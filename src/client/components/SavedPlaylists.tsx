@@ -3,12 +3,10 @@ import { toast } from "sonner";
 import { ArrowLeft, Bookmark, ListMusic, Play, Plus, Trash2, X } from "lucide-react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Item } from "@/components/ui/item";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
@@ -163,8 +161,8 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         <DialogDescription>{selectedId ? "Edit this list or load it into Up next." : "Lists are shared on this TV and stay available when the watching profile changes. Keep the current Up next to reuse it later."}</DialogDescription>
       </DialogHeader>}
       {selectedId && <Button ref={backRef} variant="ghost" className="justify-self-start" disabled={pending} onClick={() => select(null)}><ArrowLeft aria-hidden="true" />All lists</Button>}
-      {!connected && <Alert><AlertDescription>Reconnect to load or edit lists.</AlertDescription></Alert>}
-      {error && <Alert variant="destructive" className="gap-2"><AlertDescription>{error}</AlertDescription><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Reload lists</Button></Alert>}
+      {!connected && <p role="status" className="border-l-2 border-primary py-2 pl-3">Reconnect to load or edit lists.</p>}
+      {error && <div role="alert" className="grid gap-2 border-l-2 border-destructive py-2 pl-3 text-destructive"><p>{error}</p><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Reload lists</Button></div>}
       {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading lists…</p>}
       {!selectedId ? <>
@@ -174,15 +172,15 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         </div>
         <Separator />
         {!loading && !playlists.length && <p className="text-sm text-muted-foreground">Your kept lists will appear here.</p>}
-        <ul ref={listRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="Saved lists" aria-busy={loading}>{playlists.map(item => <Item asChild key={item.id} variant="outline"><li>
-          <Button variant="outline" className="h-auto min-h-11 w-full justify-between gap-3 py-3 text-left whitespace-normal" data-playlist-id={item.id} disabled={disabled} onClick={() => select(item.id)}>
+        <ul ref={listRef} className="max-h-80 divide-y overflow-y-auto" aria-label="Saved lists" aria-busy={loading}>{playlists.map(item => <li key={item.id}>
+          <Button variant="ghost" className="h-auto min-h-11 w-full justify-between gap-3 rounded-none px-0 py-3 text-left whitespace-normal" data-playlist-id={item.id} disabled={disabled} onClick={() => select(item.id)}>
             <span className="min-w-0 break-words">{item.name}</span>
             <span className="flex shrink-0 items-center gap-2">
               {item.source && <Badge variant="secondary">{providerLabels[item.source.provider]}</Badge>}
               <span className="text-sm text-muted-foreground">{item.entryCount} {item.entryCount === 1 ? "item" : "items"}, {item.totalDuration == null ? "unknown length" : `${Math.floor(item.totalDuration / 3_600)}:${String(Math.floor(item.totalDuration % 3_600 / 60)).padStart(2, "0")}`}</span>
             </span>
           </Button>
-        </li></Item>)}</ul>
+        </li>)}</ul>
       </> : playlist && <>
         <div className="flex flex-wrap gap-2" aria-label="Load list">
           <Button disabled={disabled || !canPlay || !playlist.entries.length} onClick={() => void load("play")}><Play aria-hidden="true" />Play</Button>
@@ -208,7 +206,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
           void update(path, { revision: playlist.revision, operation: "move", entryId: String(active.id), beforeEntryId }, "List order kept.");
         }}>
           <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
-        <ol ref={entriesRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="List items" aria-busy={loading}>{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+        <ol ref={entriesRef} className="max-h-80 divide-y overflow-y-auto" aria-label="List items" aria-busy={loading}>{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-2 py-2">
           {drag.handle}
           <span className="w-6 shrink-0 text-center text-sm text-muted-foreground">{index + 1}</span>
           <span className="min-w-0 flex-1 break-words text-sm">{entry.title}{entry.live && <span className="ml-2 text-xs text-muted-foreground">LIVE</span>}</span>
@@ -228,7 +226,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
           <Button variant="outline" disabled={disabled || !queueCount} onClick={() => setConfirm("saveQueue")}><Bookmark aria-hidden="true" />Update from Up next</Button>
           <Button variant="ghost" disabled={disabled} onClick={() => void deleteList()}><Trash2 aria-hidden="true" />Delete</Button>
         </div>
-        {confirm && <div className="grid gap-3 rounded-lg border p-3">
+        {confirm && <div className="grid gap-3 border-t pt-3">
           <p className="text-sm">Replace the kept contents of {playlist.name} with the current {queueCount} Up next items?</p>
           <div className="flex flex-wrap gap-2">
             <Button disabled={disabled || !queueCount} onClick={() => void update(path, { revision: playlist.revision, operation: "saveQueue" }, "List updated from Up next.")}>Replace saved items</Button>

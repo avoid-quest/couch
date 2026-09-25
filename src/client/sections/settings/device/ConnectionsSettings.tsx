@@ -146,9 +146,9 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         {!manager ? <p className="text-sm text-muted-foreground">Claim administration to manage devices.</p>
           : controllers.isPending ? <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading devices…</p>
           : controllers.isError ? <p role="alert">Could not load devices. <Button variant="outline" className="min-h-11" onClick={() => void controllers.refetch()}>Retry</Button></p>
-          : <ul className="divide-y rounded-md border">
+          : <ul className="divide-y border-t border-border">
               {controllers.data.map(device => (
-                <li key={device.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <li key={device.id} className="flex flex-wrap items-center gap-3 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{device.name}{device.id === selfId && <span className="ml-2 font-normal text-muted-foreground">(this device)</span>}</p>
                     <p className="text-sm text-muted-foreground">{device.role === "administrator" ? "Administrator" : "Controller"} · last seen {formatSeen(device.lastSeenAt)}</p>

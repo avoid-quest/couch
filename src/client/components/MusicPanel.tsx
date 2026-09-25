@@ -1,9 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUpRight, Play, Plus, Search } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { MusicAlbums, MusicArtist, MusicArtists } from "../../shared/library";
@@ -109,15 +107,15 @@ export function MusicPanel({ origin, token, connected, canPlay, view, active, on
       <div className="min-w-0 flex-1"><Label htmlFor={queryId} className="sr-only">{searchLabel}</Label><Input id={queryId} type="search" aria-label={searchLabel} placeholder={searchLabel} maxLength={200} value={draft} disabled={!connected} onChange={event => setDraft(event.target.value)} /></div>
       <Button type="submit" variant="secondary" size="icon" aria-label={browse.kind === "album" ? "Filter" : "Search"} disabled={!connected || busy}><Search aria-hidden="true" /></Button>
     </form>
-    {error && <Alert variant="destructive"><AlertDescription className="space-y-3"><p>{error.message}</p><Button variant="outline" disabled={!connected || busy} onClick={() => void refetch()}>Try again</Button></AlertDescription></Alert>}
-    {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
+    {error && <div role="alert" className="grid gap-3 border-l-2 border-destructive py-2 pl-3 text-destructive"><p>{error.message}</p><Button variant="outline" className="justify-self-start" disabled={!connected || busy} onClick={() => void refetch()}>Try again</Button></div>}
+    {actionError && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{actionError}</p>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to this player to browse and queue music.</p>}
     {busy && connected && !error && <p className="text-sm text-muted-foreground" role="status">Loading music…</p>}
     {!busy && browse.kind !== "album" && <p className="text-sm text-muted-foreground" aria-live="polite">{total} {browse.kind === "artists" ? total === 1 ? "artist" : "artists" : total === 1 ? "album" : "albums"}</p>}
-    {!busy && total === 0 && <Card className="p-5 text-sm leading-relaxed text-muted-foreground">{browse.q ? "No matching music. Try another title or artist." : browse.kind === "albums" && browse.artist ? "No albums for this artist. View all tracks to find their singles." : "No tagged music. Add a folder on the TV, or rescan."}</Card>}
-    {!busy && browse.kind === "artists" && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr))]">
-      {artists?.items.map(artist => <li key={artist.id} className="min-w-0"><Button variant="ghost" className="h-full w-full min-h-22 justify-start border p-2.5 text-left whitespace-normal" data-music-artist={artist.id} aria-label={`Browse ${artist.name} albums`} disabled={!connected} onClick={() => open({ kind: "albums", artist, q: "", offset: 0 }, `[data-music-artist="${CSS.escape(artist.id)}"]`)}>
+    {!busy && total === 0 && <p className="border-t pt-5 text-sm leading-relaxed text-muted-foreground">{browse.q ? "No matching music. Try another title or artist." : browse.kind === "albums" && browse.artist ? "No albums for this artist. View all tracks to find their singles." : "No tagged music. Add a folder on the TV, or rescan."}</p>}
+    {!busy && browse.kind === "artists" && <ul className="divide-y">
+      {artists?.items.map(artist => <li key={artist.id} className="min-w-0"><Button variant="ghost" className="h-full w-full min-h-22 justify-start rounded-none px-0 py-3 text-left whitespace-normal" data-music-artist={artist.id} aria-label={`Browse ${artist.name} albums`} disabled={!connected} onClick={() => open({ kind: "albums", artist, q: "", offset: 0 }, `[data-music-artist="${CSS.escape(artist.id)}"]`)}>
         <AuthArtwork origin={origin} token={token} id={artist.artworkId} className="rounded-full" /><span className="min-w-0"><strong className="block break-words text-base font-medium">{artist.name}</strong><span className="mt-1 block text-sm font-normal text-muted-foreground">{artist.albumCount > 0 && `${artist.albumCount} album${artist.albumCount === 1 ? "" : "s"} · `}{artist.trackCount} track{artist.trackCount === 1 ? "" : "s"}</span></span><ArrowUpRight className="ml-auto text-muted-foreground" aria-hidden="true" />
       </Button></li>)}
     </ul>}
@@ -127,16 +125,16 @@ export function MusicPanel({ origin, token, connected, canPlay, view, active, on
       </Button></li>)}
     </ul>}
     {!busy && browse.kind === "album" && detail && <div className="music-album-detail space-y-4">
-      <Card className="grid gap-4 bg-muted/50 p-4">
+      <div className="grid gap-4 border-t pt-4">
         <div className="flex min-w-0 items-center gap-4"><AuthArtwork origin={origin} token={token} id={detail.album.artworkId} className="size-24" /><div className="min-w-0"><p className="break-words text-base font-medium">{detail.album.artist || "Unknown artist"}</p><p className="mt-1 text-sm text-muted-foreground">{detail.album.trackCount} track{detail.album.trackCount === 1 ? "" : "s"}{detail.album.duration !== null && ` · ${progressTime(detail.album.duration)}`}</p></div></div>
         <div className="flex max-w-70 flex-wrap gap-2"><Button className="min-w-36 flex-1" aria-label="Play" disabled={!connected || !canPlay || pending || !detail.items.length || detail.items.some(item => !item.available)} onClick={() => void queue(detail.album.title, () => onQueueAlbum(detail.album.id, true), true)}><Play aria-hidden="true" />Play</Button><Button className="min-w-36 flex-1" variant="secondary" aria-label="Up next" disabled={!connected || pending || !detail.items.length || detail.items.some(item => !item.available)} onClick={() => void queue(detail.album.title, () => onQueueAlbum(detail.album.id, false), false)}><Plus aria-hidden="true" />Up next</Button></div>
         {detail.items.some(item => !item.available) && <p className="text-sm text-muted-foreground">Some files are unavailable. Reconnect the library folder to add the whole album to Up next.</p>}
-      </Card>
+      </div>
       {!tracks.length && !!detail.items.length && <p className="text-sm text-muted-foreground">No matching tracks. Clear the filter to see the whole album.</p>}
-      <ol className="space-y-2">{tracks.map((item, index) => <li key={item.id}><Card className="grid items-center gap-3 p-3">
+      <ol className="divide-y">{tracks.map((item, index) => <li key={item.id} className="grid items-center gap-3 py-3">
         <div className="flex min-w-0 items-center gap-3"><span className="grid w-7 min-h-9 shrink-0 place-items-center text-sm tabular-nums text-muted-foreground" aria-hidden="true">{item.trackNumber ?? index + 1}</span><div className="min-w-0 flex-1"><strong className="block break-words text-base font-medium">{item.title}</strong><p className="mt-1 break-words text-sm text-muted-foreground">{item.discNumber != null && <span data-disc-number={item.discNumber}>Disc {item.discNumber} · </span>}{item.trackNumber != null && <span data-track-number={item.trackNumber} className="sr-only">Track {item.trackNumber} · </span>}{item.artists?.join(", ") || item.artist || "Unknown artist"}{item.duration !== null && ` · ${progressTime(item.duration)}`}{!item.available && " · File unavailable"}</p></div></div>
         <div className="flex flex-wrap gap-2"><Button aria-label={`Play ${item.title}`} disabled={!connected || !canPlay || pending || !item.available} onClick={() => void queue(item.title, () => onEnqueue(item.id, { playNow: true, fromStart: true }), true)}><Play aria-hidden="true" />Play</Button><Button variant="secondary" aria-label={`Up next: ${item.title}`} disabled={!connected || pending || !item.available} onClick={() => void queue(item.title, () => onEnqueue(item.id), false)}><Plus aria-hidden="true" />Up next</Button></div>
-      </Card></li>)}</ol>
+      </li>)}</ol>
     </div>}
     {!busy && browse.kind !== "album" && total > musicPageSize && <nav className="flex items-center justify-between gap-2" aria-label="Music pages"><Button variant="outline" disabled={!connected || !browse.offset} onClick={() => setBrowse(value => ({ ...value, offset: Math.max(0, value.offset - musicPageSize) }))}>Previous</Button><span className="text-center text-sm text-muted-foreground">{browse.offset + 1}–{Math.min(browse.offset + musicPageSize, total)} of {total}</span><Button variant="outline" disabled={!connected || browse.offset + musicPageSize >= total} onClick={() => setBrowse(value => ({ ...value, offset: value.offset + musicPageSize }))}>Next</Button></nav>}
   </section>;

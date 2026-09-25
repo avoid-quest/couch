@@ -3,7 +3,6 @@ import { useCallback, useEffect, useDeferredValue, useRef, useState } from "reac
 import { ListVideo, Play, Plus, Radio } from "lucide-react";
 import type { GuideChannel, GuidePage, GuideProgram } from "../../../shared/iptv";
 import type { Action } from "../../../shared/protocol";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,7 +58,7 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
         <GuideSources {...{ request, origin: credentials.origin, token: credentials.token, host, connected, controllerVersion: 0 }} sources={page?.sources ?? []} />
       </div>
     </div>
-    {(playError || guide.error) && <Alert variant="destructive"><AlertDescription>{playError || (guide.error instanceof Error ? guide.error.message : "Could not load the TV guide.")}</AlertDescription></Alert>}
+    {(playError || guide.error) && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{playError || (guide.error instanceof Error ? guide.error.message : "Could not load the TV guide.")}</p>}
     {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
     {page?.sources.some(source => source.error) && <p className="text-sm text-muted-foreground">A source refresh failed. Showing its saved guide.</p>}
     {page && page.sources.length === 0 ? <p className="guide-empty py-5 text-muted-foreground">No guide sources yet. An administrator can import an M3U channel list and XMLTV programs in Guide sources.</p> : <>
@@ -68,8 +67,8 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
         <div className="grid min-w-0 gap-2"><Label htmlFor="guide-group">Group</Label><Select value={group ? `group:${group}` : "all"} onValueChange={value => { setGroup(value === "all" ? "" : value.slice(6)); setOffset(0); }}><SelectTrigger id="guide-group" className="w-full min-w-0"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All groups</SelectItem>{page?.groups.map(name => <SelectItem key={name} value={`group:${name}`}>{name}</SelectItem>)}</SelectContent></Select></div>
       </div>
       <p className="text-xs text-muted-foreground">Times in {Intl.DateTimeFormat().resolvedOptions().timeZone}. {guide.isFetching ? "Updating guide…" : `${page?.total ?? 0} channels`}</p>
-      <ul className="guide-channel-list grid gap-3">
-        {page?.channels.map(channel => <li key={channel.id} className="guide-channel grid items-center gap-3 rounded-lg border bg-card p-3.5 md:[grid-template-columns:minmax(140px,.8fr)_minmax(0,1.4fr)] md:[&>.guide-channel-actions]:col-span-full lg:[grid-template-columns:minmax(150px,.7fr)_minmax(0,1.2fr)_auto] lg:[&>.guide-channel-actions]:col-span-auto lg:[&>.guide-channel-actions]:max-w-[270px]" data-channel-id={channel.id}>
+      <ul className="guide-channel-list divide-y">
+        {page?.channels.map(channel => <li key={channel.id} className="guide-channel grid items-center gap-3 py-3.5 md:[grid-template-columns:minmax(140px,.8fr)_minmax(0,1.4fr)] md:[&>.guide-channel-actions]:col-span-full lg:[grid-template-columns:minmax(150px,.7fr)_minmax(0,1.2fr)_auto] lg:[&>.guide-channel-actions]:col-span-auto lg:[&>.guide-channel-actions]:max-w-[270px]" data-channel-id={channel.id}>
           <div className="guide-channel-name flex min-w-0 items-center gap-3">
             <GuideLogo credentials={credentials} channel={channel} />
             <div className="min-w-0"><h3 className="font-semibold [overflow-wrap:anywhere]">{channel.name}</h3><p className="text-xs text-muted-foreground">{channel.group || "TV"}{currentSource === `iptv:${channel.id}` && " · On TV"}</p></div>

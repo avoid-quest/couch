@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { isNativeHost } from "@/session/native-context";
 import { usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field as FormField, FieldLabel } from "@/components/ui/field";
@@ -125,7 +124,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
       <Button aria-expanded={open} disabled={!connected} onClick={() => setOpen(value => !value)} type="button" variant="outline">{open ? "Close metadata editor" : "Edit metadata"}</Button>
       {open && <>
         <p className="text-sm text-muted-foreground">Administrator corrections are saved on the TV and kept through rescans. Original files are preserved.</p>
-        {(page.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Could not load metadata."} <Button onClick={() => setOpen(false)} type="button" variant="link">Close and reopen to reload</Button></AlertDescription></Alert>}
+        {(page.error || error) && <div role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{error ?? "Could not load metadata."} <Button onClick={() => setOpen(false)} type="button" variant="link">Close and reopen to reload</Button></div>}
         {notice && <p className="text-sm" role="status">{notice}</p>}
         {!connected && <p className="text-sm" role="status">Offline. Your draft is kept here. Reconnect to save, search or export.</p>}
         {pending && <p className="text-sm" role="status">Working…</p>}
@@ -148,7 +147,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
             <Button className="min-h-11" disabled={busy} type="submit" variant="secondary">Search TMDB</Button>
           </form>
           {results && <ul aria-label="TMDB search results" className="space-y-2">{results.map(result => <li key={result.id}><Button className="h-auto min-h-11 w-full whitespace-normal text-left" disabled={busy} onClick={() => void update("preview", { revision: metadata.revision, id: result.id, season: draft.season === "" ? null : Number(draft.season), episode: draft.episode === "" ? null : Number(draft.episode) })} type="button" variant="outline">Preview {result.title} {result.year}</Button><p className="text-sm text-muted-foreground">{result.description}</p></li>)}{!results.length && <li>No matches. Try another title.</li>}</ul>}
-          {preview && <div aria-label="TMDB match preview" className="space-y-3 rounded-md border p-3">
+          {preview && <div aria-label="TMDB match preview" className="space-y-3 border-t pt-3">
             <h4 className="font-medium">Preview: {preview.match.title}</h4>
             {preview.artwork && <img alt="TMDB preview artwork" className="max-h-52 max-w-full object-contain" src={preview.artwork} />}
             <dl className="space-y-2 text-sm">{(Object.keys(fields) as Field[]).filter(key => metadata.type === "episode" || !["showTitle", "season", "episode"].includes(key)).map(key => <div key={key}><dt className="text-muted-foreground">{fields[key]}</dt><dd className="break-words whitespace-pre-wrap">{Array.isArray(preview.values[key]) ? (preview.values[key] as string[]).join(", ") : preview.values[key] ?? "Empty"}</dd></div>)}</dl>

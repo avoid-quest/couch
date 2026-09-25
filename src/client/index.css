@@ -390,9 +390,9 @@ body .queue-panel-standard .queue-feedback { margin: .6rem 0; }
 .app-shell .find-empty-sources > button { margin-top: .6rem; }
 .app-shell .find-source-errors { margin-top: 1rem; color: #aaa; font-size: .85rem; }
 .app-shell .find-source-errors p { margin: .3rem 0; }
-.app-shell .find-link-card { max-width: 48rem; border-top: 1px solid var(--border); padding-top: 1rem; }
-.app-shell .find-link-card h2 { overflow: hidden; font-size: 1.3rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.app-shell .find-link-card > p:first-of-type { overflow: hidden; color: #aaa; font-size: .85rem; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .find-link-preview { max-width: 48rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.app-shell .find-link-preview h2 { overflow: hidden; font-size: 1.3rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .find-link-preview > p:first-of-type { overflow: hidden; color: #aaa; font-size: .85rem; text-overflow: ellipsis; white-space: nowrap; }
 .app-shell .find-link-choice { display: flex; align-items: center; gap: .2rem; margin-top: .6rem; }
 .app-shell .find-link-choice > span:first-child { width: 6rem; flex: none; color: #aaa; }
 .app-shell .find-link-choice > button[aria-pressed="true"] { color: #fff; }
@@ -448,7 +448,7 @@ body .queue-panel-standard .queue-feedback { margin: .6rem 0; }
 .app-shell .player-page .audio-stage-copy h1 { margin: 0; font-size: clamp(2.5rem, 4vw, 3.4rem); font-weight: 600; letter-spacing: -.03em; }
 .app-shell .player-page .audio-stage-copy .eyebrow { display: none; }
 /* macOS mpv sits behind the WebView. Every full-screen ancestor of its video
-   rectangle must be clear; the band, status card and open sheet stay solid. */
+   rectangle must be clear; the band, status text and open sheet stay solid. */
 body.native-host:has(.player-page .video-stage.has-video),
 body.native-host:has(.player-page .video-stage.has-video) .app-shell,
 body.native-host:has(.player-page .video-stage.has-video) .tv-browser,

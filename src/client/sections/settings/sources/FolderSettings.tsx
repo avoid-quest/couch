@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/api/client";
 import type { ManagedFolder } from "../../../../shared/folders";
 import type { LibrarySource } from "../../../../shared/library";
@@ -74,7 +73,7 @@ export function FolderSettings({ credentials, connected, canManage }: Props) {
       <ul className="space-y-3">
         {sources.map(source => (
           <li data-folder-source={source.id} key={source.id}>
-            <Card className="min-w-0 gap-3 p-3">
+            <div className="min-w-0 space-y-3 border-t border-border py-4">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="min-w-0 break-all">{source.name}</strong><Badge variant={source.status === "error" || source.status === "unavailable" ? "destructive" : "secondary"}>{labels[source.status]}</Badge></div>
               {canManage && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}
               <p className="text-sm text-muted-foreground" role={source.status === "scanning" ? "status" : undefined}>{source.status === "scanning" ? `${source.scannedItems ?? 0} media files checked` : `${source.itemCount} catalog items`}</p>
@@ -89,12 +88,12 @@ export function FolderSettings({ credentials, connected, canManage }: Props) {
                   <Button className="min-h-11" disabled={!canWrite || source.status === "scanning"} onClick={() => setConfirm({ source, action: "remove" })} variant="outline">Remove source</Button>
                 </div>
               )}
-            </Card>
+            </div>
           </li>
         ))}
       </ul>
       {canManage && confirm && (
-        <div aria-label={confirm.action === "remove" ? "Confirm source removal" : "Verify original folder"} className="space-y-3 rounded-lg border p-3" role="group">
+        <div aria-label={confirm.action === "remove" ? "Confirm source removal" : "Verify original folder"} className="space-y-3 border-t border-border py-4" role="group">
           <p className="break-words">{confirm.action === "remove"
             ? `Remove ${confirm.source.name} from the library catalog? Its media files and watching history stay. Current playback continues, but queued items from this source will be unavailable when played again.`
             : "This older source has no saved drive identity. Confirm that the path below is its original folder on the original drive before verifying it. Its catalog and watching history stay."}</p>

@@ -2,7 +2,6 @@ import { HistoryPanel, type HistoryPlayback } from "./HistoryPanel";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -273,15 +272,15 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
         {view === "browse" && !atRecent && <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => { restoreFocus.current = "input"; setInput(""); setTrail([{ request: {}, title: info.name }]); }}>Back to recent</Button>}
       </div>
       <TabsContent value={view} className="space-y-4">
-        {actionError && <p className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{actionError}</p>}
-        {notice && <p className="provider-notice rounded-lg border bg-muted p-4 text-sm" role="status">{notice}</p>}
-        {favoriteError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">Kept items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
+        {actionError && <p className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">{actionError}</p>}
+        {notice && <p className="border-l-2 border-primary py-2 pl-3 text-sm" role="status">{notice}</p>}
+        {favoriteError && <div className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">Kept items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
         {view === "browse" && atRecent && <HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} onPlay={onPlayHistory} provider={provider} active={active} />}
         {view === "browse" && !atRecent && <div className="provider-location flex min-w-0 items-center gap-3">
           {trail.length > 1 && <Button data-back variant="outline" className="min-h-11 shrink-0" disabled={!connected} onClick={back}>Back</Button>}
           <h3 className="min-w-0 text-base font-medium wrap-anywhere">{page?.title || location.title}</h3>
         </div>}
-        {view === "browse" && browseError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
+        {view === "browse" && browseError && <div className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
         {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading kept items…" : `Loading ${info.name}…`}</p>}
         {!(view === "browse" && atRecent) && !pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Keep albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Keep videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, list, or program link."}</p>}
         {listRef && !pending && !browseError && <div className="flex flex-wrap items-center gap-2">
@@ -308,32 +307,30 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
             </div>
           </li>;
         })}</ol>}
-        {!!items.length && !album && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))]">{items.map(item => {
+        {!!items.length && !album && <ul className="divide-y">{items.map(item => {
           const saved = favorites.some(entry => entry.id === item.id);
           const channelSummary = provider === "twitch" && view === "browse" && item.url === location.request.url;
-          const details = <>
-            {!channelSummary && <div className="relative overflow-hidden bg-muted">
+          const details = <div className="flex min-w-0 items-start gap-3">
+            {!channelSummary && <div className="relative w-32 shrink-0 overflow-hidden">
               <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className={provider === "bandcamp" ? "aspect-square" : ""} />
               {item.live ? <Badge variant="destructive" className="provider-badge live absolute right-2 bottom-2">LIVE</Badge> : item.duration ? <Badge variant="secondary" className="provider-badge absolute right-2 bottom-2">{duration(item.duration)}</Badge> : item.kind !== "media" ? <Badge variant="secondary" className="provider-badge absolute right-2 bottom-2">{item.kind === "channel" ? "Channel" : "Collection"}</Badge> : null}
             </div>}
-            <div className="min-h-20 space-y-1 p-3 pb-0">
+            <div className="min-w-0 flex-1 space-y-1">
               <h4 className="line-clamp-2 text-base font-medium leading-snug wrap-anywhere" title={item.title}>{item.title}</h4>
               {item.subtitle && <p className="text-muted-foreground line-clamp-1 text-sm wrap-anywhere">{item.subtitle}</p>}
               {!item.subtitle && item.description && <p className="provider-description text-muted-foreground line-clamp-2 text-sm wrap-anywhere">{item.description}</p>}
             </div>
-          </>;
-          return <li className={`min-w-0${channelSummary ? " col-span-full" : ""}`} key={item.id}>
-            <Card className="h-full gap-0 overflow-hidden py-0 transition-[background-color,box-shadow] duration-150 focus-within:ring-1 focus-within:ring-ring">
+          </div>;
+          return <li className="grid min-w-0 gap-3 py-3" key={item.id}>
               {item.kind === "media" ? <div className="min-w-0">{details}</div> : <Button variant="ghost" className="block h-auto w-full min-w-0 rounded-none p-0 text-left whitespace-normal focus-visible:outline-offset-[-4px]" data-provider-id={item.id} disabled={!connected} onClick={() => open(item)} aria-label={`Open ${item.title}`}>{details}</Button>}
-              <div className={`mt-auto grid items-center gap-2 p-3 [&>button]:min-w-0 [&>button]:px-2 [&>button]:text-sm ${item.kind === "media" ? provider === "bandcamp" ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px_44px]" : "grid-cols-[minmax(0,1fr)_44px]"}`}>
+              <div className="flex flex-wrap items-center gap-2 [&>button]:text-sm">
                 <Button aria-label="Play on TV" disabled={!canPlay || busy !== null} onClick={() => void enqueue(item, true)}><Play aria-hidden="true" />Play</Button>
                 <Button variant="secondary" aria-label="Up next" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Up next</Button>
                 {!channelSummary && <Button variant="secondary" disabled={!connected} onClick={() => open(item)}>{item.provider === "twitch" && item.kind === "channel" ? "Past broadcasts" : "Browse"}</Button>}
                 {item.provider !== "bandcamp" && <QualityOptions id={`${qualityId}-${item.id}`} label={`Video quality for ${item.title}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />}
-                {item.provider === "twitch" && item.live && !channelSummary && <Button className="col-span-full" data-provider-id={item.id} variant="outline" disabled={!connected || busy !== null} onClick={() => open(item)}>Past broadcasts</Button>}
+                {item.provider === "twitch" && item.live && !channelSummary && <Button data-provider-id={item.id} variant="outline" disabled={!connected || busy !== null} onClick={() => open(item)}>Past broadcasts</Button>}
                 <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save shrink-0" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={saved ? `Remove ${item.title}` : `Keep ${item.title}`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
               </div>
-            </Card>
           </li>;
         })}</ul>}
         {view === "browse" && page?.nextCursor && <Button variant="outline" className="provider-more min-h-11 w-full" disabled={!connected || loadingMore} onClick={() => void more()}>{loadingMore ? "Loading more…" : "Load more"}</Button>}

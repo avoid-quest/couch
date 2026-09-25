@@ -97,7 +97,7 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
     {selectedOutput?.configurationAvailable === false && <p className="text-sm text-muted-foreground">{selectedOutput.name} exposes no selectable output-only data source to Couch. Check in System Settings on {hostName} for other hardware settings.</p>}
     {state && !state.choices.length && <p>No available sound outputs found.</p>}
     <p className="text-sm text-muted-foreground">Pair a speaker in Bluetooth to add it here.</p>
-    <Collapsible className="rounded-sm border p-4">
+    <Collapsible className="border-t border-border pt-3">
       <CollapsibleTrigger asChild><Button variant="ghost" className="min-h-11 w-full justify-start px-0 font-medium">Sound test and audio delay</Button></CollapsibleTrigger>
       <CollapsibleContent className="space-y-4 pt-3">
         {state?.audioDelay !== undefined && <DelayControl id="sound-audio-delay" label="Audio delay" value={state.audioDelay} disabled={!connected || pending} onApply={delay => change("delay", { delay })} />}

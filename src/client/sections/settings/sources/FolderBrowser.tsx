@@ -44,16 +44,16 @@ export function FolderBrowser({ credentials, canWrite, onAdd }: Props) {
   const path = browser.path;
 
   return (
-    <div aria-label="TV folder browser" className="min-w-0 space-y-3 rounded-lg border p-3">
+    <div aria-label="TV folder browser" className="min-w-0 space-y-3">
       <div className="space-y-1"><p className="font-medium">Choose a folder on the TV</p><p className="break-all text-sm text-muted-foreground">{browser.path ?? "Permitted media locations"}</p></div>
       <div className="flex flex-wrap gap-2">
         {browser.path && <Button variant="outline" className="min-h-11" disabled={!canWrite} onClick={() => void browse(browser.parent)}><ArrowLeft aria-hidden="true" />{browser.parent ? "Parent folder" : "Media locations"}</Button>}
         <Button variant="outline" className="min-h-11" disabled={!canWrite} onClick={() => void browse(browser.path, browser.offset)}><RefreshCw aria-hidden="true" />Refresh</Button>
       </div>
-      <ul className="space-y-2">
+      <ul className="divide-y border-t border-border">
         {browser.locations.map(location => (
-          <li className="min-w-0 space-y-1" key={location.path}>
-            <Button className="h-auto min-h-11 w-full justify-start whitespace-normal text-left" disabled={!canWrite || !!location.error} variant="outline" onClick={() => void browse(location.path)}>
+          <li className="min-w-0 space-y-1 py-2" key={location.path}>
+            <Button className="h-auto min-h-11 w-full justify-start rounded-none px-0 whitespace-normal text-left" disabled={!canWrite || !!location.error} variant="ghost" onClick={() => void browse(location.path)}>
               <FolderOpen aria-hidden="true" className="shrink-0" /><span className="min-w-0 break-all">{location.name}</span>
             </Button>
             {location.error && <p className="break-words text-sm text-destructive">{location.error}</p>}

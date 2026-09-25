@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Plus, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import type { ControllerIdentity } from "../../shared/controllers";
 import type { GuideSource } from "../../shared/iptv";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -48,9 +47,9 @@ export function GuideSources({ inline = false, request, sources, host, connected
   const edit = (source: GuideSource | null) => { setEditing(source); setName(source?.name ?? ""); setPlaylistUrl(""); setGuideUrl(""); setError(null); };
   if (!administrator) return <p className="text-sm text-muted-foreground">An administrator can add or refresh guide sources.</p>;
   const content = <>
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{error}</p>}
       {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-      <ul className="space-y-3">{sources.map(source => <li className="space-y-2 rounded-lg border p-3" key={source.id}>
+      <ul className="divide-y">{sources.map(source => <li className="space-y-2 py-3" key={source.id}>
         <p className="break-words font-medium">{source.name}</p>
         <p className="text-sm text-muted-foreground">{source.channelCount} channels · {source.programCount} programs<br />{source.updatedAt ? `Updated ${new Date(source.updatedAt).toLocaleString()}` : "No cached guide"}</p>
         {source.error && <p className="text-sm text-destructive">{source.error}</p>}
