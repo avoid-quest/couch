@@ -18,12 +18,6 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, target: null, packaged: false });
   }
 })();
-const darkSurface = tauri.app.windows[0]?.backgroundColor;
-if (!darkSurface || !/^#([0-9a-f]{2})\1\1$/i.test(darkSurface)) throw new Error("Configure a neutral dark window color in Tauri.");
-const component = Number.parseInt(darkSurface.slice(1, 3), 16) / 255;
-const linear = component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
-const darkLightness = Math.cbrt(linear).toFixed(3);
-
 export default defineConfig(({ command }) => ({
   clearScreen: false,
   root: "src/client",
@@ -32,16 +26,6 @@ export default defineConfig(({ command }) => ({
   base: "/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
-    {
-      name: "couch-design-background",
-      enforce: "pre",
-      transform(source, id) {
-        if (!id.endsWith("/src/client/index.css")) return;
-        if (!source.includes("__COUCH_DARK_LIGHTNESS__")) throw new Error("Missing dark design token.");
-        return source.replace("__COUCH_DARK_LIGHTNESS__", darkLightness);
-      },
-      transformIndexHtml: html => html.replace("__COUCH_DARK_SURFACE__", darkSurface),
-    },
     tanstackRouter({ routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
     react(),
     tailwindcss(),
@@ -57,8 +41,8 @@ export default defineConfig(({ command }) => ({
         name: "Couch",
         short_name: "Couch",
         description: "Shared media player for your TV, controlled from any phone",
-        theme_color: darkSurface,
-        background_color: darkSurface,
+        theme_color: "#000000",
+        background_color: "#000000",
         display: "standalone",
         start_url: "/",
         scope: "/",

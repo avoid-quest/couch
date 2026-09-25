@@ -5,7 +5,6 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 @import "@fontsource-variable/inter-tight";
 
 @layer components {
@@ -14,38 +13,13 @@ html:has(body.native-host), body.native-host { background: transparent; }
 [hidden] { display: none !important; }
 button, a, input { -webkit-tap-highlight-color: transparent; }
 a { text-underline-offset: 4px; }
-/* Keep Mira's compact visual style; TV and touch screens need larger hit areas. */
-@media (max-width: 959px), (pointer: coarse) {
-  button, input, [role="combobox"], [role="option"] { min-height: 44px; min-width: 44px; }
-  [data-slot="button"][data-size^="icon"] { min-width: 44px; }
-  [data-slot="slider"] { min-height: 44px; }
-  [data-slot="tabs-list"] { height: auto; min-height: 50px; }
-}
-body.tv-presentation button, body.tv-presentation input, body.tv-presentation [role="combobox"], body.tv-presentation [role="option"] { min-height: 48px; }
-:where(body.tv-presentation) [data-slot="button"][data-size^="icon"] { min-width: 48px; }
-body.tv-presentation [data-slot="slider"] { min-height: 44px; }
-body.tv-presentation [data-slot="tabs-list"] { height: auto; min-height: 54px; }
-[data-slot="dialog-header"] { padding-right: 36px; }
-
-/* Native-only dimensions apply to portal dialogs and controls as well as home. */
-body.tv-presentation {
-  font-size: 24px;
-  --text-xs: 18px;
-  --text-sm: 20px;
-  --text-base: 24px;
-  --text-lg: 28px;
-}
-body.tv-presentation button, body.tv-presentation input, body.tv-presentation [role="combobox"], body.tv-presentation [role="option"] { font-size: 24px; }
-body.tv-presentation [data-slot="dialog-content"], body.tv-presentation [data-slot="popover-content"] { font-size: 24px; }
-body.tv-presentation .play-button svg { width: 32px; height: 32px; }
-body.tv-presentation :focus-visible { outline: 4px solid var(--ring); outline-offset: 4px; }
 /* appearance.css */
 :root { --interface-scale: 1; }
 body { min-width: 0; }
 /* Radix positions portal wrappers in viewport pixels. Scale their contents. */
 #root, [data-slot="dialog-content"], [data-slot="select-content"], [data-slot="popover-content"] { zoom: var(--interface-scale); }
 
-[data-slot="dialog-content"], body.tv-presentation [data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
+[data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
 [data-slot="popover-content"] { max-width: calc((100vw - 2rem) / var(--interface-scale)); }
 /* history-presentation.css */
 .history-inspect .history-items { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
@@ -82,23 +56,12 @@ body { min-width: 0; }
 }
 
 @custom-variant dark (&:is(.dark *));
+/* Phones and narrow windows get 44px targets; Mira stays compact elsewhere. */
+@custom-variant touch { @media (max-width: 959px) { @slot; } @media (pointer: coarse) { @slot; } }
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
+    --font-sans: 'Inter Tight Variable', sans-serif;
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -126,118 +89,48 @@ body { min-width: 0; }
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Clock: one dark theme. Black ground, white ink, hairlines; the picture brings the colour. */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-    --background: oklch(__COUCH_DARK_LIGHTNESS__ 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: #000;
+    --foreground: #fff;
+    --card: #000;
+    --card-foreground: #fff;
+    --popover: #0a0a0a;
+    --popover-foreground: #fff;
+    --primary: #fff;
+    --primary-foreground: #000;
+    --secondary: #171717;
+    --secondary-foreground: #fff;
+    --muted: #171717;
+    --muted-foreground: #a3a3a3;
+    --accent: #fff;
+    --accent-foreground: #000;
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --border: rgb(255 255 255 / 16%);
+    --input: rgb(255 255 255 / 20%);
+    --ring: #fff;
+    --radius: .25rem;
+    --gutter: 3rem;
+    color-scheme: dark;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
-  html {
-    @apply font-sans;
-    color-scheme: dark;
-    }
+  * { @apply border-border outline-ring/50; }
+  /* One layout scaled proportionally: 1rem is 1/80 of the width (24px on a 1080p TV). */
+  html { @apply font-sans; font-size: clamp(16px, 1.25vw, 24px); font-variant-numeric: tabular-nums; }
+  body { @apply bg-background text-foreground; }
   button, [role="button"] { touch-action: manipulation; }
-  :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
-/* Clock layout. Component rules stay scoped to the single app shell. */
-html { font-size: clamp(16px, 1.25vw, 24px); view-transition-name: none; }
-.app-shell, body {
-  --background: #000;
-  --foreground: #fff;
-  --card: #000;
-  --card-foreground: #fff;
-  --popover: #000;
-  --popover-foreground: #fff;
-  --primary: #fff;
-  --primary-foreground: #000;
-  --secondary: #171717;
-  --secondary-foreground: #fff;
-  --muted: #171717;
-  --muted-foreground: #aaa;
-  --accent: #fff;
-  --accent-foreground: #000;
-  --border: rgb(255 255 255 / 20%);
-  --input: rgb(255 255 255 / 20%);
-  --ring: #fff;
-  --radius: .25rem;
-  font-family: 'Inter Tight Variable', 'Inter Variable', sans-serif;
-  font-variant-numeric: tabular-nums;
-  background: #000;
-  color: #fff;
-}
+@media (max-width: 700px) { :root { --gutter: 1rem; } }
+
+/* Clock focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
+   Unlayered on purpose so it wins over component rings and hover backgrounds. */
+:is(button, a, [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
+[data-slot="button"][data-variant="default"]:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+:is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
+html { view-transition-name: none; }
 .app-shell { --shell-gutter: 3rem; --shell-header: 3.75rem; --shell-footer: 4.6rem; min-height: 100dvh; }
-.app-shell :is(button, a, [role="slider"]):focus-visible,
-body :is([data-slot="popover-content"], [data-slot="sheet-content"]) :is(button, a):focus-visible { outline: 0; background: #fff; color: #000; }
 .app-shell .app-header { position: relative; z-index: 30; display: flex; min-height: var(--shell-header); align-items: center; justify-content: flex-start; gap: .2rem; padding: 1.4rem var(--shell-gutter) 0; border: 0; background: #000; }
 .app-shell .header-status { display: flex; align-items: center; gap: .2rem; margin-left: auto; color: #fff; }
 .app-shell .header-status > * { border-radius: .25rem; }
@@ -503,4 +396,3 @@ body.native-host:has(.player-page .video-stage.has-video) .player-page { backgro
 }
 .app-shell .remote-pad { width: 100%; }
 .app-shell .player-band-actions .transport-buttons button { border-radius: .25rem; }
-[data-sonner-toast] { border-radius: .25rem; box-shadow: none; }

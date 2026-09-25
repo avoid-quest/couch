@@ -279,7 +279,7 @@ export async function assertTheme(ui: UiDriver) {
   assert.equal(theme.actual, theme.expected, "Tailwind bg-primary uses the generated theme");
   assert.ok(["flex", "inline-flex"].includes(theme.display), "Generated button layout utilities are compiled");
   assert.ok(parseFloat(theme.radius) > 0, "Generated radius utilities are compiled");
-  assert.ok(theme.font.includes("Inter Variable"), "The requested Mira preset font is bundled");
+  assert.ok(theme.font.includes("Inter Tight Variable"), "The Clock font is bundled");
   return theme;
 }
 
@@ -295,7 +295,9 @@ export async function assertResponsive(ui: UiDriver, description: string) {
       clipped: [...document.querySelectorAll('button')].filter(visible).filter(element =>
         element.scrollWidth > element.clientWidth + 2 && !element.matches('[role=combobox]') && !element.querySelector('.truncate')
       ).map(element => element.getAttribute('aria-label') || element.textContent.trim()),
-      small: [...document.querySelectorAll('button:not(:disabled), input:not(:disabled), [data-slot=slider]')].filter(visible).map(element => {
+      // Checkboxes, switches and radios are hit through their label.
+      small: [...document.querySelectorAll('button:not(:disabled), input:not(:disabled), [data-slot=slider]')].filter(visible)
+        .filter(element => !element.matches('[role=checkbox], [role=switch], [role=radio]') || ![...(element.labels ?? [])].some(label => label.getBoundingClientRect().height >= 43.5)).map(element => {
         const rect = element.getBoundingClientRect();
         return { label: element.getAttribute('aria-label') || element.textContent.trim() || element.id, width: rect.width, height: rect.height };
       }).filter(rect => rect.width < 43.5 || rect.height < 43.5) };
