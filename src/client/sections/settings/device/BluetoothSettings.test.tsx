@@ -26,6 +26,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  await Bun.sleep(0);
   (globalThis.fetch as ReturnType<typeof spyOn>).mockRestore();
   window.happyDOM.abort();
   for (const [key, descriptor] of originals) {
