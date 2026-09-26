@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import type { NetworkInterfaceInfo } from "node:os";
 import { createLanListener, lanPeer, lanUrls, selectLan } from "./lan-listener";
 const entry = (address: string): NetworkInterfaceInfo => ({ address, netmask: "255.255.255.0", cidr: `${address}/24`, family: "IPv4", internal: false, mac: "00:00:00:00:00:00" });
@@ -56,10 +56,15 @@ test("failed or mixed DNS answers omit only invalid aliases and preserve the rec
   expect(result.error).toContain("Direct IP access remains available");
 });
 test("a DNS timeout leaves the direct IP available", async () => {
-  const result = await lanUrls(network, 4100, ["http://slow.home:4100"], (() => new Promise(() => {})) as never);
-  expect(result.urls).toEqual(["http://192.168.1.20:4100"]);
-  expect(result.error).toContain("timed out");
-}, 7_000);
+  jest.useFakeTimers();
+  try {
+    const pending = lanUrls(network, 4100, ["http://slow.home:4100"], (() => new Promise(() => {})) as never);
+    jest.advanceTimersByTime(5_000);
+    const result = await pending;
+    expect(result.urls).toEqual(["http://192.168.1.20:4100"]);
+    expect(result.error).toContain("timed out");
+  } finally { jest.useRealTimers(); }
+});
 test("sharing binds one address, closes on disable/network change and refreshes advertised addresses", async () => {
   let address = network.address, starts = 0, stops = 0;
   const changes: string[][] = [];

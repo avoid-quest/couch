@@ -1,15 +1,19 @@
+import { setupUiTests, act, render, screen, fireEvent, waitFor } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
-import { act, Profiler } from "react";
-import type { Root } from "react-dom/client";
+import { Profiler } from "react";
+import { toast } from "sonner";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import type { ClientMessage, ServerMessage, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
-import { screen, fireEvent } from "../testing";
 import { formatEndTime } from "../time-format";
 import type { SessionGateValue } from "./session-context";
 import type { ShellValue } from "../sections/shell/AppShell";
 import type { PlaybackClock } from "./playback-clock";
+
+setupUiTests();
+
+const originalWebSocket = globalThis.WebSocket;
+afterEach(() => { globalThis.WebSocket = originalWebSocket; toast.dismiss(); });
 
 const origin = "http://localhost";
 const snapshot: SessionState = {
@@ -19,10 +23,8 @@ const snapshot: SessionState = {
   player: { playbackId: "playback", status: "playing", position: 60, duration: 600, volume: 80, seekable: true, error: null, chapters: [{ title: "Opening", position: 0 }, { title: "Second chapter", position: 120 }] },
 };
 const sockets: Socket[] = [];
-const originals = new Map<string, PropertyDescriptor | undefined>();
 const renders = { find: 0, settings: 0, connection: 0 };
-let root: Root, window: Window, gate: SessionGateValue, shell: ShellValue, clock: PlaybackClock;
-let fetchSpy: ReturnType<typeof spyOn>, dateSpy: ReturnType<typeof spyOn>;
+let gate: SessionGateValue, shell: ShellValue, clock: PlaybackClock;
 let capability: boolean, role: "controller" | "administrator";
 const reads: string[] = [];
 
@@ -40,23 +42,17 @@ class Socket {
   close(code = 1000) { this.readyState = 3; this.onclose?.({ code } as CloseEvent); }
   confirm() { this.emit({ type: "result", requestId: this.sent.at(-1)!.requestId, ok: true }); }
 }
-const flush = () => act(async () => { await Bun.sleep(20); });
 const tick = (position: number, duration = 600) => sockets.at(-1)!.emit({ type: "clock", playbackId: "playback", position, duration });
 
 beforeEach(async () => {
   capability = true; role = "controller";
   sockets.length = reads.length = 0;
   Object.assign(renders, { find: 0, settings: 0, connection: 0 });
-  window = new Window({ url: origin });
-  for (const key of ["CSS", "window", "document", "location", "history", "navigator", "localStorage", "sessionStorage", "scrollTo", "HTMLElement", "HTMLFormElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "Event", "MouseEvent", "KeyboardEvent", "CustomEvent", "MutationObserver", "ResizeObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "WebSocket" ? Socket : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
+  globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   localStorage.setItem("couch.remote-token", "secret");
   localStorage.setItem("couch.remote-installation-id", "installation");
-  dateSpy = spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+  spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
     reads.push(path);
     if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [origin], player: "idle", ...(capability ? { playbackClock: 1 } : {}) });
@@ -69,16 +65,6 @@ beforeEach(async () => {
     if (path === "/api/streaming-community") return Response.json({ origin: "" });
     throw new Error(`Unexpected request: ${path}`);
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
-  root = createRoot(document.body.appendChild(document.createElement("div")));
-});
-
-afterEach(async () => {
-  await act(async () => root.unmount());
-  fetchSpy.mockRestore(); dateSpy.mockRestore();
-  await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
 });
 
 async function mount(path = "/find") {
@@ -106,9 +92,9 @@ async function mount(path = "/find") {
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <Page /> });
   const settings = createRoute({ getParentRoute: () => base, path: "/settings/sources", component: () => <Page settings /> });
   const router = createRouter({ routeTree: base.addChildren([find, settings]), history: createMemoryHistory({ initialEntries: [path] }) });
-  await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
+  await act(async () => { await router.load(); render(<RouterProvider router={router} />); });
   await act(async () => sockets.at(-1)!.emit({ type: "state", state: snapshot }));
-  await flush();
+  if (path === "/settings/sources") await waitFor(() => expect(screen.getAllByText("Not set up")).toHaveLength(3));
   return router;
 }
 
@@ -123,13 +109,13 @@ test.each(["/find", "/settings/sources"])("real gate and shell keep %s stable wh
   expect(screen.getByRole("radio", { name: /Second chapter/ }).getAttribute("aria-checked")).toBe("true");
   expect(gate).toBe(initialGate);
   expect(shell).toBe(initialShell);
-  expect(document.querySelector('[data-time-labels]')?.textContent).toContain("3:00Second chapter");
-  expect(document.querySelector('[data-time-labels]')?.textContent).toContain(`−8:00 ends ${formatEndTime(480)}`);
+  expect(screen.getByText("3:00")).toBeVisible();
+  expect(screen.getByText(`−8:00 ends ${formatEndTime(480)}`)).toBeVisible();
   expect(screen.getByRole("slider", { name: "Playback position" }).getAttribute("aria-valuenow")).toBe("180");
   expect(screen.getByRole("slider", { name: "Playback position" }).getAttribute("aria-valuemax")).toBe("660");
   expect(screen.getByRole("list", { name: "Up next" }).textContent).not.toBe(firstQueue);
   expect(screen.getByRole("list", { name: "Up next" }).textContent).toContain(`starts ${formatEndTime(480)}`);
-  expect(document.querySelector("[data-mini-player]")?.textContent).toContain("3:00 / 11:00");
+  expect(screen.getByText(`3:00 / 11:00 · ends ${formatEndTime(480)}`)).toBeVisible();
 });
 
 test("relative seeks and Undo capture a clock delivered before React commits", async () => {
@@ -167,7 +153,7 @@ test("old hosts seed clocks from full snapshots and structural changes reach con
   const initialGate = gate, initialShell = shell, before = { ...renders };
   role = "administrator";
   await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...snapshot, versions: { controllers: 1, library: 1 }, queue: [...snapshot.queue, { id: "three", title: "Third movie", source: "library:three" }], player: { ...snapshot.player, status: "paused", position: 240, duration: 800 } } }));
-  await flush();
+  await waitFor(() => expect(gate.identity?.authority).toBe("administrator"));
   expect(clock.position).toBe(240);
   expect(clock.duration).toBe(800);
   expect(gate).not.toBe(initialGate); expect(shell).not.toBe(initialShell);
@@ -175,7 +161,7 @@ test("old hosts seed clocks from full snapshots and structural changes reach con
   expect(renders.connection).toBeGreaterThan(before.connection);
   expect(gate.state?.player.status).toBe("paused");
   expect(gate.identity?.authority).toBe("administrator");
-  expect(screen.getByRole("button", { name: "Play Third movie" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Play Third movie" })).toBeVisible();
   expect(reads.filter(path => path === "/api/library/sources").length).toBeGreaterThan(1);
 });
 

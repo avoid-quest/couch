@@ -1,8 +1,6 @@
-import { screen } from "./testing";
+import { setupUiTests, render as renderUI, screen, testWindow } from "./testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
 import { act, startTransition, StrictMode, Suspense, use, useLayoutEffect } from "react";
-import type { Root } from "react-dom/client";
 import { useSession, type Credentials } from "./session/session";
 import { knownConnection, rememberConnection } from "./session/connection";
 import * as connection from "./session/connection";
@@ -10,8 +8,9 @@ import type { ConnectionDetails, ControllerIdentity } from "../shared/controller
 import type { ClientMessage, NavigationKey, ServerMessage, SessionState } from "../shared/protocol";
 import { loadedBuild } from "../shared/build";
 
-let root: Root, window: Window, request: ReturnType<typeof spyOn>;
-const originals = new Map<string, PropertyDescriptor | undefined>();
+setupUiTests();
+
+let view: ReturnType<typeof renderUI>, request: ReturnType<typeof spyOn>;
 let current: ReturnType<typeof useSession>;
 const originalRevision = loadedBuild.revision;
 const details: ConnectionDetails = { name: "Living room", player: "idle", urls: ["http://192.168.1.20:4100"], installationId: "installation" };
@@ -52,31 +51,18 @@ function Remote({ credentials, onNavigation, pending, selectedOrigin, desktopPro
 }
 
 beforeEach(async () => {
-  window = new Window({ url: "http://192.168.1.20:4100" });
+  testWindow.happyDOM.setURL("http://192.168.1.20:4100");
+  spyOn(globalThis, "WebSocket").mockImplementation(((url: string | URL) => new Socket(new URL(String(url)))) as never);
+  Object.assign(WebSocket, { OPEN: Socket.OPEN });
   Socket.instances = [];
-  for (const key of ["window", "document", "navigator", "location", "localStorage", "sessionStorage", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "WebSocket" ? Socket : key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
-  }
   request = spyOn(globalThis, "fetch").mockRejectedValue(new Error("Selected computer is offline"));
-  const { createRoot } = await import("react-dom/client");
-  root = createRoot(document.body.appendChild(document.createElement("div")));
+  view = renderUI(null);
 });
-afterEach(async () => {
-  await act(async () => root.unmount());
-  request.mockRestore();
-  loadedBuild.revision = originalRevision;
-  await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  originals.clear();
-});
+afterEach(() => { loadedBuild.revision = originalRevision; });
 
 test("an unavailable target never sends its pairing to advertised aliases", async () => {
   rememberConnection(location.origin, { name: "Living room", player: "idle", urls: ["http://192.168.1.99:4100"] });
-  await act(async () => root.render(<Remote credentials={{ origin: location.origin, token: "paired-only-here" }} />));
+  await act(async () => view.rerender(<Remote credentials={{ origin: location.origin, token: "paired-only-here" }} />));
   expect(request).toHaveBeenCalledTimes(1);
   expect(String(request.mock.calls[0]![0])).toStartWith(location.origin + "/api/");
   expect(new Headers(request.mock.calls[0]![1]?.headers).has("Authorization")).toBe(false);
@@ -85,7 +71,7 @@ test("an unavailable target never sends its pairing to advertised aliases", asyn
 
 test("an unpaired page checks its own origin despite cached connection addresses", async () => {
   rememberConnection("http://192.168.1.99:4100", { name: "Old address", player: "idle", urls: ["http://192.168.1.98:4100"] });
-  await act(async () => root.render(<Remote credentials={null} />));
+  await act(async () => view.rerender(<Remote credentials={null} />));
   expect(request).toHaveBeenCalledTimes(1);
   expect(request.mock.calls[0]![0]).toBe(location.origin + "/api/connection");
   expect(new Headers(request.mock.calls[0]![1]?.headers).has("Authorization")).toBe(false);
@@ -94,7 +80,7 @@ test("an unpaired page checks its own origin despite cached connection addresses
 
 test("a replaced installation at the same origin requires pairing before any credential is sent", async () => {
   request.mockImplementation(async () => Response.json({ name: "Different Couch", player: "idle", urls: [location.origin], installationId: "different-installation" }));
-  await act(async () => root.render(<Remote credentials={{ origin: location.origin, token: "old-pairing", installationId: "remembered-installation" }} />));
+  await act(async () => view.rerender(<Remote credentials={{ origin: location.origin, token: "old-pairing", installationId: "remembered-installation" }} />));
   expect(screen.getByRole("status").textContent).toBe("pairing-required");
   expect(request.mock.calls.length).toBeGreaterThan(0);
   for (const [url, options] of request.mock.calls) {
@@ -105,7 +91,7 @@ test("a replaced installation at the same origin requires pairing before any cre
 
 test("bundled remote discovery rejects incompatible hosts before sending a pairing", async () => {
   request.mockImplementation(async () => Response.json({ ...details, desktopClientProtocol: 2 }));
-  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
   expect(current.status).toBe("protocol-mismatch");
   expect(Socket.instances).toHaveLength(0);
   expect(request.mock.calls.map(([url]: [unknown]) => String(url))).toEqual([`${credentials.origin}/api/connection`]);
@@ -114,7 +100,7 @@ test("bundled remote discovery rejects incompatible hosts before sending a pairi
 
 test("bundled remote discovery rejects a host without a protocol marker", async () => {
   request.mockImplementation(async () => Response.json(details));
-  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
   expect(current.status).toBe("protocol-mismatch");
   expect(Socket.instances).toHaveLength(0);
   expect(request.mock.calls.map(([url]: [unknown]) => String(url))).toEqual([`${credentials.origin}/api/connection`]);
@@ -123,7 +109,7 @@ test("bundled remote discovery rejects a host without a protocol marker", async 
 test("bundled remote sessions accept a different host revision under the same protocol", async () => {
   loadedBuild.revision = "desktop-client";
   request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? { ...details, desktopClientProtocol: 1 } : identity));
-  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
   expect(Socket.instances).toHaveLength(1);
   expect(Socket.instances[0]!.url.searchParams.get("clientProtocol")).toBe("1");
   expect(request.mock.calls.some(([url]: [unknown]) => String(url).endsWith("/api/build"))).toBe(false);
@@ -134,13 +120,13 @@ test("navigation uses the latest committed callback without replacing its WebSoc
   online();
   const received: string[] = [];
   const render = (prefix: string, pending?: Promise<void>) => <Suspense fallback="Waiting"><Remote credentials={credentials} onNavigation={key => received.push(`${prefix}:${key}`)} pending={pending} /></Suspense>;
-  await act(async () => root.render(render("first")));
+  await act(async () => view.rerender(render("first")));
   const socket = Socket.instances[0]!;
   await act(async () => socket.receive({ type: "navigation", key: "home" }));
-  await act(async () => root.render(render("second")));
+  await act(async () => view.rerender(render("second")));
   await act(async () => socket.receive({ type: "navigation", key: "back" }));
   const suspended = deferred<void>();
-  await act(async () => startTransition(() => root.render(render("uncommitted", suspended.promise))));
+  await act(async () => startTransition(() => view.rerender(render("uncommitted", suspended.promise))));
   await act(async () => socket.receive({ type: "navigation", key: "select" }));
   expect(received).toEqual(["first:home", "second:back", "second:select"]);
   expect(Socket.instances).toHaveLength(1);
@@ -152,7 +138,7 @@ test("navigation uses the latest committed callback without replacing its WebSoc
 
 test("connection details follow session metadata and persist without rewriting for playback ticks", async () => {
   online();
-  await act(async () => root.render(<Remote credentials={credentials} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} />));
   const socket = Socket.instances[0]!;
   expect(current.details).toEqual(details);
   const renamed: SessionState = { ...state, installationName: "Den", player: { ...state.player, status: "playing" } };
@@ -172,7 +158,7 @@ test("connection details follow session metadata and persist without rewriting f
 
 test.each(["origin", "token", "installationId"] as const)("changing %s resets controller identity and rejects commands from the previous connection", async key => {
   online();
-  await act(async () => root.render(<Remote credentials={credentials} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} />));
   const socket = Socket.instances[0]!;
   await act(async () => { socket.open(); socket.receive({ type: "state", state }); });
   expect(current.identity).toEqual(identity);
@@ -181,7 +167,7 @@ test.each(["origin", "token", "installationId"] as const)("changing %s resets co
   const response = deferred<Response>();
   request.mockImplementation(() => response.promise);
   const next = { ...credentials, [key]: key === "origin" ? "http://192.168.1.21:4100" : "replacement" };
-  await act(async () => root.render(<Remote credentials={next} />));
+  await act(async () => view.rerender(<Remote credentials={next} />));
   expect(current.identity).toBeNull();
   expect(current.state).toBeNull();
   expect(current.pairingRequired).toBe(false);
@@ -198,13 +184,13 @@ test.each(["origin", "token", "installationId"] as const)("changing %s resets co
 
 test.each(["origin", "token", "installationId"] as const)("changing %s clears rejection of the previous pairing", async key => {
   request.mockImplementation(async (url: string | URL | Request) => String(url).endsWith("/api/connection") ? Response.json(details) : new Response(null, { status: 401 }));
-  await act(async () => root.render(<Remote credentials={credentials} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} />));
   expect(current.pairingRequired).toBe(true);
   expect(current.playerStatus).toBe("idle");
   const response = deferred<Response>();
   request.mockImplementation(() => response.promise);
   const next = { ...credentials, [key]: key === "origin" ? "http://192.168.1.21:4100" : "replacement" };
-  await act(async () => root.render(<Remote credentials={next} />));
+  await act(async () => view.rerender(<Remote credentials={next} />));
   expect(current.pairingRequired).toBe(false);
   expect(current.status).toBe("connecting");
 });
@@ -212,12 +198,12 @@ test.each(["origin", "token", "installationId"] as const)("changing %s clears re
 test("an origin change ignores an older public response completed after the new connection", async () => {
   const stale = deferred<Response>();
   request.mockImplementation(() => stale.promise);
-  await act(async () => root.render(<Remote credentials={credentials} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} />));
   const staleSignal = request.mock.calls[0]![1]!.signal as AbortSignal;
   const next = { ...credentials, origin: "http://192.168.1.21:4100" };
   const nextDetails = { ...details, name: "Bedroom", urls: [next.origin] };
   request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? nextDetails : identity));
-  await act(async () => root.render(<Remote credentials={next} />));
+  await act(async () => view.rerender(<Remote credentials={next} />));
   expect(staleSignal.aborted).toBe(true);
   await act(async () => stale.resolve(Response.json(details)));
   expect(current.details).toEqual(nextDetails);
@@ -228,7 +214,7 @@ test("an origin change ignores an older public response completed after the new 
 
 test("controller refresh ignores an older response body completed after a new controller version", async () => {
   online();
-  await act(async () => root.render(<Remote credentials={credentials} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} />));
   const socket = Socket.instances[0]!;
   const stale = deferred<ControllerIdentity>();
   request.mockImplementation(async (url: string | URL | Request) => String(url).endsWith("/api/connection") ? Response.json(details) : ({ ok: true, status: 200, json: () => stale.promise }) as Response);
@@ -247,10 +233,10 @@ test("a disposed build response cannot reload the replacement connection", async
   loadedBuild.revision = "client";
   const stale = deferred<typeof loadedBuild>();
   request.mockImplementation(async (url: string | URL | Request) => String(url).endsWith("/api/build") ? ({ ok: true, status: 200, json: () => stale.promise }) as Response : Response.json(details));
-  await act(async () => root.render(<Remote credentials={credentials} />));
+  await act(async () => view.rerender(<Remote credentials={credentials} />));
   const next = { ...credentials, origin: "http://192.168.1.21:4100" };
   request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? { ...details, urls: [next.origin] } : String(url).endsWith("/api/build") ? loadedBuild : identity));
-  await act(async () => root.render(<Remote credentials={next} />));
+  await act(async () => view.rerender(<Remote credentials={next} />));
   const socket = Socket.instances[0]!;
   await act(async () => { socket.open(); socket.receive({ type: "state", state }); });
   const reload = spyOn(location, "reload").mockImplementation(() => {});
@@ -270,7 +256,7 @@ test("Strict Mode aborts its discarded fetch and closes the surviving socket on 
     if (signals.length === 1) return discarded.promise;
     return Response.json(String(url).endsWith("/api/connection") ? details : identity);
   });
-  await act(async () => root.render(<StrictMode><Remote credentials={credentials} /></StrictMode>));
+  await act(async () => view.rerender(<StrictMode><Remote credentials={credentials} /></StrictMode>));
   expect(signals[0]!.aborted).toBe(true);
   expect(signals[1]!.aborted).toBe(false);
   await act(async () => discarded.resolve(Response.json({ ...details, name: "Discarded" })));
@@ -279,7 +265,7 @@ test("Strict Mode aborts its discarded fetch and closes the surviving socket on 
   const socket = Socket.instances[0]!;
   await act(async () => { socket.open(); socket.receive({ type: "state", state }); });
   const pending = current.command({ type: "stop" }).then(() => null, error => error as Error);
-  await act(async () => root.render(null));
+  await act(async () => view.rerender(null));
   expect(socket.closed).toBe(true);
   expect(signals.every(signal => signal.aborted)).toBe(true);
   expect((await pending)?.message).toContain("Connection lost");

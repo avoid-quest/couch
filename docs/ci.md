@@ -18,6 +18,42 @@ are part of that existing suite, not another harness. For focused iteration use
 `bun test --isolate --parallel=4 <test paths>`; run the real-clock test separately.
 A nonzero exit or unhandled error is a failure, regardless of the assertion count.
 
+## Writing tests
+
+Keep TypeScript tests on `bun:test` and native tests on Cargo. UI tests import the
+shared setup before application modules and register cleanup in the test file:
+
+```ts
+import { render, screen, setupUiTests, userEvent } from "@/testing/react";
+import { expect, test } from "bun:test";
+
+setupUiTests();
+```
+
+The explicit call registers hooks again during Bun's `--rerun-each`; imported
+modules can remain cached. The helper installs Happy DOM, retains Bun's network
+primitives, and exports React Testing Library's normal APIs. Use
+`renderWithQueryClient` or `createTestQueryClient` for a fresh client whose cache
+is cleared during cleanup. Restore test-specific globals, event listeners, and
+external resources in the owning fixture. Render temporary controls through RTL
+so its cleanup owns them too.
+
+Use named roles, labels, and user actions to assert meaningful outcomes. Delete
+CSS, class, wrapper, and layout assertions; do not hide selectors in helpers.
+Prefer `userEvent.setup()` for interactions and `findByRole`/`waitFor` for async
+results. Resolve controlled promises inside awaited `act` before checking that a
+late response had no effect. Keep distinct authorization, cancellation,
+persistence, and native-input restrictions even when their old tests asserted
+implementation details.
+
+For timeout and expiry behavior, use Bun's `jest.useFakeTimers()` and restore real
+timers in `finally`. Keep actual subprocess and media-clock checks on real time.
+Use `bun test --parallel=4 --rerun-each=3 <paths>` to check changed fixtures for
+leaks; retries do not turn a failing test into acceptable evidence. The separate
+clock process remains because the measured combined run was slower. Rust keeps
+the existing locked Cargo commands; native driver and nextest adoption require
+demonstrated benefits before adding dependencies.
+
 ## Exact-revision evidence
 
 `verify` refuses the wrong Bun version, an uncommitted source tree, or missing
