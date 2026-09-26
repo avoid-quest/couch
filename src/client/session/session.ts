@@ -65,6 +65,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     const pairingRequired = () => { authenticate = false; ready.current = false; observation.current = null; setClock(emptyPlaybackClock); setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
+      clearTimeout(retry);
+      retry = undefined;
       if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
@@ -195,9 +197,22 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       };
     };
 
+    const wake = (event: Event) => {
+      // Only advance a queued disconnected retry. Closing a healthy socket also
+      // cancels its Controller's Bluetooth operation and pending commands.
+      if (disposed || !authenticate || !credentials || !sameCredentials(credentials, currentCredentials.current) || retry === undefined || document.visibilityState !== "visible") return;
+      if (event.type === "pageshow" && !(event as PageTransitionEvent).persisted) return;
+      void connect();
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    window.addEventListener("online", wake);
     void connect();
     return () => {
       disposed = true;
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("pageshow", wake);
+      window.removeEventListener("online", wake);
       controller.abort();
       ready.current = false;
       clearTimeout(retry);
