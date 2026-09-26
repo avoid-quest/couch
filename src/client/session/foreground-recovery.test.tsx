@@ -1,21 +1,22 @@
+import { setupUiTests, act, render } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import { loadedBuild } from "../../shared/build";
 import type { ClientMessage, ServerMessage, SessionState } from "../../shared/protocol";
 import type { Credentials, useSession } from "./session";
+
+setupUiTests();
+
+const originalWebSocket = globalThis.WebSocket;
+afterEach(() => { globalThis.WebSocket = originalWebSocket; });
 
 const originalRevision = loadedBuild.revision;
 const credentials: Credentials = { origin: "http://localhost", token: "paired", installationId: "installation" };
 const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
 const playlist = { type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", title: "Playlist" } as const;
-const originals = new Map<string, PropertyDescriptor | undefined>();
 const sockets: Socket[] = [];
 const requests: Array<{ origin: string; path: string; token: string | null; signal?: AbortSignal | null }> = [];
 const timers: Array<{ handle: ReturnType<typeof setTimeout>; delay: number; due: number; active: boolean; callback: () => void }> = [];
-const spies: Array<ReturnType<typeof spyOn>> = [];
-let root: Root | undefined, window: Window, session: ReturnType<typeof useSession>;
+let view: ReturnType<typeof render>, session: ReturnType<typeof useSession>;
 let mount: (next?: Credentials | null, protocol?: number) => Promise<void>;
 let now: number, unavailable: boolean, installation: string, identityStatus: number, buildMismatch: boolean;
 let discovery: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
@@ -39,28 +40,23 @@ beforeEach(async () => {
   sockets.length = requests.length = timers.length = 0;
   loadedBuild.revision = "fixture-revision";
   now = 0; unavailable = buildMismatch = false; installation = "installation"; identityStatus = 200; discovery = undefined;
-  window = new Window({ url: credentials.origin });
-  for (const key of ["window", "document", "location", "navigator", "HTMLElement", "Element", "Node", "Event", "MessageEvent", "localStorage", "sessionStorage", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "WebSocket" ? Socket : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  }
+  globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   const schedule = globalThis.setTimeout, cancel = globalThis.clearTimeout;
   // Retain real handles so production cleanup runs normally, while only this
   // fixture advances retry, handshake and command deadlines.
-  spies.push(spyOn(globalThis, "setTimeout").mockImplementation(((callback: (...args: unknown[]) => void, delay: number, ...args: unknown[]) => {
+  spyOn(globalThis, "setTimeout").mockImplementation(((callback: (...args: unknown[]) => void, delay: number, ...args: unknown[]) => {
     if (![500, 1_000, 2_000, 4_000, 5_000, 8_000, 35_000].includes(delay)) return schedule(callback, delay, ...args);
     const handle = schedule(() => {}, 60_000);
     timers.push({ handle, delay, due: now + delay, active: true, callback: () => callback(...args) });
     return handle;
-  }) as typeof setTimeout));
-  spies.push(spyOn(globalThis, "clearTimeout").mockImplementation(((handle: ReturnType<typeof setTimeout>) => {
+  }) as typeof setTimeout);
+  spyOn(globalThis, "clearTimeout").mockImplementation(((handle: ReturnType<typeof setTimeout>) => {
     const timer = timers.find(timer => timer.handle === handle);
     if (timer) timer.active = false;
     cancel(handle);
-  }) as typeof clearTimeout));
-  spies.push(spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+  }) as typeof clearTimeout);
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     requests.push({ origin: url.origin, path: url.pathname, token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
     if (url.pathname === "/api/connection") {
@@ -71,25 +67,21 @@ beforeEach(async () => {
     if (url.pathname === "/api/build") return Response.json(buildMismatch ? { ...loadedBuild, revision: "other-revision" } : loadedBuild);
     if (url.pathname === "/api/controllers/me") return Response.json({ controller: { id: "remote", name: "Remote", role: "controller" }, authority: "controller", claimAvailable: false }, { status: identityStatus });
     throw new Error(`Unexpected request: ${url.pathname}`);
-  }) as typeof fetch));
-  const { createRoot } = await import("react-dom/client");
+  }) as typeof fetch);
   const { useSession } = await import("./session");
   function Probe({ connection, protocol }: { connection: Credentials | null; protocol?: number }) {
     session = useSession(connection, undefined, connection?.origin ?? credentials.origin, protocol);
     return null;
   }
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-  mount = async (next = credentials, protocol) => { await act(async () => root!.render(<Probe connection={next} protocol={protocol} />)); };
+  view = render(<></>);
+  mount = async (next = credentials, protocol) => { await act(async () => view.rerender(<Probe connection={next} protocol={protocol} />)); };
 });
 
 afterEach(async () => {
-  if (root) await act(async () => root!.unmount()); root = undefined;
   discovery?.resolve(details());
   for (const timer of timers) clearTimeout(timer.handle);
-  for (const spy of spies.reverse()) spy.mockRestore(); spies.length = 0;
-  await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  Reflect.deleteProperty(document, "visibilityState");
+  Reflect.deleteProperty(navigator, "onLine");
   loadedBuild.revision = originalRevision;
 });
 
@@ -247,7 +239,6 @@ test("reachable LAN recovers even when navigator reports offline, without replay
 
 test.each(["target", "credential", "unmount"] as const)("%s replacement retires listeners, retry timers and late callbacks", async change => {
   const documentRemove = spyOn(document, "removeEventListener"), windowRemove = spyOn(globalThis.window, "removeEventListener");
-  spies.push(documentRemove, windowRemove);
   await connect(); unavailable = true;
   await act(async () => sockets[0]!.close());
   const oldRetry = activeTimers()[0]!;
@@ -255,7 +246,7 @@ test.each(["target", "credential", "unmount"] as const)("%s replacement retires 
   await act(async () => burst());
   const late = discovery, signal = discoveries().at(-1)!.signal;
   discovery = undefined;
-  if (change === "unmount") { await act(async () => root!.unmount()); root = undefined; }
+  if (change === "unmount") view.unmount();
   else await mount({ ...credentials, ...(change === "target" ? { origin: "http://another-tv" } : { token: "replacement-token" }) });
   expect(signal?.aborted).toBe(true);
   expect(oldRetry.active).toBe(false);

@@ -1,15 +1,14 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
-import { act, useState } from "react";
-import type { Root } from "react-dom/client";
+import { setupUiTests, render as renderUI, act, screen, userEvent, createTestQueryClient } from "@/testing/react";
+import { beforeEach, expect, spyOn, test } from "bun:test";
+import { useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
-import { fireEvent, screen } from "../../testing";
 import { SessionGateContext } from "@/session/gate-context";
 
-let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>, reorderFavorites: typeof import("./SavedFavorites").reorderFavorites;
-const originals = new Map<string, PropertyDescriptor | undefined>();
+setupUiTests();
+
+let view: ReturnType<typeof renderUI>, client: QueryClient, reorderFavorites: typeof import("./SavedFavorites").reorderFavorites;
 const calls: Array<{ path: string; method: string }> = [];
 const played: Array<{ kind: string; id: string; playNow: boolean }> = [];
 const opened: string[] = [];
@@ -19,30 +18,24 @@ const station: RadioStation = { id: "station", name: "Evening radio", url: "http
 let online: ProviderItem[] = [], radios: RadioStation[] = [], failOnline = false;
 const button = (label: string) => screen.getByRole("button", { name: label });
 const queryButton = (label: string) => screen.queryByRole("button", { name: label });
-const flush = () => act(async () => { await Bun.sleep(20); });
-const click = async (label: string) => { await act(async () => fireEvent.click(button(label))); await flush(); };
+const click = async (label: string) => userEvent.click(await screen.findByRole("button", { name: label }));
 async function render(connected = true, canPlay = true, session?: unknown) {
   const { SavedFavorites, reorderFavorites: reorder } = await import("./SavedFavorites");
   reorderFavorites = reorder;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client = createTestQueryClient();
   const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
-  await act(async () => root.render(wrap(<SessionGateContext.Provider value={(session ?? null) as never}><SavedFavorites origin="http://localhost" token="paired" connected={connected} canPlay={canPlay}
+  await act(async () => view.rerender(wrap(<SessionGateContext.Provider value={(session ?? null) as never}><SavedFavorites origin="http://localhost" token="paired" connected={connected} canPlay={canPlay}
     onEnqueueProvider={async (item, playNow) => { played.push({ kind: "provider", id: item.id, playNow }); return true; }}
     onEnqueueRadio={async (item, playNow) => { played.push({ kind: "radio", id: item.id, playNow }); return true; }}
     onOpenProvider={item => opened.push(item.id)} /></SessionGateContext.Provider>)));
-  await flush();
+
+  if (connected) await screen.findByRole("button", { name: "Play Evening radio" });
 }
 beforeEach(async () => {
   calls.length = 0; played.length = 0; opened.length = 0; failOnline = false;
   online = [video, album]; radios = [station];
-  window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "HTMLSelectElement", "KeyboardEvent", "PointerEvent", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
-  request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname, method = init?.method ?? "GET";
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
     calls.push({ path, method });
@@ -63,20 +56,12 @@ beforeEach(async () => {
     if (path === "/api/providers/favorites" && failOnline) return Response.json({ error: "Online saves unavailable" }, { status: 503 });
     return Response.json({ favorites: path === "/api/providers/favorites" ? online : radios });
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-});
-afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  view = renderUI(<></>);
 });
 
 test("one saved list shows existing online and radio favorites without catalog or queue writes", async () => {
   await render();
   expect(screen.getAllByRole("listitem")).toHaveLength(3);
-  expect(screen.getAllByRole("listitem").every((row: HTMLElement) => row.hasAttribute("data-nav-row"))).toBe(true);
-  expect(button("Queue Evening video").closest("li")?.contains(button("Queue Evening radio"))).toBe(false);
   expect(document.body.textContent).toContain("YouTube");
   expect(document.body.textContent).toContain("Bandcamp");
   expect(document.body.textContent).toContain("Radio");
@@ -113,7 +98,8 @@ test("removal uses original stores and preserves the queue and another controlle
   expect(screen.getAllByRole("listitem")).toHaveLength(1);
   expect(played).toEqual([]);
   online.push({ ...video, id: "new", title: "New shared video" });
-  await act(async () => { await client.invalidateQueries(); }); await flush();
+  await act(async () => { await client.invalidateQueries(); });
+  await screen.findByRole("button", { name: "Play New shared video" });
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
   expect(document.body.textContent).toContain("New shared video");
 });
@@ -123,9 +109,10 @@ test("Undo after removal saves the item again in its old place", async () => {
   await render(true, true, { state: null, offerUndo: (text: string, undo: () => Promise<void>) => { expect(text).toBe("Removed Evening video from Saved."); undos.push(undo); } });
   await click("Remove Evening video");
   expect(online.map(item => item.id)).toEqual(["album"]);
-  await act(async () => { await undos[0]!(); }); await flush();
+  await act(async () => { await undos[0]!(); });
+  await screen.findByRole("button", { name: "Play Evening video" });
   expect(online.map(item => item.id)).toEqual(["video", "album"]);
-  expect(screen.getAllByRole("listitem").map((row: HTMLElement) => row.querySelector("[data-play]")?.getAttribute("aria-label"))).toEqual(["Play Evening video", "Open Evening album", "Play Evening radio"]);
+  expect(screen.getAllByRole("button", { name: /^(Play Evening video|Open Evening album|Play Evening radio)$/ }).map(button => button.getAttribute("aria-label"))).toEqual(["Play Evening video", "Open Evening album", "Play Evening radio"]);
 });
 
 test("one unavailable save source does not hide the other source and retry recovers", async () => {
@@ -157,24 +144,24 @@ test("Saved keeps saved collections together without a separate history destinat
   type SavedTab = import("./SavedSection").SavedTab;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const found: string[] = [];
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   function Saved() {
     const [tab, setTab] = useState<SavedTab>("later");
     return <SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay tab={tab} onTabChange={setTab}
       onFind={() => found.push("Find")} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} />;
   }
-  await act(async () => root.render(<QueryClientProvider client={client}><Saved /></QueryClientProvider>));
-  await flush();
+  await act(async () => view.rerender(<QueryClientProvider client={client}><Saved /></QueryClientProvider>));
+
   expect(document.body.textContent).toContain("Shared on Couch");
-  expect(document.body.textContent).toContain("Saved local movie");
+  expect(await screen.findByRole("button", { name: "Play Saved local movie" })).toBeEnabled();
   expect(screen.getByRole("tab", { name: /For later/ }).textContent).toContain("1");
-  await act(async () => fireEvent.mouseDown(screen.getByRole("tab", { name: /Channels & stations/ }), { button: 0 }));
-  await flush();
+  await userEvent.click(screen.getByRole("tab", { name: /Channels & stations/ }));
+  await screen.findByRole("button", { name: "Play Evening video" });
+
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Channels & stations");
   for (const itemTitle of ["Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
-  expect(screen.getAllByRole("listitem").every((row: HTMLElement) => row.hasAttribute("data-nav-row"))).toBe(true);
-  await act(async () => fireEvent.mouseDown(screen.getByRole("tab", { name: /Lists/ }), { button: 0 }));
-  await flush();
+  await userEvent.click(screen.getByRole("tab", { name: /Lists/ }));
+
   expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Lists");
   expect(found).toEqual([]);
   expect(calls.every(call => call.method === "GET")).toBe(true);

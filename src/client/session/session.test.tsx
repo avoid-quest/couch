@@ -1,21 +1,21 @@
+import { setupUiTests, act, render, screen } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import type { Action, ClientMessage, ServerMessage, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
-import { screen } from "../testing";
 import type { Credentials, useSession } from "./session";
+
+setupUiTests();
+
+const originalWebSocket = globalThis.WebSocket;
+afterEach(() => { globalThis.WebSocket = originalWebSocket; });
 
 const credentials: Credentials = { origin: "http://localhost", token: "paired", installationId: "installation" };
 const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
 const atom = { type: "enqueueProvider", provider: "youtube", shape: "atom", url: "https://www.youtube.com/watch?v=abcdefghijk", title: "Episode" } as const;
 const playlist = { ...atom, shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890" } as const;
 const sockets: Socket[] = [];
-const originals = new Map<string, PropertyDescriptor | undefined>();
 const timers: Array<{ handle: ReturnType<typeof setTimeout>; delay: number; fired: boolean; fire: () => void }> = [];
-let root: Root | undefined, window: Window | undefined, session: ReturnType<typeof useSession>;
-let fetchSpy: ReturnType<typeof spyOn>, timerSpy: ReturnType<typeof spyOn> | undefined;
+let session: ReturnType<typeof useSession>;
 let capability = true;
 const renderedObservations: Array<SessionState | null> = [];
 let mount: (next: Credentials) => Promise<void>;
@@ -37,28 +37,22 @@ class Socket {
 beforeEach(async () => {
   capability = true;
   sockets.length = timers.length = 0;
-  window = new Window({ url: credentials.origin });
-  for (const key of ["window", "document", "location", "navigator", "HTMLElement", "Element", "Node", "Event", "MessageEvent", "localStorage", "sessionStorage", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "WebSocket" ? Socket : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  }
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+  globalThis.WebSocket = Socket as unknown as typeof WebSocket;
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true, ...(capability ? { playbackClock: 1 } : {}) });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ controller: { id: "remote", name: "Remote", role: "controller" }, authority: "controller", claimAvailable: false });
     throw new Error(`Unexpected session request: ${path}`);
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
   const { useSession } = await import("./session");
   function Probe({ connection }: { connection: Credentials }) {
     session = useSession(connection);
     renderedObservations.push(session.readObservation());
     return <output role="status">{session.status}</output>;
   }
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-  mount = async next => { await act(async () => root!.render(<Probe connection={next} />)); };
+  const view = render(<></>);
+  mount = async next => { await act(async () => view.rerender(<Probe connection={next} />)); };
   await mount(credentials);
   expect(sockets).toHaveLength(1);
   await act(async () => sockets[0]!.emit({ type: "state", state }));
@@ -68,7 +62,7 @@ beforeEach(async () => {
   // Keeping real scheduler handles lets the hook's ordinary clearTimeout and
   // cleanup paths run unchanged; tests do not wait eight or thirty-five seconds.
   const schedule = globalThis.setTimeout;
-  timerSpy = spyOn(globalThis, "setTimeout").mockImplementation(((...args: Parameters<typeof setTimeout>) => {
+  spyOn(globalThis, "setTimeout").mockImplementation(((...args: Parameters<typeof setTimeout>) => {
     const handle = schedule(...args);
     const [callback, delay] = args;
     if (typeof callback === "function" && (delay === 8_000 || delay === 35_000)) timers.push({ handle, delay, fired: false, fire: () => callback(...args.slice(2)) });
@@ -77,14 +71,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  if (root) await act(async () => root!.unmount());
-  root = undefined;
   for (const timer of timers) clearTimeout(timer.handle);
-  timerSpy?.mockRestore(); timerSpy = undefined;
-  fetchSpy?.mockRestore();
-  await window?.happyDOM.abort(); window = undefined;
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
 });
 
 async function elapse(milliseconds: number) {
