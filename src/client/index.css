@@ -109,6 +109,10 @@ html { view-transition-name: none; }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
 .player-band { position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
+/* Video controls shade the picture without a hard edge that looks like a crop. */
+.player-band.player-video-controls { pointer-events: none; padding-top: 3.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 3rem, rgb(0 0 0 / 96%)); }
+.player-video-controls > * { pointer-events: auto; }
+.player-band[data-player-band="hidden"] { pointer-events: none; }
 .player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) 1.5rem; }
 [data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
@@ -141,7 +145,7 @@ html { view-transition-name: none; }
   [data-queue-open] .player-main { display: contents; }
   [data-queue-open] .player-summary { display: none; }
   [data-queue-open] .player-queue { display: flex; grid-row: 1; }
-  [data-queue-open] .player-band { position: static; grid-row: 2; width: 100%; padding-inline: 0; }
+  [data-queue-open] .player-band { background: var(--background); padding-top: 0; position: static; grid-row: 2; width: 100%; padding-inline: 0; }
 }
 @media (max-width: 599px) {
   [data-player-audio-copy] h1 { font-size: 1.25rem; }
@@ -156,6 +160,7 @@ html { view-transition-name: none; }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
   .player-header { padding-block: .25rem; }
   [data-player-band] { padding-block: .25rem; }
+  .player-band.player-video-controls { padding-top: 1.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 1.5rem, rgb(0 0 0 / 96%)); }
   .player-control-row { gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
   [data-player-audio-copy] h1 { font-size: 1.125rem; -webkit-line-clamp: 1; }
@@ -172,3 +177,5 @@ body.native-host:has(.player-page .video-stage.has-video),
 body.native-host:has(.player-page .video-stage.has-video) .app-shell,
 body.native-host:has(.player-page .video-stage.has-video) .tv-browser,
 body.native-host:has(.player-page .video-stage.has-video) .player-page { background: transparent; }
+
+@media (max-width: 959px) { [data-queue-open] .player-band.player-video-controls { padding-top: 0; background: var(--background); } }
