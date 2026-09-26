@@ -12,6 +12,8 @@ test("the actual appliance session retains the panel and does not change primary
       "dbus-update-activation-environment": "exit 0",
       xset: "exit 0",
       openbox: "exit 0",
+      // The shell can enter its monitor loop before reaping the exited window manager.
+      sleep: "exit 0",
       xrandr: 'if [ "$1" = --query ]; then printf "eDP-1 connected primary 1366x768+0+0\\nHDMI-1 connected 1920x1080+1366+0\\n"; else printf "%s\\n" "$*" >> "$COUCH_DISPLAY_TEST_LOG"; fi',
     })) {
       const path = join(directory, name);
