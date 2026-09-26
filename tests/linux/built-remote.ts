@@ -146,7 +146,7 @@ try {
     `));
   }
   await ui.execute("document.documentElement.style.removeProperty('--interface-scale')");
-  await ui.button("Stop");
+  await ui.stopPlayback();
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Find");
   await ui.type("#media-search", "provider fixture");
@@ -161,7 +161,7 @@ try {
   assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host");
   assert.ok(!JSON.stringify(latest).includes(providerTransport), "Resolved transport remains private to the native pipe");
   await ui.section("Now");
-  await ui.button("Stop");
+  await ui.stopPlayback();
   await until("provider playback stops through the browser", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Saved");
   await remote.refresh();

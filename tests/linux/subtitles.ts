@@ -35,7 +35,8 @@ function controls({ clients, until }: Pick<Context, "clients" | "until">) {
 
 async function settings(ui: UiDriver, until: Wait, panel: "tracks" | "settings" = "tracks") {
   await ui.controls();
-  await ui.button(panel === "tracks" ? "Audio & subtitles" : "Settings", "[data-player-tools]");
+  await ui.button("Playback", "[data-player-tools]");
+  if (panel === "tracks") await ui.button("Audio & subtitles", "[data-player-sheet]");
   await until("playback panel opens", async () => await ui.execute("return !!document.querySelector('[data-player-sheet]')"));
 }
 

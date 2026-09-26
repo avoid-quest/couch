@@ -68,6 +68,13 @@ export class UiDriver {
     await this.waitFor("Playback controls become visible", () => this.execute("return !!document.querySelector('[data-player-band=shown]')"));
   }
 
+  async stopPlayback() {
+    await this.controls();
+    if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.button("Close", "[data-player-sheet]");
+    await this.button("Playback", "[data-player-band]");
+    await this.button("Stop playback", "[data-player-sheet]");
+  }
+
   async watching() {
     await this.controls();
     await this.waitFor("Player dialogs close before native pixel capture", () => this.execute("return !document.querySelector('[role=dialog], [role=listbox], [data-slot=popover-content]')"));

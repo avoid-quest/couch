@@ -42,7 +42,7 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
   await httpRemote.minimize();
   await other.restore();
   await other.ui.section("Queue");
-  await other.ui.button("Stop", "[data-player-band]");
+  await other.ui.stopPlayback();
   await until("second phone cancels both current playback and prepared successor", () => all(state => state.player.status === "idle"));
   await Bun.sleep(3_500);
   assert.ok(all(state => state.player.status === "idle" && state.player.playbackId === null));

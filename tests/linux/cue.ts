@@ -36,7 +36,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await until("cue seek acknowledges two seconds within the segment", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.4));
   const profileId = first().activeProfile.id;
   await httpRemote.ui.section("Queue");
-  await httpRemote.ui.button("Stop", "[data-player-band]");
+  await httpRemote.ui.stopPlayback();
   await until("phone Stop retires the cue playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
   if (!entries.some(entry => entry.id === phoneEntryId)) await clients[0]!.command({ type: "remove", entryId: phoneEntryId });
   await clients[0]!.command({ type: "remove", entryId: entries[0]!.id });

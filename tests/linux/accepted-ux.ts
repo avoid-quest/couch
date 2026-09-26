@@ -24,7 +24,7 @@ export async function verifyAcceptedUx(context: MusicContext) {
       await driver.section("Queue");
       await until(`${name} separates current, next and played queue entries`, () => driver.execute(`
         const ids = label => [...document.querySelectorAll('[data-queue-panel] [aria-label="' + label + '"] [data-queue-entry-id]')].map(row => row.dataset.queueEntryId);
-        return document.querySelector('[data-player-heading] h1')?.textContent === 'Search local video'
+        return document.querySelector('[aria-label=Player] h1')?.textContent === 'Search local video'
           && JSON.stringify([ids('Up next'), ids('Played')]) === JSON.stringify([[arguments[0]], [arguments[1]]]);
       `, [ids[2], ids[0]]));
       if (name === "phone") { await assertResponsive(driver, "Phone current session"); await httpRemote.screenshot("accepted-current-session"); }
