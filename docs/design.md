@@ -15,8 +15,13 @@ catalog provides interface icons, not brand identities.
 
 ## Principles
 
-- **Conventional structure, quiet style.** Find, Saved and Settings, a
+- **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
   full-bleed player with one solid control band, and "Playing on" one step away.
+- **Home is a timetable.** Each row names its section and the clock time it
+  matters at ("ends 21:38", "until 23:10") in a left column, with its content
+  on the right. Rows appear only when they have something in them: Now, Up
+  next, Continue, Radio and For later. Up next is one ruler split by each
+  entry's length, so the evening's shape is visible before its titles.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29".
 - **Colour only when it means something.** Destructive red is the only colour.
@@ -78,7 +83,7 @@ owned by Couch; the Mira defaults were changed only where Clock needs it:
 Shared building blocks in `src/client/components`:
 
 - `MediaRow` / `MediaList`: thumbnail, title, meta, length bar, one main verb
-  and actions revealed on hover or focus. Find, Saved and Up next.
+  and actions revealed on hover or focus. Home, Find, Saved and Up next.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.

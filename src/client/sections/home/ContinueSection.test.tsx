@@ -4,22 +4,16 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { HistoryItem } from "../../../shared/library";
-import type { ForLaterItem } from "../../../shared/for-later";
-import { BrowseHome } from "./BrowseHome";
+import { ContinueSection } from "./HomePage";
 
 const credentials = { origin: "http://localhost", token: "paired" };
 const unfinished: HistoryItem = { mediaId: "library:movie", libraryItemId: "movie", title: "Halfway home", position: 120, duration: 600, watched: false, lastPlayedAt: 1 };
 const online: HistoryItem = { mediaId: "media:album", libraryItemId: null, title: "Album track", position: 45, duration: 240, watched: false, lastPlayedAt: 2, playable: true, thumbnail: "https://example.com/album.jpg", sourceLabel: "Online" };
 const unplayable: HistoryItem = { ...unfinished, mediaId: "gone", libraryItemId: null, title: "Missing file" };
-const saved: ForLaterItem[] = [
-  { id: "film", title: "Saved film", url: "https://example.com/film", duration: 120 },
-  { id: "station", title: "Saved station", kind: "radio", url: "https://example.com/live", live: true },
-  { id: "live", title: "Live stream", url: "https://example.com/stream", live: true },
-];
 const originals = new Map<string, PropertyDescriptor | undefined>();
 let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>;
-let historyItems: HistoryItem[], savedItems: ForLaterItem[], historyError: boolean, laterError: boolean;
-const played: unknown[] = [], queued: HistoryItem[] = [], openedSources: number[] = [], requests: string[] = [];
+let historyItems: HistoryItem[], historyError: boolean;
+const played: unknown[] = [], queued: HistoryItem[] = [], requests: string[] = [];
 
 function button(label: string, scope: ParentNode = document) {
   const found = [...scope.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label);
@@ -32,15 +26,15 @@ function row(title: string) {
   return found;
 }
 async function flush() { await act(async () => { await Bun.sleep(30); }); }
-async function renderHome({ connected = true, active = true, canPlay = true, canManageMetadata = false }: { connected?: boolean; active?: boolean; canPlay?: boolean; canManageMetadata?: boolean } = {}) {
-  await act(async () => root.render(<QueryClientProvider client={client}><BrowseHome credentials={credentials} connected={connected} active={active} canPlay={canPlay} canManageMetadata={canManageMetadata} onAddSource={() => openedSources.push(1)} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
-  if (connected && active) await flush();
+async function renderContinue({ connected = true, canPlay = true, feature = false }: { connected?: boolean; canPlay?: boolean; feature?: boolean } = {}) {
+  await act(async () => root.render(<QueryClientProvider client={client}><ContinueSection credentials={credentials} connected={connected} canPlay={canPlay} feature={feature} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
+  if (connected) await flush();
 }
 
 beforeEach(async () => {
   historyItems = [unfinished, online, unplayable, { ...unfinished, mediaId: "finished", title: "Finished film", watched: true }, { ...unfinished, mediaId: "started", title: "No progress", position: 0 }];
-  savedItems = saved; historyError = laterError = false;
-  played.length = 0; queued.length = 0; openedSources.length = 0; requests.length = 0;
+  historyError = false;
+  played.length = 0; queued.length = 0; requests.length = 0;
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "location", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -52,14 +46,10 @@ beforeEach(async () => {
     const url = new URL(String(input)); requests.push(url.pathname);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
     if (url.pathname === "/api/progress/history") return historyError ? Response.json({ error: "History unavailable" }, { status: 503 }) : Response.json({ items: historyItems });
-    if (url.pathname === "/api/for-later") return laterError ? Response.json({ error: "Saved items unavailable" }, { status: 503 }) : Response.json({ items: savedItems });
-    if (url.pathname === "/api/library/sources") return Response.json({ sources: [] });
-    if (url.pathname === "/api/jellyfin/connection") return Response.json({ configured: false });
     if (url.pathname === "/api/progress/library%3Amovie" && init?.method === "POST") {
       historyItems = historyItems.filter(item => item.mediaId !== "library:movie");
       return Response.json({ ok: true });
     }
-    if (url.pathname === "/api/for-later/film/load" && init?.method === "POST") return Response.json({ notice: "Added Saved film to Up next." });
     throw new Error(`Unexpected request: ${url.pathname}`);
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
@@ -73,7 +63,7 @@ afterEach(async () => {
 });
 
 test("Continue shows only unfinished items and preserves resume, restart, and queue identity", async () => {
-  await renderHome();
+  await renderContinue();
   expect(document.querySelector('section[aria-label="Continue"]')).toBeDefined();
   expect(row("Halfway home").hasAttribute("data-nav-row")).toBe(true);
   expect(row("Album track").hasAttribute("data-nav-row")).toBe(true);
@@ -82,18 +72,17 @@ test("Continue shows only unfinished items and preserves resume, restart, and qu
   expect(document.body.textContent).toContain("Album track");
   expect(document.body.textContent).not.toContain("Finished film");
   expect(document.body.textContent).not.toContain("No progress");
-  expect(document.body.textContent).not.toContain("Add a source");
   await act(async () => button("Resume Halfway home").click());
   await act(async () => button("From start", row("Halfway home")).click());
   await act(async () => button("Queue", row("Halfway home")).click());
   await act(async () => button("Queue", row("Album track")).click());
   expect(played).toEqual([[unfinished, { fromStart: false }], [unfinished, { fromStart: true }]]);
   expect(queued).toEqual([unfinished, online]);
-  expect(document.querySelector<HTMLImageElement>('section[aria-label="Continue"] img')?.src).toBe("https://example.com/album.jpg");
+  expect(document.querySelector<HTMLImageElement>('ul[aria-label="Continue"] img')?.src).toBe("https://example.com/album.jpg");
 });
 
 test("Continue queues every playable item even when playback is unavailable", async () => {
-  await renderHome({ canPlay: false });
+  await renderContinue({ canPlay: false });
   expect(button("Resume Album track").disabled).toBe(true);
   expect(button("From start", row("Album track")).disabled).toBe(true);
   expect(button("Queue", row("Album track")).disabled).toBe(false);
@@ -104,7 +93,7 @@ test("Continue queues every playable item even when playback is unavailable", as
 });
 
 test("Continue removes an item and refetches the visible history", async () => {
-  await renderHome();
+  await renderContinue();
   await act(async () => button("Remove", row("Halfway home")).click());
   await flush();
   expect(requests).toContain("/api/progress/library%3Amovie");
@@ -112,55 +101,29 @@ test("Continue removes an item and refetches the visible history", async () => {
   expect(document.body.textContent).not.toContain("Halfway home");
 });
 
-test("For later on Find home shows media, excludes radio and live, and queues saved media", async () => {
-  await renderHome();
-  expect(document.body.textContent).toContain("For later");
-  expect(document.body.textContent).toContain("Saved film");
-  expect(document.body.textContent).not.toContain("Saved station");
-  expect(document.body.textContent).not.toContain("Live stream");
-  await act(async () => button("Queue Saved film").click());
-  const call = request.mock.calls.find(([input, init]: Parameters<typeof fetch>) => String(input).endsWith("/api/for-later/film/load") && init?.method === "POST");
-  expect(JSON.parse(String(call?.[1]?.body))).toEqual({ mode: "append" });
-});
-
-test("hidden home skips reads; disconnected home cannot play or queue", async () => {
-  await renderHome({ active: false });
+test("disconnected Continue skips reads and cannot play or queue", async () => {
+  await renderContinue({ connected: false });
   expect(requests).toEqual([]);
-  await renderHome({ active: true });
-  await renderHome({ connected: false });
+  await renderContinue();
+  await renderContinue({ connected: false });
   expect(button("Resume Halfway home").disabled).toBe(true);
   expect(button("Queue", row("Halfway home")).disabled).toBe(true);
 });
 
-test("history failure offers retry independently of saved media", async () => {
+test("history failure offers retry", async () => {
   historyError = true;
-  await renderHome();
+  await renderContinue();
   expect(document.body.textContent).toContain("History unavailable");
-  expect(document.body.textContent).toContain("Saved film");
   historyError = false;
   await act(async () => button("Try again").click());
   await flush();
   expect(document.body.textContent).toContain("Halfway home");
 });
 
-test("a failed For later read explains the gap and can be retried", async () => {
-  historyItems = []; savedItems = []; laterError = true;
-  await renderHome();
-  expect(document.body.textContent).toContain("Couldn't load For later.");
-  expect(document.body.textContent).not.toContain("Find something to play");
-  laterError = false; savedItems = saved;
-  await act(async () => button("Try again").click());
-  await flush();
-  expect(document.body.textContent).toContain("Saved film");
-});
-
-test("empty Find home says what Couch searches and opens source settings for an administrator", async () => {
-  historyItems = []; savedItems = [];
-  await renderHome({ canManageMetadata: true });
-  expect(document.body.textContent).toContain("Couch searches YouTube, Twitch, RaiPlay, radio and your folders at once");
-  expect(document.body.textContent).toContain("Sources");
-  expect(document.body.textContent).toContain("Live TV");
-  expect(document.body.textContent).not.toContain("Library folders are managed");
-  await act(async () => button("Add a source").click());
-  expect(openedSources).toHaveLength(1);
+test("with nothing playing, the latest unfinished item leads the row", async () => {
+  await renderContinue({ feature: true });
+  expect(document.querySelector("h3")?.textContent).toBe("Halfway home");
+  expect(document.querySelector('ul[aria-label="Continue"]')?.textContent).not.toContain("Halfway home");
+  await act(async () => button("Resume Halfway home").click());
+  expect(played).toEqual([[unfinished, { fromStart: false }]]);
 });

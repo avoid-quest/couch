@@ -1,11 +1,11 @@
 import { settingsPageForPath, settingsPages } from "./settings-pages";
 
-// Four destinations. Sources are filters inside Find, not places.
+// Four destinations and the player. Sources are filters inside Find, not places.
 export const pagePaths: Record<string, string> = {
-  Now: "/", Find: "/find", Saved: "/saved", Settings: "/settings",
+  Home: "/", Now: "/now", Find: "/find", Saved: "/saved", Settings: "/settings",
 };
 
-// Old links keep working: sources became filters, the queue moved onto Now.
+// Old links keep working: sources became filters, the queue moved onto Home.
 export const legacyPaths: Record<string, string> = {
   "/search": "/find", "/up-next": "/", "/browse": "/find", "/browse/library": "/find",
   "/browse/files": "/find", "/browse/online": "/find", "/browse/guide": "/find",

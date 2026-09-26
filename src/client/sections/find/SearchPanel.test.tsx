@@ -49,7 +49,7 @@ beforeEach(async () => {
   paths.length = 0; queued.length = 0; browsed.length = 0; release = undefined; jellyfinError = unavailable = empty = false; delayedQuery = ""; connectedJellyfin = true;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }); revisions = { providers: 0, radio: 0 };
   window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "CompositionEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -227,4 +227,49 @@ test("debounced drafts survive frequent parent renders, use the latest callback 
   const reads = paths.filter(path => path.includes("youtube/items")).length;
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))); await flush();
   expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(reads + 1);
+});
+
+
+test("successive searches reuse supporting reads and revisiting a fresh query reuses its results", async () => {
+  integrated = true;
+  await render(); await search("Evening");
+  await until(() => !!button("Resume Evening movie") && !!button("Play Evening song"));
+  await search("new");
+  await until(() => !!button("Resume New movie"));
+  for (const path of ["/api/providers/favorites", "/api/radio/favorites", "/api/for-later", "/api/library/sources", "/api/jellyfin", "/api/radio/avoid"]) expect(paths.filter(value => value === path)).toHaveLength(1);
+  const reads = paths.length;
+  await search("Evening");
+  await until(() => !!button("Resume Evening movie"));
+  expect(paths).toHaveLength(reads);
+  await click("More from Jellyfin");
+  expect(paths.filter(path => path === "/api/jellyfin")).toHaveLength(1);
+  expect(paths).toContain("/api/jellyfin/items?q=Evening&startIndex=50");
+});
+
+test("explicit resubmission refreshes cached local and radio results", async () => {
+  await render(); await search("Evening");
+  await until(() => !!button("Resume Evening movie"));
+  const reads = paths.filter(path => path.startsWith("/api/library/items")).length;
+  const radioReads = paths.filter(path => path === "/api/radio/avoid").length;
+  await search("Evening");
+  await until(() => paths.filter(path => path.startsWith("/api/library/items")).length > reads);
+  expect(paths.filter(path => path === "/api/radio/avoid")).toHaveLength(radioReads + 1);
+});
+
+
+test("search waits for IME composition to finish before starting its debounce", async () => {
+  await render();
+  const input = document.querySelector<HTMLInputElement>("#media-search")!;
+  await act(async () => input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "映画");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await act(async () => { await Bun.sleep(350); });
+  expect(paths).toEqual([]);
+  await act(async () => input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "映画" })));
+  await act(async () => { await Bun.sleep(350); });
+  await until(() => paths.some(path => path.startsWith("/api/library/items")));
+  expect(paths.filter(path => path.startsWith("/api/library/items"))).toEqual(["/api/library/items?q=%E6%98%A0%E7%94%BB&offset=0&limit=30"]);
 });

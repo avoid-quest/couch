@@ -143,7 +143,7 @@ export class UiDriver {
   }
 
   async button(label: string, scope = "") {
-    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('[data-app-nav] a[href^=\"/settings\"]')")) return this.section("Settings");
+    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('[data-app-nav] a[href*=\"/settings\"]')")) return this.section("Settings");
     const matches = () => this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     await this.waitFor(`One ${label} button exists in ${scope || "the page"}`, async () => (await matches()).length === 1);
@@ -156,10 +156,13 @@ export class UiDriver {
     const source = ({ Files: "Folders", Library: "Folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
     const destination = label === "Queue" || label === "Now" ? "Now" : label === "For later" ? "Saved" : source || ["Online", "Home", "Search"].includes(label) ? "Find" : label;
     if (destination === "Now") {
+      // The player opens at /now while something plays; otherwise it returns to Home, which shows Up next.
       if (!await this.execute("return !!document.querySelector('[data-page=Now]')")) {
-        await this.click('[data-app-status] a[href="/"]');
+        const path = label === "Queue" ? "/" : "/now";
+        const route = await this.execute("return window.__TAURI_INTERNALS__ ? '#' + arguments[0] : arguments[0]", [path]);
+        await this.request(`/session/${this.session()}/url`, { url: new URL(route, await this.execute("return location.href")).href });
       }
-      await this.waitFor("Now or Up next opens", () => this.execute("return !!document.querySelector('[data-page=Now]')"));
+      await this.waitFor("Now or Home opens", () => this.execute("return !!document.querySelector('[data-page=Now], [data-page=Home]')"));
       if (label === "Queue" && !await this.execute("return !!document.querySelector('[data-queue-panel]')")) {
         if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
         await this.click('[data-panel="queue"]');
@@ -168,10 +171,9 @@ export class UiDriver {
     }
     if (await this.execute("return !!document.querySelector('.player-page')")) {
       if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
-      await this.click(".player-page [data-back]");
+      await this.key(keys.escape);
     }
-    else if (await this.execute("return !!document.querySelector('[data-player-idle]')")) await this.request(`/session/${this.session()}/url`, { url: new URL(`/${destination.toLowerCase()}`, await this.execute("return location.href")).href });
-    const target = `[data-app-nav] a[href^="/${destination.toLowerCase()}"]`;
+    const target = `[data-app-nav] a[href*="/${destination.toLowerCase()}"]`;
     await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
     await this.click(target);
     await this.waitFor(`${label} page opens`, () => this.execute("return !!document.querySelector(arguments[0])", [`[data-page="${destination}"]`]));

@@ -32,31 +32,6 @@ afterEach(async () => {
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
-test("Add a source on empty Find home opens source settings", async () => {
-  window.happyDOM.setURL("http://localhost/find");
-  history = createBrowserHistory();
-  request = spyOn(globalThis, "fetch").mockImplementation((async input => {
-    const path = new URL(String(input)).pathname;
-    if (path === "/api/progress/history" || path === "/api/for-later") return Response.json({ items: [] });
-    if (path === "/api/jellyfin/connection") return Response.json({ configured: false });
-    if (path === "/api/library/sources" || path === "/api/iptv/sources") return Response.json({ sources: [] });
-    throw new Error(`Unexpected request: ${path}`);
-  }) as typeof fetch);
-  const shell = {
-    nativeHost: false, credentials: { origin: "http://localhost", token: "paired" }, identity: { authority: "host" }, state: null,
-    connected: true, available: false, active: false, tv: { browsing: true }, section: "Find",
-    videoQualityPreference: { quality: "auto" }, changeSearch: () => {},
-  } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
-  const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
-  const settings = createRoute({ getParentRoute: () => base, path: "/settings/sources", component: () => <h1>Source settings</h1> });
-  const router = createRouter({ routeTree: base.addChildren([find, settings]), history });
-  await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
-  await act(async () => { await Bun.sleep(30); });
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Add a source" })));
-  expect(history.location.pathname).toBe("/settings/sources");
-  expect(screen.getByRole("heading", { name: "Source settings" })).toBeDefined();
-});
 for (const hash of [false, true]) test(`${hash ? "native hash" : "browser"} navigation leaves a nonempty Find search`, async () => {
   window.happyDOM.setURL(`http://localhost/${hash ? "#/" : ""}find?q=fixture`);
   history = hash ? createHashHistory() : createBrowserHistory();
@@ -66,15 +41,15 @@ for (const hash of [false, true]) test(`${hash ? "native hash" : "browser"} navi
     videoQualityPreference: { quality: "auto" },
     changeSearch: (state: Parameters<typeof searchLocation>[0]) => history.replace(searchLocation(state)),
   } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Link to="/">Now</Link><Link to="/find" search={{ q: "fixture" }}>Find</Link><Outlet /></ShellProviders> });
-  const now = createRoute({ getParentRoute: () => base, path: "/", component: () => <h1>Now playing</h1> });
+  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Link to="/">Home</Link><Link to="/find" search={{ q: "fixture" }}>Find</Link><Outlet /></ShellProviders> });
+  const home = createRoute({ getParentRoute: () => base, path: "/", component: () => <h1>Home page</h1> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
-  const router = createRouter({ routeTree: base.addChildren([now, find]), history });
+  const router = createRouter({ routeTree: base.addChildren([home, find]), history });
   await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
   expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("fixture");
-  await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Now", exact: true })); await Bun.sleep(30); });
+  await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Home", exact: true })); await Bun.sleep(30); });
   expect(history.location.pathname).toBe("/");
-  expect(screen.getByRole("heading", { name: "Now playing" })).toBeDefined();
+  expect(screen.getByRole("heading", { name: "Home page" })).toBeDefined();
   await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Find", exact: true })); await Bun.sleep(30); });
   expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("fixture");
 });

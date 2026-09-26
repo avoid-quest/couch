@@ -97,13 +97,14 @@ async function render(status: "playing" | "unavailable" | "idle", remoteOffline 
     available: status !== "unavailable", section: "Find", tv: { browsing: true, controlsVisible: false },
     run: async () => true, reconnect: () => {}, host: null, remoteControlEnabled: false, pairingRequired: false,
     sourcesOpen: false, onlineRequest: null, remoteOpen: false, setRemoteOpen: () => {},
-    sectionUrl: () => "/find",
+    sectionUrl: () => "/find", recentRadio: [],
     videoQualityPreference: { quality: "auto" },
   } as unknown as ShellValue;
   const base = createRootRoute({ component: () => <NativeModeGate><ShellProviders value={shell}><ShellChrome><Outlet /></ShellChrome></ShellProviders></NativeModeGate> });
-  const now = createRoute({ getParentRoute: () => base, path: "/", component: (await import("../now/PlayerPage")).PlayerPage });
+  const home = createRoute({ getParentRoute: () => base, path: "/", component: (await import("../home/HomePage")).HomePage });
+  const now = createRoute({ getParentRoute: () => base, path: "/now", component: (await import("../now/PlayerPage")).PlayerPage });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <p>Find view</p> });
-  const router = createRouter({ routeTree: base.addChildren([now, find]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
+  const router = createRouter({ routeTree: base.addChildren([home, now, find]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
   await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
 }
 
@@ -112,17 +113,17 @@ test("the shared browsing shell leaves video to the player page", async () => {
   expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
   expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeDefined();
-  expect([...screen.getByRole("navigation", { name: "Main navigation" }).querySelectorAll("a")].map(link => link.textContent)).toEqual(["Find", "Saved", "Settings"]);
+  expect([...screen.getByRole("navigation", { name: "Main navigation" }).querySelectorAll("a")].map(link => link.textContent)).toEqual(["Home", "Find", "Saved", "Settings"]);
 });
 
-test("a stopped queue stays reachable from Find without a top-level queue page", async () => {
+test("a stopped queue stays reachable on Home", async () => {
   await render("idle");
-  await act(async () => fireEvent.click(screen.getByRole("link", { name: "Up next (1)" })));
-  expect(document.querySelector('[data-page="Now"] h1')?.textContent).toBe("Nothing playing");
+  await act(async () => fireEvent.click(screen.getByRole("link", { name: "Home" })));
+  expect(document.querySelector('[data-page="Home"] [aria-label="Up next"]')).not.toBeNull();
   expect(screen.getByRole("button", { name: "Play Movie" })).toBeDefined();
 });
 
-test("an idle session without queued entries has no queue shortcut", async () => {
+test("the header has no queue shortcut; Up next lives on Home", async () => {
   await render("idle", false, true);
   expect(screen.queryByRole("link", { name: /^Up next/ })).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();

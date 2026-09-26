@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Tv, X } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
-import type { HistoryPlayback } from "@/sections/find/BrowseHome";
+import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
@@ -34,7 +34,7 @@ import { PairForm } from "./PairForm";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 
-const navItems = ["Find", "Saved", "Settings"];
+const navItems = ["Home", "Find", "Saved", "Settings"];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 const reducedMotion = () => window.matchMedia(reducedMotionQuery).matches;
 function subscribeReducedMotion(onChange: () => void) {
@@ -52,15 +52,15 @@ function useShellValue() {
   const { credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
   const router = useRouter();
   const location = useLocation();
-  const section = sectionForPath(location.pathname) ?? "Now";
+  const section = sectionForPath(location.pathname) ?? "Home";
   const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
   const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "playback" : null);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
   if (section === "Find") rememberedSearch.current = readSearchState(location.searchStr);
-  const lastBrowsePath = useRef("/find");
+  const lastBrowsePath = useRef("/");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   useEffect(() => {
-    if (section === "Now" && state && !state.currentEntryId && state.queue.length === 0) router.history.replace(lastBrowsePath.current);
+    if (section === "Now" && state && !state.currentEntryId) router.history.replace(lastBrowsePath.current);
   }, [section, state?.currentEntryId, state?.queue.length, !!state, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
@@ -76,7 +76,7 @@ function useShellValue() {
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
   useEffect(() => {
-    document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Now" ? "Couch" : `${section} · Couch`;
+    document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Now" || section === "Home" ? "Couch" : `${section} · Couch`;
   }, [section, settingsSection]);
 
   const at = location.pathname + location.searchStr;
@@ -100,7 +100,7 @@ function useShellValue() {
     else router.history.push(lastBrowsePath.current);
   };
   const browseSection = (name: string) => {
-    const destination = name === "Home" || name === "Search" || name === "Browse" || name === "Queue" ? "Now" : name === "For later" ? "Saved" : "Find";
+    const destination = name === "Home" || name === "Queue" ? "Home" : name === "For later" ? "Saved" : "Find";
     changeSection(destination);
   };
   const changeSettingsSection = (page: SettingsPage | null) => {
@@ -120,8 +120,8 @@ function useShellValue() {
     if (onlineRequest) { setOnlineRequest(null); changeSection("Saved"); return; }
     if (section === "Now") leavePlayer();
     else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
-    else if (section === "Find" && state?.currentEntryId) changeSection("Now");
-    else changeSection("Find");
+    else if (section !== "Home") changeSection("Home");
+    else if (state?.currentEntryId) changeSection("Now");
   });
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
@@ -177,7 +177,7 @@ function useShellValue() {
   return {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
-    credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current) ?? "Find", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
+    credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, leavePlayer, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
@@ -251,7 +251,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   useEffect(() => { window.scrollTo(0, 0); }, [section]);
   useEffect(() => {
     if (!tvPresentation) return;
-    const onHome = () => shell.changeSection("Find");
+    const onHome = () => shell.changeSection("Home");
     const onInfo = () => shell.changeSection("Now");
     window.addEventListener("couch-home", onHome);
     window.addEventListener("couch-info", onInfo);
@@ -288,7 +288,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              {paired && !current && !!state?.queue.length && <Button asChild variant="ghost"><Link to="/" aria-current={section === "Now" ? "page" : undefined}>Up next ({state.queue.length})</Link></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
               {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} updates={!localHost && !tvPresentation} />}
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
@@ -302,7 +301,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage /> : <>
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} localHost={localHost} onOpen={() => shell.changeSection("Now")} />}
+            {current && (active || player?.status === "error") && section !== "Now" && section !== "Home" && state && <MiniPlayer state={state} connected={connected} run={run} localHost={localHost} onOpen={() => shell.changeSection("Now")} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>

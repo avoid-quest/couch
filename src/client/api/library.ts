@@ -10,6 +10,7 @@ import { apiFetch, apiJson, apiSend, type ApiCredentials } from "./client";
 export const libraryFoldersQuery = (credentials: ApiCredentials, manage = true) =>
   queryOptions({
     queryKey: ["library", manage ? "folders" : "sources"] as const,
+    staleTime: 30_000,
     queryFn: ({ signal }) => apiJson<{ sources: (LibrarySource & Partial<ManagedFolder>)[] }>(credentials, manage ? "/api/library/folders" : "/api/library/sources", { signal }),
   });
 

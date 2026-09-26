@@ -33,7 +33,7 @@ function sourceLabel(item: ForLaterItem) {
 
 type Mode = "play" | "append" | "remove";
 
-export function ForLaterSection({ origin, token, connected, canPlay, onFind, showHeading = true, mediaOnly = false }: {
+export function ForLaterSection({ origin, token, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: {
   origin: string; token: string; connected: boolean; canPlay: boolean;
   /** @deprecated Rows always play; the details dialog is gone. */
   inspect?: boolean;
@@ -41,8 +41,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   onFind?: () => void;
   /** A visible section title (Find). Saved titles the tab with its PageHeader. */
   showHeading?: boolean;
-  /** Only video and music, for Find's home. */
+  /** Only video and music, for Home. */
   mediaOnly?: boolean;
+  /** Show only the first items, for Home. */
+  limit?: number;
 }) {
   // The session invalidates ["for-later"] whenever any remote changes the list.
   const session = useOptionalSessionGate();
@@ -76,7 +78,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     },
   });
   // A pending reorder renders its order so the drop shows immediately.
-  const items = applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], reorder.isPending ? reorder.variables : undefined, item => item.id);
+  const all = applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], reorder.isPending ? reorder.variables : undefined, item => item.id);
+  const items = all.slice(0, limit);
   const loading = connected && isPending;
   const pending = action.isPending;
   const section = useRef<HTMLElement>(null);
@@ -90,7 +93,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     action.mutate({ item, mode });
   };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    const order = over && forLaterOrder(items, String(active.id), String(over.id));
+    const order = over && forLaterOrder(all, String(active.id), String(over.id));
     if (order) reorder.mutate(order);
   };
   const failure = action.error ? action.error.message || "Couldn't use this item." : reorder.error ? reorder.error.message || "Couldn't save the order." : "";

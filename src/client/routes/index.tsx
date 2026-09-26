@@ -1,4 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { NowPage } from "../sections/now/NowPage";
+import { HomePage } from "../sections/home/HomePage";
 
-export const Route = createFileRoute("/")({ component: NowPage });
+export const Route = createFileRoute("/")({ component: HomePage });

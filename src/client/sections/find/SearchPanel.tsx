@@ -1,5 +1,5 @@
 import { searchSources, type SearchRouteState } from "../../search";
-import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { memo, useMemo, useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -59,17 +59,19 @@ export function SearchPanel(props: Props) {
   if (routeQuery !== seenRoute) { setSeenRoute(routeQuery); if (props.draftQuery === undefined && routeQuery !== undefined) setDraft(routeQuery); }
   const draft = props.draftQuery ?? localDraft;
   const input = useRef<HTMLInputElement>(null);
+  const [composing, setComposing] = useState(false);
+  const typeToSearch = useEffectEvent((event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || (event.key.length !== 1 || event.key === " ") || document.querySelector('[role="dialog"][data-state="open"]')) return;
+    if (!(event.target instanceof HTMLElement) || event.target.closest("button, a, input, select, textarea, summary, [role=button], [role=link], [role=option], [contenteditable=true]")) return;
+    input.current?.focus();
+    if (input.current) { props.onQueryChange?.(`${draft}${event.key}`); if (!props.onQueryChange) setDraft(`${draft}${event.key}`); event.preventDefault(); }
+  });
   useEffect(() => {
     if (!props.active) return;
-    const typeToSearch = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || (event.key.length !== 1 || event.key === " ") || document.querySelector('[role="dialog"][data-state="open"]')) return;
-      if (!(event.target instanceof HTMLElement) || event.target.closest("button, a, input, select, textarea, summary, [role=button], [role=link], [role=option], [contenteditable=true]")) return;
-      input.current?.focus();
-      if (input.current) { props.onQueryChange?.(`${draft}${event.key}`); if (!props.onQueryChange) setDraft(`${draft}${event.key}`); event.preventDefault(); }
-    };
-    window.addEventListener("keydown", typeToSearch);
-    return () => window.removeEventListener("keydown", typeToSearch);
-  }, [props.active, props.onQueryChange, draft]);
+    const onKeyDown = (event: KeyboardEvent) => typeToSearch(event);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.active]);
   const [localSearch, setSearch] = useState({ query: "", attempt: 0 });
   const search = { ...localSearch, query: props.searchState?.query ?? localSearch.query };
   const [summaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
@@ -93,10 +95,10 @@ export function SearchPanel(props: Props) {
   };
   const commitDraft = useEffectEvent(() => commit(draft.trim()));
   useEffect(() => {
-    if (!props.active || !props.connected || draft.trim() === search.query) return;
+    if (composing || !props.active || !props.connected || draft.trim() === search.query) return;
     const timer = setTimeout(() => commitDraft(), 300);
     return () => clearTimeout(timer);
-  }, [draft, search.query, props.active, props.connected]);
+  }, [draft, search.query, props.active, props.connected, composing]);
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const scroll = useRef({ top: 0, left: 0 });
@@ -131,9 +133,9 @@ export function SearchPanel(props: Props) {
   }, [collection, props.active]);
   const backFromCollection = () => { restoreHit.current = collection?.openerId ?? null; collection?.back(); };
   const facetKind = kind === "All" ? undefined : kind, facetLength = length === "All" ? undefined : length;
-  const mergedHits = sourceOrder.flatMap((source, rank) => (summaries[source]?.hits ?? []).map((hit, index) => ({ hit, order: index * sourceOrder.length + rank })))
+  const mergedHits = useMemo(() => sourceOrder.flatMap((source, rank) => (summaries[source]?.hits ?? []).map((hit, index) => ({ hit, order: index * sourceOrder.length + rank })))
     .filter(({ hit }) => (collection ? hit.source === collection.source : inScope(hit.source) && matchesFacet(hit, facetKind, facetLength)))
-    .sort((a, b) => a.order - b.order).map(({ hit }) => hit);
+    .sort((a, b) => a.order - b.order).map(({ hit }) => hit), [summaries, collection, filter, facetKind, facetLength]);
   const focusedHit = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!props.active || !focusedHit.current || document.activeElement !== document.body) return;
@@ -162,7 +164,7 @@ export function SearchPanel(props: Props) {
   </>;
   return <section ref={panel} className="min-w-0 space-y-6" aria-label="Search media" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }} onKeyDown={event => { if (collection && event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); backFromCollection(); return; } if (event.target !== input.current) return; if (event.key === "ArrowDown") { const row = panel.current?.querySelector<HTMLElement>("[data-play]"); if (row) { event.preventDefault(); row.focus(); } } else if (event.key === "ArrowUp") { const nav = document.querySelector<HTMLElement>(".app-header a"); if (nav) { event.preventDefault(); nav.focus(); } } }}>
     <div className="flex items-center gap-4">
-      <SearchBar id="media-search" pageFirst inputRef={input} className="min-w-0 flex-1" value={draft} onValueChange={changeDraft} onSubmit={() => { commit(draft.trim(), true); requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("[data-play]")?.focus()); }} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
+      <SearchBar id="media-search" pageFirst inputRef={input} className="min-w-0 flex-1" value={draft} onValueChange={changeDraft} onCompositionChange={setComposing} onSubmit={() => { commit(draft.trim(), true); requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("[data-play]")?.focus()); }} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
       {gate?.nativeHost && gate.localHost && !gate.tvPresentation && props.onCommand && <OpenFileButton connected={props.connected} run={props.onCommand} playNow />}
     </div>
     {search.query && !url && asking.length > 0 && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner aria-hidden="true" className="size-3.5" />Still asking {asking.join(", ")}…</p>}
@@ -182,8 +184,8 @@ export function SearchPanel(props: Props) {
     </div>)}
     {search.query && providers.map(provider => <SearchOnlineResults key={`${provider}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} onCollectionChange={open => setOpenedProvider(open ? provider : null)} active={props.active && showSource(providerNames[provider])} provider={provider} query={search.query} quality={quality} onEnqueued={resetQuality} />)}
     {search.query && !url && <>
-      {radioSources.map(source => <SearchRadioResults key={`${source}:${search.query}:${search.attempt}`} {...props} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} />)}
-      {(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.query}:${search.attempt}`} {...props} onResults={reportResults} active={props.active && showSource(source === "Library" ? "Folders" : source)} source={source} query={search.query} />)}
+      {radioSources.map(source => <SearchRadioResults key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} />)}
+      {(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && showSource(source === "Library" ? "Folders" : source)} source={source} query={search.query} />)}
     </>}
     {url && <PastedLink key={`${url}:${search.attempt}`} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
   </section>;
@@ -197,7 +199,7 @@ function FilterGroup<T extends string>({ label, value, onChange, options }: { la
 }
 
 /** Search hits as media rows under one time ruler. */
-export function HitList({ hits, label, origin, token }: { hits: SearchHit[]; label: string; origin: string; token: string }) {
+export const HitList = memo(function HitList({ hits, label, origin, token }: { hits: SearchHit[]; label: string; origin: string; token: string }) {
   if (!hits.length) return null;
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
@@ -209,7 +211,7 @@ export function HitList({ hits, label, origin, token }: { hits: SearchHit[]; lab
       {hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />}
     </MediaRow>)}</MediaList>
   </div>;
-}
+});
 
 /** An opened channel, list or show: back, title, and whole-list verbs. */
 export function CollectionHeader({ collection, back, onBack, canPlay }: { collection: SearchCollection; back: string; onBack: () => void; canPlay: boolean }) {

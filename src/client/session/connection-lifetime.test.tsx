@@ -259,3 +259,20 @@ test("live sharing changes update the connected gate", async () => {
   await flush(); await flush();
   expect(gate.remoteControlEnabled).toBe(false);
 });
+
+
+test("typing coalesces activity reports and unpairing cancels the trailing report", async () => {
+  await mount(); await connected();
+  const activity = () => requests.filter(request => request.path === "/api/activity");
+  for (let key = 0; key < 12; key++) {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    await flush();
+  }
+  expect(activity()).toHaveLength(1);
+  await act(async () => { await Bun.sleep(1_050); });
+  expect(activity()).toHaveLength(2);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "b", bubbles: true }));
+  await act(async () => gate.unpair());
+  await act(async () => { await Bun.sleep(1_050); });
+  expect(activity()).toHaveLength(2);
+});

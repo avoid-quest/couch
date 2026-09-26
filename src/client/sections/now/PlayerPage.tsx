@@ -5,7 +5,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { PageHeader } from "@/components/PageHeader";
 import { PlaybackTimeline, PlaybackTransport, PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
 import { sourceLabel } from "@/source-label";
 import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
@@ -86,12 +85,8 @@ export function PlayerPage() {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [shown, panel, playing, transportReady, player?.playbackId, run, shell.leavePlayer]);
-  const queue = <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} />;
-  if (!current) return <section data-page="Now" data-player-idle aria-label="Now" className="max-w-3xl pt-6">
-    <PageHeader title="Nothing playing" className="mb-2" />
-    <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">Find something to play.<Button data-page-first variant="ghost" size="sm" onClick={() => shell.changeSection("Find")}>Find</Button></p>
-    <div className="mt-8">{queue}</div>
-  </section>;
+  // The shell sends an idle player back to Home, which shows Up next.
+  if (!current) return null;
 
   const elsewhere = !localHost && active;
   const audioOnly = current.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
