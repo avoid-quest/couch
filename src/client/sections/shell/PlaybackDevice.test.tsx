@@ -6,7 +6,6 @@ import * as core from "@tauri-apps/api/core";
 import { onlineManager } from "@tanstack/react-query";
 import { screen, fireEvent, within } from "@/testing";
 import { isNativeHost } from "@/session/native-context";
-import { buildInfo } from "../../../shared/build";
 
 let root: Root, window: Window, invoke: Mock<typeof core.invoke>, request: ReturnType<typeof spyOn>;
 let client: import("@tanstack/react-query").QueryClient | null = null;
@@ -42,7 +41,6 @@ beforeEach(async () => {
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 afterEach(async () => {
-  buildInfo.clientOnly = false;
   Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
   await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); });
   invoke.mockRestore(); request.mockRestore(); onlineManager.setOnline(true); await window.happyDOM.abort();
@@ -76,12 +74,10 @@ test("first launch chooses a device before requesting local startup", async () =
   expect(screen.getByText("Local installation")).toBeDefined();
 });
 
-test("Client-only Windows offers remote playback and keeps offline recovery remote", async () => {
-  buildInfo.clientOnly = true;
+test("Another Couch survives restart and offers local playback only by explicit choice", async () => {
   await render();
-  expect(screen.getByRole("heading", { name: "Connect to a Couch" })).toBeDefined();
-  expect(screen.getByText(/controls a Couch on your network/)).toBeDefined();
-  expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeDefined();
+  expect(button("This computer")).toBeDefined();
   await act(async () => fireEvent.change(screen.getByRole("textbox", { name: "Couch address" }), { target: { value: "192.168.1.10:4100" } }));
   await act(async () => fireEvent.click(button("Connect"))); await flush();
   expect(choice.mode).toBe("remote");
@@ -91,9 +87,9 @@ test("Client-only Windows offers remote playback and keeps offline recovery remo
   root = createRoot(document.body.appendChild(document.createElement("div")));
   await render();
   expect(button("Try again")).toBeDefined();
-  expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Use this computer" })).toBeDefined();
   await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
-  expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
+  expect(screen.getByRole("radio", { name: "This computer" }).getAttribute("aria-checked")).toBe("false");
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(false);
 });
 

@@ -18,7 +18,6 @@ import { readSearchState, searchLocation, type SearchRouteState } from "@/search
 import { createId } from "@/session/session";
 import { pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { buildInfo } from "../../../shared/build";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -215,7 +214,7 @@ function ConnectionStatus() {
   if (remoteApp && device?.error && !device.error.startsWith("confirmation-required:")) return <DeviceRecovery />;
   const recovery = remoteApp && <>
     <Button variant="ghost" size="sm" onClick={reconnect}>{TRY_AGAIN}</Button>
-    {!buildInfo.clientOnly && <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>}
+    <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
   </>;
   if (status === "protocol-mismatch") return <Alert variant="destructive"><AlertDescription>{PROTOCOL_MISMATCH}</AlertDescription>{recovery && <div className="flex flex-wrap gap-1 pt-1">{recovery}</div>}</Alert>;
   if (status === "connection-rejected") return <Alert variant="destructive"><AlertDescription>{name} refused this address. Open Couch at the address it shows.</AlertDescription></Alert>;

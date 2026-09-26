@@ -15,7 +15,6 @@ import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-q
 import { acknowledgeFrontend, apiSend } from "@/api/client";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
-import { buildInfo } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useLocalUpdateActivity } from "@/update-activity";
 import { ChevronRight } from "lucide-react";
@@ -105,7 +104,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     {choice.mode === "local" ? <Fragment key={`local:${localEpoch}`}>{children}</Fragment>
       : choice.mode === "remote" ? <Fragment key={`remote:${choice.address}:${recoveryEpoch}`}>{children}</Fragment>
       : <main className="flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
-        <Onboarding title={buildInfo.clientOnly ? "Connect to a Couch" : "Where do you want to play?"} description={buildInfo.clientOnly ? "This app controls a Couch on your network." : undefined}><DeviceForm /></Onboarding>
+        <Onboarding title="Where do you want to play?"><DeviceForm /></Onboarding>
       </main>}
   </Context.Provider>;
 }
@@ -119,7 +118,7 @@ export function DeviceRecovery() {
   if (device?.mode !== "remote" || !device.error || device.error.startsWith("confirmation-required:")) return null;
   return <StatusLine actions={<>
     <Button variant="ghost" size="sm" onClick={device.retry} disabled={device.pending}>{TRY_AGAIN}</Button>
-    {!buildInfo.clientOnly && <Button variant="ghost" size="sm" onClick={() => void device.choose("local")} disabled={device.pending}>Use this computer</Button>}
+    <Button variant="ghost" size="sm" onClick={() => void device.choose("local")} disabled={device.pending}>Use this computer</Button>
   </>}>{device.error}</StatusLine>;
 }
 
@@ -164,10 +163,10 @@ function DeviceForm() {
   const submit = (event: FormEvent) => { event.preventDefault(); void selectRemote(); };
   return <div className="grid gap-6">
     <div className="-mx-3 border-t">
-      {!buildInfo.clientOnly && <Button variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
+      <Button variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
         <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Play here. Phones can pair as remotes.</span></span>
         <ChevronRight aria-hidden="true" />
-      </Button>}
+      </Button>
       <form className="grid gap-3 border-b px-3 py-4" onSubmit={submit}>
         <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Control a Couch on your network.</p></div>
         <div className="flex gap-2"><Input id="playback-address" aria-label="Couch address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
@@ -218,7 +217,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
       <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="w-96 gap-4">
         <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>
         <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
-          {!buildInfo.clientOnly && <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>This computer</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>}
+          <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>This computer</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>
           {targets.map((target, index) => {
             const named = device.mode === "remote" && device.address === target && installationName;
             return <Field orientation="horizontal" className="items-center py-1.5" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{named || hostOf(target)}</span>{named && <span className="truncate text-muted-foreground">{hostOf(target)}</span>}</FieldLabel></Field>;

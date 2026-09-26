@@ -72,8 +72,8 @@ gh workflow run package-desktop.yml --repo avoid-quest/couch --ref main \
 
 The jobs check the Debian signed receipt against their checkout, build and
 inspect their package, seal the exact bytes and upload directly to the same
-Cloud draft. The Mac DMG contains Full capabilities, including a switchable
-Client-only mode; the Windows NSIS stays Client-only. Record each successful
+Cloud draft. Both the Mac DMG and Windows NSIS include local playback and the
+**This computer** / **Another Couch** operating modes. Record each successful
 native run and attempt. These jobs retain only signed manifests, qualification
 receipts and Cloud upload metadata. `act` can exercise their guards and control
 flow, but cannot execute a macOS runner or prove a native package build.

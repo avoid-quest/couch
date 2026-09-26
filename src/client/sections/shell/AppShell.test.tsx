@@ -7,7 +7,6 @@ import type { Root } from "react-dom/client";
 import type { SessionState } from "../../../shared/protocol";
 import { fireEvent, screen } from "@/testing";
 import type { ShellValue } from "./AppShell";
-import { buildInfo } from "../../../shared/build";
 
 let root: Root, window: Window;
 let fetchSpy: ReturnType<typeof spyOn> | null = null;
@@ -32,7 +31,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  buildInfo.clientOnly = false;
   await act(async () => root.unmount());
   fetchSpy?.mockRestore(); fetchSpy = null;
   await window.happyDOM.abort();
@@ -145,10 +143,9 @@ test("a missing player is a quiet status line while browsing Find", async () => 
   expect(screen.getByText("Find view")).toBeDefined();
 });
 
-test("a Client-only app keeps offline recovery on the selected remote", async () => {
-  buildInfo.clientOnly = true;
+test("a desktop app keeps offline recovery on the selected remote and offers an explicit local choice", async () => {
   await render("unavailable", true);
   expect(screen.getByText("Offline. Reconnecting to Desk Couch…")).toBeDefined();
   expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
-  expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Use this computer" })).toBeDefined();
 });
