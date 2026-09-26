@@ -16,6 +16,7 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 const timers: Array<{ handle: ReturnType<typeof setTimeout>; delay: number; fired: boolean; fire: () => void }> = [];
 let root: Root | undefined, window: Window | undefined, session: ReturnType<typeof useSession>;
 let fetchSpy: ReturnType<typeof spyOn>, timerSpy: ReturnType<typeof spyOn> | undefined;
+let capability = true;
 let mount: (next: Credentials) => Promise<void>;
 
 class Socket {
@@ -33,6 +34,7 @@ class Socket {
 }
 
 beforeEach(async () => {
+  capability = true;
   sockets.length = timers.length = 0;
   window = new Window({ url: credentials.origin });
   for (const key of ["window", "document", "location", "navigator", "HTMLElement", "Element", "Node", "Event", "MessageEvent", "localStorage", "sessionStorage", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
@@ -42,7 +44,7 @@ beforeEach(async () => {
   }
   fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true });
+    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true, ...(capability ? { playbackClock: 1 } : {}) });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ controller: { id: "remote", name: "Remote", role: "controller" }, authority: "controller", claimAvailable: false });
     throw new Error(`Unexpected session request: ${path}`);
@@ -148,4 +150,61 @@ test("changing connections rejects the old provider request and an old confirmat
   nextSocket.emit({ type: "result", requestId: nextSocket.sent[0]!.requestId, ok: true });
   await next;
   expect(nextOutcome).toBe("confirmed");
+});
+
+
+const playing = { ...state, currentEntryId: "entry", queue: [{ id: "entry", title: "Track", source: "https://media.example/track" }], player: { ...state.player, playbackId: "active", status: "playing" as const, duration: 100 } };
+
+test("clock negotiation retains full old-host fallback", async () => {
+  expect(sockets[0]!.url.searchParams.get("playbackClock")).toBe("1");
+  capability = false;
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  expect(peer.url.searchParams.has("playbackClock")).toBe(false);
+  expect(session.connected).toBe(false);
+  await act(async () => peer.emit({ type: "state", state: playing }));
+  await act(async () => peer.emit({ type: "state", state: { ...playing, player: { ...playing.player, position: 12 } } }));
+  expect(session.state?.player.position).toBe(12);
+  expect(session.connected).toBe(true);
+});
+
+test("only a current baseline and matching playback identity accept clocks, including reconnect and Stop", async () => {
+  await act(async () => sockets[0]!.emit({ type: "state", state: playing }));
+  const queue = session.state!.queue;
+  await act(async () => sockets[0]!.emit({ type: "clock", playbackId: "active", position: 12, duration: 110 }));
+  expect(session.state?.player).toMatchObject({ position: 12, duration: 110 });
+  expect(session.state?.queue).toBe(queue);
+  await act(async () => sockets[0]!.emit({ type: "clock", playbackId: "retired", position: 99, duration: 110 }));
+  expect(session.state?.player.position).toBe(12);
+  const retired = sockets[0]!.onmessage!;
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  await act(async () => peer.emit({ type: "clock", playbackId: "active", position: 44, duration: 110 }));
+  expect(session.state).toBeNull();
+  expect(session.connected).toBe(false);
+  await expect(session.command({ type: "stop" })).rejects.toThrow("Reconnecting");
+  await act(async () => peer.emit({ type: "state", state: playing }));
+  await act(async () => retired({ data: JSON.stringify({ type: "clock", playbackId: "active", position: 99, duration: 110 }) } as MessageEvent<string>));
+  expect(session.state?.player.position).toBe(0);
+  await act(async () => peer.emit({ type: "state", state }));
+  await act(async () => peer.emit({ type: "clock", playbackId: "active", position: 44, duration: 110 }));
+  expect(session.state?.player.playbackId).toBeNull();
+  expect(session.state?.player.position).toBe(0);
+  await act(async () => peer.close(4001));
+  await act(async () => peer.emit({ type: "clock", playbackId: null, position: 33, duration: null }));
+  expect(session.state).toBeNull();
+  expect(session.pairingRequired).toBe(true);
+});
+
+test.each([
+  '{"type":"clock","playbackId":"active","position":1e400,"duration":100}',
+  '{"type":"clock","playbackId":"active","position":0,"duration":1e400}',
+  '{"type":"clock","playbackId":"active","position":null,"duration":100}',
+  '{"type":"clock","playbackId":7,"position":0,"duration":100}',
+  '{"type":"clock","playbackId":"active","position":0}',
+])("malformed clock closes with existing invalid-response behavior: %s", async data => {
+  const peer = sockets[0]!, close = spyOn(peer, "close");
+  await act(async () => peer.onmessage!({ data } as MessageEvent<string>));
+  expect(close).toHaveBeenCalledWith(4002, "Invalid response");
+  expect(session.connected).toBe(false);
 });

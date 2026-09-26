@@ -129,7 +129,7 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
   peer.close();
   const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
-  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, desktopRemoteUi: 1, desktopClientProtocol: 1, tvPresentation: false });
+  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, desktopRemoteUi: 1, desktopClientProtocol: 1, playbackClock: 1, tvPresentation: false });
   for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
@@ -406,8 +406,8 @@ class Peer {
   messages: ServerMessage[] = [];
   private listeners = new Set<() => void>();
 
-  constructor(hub: Hub, token: string) {
-    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${encodeURIComponent(token)}`, { headers: { Origin: hub.origin } });
+  constructor(hub: Hub, token: string, playbackClock = false) {
+    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${encodeURIComponent(token)}&clientProtocol=1${playbackClock ? "&playbackClock=1" : ""}`, { headers: { Origin: hub.origin } });
     this.socket.addEventListener("message", event => {
       this.messages.push(JSON.parse(String(event.data)) as ServerMessage);
       for (const listener of this.listeners) listener();
@@ -1862,4 +1862,75 @@ test("public installation identity binds pairing to one installation and survive
   expect((await paired.json()).installationId).toBe(original.installationId);
   await first.hub.close(); hubs.splice(hubs.indexOf(first.hub), 1);
   expect((await connection(fixture(first.databasePath).hub)).installationId).toBe(original.installationId);
+});
+
+
+test.each([10, 500])("40 observations use bounded clocks with %s queue entries while legacy peers retain full states", async count => {
+  const now = spyOn(Date, "now").mockReturnValue(1_000);
+  try {
+    const { hub } = fixture();
+    expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ desktopClientProtocol: 1, playbackClock: 1 });
+    hub.session.observe(idle);
+    hub.session.loadQueue(Array.from({ length: count }, (_, index) => ({ id: `item-${index}`, title: `Track ${index}`, source: `https://media.example/${index}` })), "replace");
+    hub.session.command({ type: "play", entryId: hub.session.state.queue[0]!.id });
+    const player = { ...idle, playbackId: hub.session.state.player.playbackId, status: "playing" as const, duration: 1000, seekable: true };
+    hub.session.observe(player);
+    const token = await pair(hub);
+    const modern = new Peer(hub, token, true), legacy = new Peer(hub, token);
+    await Promise.all([modern.ready(), legacy.ready()]);
+    expect(modern.messages[0]).toEqual(legacy.messages[0]);
+    expect(modern.state.queue).toHaveLength(count);
+    const queue = modern.state.queue;
+    modern.messages.length = legacy.messages.length = 0;
+    for (let position = 1; position <= 40; position++) hub.session.observe({ ...player, position });
+    await Promise.all([modern.waitFor(message => message.type === "clock" && message.position === 40), legacy.waitFor(message => message.type === "state" && message.state.player.position === 40)]);
+    expect(modern.messages).toHaveLength(40);
+    expect(legacy.messages).toHaveLength(40);
+    for (let index = 0; index < 40; index++) {
+      expect(modern.messages[index]).toEqual({ type: "clock", playbackId: player.playbackId, position: index + 1, duration: 1000 });
+      expect(JSON.stringify(modern.messages[index]).length).toBeLessThan(110);
+      expect(legacy.messages[index]).toMatchObject({ type: "state", state: { queue } });
+    }
+  } finally { now.mockRestore(); }
+});
+
+test("modern-only observations never construct legacy wire snapshots; reconnect, replacement and Stop are full", async () => {
+  const { hub, commands } = fixture();
+  hub.session.observe(idle);
+  hub.session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "https://media.example/one" }, playNow: true });
+  const player = { ...idle, playbackId: hub.session.state.player.playbackId!, status: "playing" as const, duration: 100, seekable: true };
+  hub.session.observe(player);
+  const token = await pair(hub), peer = new Peer(hub, token, true);
+  await peer.ready();
+  const stringify = spyOn(JSON, "stringify");
+  try {
+    hub.session.observe({ ...player, position: 1 });
+    await peer.waitFor(message => message.type === "clock");
+    expect(stringify.mock.calls.some(([value]) => value?.type === "state")).toBe(false);
+  } finally { stringify.mockRestore(); }
+  expect(await peer.command({ type: "seek", playbackId: player.playbackId, position: 25 })).toMatchObject({ ok: true });
+  expect(commands.at(-1)).toEqual({ type: "seek", playbackId: player.playbackId, position: 25 });
+  expect(hub.session.state.player.position).toBe(1);
+  hub.session.observe({ ...player, position: 25 });
+  await peer.waitFor(message => message.type === "state" && message.state.player.position === 25);
+  expect(await peer.command({ type: "pause", playbackId: player.playbackId, paused: true })).toMatchObject({ ok: true });
+  expect(commands.at(-1)).toEqual({ type: "pause", playbackId: player.playbackId, paused: true });
+  hub.session.observe({ ...player, position: 25, status: "paused" });
+  await peer.waitFor(message => message.type === "state" && message.state.player.status === "paused");
+  await peer.close();
+  const reconnected = new Peer(hub, token, true);
+  await reconnected.ready();
+  expect(reconnected.messages[0]).toMatchObject({ type: "state", state: { player: { position: 25, status: "paused" } } });
+  hub.session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://media.example/two" }, playNow: true });
+  await reconnected.waitFor(message => message.type === "state" && message.state.currentEntryId === "two");
+  expect(reconnected.state.player.playbackId).not.toBe(player.playbackId);
+  hub.session.observe({ ...player, position: 90 });
+  expect(hub.session.state.player.position).toBe(0);
+  expect(await reconnected.command({ type: "stop" })).toMatchObject({ ok: true });
+  await reconnected.waitFor(message => message.type === "state" && message.state.currentEntryId === null);
+  const { controller } = await (await controllerApi(hub, token, "/api/controllers/me")).json() as { controller: { id: string } };
+  const closed = new Promise<number>(resolve => reconnected.socket.addEventListener("close", event => resolve(event.code), { once: true }));
+  expect((await controllerApi(hub, hostToken, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
+  expect(await closed).toBe(4001);
+  expect((await fetch(`${hub.origin}/api/ws?token=${token}&playbackClock=1`, { headers: { Origin: hub.origin } })).status).toBe(401);
 });

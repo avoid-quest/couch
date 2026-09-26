@@ -61,12 +61,14 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
+      let playbackClock = false;
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal });
         if (!response.ok) throw new Error("Server unavailable");
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
+        playbackClock = next.playbackClock === 1;
         setConnectionDetails({ origin, details: next });
         if (desktopProtocol && next.desktopClientProtocol !== desktopProtocol) { setStatus("protocol-mismatch"); setState(null); setIdentity(null); return; }
         if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
@@ -114,7 +116,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const asset = buildKey(loadedBuild);
       if (asset && !desktopProtocol) url.searchParams.set("build", asset);
       if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
+      if (playbackClock) url.searchParams.set("playbackClock", "1");
       const connection = new WebSocket(url);
+      let baseline = false;
       socket.current = connection;
       socketCredentials.current = credentials;
       const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
@@ -133,11 +137,23 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           return;
         }
         if (message.type === "state") {
+          baseline = true;
           clearTimeout(handshake);
           attempt = 0;
           ready.current = true;
           setState(message.state);
           setStatus("connected");
+        } else if (message.type === "clock") {
+          if (!playbackClock || !(message.playbackId === null || typeof message.playbackId === "string")
+            || typeof message.position !== "number" || !Number.isFinite(message.position)
+            || !(message.duration === null || typeof message.duration === "number" && Number.isFinite(message.duration))) {
+            connection.close(4002, "Invalid response");
+            return;
+          }
+          if (!baseline) return;
+          const clock = message;
+          setState(previous => isCurrent() && previous?.player.playbackId === clock.playbackId
+            ? { ...previous, player: { ...previous.player, position: clock.position, duration: clock.duration } } : previous);
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {

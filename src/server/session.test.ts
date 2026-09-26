@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
-import type { PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { PlaybackCommand, PlaybackClock, PlayerState, SessionState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
 
@@ -326,5 +326,108 @@ test("live radio ticks that only advance duration and position skip the full-sta
     expect(session.state.player).toMatchObject({ position: 2, duration: 60 });
     session.observe({ ...player, position: 3, duration: 90, seekable: true });
     expect(publications).toBe(baseline + 1);
+  } finally { session.close(); store.close(); }
+});
+
+
+test("only clocks are compact; native and household changes always publish full state", () => {
+  const store = openStore(":memory:");
+  const publications: Array<{ clock?: PlaybackClock; state: unknown }> = [];
+  const session = createSession(store, () => {}, (state, clock) => publications.push({ clock, state: structuredClone(state) }), { now: () => 1_000 });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "https://media.example/one" }, playNow: true });
+    session.observe({ ...idle, playbackId: session.state.player.playbackId, status: "playing", seekable: true, duration: 100 });
+    const full = (change: () => void) => {
+      publications.length = 0; change();
+      expect(publications.length).toBeGreaterThan(0);
+      expect(publications.every(value => !value.clock)).toBe(true);
+    };
+    session.observe({ ...session.state.player, position: 1 });
+    expect(publications.at(-1)?.clock).toMatchObject({ position: 1, duration: 100 });
+    for (const changes of [
+      { duration: null, buffering: true }, { seekable: false }, { volume: 22 },
+      { tracks: [{ id: "a", index: 1, kind: "audio" as const, label: "English", language: "eng", selected: true }] },
+      { chapters: [{ title: "Chapter", position: 12 }] }, { speed: 1.5 },
+      { audioDelay: 0.1 }, { subtitleDelay: 0.2 }, { replayGain: "track" as const },
+      { subtitleError: "Subtitle unavailable" }, { nowPlaying: { title: "Song" } }, { status: "paused" as const },
+      { error: "Playback problem" },
+    ]) full(() => session.observe({ ...session.state.player, ...changes }));
+    full(() => session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://media.example/two" } }));
+    full(() => session.command({ type: "preferences", profileId: "household", preferences: { speed: 1.25 } }));
+    full(() => session.invalidate("library", "controllers"));
+    full(() => session.notice({ deviceId: "phone", name: "Phone" }, "paused playback"));
+    // Activity is transient; its removal must not leave it in modern snapshots.
+    full(() => session.observe({ ...session.state.player, position: 2 }));
+    full(() => session.command({ type: "play", entryId: "two" }));
+    full(() => session.command({ type: "stop" }));
+  } finally { session.close(); store.close(); }
+});
+
+test.each(["radio:one", "iptv:one"])("%s suppresses clock publications while retaining native volume changes", source => {
+  const store = openStore(":memory:");
+  let publications = 0;
+  const session = createSession(store, () => {}, () => publications++, { now: () => 1_000 });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source, live: true }, playNow: true });
+    const player = { ...idle, playbackId: session.state.player.playbackId, status: "playing" as const };
+    session.observe(player);
+    const baseline = publications;
+    for (let position = 1; position <= 40; position++) session.observe({ ...player, position, duration: position * 2 });
+    expect(publications).toBe(baseline);
+    session.observe({ ...player, position: 41, volume: 32 });
+    expect(publications).toBe(baseline + 1);
+  } finally { session.close(); store.close(); }
+});
+
+
+test("progress checkpoints, write errors and nested observation changes retain full publication", () => {
+  const store = openStore(":memory:");
+  let now = 1_000, nested = false;
+  const publications: Array<{ state: SessionState; clock?: PlaybackClock }> = [];
+  const session = createSession(store, () => {}, (state, clock) => publications.push({ state: structuredClone(state), clock }), {
+    now: () => now, observe: () => { if (nested) session.invalidate("library"); },
+  });
+  const save = store.saveProgress;
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "https://media.example/one" }, playNow: true });
+    const player = { ...idle, playbackId: session.state.player.playbackId, status: "playing" as const, duration: 100, seekable: true };
+    session.observe(player);
+    publications.length = 0; now += 10_000;
+    session.observe({ ...player, position: 1 });
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.clock).toBeUndefined();
+    expect(publications[0]?.state.versions?.progress).toBe(2);
+    publications.length = 0; now += 10_000;
+    store.saveProgress = () => { throw new Error("Disk full"); };
+    session.observe({ ...player, position: 2 });
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.clock).toBeUndefined();
+    expect(publications[0]?.state.progressError).toContain("Couldn't save");
+    store.saveProgress = save;
+    publications.length = 0; nested = true;
+    session.observe({ ...player, position: 3 });
+    expect(publications.every(value => !value.clock)).toBe(true);
+    expect(publications.at(-1)?.state.versions?.library).toBe(1);
+  } finally { nested = false; store.saveProgress = save; session.close(); store.close(); }
+});
+
+test("live clocks ignore native volume when system audio owns it", () => {
+  const store = openStore(":memory:");
+  let publications = 0;
+  const session = createSession(store, () => {}, () => publications++, { systemAudio: true });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "radio:one", kind: "radio" }, playNow: true });
+    const player = { ...idle, playbackId: session.state.player.playbackId, status: "playing" as const };
+    session.observe(player);
+    const count = publications;
+    session.observe({ ...player, position: 1, duration: 2, volume: 100 });
+    expect(publications).toBe(count);
+    expect(session.state.player.volume).toBe(80);
+    session.observe({ ...player, position: 2, duration: 4, volume: 100, buffering: true });
+    expect(publications).toBe(count + 1);
   } finally { session.close(); store.close(); }
 });
