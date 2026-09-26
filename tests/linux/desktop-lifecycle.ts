@@ -48,7 +48,7 @@ async function processIds(name: string) {
 }
 
 async function windowId() {
-  const output = await command("xdotool", "search", "--onlyvisible", "--name", "^Couch$");
+  const output = await command("xdotool", "search", "--onlyvisible", "--name", "^Couch( ·|$)");
   for (const id of output.split("\n")) {
     if ((await command("xprop", "-id", id, "WM_PROTOCOLS")).includes("WM_DELETE_WINDOW")) return id;
   }

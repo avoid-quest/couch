@@ -14,7 +14,6 @@ import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PageHeader } from "@/components/PageHeader";
 import { musicAlbumQuery, musicAlbumsQuery, musicArtistsQuery, musicPageSize } from "@/api/library";
-import { playNotice } from "@/copy";
 import { formatDuration } from "@/time-format";
 import type { MusicAlbum, MusicArtist } from "../../../shared/library";
 import type { Credentials } from "../../session/session";
@@ -37,10 +36,10 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
   const title = view.kind === "album" ? view.album.title : view.kind === "albums" && view.artist ? view.artist.name : "Music";
   const back = () => view.kind === "album" ? setView({ kind: "albums", offset: view.offset, artist: view.artist, artistOffset: view.artistOffset }) : view.kind === "albums" && view.artist ? setView({ kind: "artists", offset: view.artistOffset ?? 0 }) : onBack();
   const total = view.kind === "artists" ? artists.data?.total ?? 0 : view.kind === "albums" ? albums.data?.total ?? 0 : 0;
-  async function queue(title: string, playNow: boolean, work: () => Promise<boolean>) {
+  async function queue(title: string, work: () => Promise<boolean>) {
     if (busy) return;
     setBusy(true);
-    try { if (await work() && !playNow) toast(playNotice(title, "queue")); }
+    try { await work(); }
     catch (error) { toast.error(error instanceof Error ? error.message : `Couldn't queue ${title}.`); }
     finally { setBusy(false); }
   }
@@ -58,13 +57,13 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
       primary={{ label: "Open", onClick: () => setView({ kind: "album", album, artist: view.artist, offset: view.offset, artistOffset: view.artistOffset }) }} />)}</MediaList>}
     {view.kind === "album" && detail.data && <>
       <div className="flex flex-wrap gap-2">
-        <Button disabled={!connected || !canPlay || busy || !detail.data.items.length || detail.data.items.some(item => !item.available)} onClick={() => void queue(view.album.title, true, () => onAlbum(view.album.id, true))}>Play all</Button>
-        <Button variant="ghost" disabled={!connected || busy || !detail.data.items.length || detail.data.items.some(item => !item.available)} onClick={() => void queue(view.album.title, false, () => onAlbum(view.album.id, false))}>Queue all</Button>
+        <Button disabled={!connected || !canPlay || busy || !detail.data.items.length || detail.data.items.some(item => !item.available)} onClick={() => void queue(view.album.title, () => onAlbum(view.album.id, true))}>Play all</Button>
+        <Button variant="ghost" disabled={!connected || busy || !detail.data.items.length || detail.data.items.some(item => !item.available)} onClick={() => void queue(view.album.title, () => onAlbum(view.album.id, false))}>Queue all</Button>
       </div>
       <MediaList aria-label={`${view.album.title} tracks`}>{detail.data.items.map(item => <MediaRow key={item.id} title={item.title} meta={[item.discNumber != null ? `Disc ${item.discNumber}` : null, item.trackNumber != null ? `Track ${item.trackNumber}` : null, item.artist, !item.available ? "File unavailable" : null].filter(Boolean).join(" · ")}
         art={item.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={item.artworkId} /> : undefined}
-        primary={{ label: "Play", disabled: !connected || !canPlay || busy || !item.available, onClick: () => void queue(item.title, true, () => onTrack(item.id, true)) }}
-        actions={<Button variant="ghost" aria-label={`Queue ${item.title}`} disabled={!connected || busy || !item.available} onClick={() => void queue(item.title, false, () => onTrack(item.id, false))}>Queue</Button>}>
+        primary={{ label: "Play", disabled: !connected || !canPlay || busy || !item.available, onClick: () => void queue(item.title, () => onTrack(item.id, true)) }}
+        actions={<Button variant="ghost" aria-label={`Queue ${item.title}`} disabled={!connected || busy || !item.available} onClick={() => void queue(item.title, () => onTrack(item.id, false))}>Queue</Button>}>
         <DurationBar duration={item.duration} />
       </MediaRow>)}</MediaList>
     </>}

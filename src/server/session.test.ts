@@ -443,3 +443,20 @@ test("catalogue enrichment does not replace the selected occurrence of a repeate
     expect(session.state.queue[0]).toMatchObject({ description: "Video synopsis", collection: entry.collection });
   } finally { session.close(); store.close(); }
 });
+
+
+test("a delayed native Stop cannot stop replacement playback", () => {
+  const store = openStore(":memory:");
+  const session = createSession(store, () => {}, () => {});
+  try {
+    session.observe(idle);
+    session.playNewEntries([{ id: "first", title: "First", source: "library:first" }]);
+    const playbackId = session.state.player.playbackId;
+    const action = parseCommand(JSON.stringify({ type: "command", requestId: "native-stop", action: { type: "stop", playbackId } }), true).action;
+    session.playNewEntries([{ id: "second", title: "Second", source: "library:second" }]);
+    expect(() => session.command(action)).toThrow("The playing item changed");
+    expect(session.state.currentEntryId).toBe("second");
+    session.command({ type: "stop", playbackId: session.state.player.playbackId! });
+    expect(session.state.currentEntryId).toBeNull();
+  } finally { session.close(); store.close(); }
+});

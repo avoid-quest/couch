@@ -69,7 +69,7 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
     case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
     case "goLive": case "next": return id(value.playbackId);
-    case "stop": return true;
+    case "stop": return value.playbackId === undefined || id(value.playbackId);
     default: return false;
   }
 }

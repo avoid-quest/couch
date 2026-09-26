@@ -5,7 +5,6 @@ import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { useDurationClock } from "@/components/DurationBar";
 import { createId } from "../../session/session";
-import { playNotice } from "@/copy";
 import { readSearch, searchError, type SearchPlaybackProps, type SearchHit } from "./SearchOnlineResults";
 
 type Props = SearchPlaybackProps & { query: string; retry?: number; source: "avoid radio" | "Radio playlists" | "Radio directory" };
@@ -34,15 +33,15 @@ function RadioResults(props: Props) {
     await client.invalidateQueries({ queryKey: options.queryKey, exact: true, refetchType: "none" });
     await client.fetchQuery({ ...radioSearchQuery(props, title, props.query, avoid), staleTime: 0 }).catch(() => {});
   }
-  async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done?: string) {
+  async function action(work: (signal: AbortSignal) => Promise<boolean | void>) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal; setBusy(true);
-    try { const ok = await work(signal); if (!signal.aborted && ok !== false && done) toast(done); }
+    try { await work(signal); }
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setBusy(false); }
   }
   function play(station: RadioStation, playNow: boolean) {
-    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false, playNow ? undefined : playNotice(station.name, "queue"));
+    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false);
   }
   function save(station: RadioStation, saved: boolean) {
     void action(async signal => {

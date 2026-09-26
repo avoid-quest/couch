@@ -1,6 +1,12 @@
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         cc::Build::new().file("src/sound.m").flag("-fobjc-arc").compile("couch_sound");
+        cc::Build::new().file("src/now_playing.m").flag("-fobjc-arc").compile("couch_now_playing");
+        cc::Build::new().file("src/native_window_title.m").flag("-fobjc-arc").compile("couch_window_title");
+        println!("cargo:rustc-link-lib=framework=MediaPlayer");
+        println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rerun-if-changed=src/now_playing.m");
+        println!("cargo:rerun-if-changed=src/native_window_title.m");
         println!("cargo:rustc-link-lib=framework=CoreAudio");
         println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rerun-if-changed=src/sound.m");
@@ -24,6 +30,8 @@ fn main() {
             "complete_local_setup",
             "local_update_activity",
             "desktop_interface_size",
+            "set_now_playing",
+            "set_native_window_title",
         ]),
     ))
     .expect("Cannot generate native command permissions");

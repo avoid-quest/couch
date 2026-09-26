@@ -255,7 +255,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     try {
       await command(action);
       if (before && current() && attempt === commandAttempt.current) {
-        const undoable = action.type === "remove" || !!before.currentEntryId && (action.type === "stop" || action.type === "play" && action.entryId !== before.currentEntryId || "playNow" in action && action.playNow);
+        const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";
         let after = readObservation();
         let plan = undoable && after && undoPlan(action, before, after);
         for (let tries = 0; undoable && !plan && tries < 20 && current() && attempt === commandAttempt.current; tries++) {

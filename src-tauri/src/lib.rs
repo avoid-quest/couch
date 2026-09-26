@@ -8,6 +8,8 @@ mod diagnostics_export;
 mod display;
 mod file_export;
 mod metadata_export;
+mod native_window_title;
+mod now_playing;
 mod operating_mode;
 mod player;
 mod protocol;
@@ -636,7 +638,9 @@ pub fn run() {
             operating_mode::retry_playback_device,
             operating_mode::complete_local_setup,
             operating_mode::local_update_activity,
-            operating_mode::desktop_interface_size
+            operating_mode::desktop_interface_size,
+            now_playing::set_now_playing,
+            native_window_title::set_native_window_title
         ])
         .setup(|app| {
             let data_dir = match std::env::var_os("COUCH_DATA_DIR") {
@@ -723,9 +727,15 @@ pub fn run() {
                     tv_presentation,
                     if cfg!(target_os = "macos") { "document.documentElement.classList.add('native-macos');" } else { "" }
                 ))
+                .on_page_load(|window, payload| {
+                    if payload.event() == tauri::webview::PageLoadEvent::Started {
+                        now_playing::clear(window.app_handle());
+                    }
+                })
                 .on_navigation(move |url| operating_mode::app_origin(handle.config(), url))
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;
+            now_playing::install(app.handle(), &main);
             if !tv_presentation {
                 desktop_lifecycle::recover_window(&main)?;
             }

@@ -9,9 +9,5 @@ export const ADMIN_ONLY = "Only an admin can change this.";
 
 export const TRY_AGAIN = "Try again";
 
-/** Toast for a queue action whose result may be offscreen. */
-export const playNotice = (title: string, mode: "next" | "queue") =>
-  mode === "next" ? `${title} plays next.` : `Queued ${title}.`;
-
-/** Toast for a Save toggle. */
+/** Copy for Saved recovery actions. */
 export const savedNotice = (title: string, saved: boolean) => saved ? `Saved ${title}.` : `Removed ${title} from Saved.`;

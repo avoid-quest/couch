@@ -33,6 +33,8 @@ import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 import { PairForm } from "./PairForm";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
+import { useNativeWindowTitle } from "@/native-window-title";
+import { useNativeMediaSession } from "@/session/native-media";
 
 const navItems = ["Home", "Find", "Saved", "Settings"];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -215,8 +217,10 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  return <ShellErrorBoundary><NativeMediaBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
+
+function NativeMediaBridge() { useNativeMediaSession(); return null; }
 
 // Connection and player state as one quiet line; red only for errors that need a decision.
 function ConnectionStatus() {
@@ -258,6 +262,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const { pathname } = useLocation();
   const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled } = useSessionGate();
+  useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const setupPending = useLocalSetupPending(credentials);
@@ -276,7 +281,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
     if (!state?.activity) return;
     if (activityToast.current) toast.dismiss(activityToast.current);
     activityToast.current = null;
-    if (state.activity.actor.deviceId !== identity?.controller?.id) {
+    if (identity && state.activity.actor.deviceId !== (identity.controller?.id ?? "host")) {
       activityToast.current = `activity-${state.activity.id}`;
       toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
     }

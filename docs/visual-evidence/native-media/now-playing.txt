@@ -1,0 +1,34 @@
+Public MPNowPlayingInfoCenter inspection in the built Couch app (26 September 2026).
+Read through LLDB, then immediately detached; no private MediaRemote APIs used.
+Selected metadata fields; transient content IDs and object addresses omitted.
+
+Remote native H.264 playback
+MPNowPlayingInfoPropertyElapsedPlaybackTime = "25.5";
+MPNowPlayingInfoPropertyIsLiveStream = 0;
+MPNowPlayingInfoPropertyPlaybackRate = 1;
+playbackDuration = 120;
+title = "couch-consistency-video.mp4";
+playbackState = 1 (Playing)
+
+After the missing-artwork fix: built Couch Media Review, same local test video
+MPNowPlayingInfoPropertyElapsedPlaybackTime = "5.083333333333333";
+MPNowPlayingInfoPropertyIsLiveStream = 0;
+MPNowPlayingInfoPropertyPlaybackRate = 0;
+artwork = MPMediaItemArtwork (present; Couch fallback)
+playbackDuration = 120;
+title = "couch-consistency-video.mp4";
+playbackState = 2 (Paused)
+Control Center accessibility: same title, Play enabled, previous/next disabled,
+seek position 5.083333333333333, elapsed 00:05, remaining -01:55, album artwork.
+
+After switching away from the remote session
+nowPlayingInfo = nil
+playbackState = 3 (Stopped)
+
+Local native NTS radio playback
+MPNowPlayingInfoPropertyElapsedPlaybackTime = "0.6158083741587297";
+MPNowPlayingInfoPropertyIsLiveStream = 1;
+MPNowPlayingInfoPropertyPlaybackRate = 1;
+artwork = MPMediaItemArtwork (present)
+title = "SOUL IN PARADISE w/ JAMMA DEE";
+playbackState = 1 (Playing)

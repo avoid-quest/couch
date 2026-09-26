@@ -18,6 +18,8 @@
     "allow-complete-local-setup",
     "allow-local-update-activity",
     "allow-desktop-interface-size",
+    "allow-set-now-playing",
+    "allow-set-native-window-title",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-cursor-visible"

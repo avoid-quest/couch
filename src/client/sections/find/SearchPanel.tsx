@@ -23,7 +23,6 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { OpenFileButton } from "@/sections/now/OpenFileButton";
-import { playNotice } from "@/copy";
 
 type Source = "Library" | "Jellyfin";
 type Options = { playNow?: boolean; fromStart?: boolean; placement?: "next" };
@@ -261,7 +260,7 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
-    try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) { onDone(); if (!playNow) toast(playNotice(hostname, "queue")); } }
+    try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) onDone(); }
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setPending(false); }
   }

@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
@@ -16,7 +15,7 @@ import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
-import { playNotice, savedNotice } from "@/copy";
+import { savedNotice } from "@/copy";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
@@ -67,7 +66,6 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         await saveOrder(favorite.kind, order);
         await queryClient.invalidateQueries({ queryKey: favoritesKey(favorite.kind) });
       });
-      else toast(text);
       await queryClient.invalidateQueries({ queryKey: favoritesKey(favorite.kind) });
     },
   });
@@ -97,8 +95,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     if (!connected || pending) return;
     setEnqueueing(true);
     try {
-      const ok = await (favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow) : onEnqueueRadio(favorite.item, playNow));
-      if (ok && !playNow) toast(playNotice(title(favorite), "queue"));
+      await (favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow) : onEnqueueRadio(favorite.item, playNow));
     } finally { setEnqueueing(false); }
   };
 

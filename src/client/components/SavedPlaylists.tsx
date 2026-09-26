@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -15,7 +14,6 @@ import { playlistQuery, playlistsQuery } from "@/api/playlists";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { formatDuration } from "@/time-format";
 import { SavedEmpty, SavedError, SavedStatus } from "@/sections/saved/SavedStatus";
-import { playNotice } from "@/copy";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
 
 const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
@@ -77,10 +75,10 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
   };
   const create = async () => {
     const name = `Up next, ${new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
-    if (await write("/api/playlists", { name, scope: "upNext" })) toast(`Saved as ${name}.`);
+    await write("/api/playlists", { name, scope: "upNext" });
   };
   const load = async (target: { id: string; name: string; revision: number }, mode: PlaylistLoadMode) => {
-    if (await write(`${listPath(target.id)}/load`, { revision: target.revision, mode }) && mode === "append") toast(playNotice(target.name, "queue"));
+    await write(`${listPath(target.id)}/load`, { revision: target.revision, mode });
   };
   const deleteList = async (target: SavedPlaylist) => {
     const result = await write(listPath(target.id), { revision: target.revision }, "DELETE");
@@ -89,7 +87,6 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
     const text = `Deleted ${target.name}.`;
     const undoToken = result.undoToken;
     if (undoToken && session) session.offerUndo(text, async () => { await apiSend(credentials, "/api/playlists/restore", { token: undoToken }, "POST", 30_000); });
-    else toast(text);
   };
   const cannotSave = !queueCount ? "Queue something first." : playlists.length >= 100 ? "100-list limit. Delete one first." : "";
 
@@ -122,7 +119,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void write(listPath(playlist.id), { revision: playlist.revision, operation: "saveQueue" }).then(ok => { if (ok) toast(`Updated ${playlist.name}.`); })}>Replace</AlertDialogAction>
+              <AlertDialogAction onClick={() => void write(listPath(playlist.id), { revision: playlist.revision, operation: "saveQueue" })}>Replace</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

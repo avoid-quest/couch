@@ -92,7 +92,7 @@ export type Action =
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
-  | { type: "stop" };
+  | { type: "stop"; playbackId?: string };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;

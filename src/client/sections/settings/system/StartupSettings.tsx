@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,7 @@ export function StartupSettings({ credentials, connected }: Props) {
   const state = startup.data;
   const saving = useMutation({
     mutationFn: (enabled: boolean) => apiSend<StartupState>(credentials, "/api/settings/startup", { enabled }),
-    onSuccess: result => { queryClient.setQueryData(startupQuery(credentials).queryKey, result); toast("Saved. Applies at the next startup."); },
+    onSuccess: result => { queryClient.setQueryData(startupQuery(credentials).queryKey, result); },
   });
   const error = saving.error ? saving.error.message || "Couldn't save. Try again." : startup.error ? "Couldn't read startup." : null;
   const fullscreen = state && (state.fullscreenAtLaunch ? "Opens fullscreen." : "Opens in a window.");

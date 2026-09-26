@@ -27,7 +27,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
 import { sourceLabel } from "@/source-label";
-import { offline, playNotice, TRY_AGAIN } from "@/copy";
+import { offline, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/library";
@@ -313,10 +313,7 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
       if (action !== "queue") removed.current = { id: item.mediaId, index: unfinished.findIndex(entry => entry.mediaId === item.mediaId) };
       const ok = action === "queue" ? await onAdd(item) : await onPlay(item, { fromStart: action === "start" });
       if (!ok) removed.current = null;
-      if (action === "queue") {
-        if (ok) toast(playNotice(item.title, "queue"));
-        else toast.error(`Couldn't queue ${item.title}.`);
-      }
+      if (action === "queue" && !ok) toast.error(`Couldn't queue ${item.title}.`);
     } catch (reason) { removed.current = null; toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
     finally { setPending(false); }
   }

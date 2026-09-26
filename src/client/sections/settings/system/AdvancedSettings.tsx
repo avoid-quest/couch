@@ -1,7 +1,6 @@
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { toast } from "sonner";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,16 +19,15 @@ function useExportDiagnostics(credentials: ApiCredentials, native: boolean) {
       const response = await apiFetch(credentials, "/api/diagnostics/export", {}, 10_000);
       if (native) {
         const bytes = await response.arrayBuffer().catch(() => { throw new Error("Export interrupted. Nothing saved."); });
-        return await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes)) ? "Exported." : "Canceled.";
+        await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes));
+        return;
       }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url; link.download = "couch-diagnostics.json";
       document.body.append(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1_000);
-      return "Downloaded.";
     },
-    onSuccess: notice => toast(notice),
   });
 }
 
