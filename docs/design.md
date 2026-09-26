@@ -138,6 +138,11 @@ Shared building blocks in `src/client/components`:
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
 
+Release notes use `react-markdown` with GitHub-flavoured Markdown because the
+[shadcn catalog](https://ui.shadcn.com/docs/components) has no Markdown renderer.
+They sit in the settings row's content column, where block content is valid and
+has room to read. Keep the parser's safe URL handling and omit raw HTML.
+
 Messages:
 
 - **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity, diagnostic results and unexpected outcomes; routine user-triggered actions stay quiet. One line, at most one action.
