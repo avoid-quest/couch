@@ -1,5 +1,17 @@
 # couch
 
+## 0.2.0-preview.16
+
+### Patch Changes
+
+- Fix Mac restart rendering and desktop update readiness. Bound stalled native initialization, explain signing-key recovery clearly, and prevent repeated downloads of an unchanged update that cannot be verified.
+
+- Reconnect disconnected remotes promptly when they return to the foreground or regain connectivity, while preserving healthy connections and pending commands.
+
+- Send compact playback clock updates to compatible remotes while retaining full snapshots for older clients and structural changes.
+
+- Keep browsing and settings stable while playback clocks advance, and use the latest playback position for relative seeking and Undo.
+
 ## 0.2.0-preview.15
 
 ### Patch Changes
