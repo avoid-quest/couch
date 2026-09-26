@@ -72,8 +72,8 @@ export function HomePage() {
   const stations = [...shell.recentRadio, ...favorites.data?.favorites ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index).slice(0, shown.radio);
   const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
   const onAir = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
-  const settled = !history.isPending && !later.isPending;
-  const empty = settled && !history.error && !later.error && !current && !upcoming.length && !unfinished.length && !savedMedia.length && !stations.length;
+  const settled = !history.isPending && !later.isPending && !favorites.isPending;
+  const empty = settled && !history.error && !later.error && !favorites.error && !current && !upcoming.length && !unfinished.length && !savedMedia.length && !stations.length;
   const canManage = identity?.authority === "host" || identity?.authority === "administrator";
 
   const art = (item: { artworkId?: string; thumbnail?: string; title: string }) => <Artwork credentials={credentials} item={item} />;
@@ -94,6 +94,7 @@ export function HomePage() {
   return <section data-page="Home" aria-label="Home" className="pt-2">
     <h1 className="sr-only">Home</h1>
     {later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
 
     {current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}

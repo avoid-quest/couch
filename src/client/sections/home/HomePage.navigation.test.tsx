@@ -20,7 +20,7 @@ beforeEach(async () => {
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
   }
-  client = new QueryClient();
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { createRoot } = await import("react-dom/client");
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
@@ -31,13 +31,15 @@ afterEach(async () => {
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
-test("Home with nothing to show says what to do and opens source settings for an admin", async () => {
+test("Home waits for radio favorites, recovers from their failure, and offers source settings when empty", async () => {
   window.happyDOM.setURL("http://localhost/");
   history = createBrowserHistory();
+  const favorites = Promise.withResolvers<Response>();
+  let retryFavorites = false;
   request = spyOn(globalThis, "fetch").mockImplementation((async input => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/progress/history" || path === "/api/for-later") return Response.json({ items: [] });
-    if (path === "/api/radio/favorites") return Response.json({ favorites: [] });
+    if (path === "/api/radio/favorites") return retryFavorites ? Response.json({ favorites: [] }) : favorites.promise;
     if (path === "/api/jellyfin/connection") return Response.json({ configured: false });
     if (path === "/api/library/sources" || path === "/api/iptv/sources") return Response.json({ sources: [] });
     throw new Error(`Unexpected request: ${path}`);
@@ -53,6 +55,12 @@ test("Home with nothing to show says what to do and opens source settings for an
   const router = createRouter({ routeTree: base.addChildren([home, settings]), history });
   await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
   await act(async () => { await Bun.sleep(30); });
+  expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
+  await act(async () => { favorites.resolve(Response.json({ error: "Radio unavailable" }, { status: 503 })); await Bun.sleep(30); });
+  expect(screen.getByRole("alert").textContent).toContain("Couldn't load your radio stations.");
+  expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
+  retryFavorites = true;
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try again" })); await Bun.sleep(30); });
   expect(screen.getByRole("heading", { name: "Find something to play" })).toBeDefined();
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Add a source" })));
   expect(history.location.pathname).toBe("/settings/sources");
