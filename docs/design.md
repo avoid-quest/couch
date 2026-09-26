@@ -35,6 +35,12 @@ catalog provides interface icons, not brand identities.
   viewport at every interface size. Plain playback glyphs keep artwork central;
   Playback and show details use Sheets. Stage CSS handles native video bounds
   and the responsive queue workspace; controls reuse shadcn components.
+- **Keyboard control stays inside Couch.** TanStack Hotkeys shares shortcuts
+  between the browser and desktop window; Tauri global shortcuts would also
+  claim keys outside the app. The header's Keyboard shortcuts dialog is the
+  user-facing reference. Keep transport shortcuts aligned with visible control
+  capabilities, preserve Find's type-to-search, and let open panels, text entry,
+  focused controls and TV navigation own their keys.
 - **Up next is a deliberate list.** Keep Playing separate and Played collapsed.
   Compact artwork rows have one menu for Play next, ordering, Save for later
   and Remove. Removal leaves focus on an adjacent action menu. Save as list

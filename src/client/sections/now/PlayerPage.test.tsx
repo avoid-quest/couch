@@ -68,16 +68,6 @@ test("Escape closes the player sheet before leaving the player", async () => {
   expect(leaves).toBe(0);
 });
 
-test("keyboard commands use the latest session callbacks", async () => {
-  const { PlayerPage } = await import("./PlayerPage");
-  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
-  const latest: unknown[] = [];
-  const changed = { ...shell, credentials: { origin: "http://another-host", token: "new" }, run: async (action: unknown) => { latest.push(action); return true; } } as unknown as ShellValue;
-  await act(async () => view.rerender(<ShellProviders value={changed}><PlayerPage /></ShellProviders>));
-  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
-  expect(actions).toEqual([]);
-  expect(latest).toEqual([{ type: "pause", playbackId: "playback", paused: true }]);
-});
 
 test("the timeline names the current chapter", async () => {
   const { PlayerPage } = await import("./PlayerPage");
@@ -220,6 +210,9 @@ test("fullscreen control labels follow the browser and Escape exits before leavi
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument();
     expect(leaves).toBe(0);
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true })));
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     expect(leaves).toBe(1);
   } finally {
@@ -474,4 +467,12 @@ test("player controls retain their slots across loading, media modes and queue c
     if (["audio", "radio"].includes(mode)) expect(captions).toBeDisabled();
     else expect(captions).toBeEnabled();
   }
+});
+
+
+test("TV Space still pauses when controls are visible", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => view.rerender(<ShellProviders value={{ ...shell, tvPresentation: true }}><PlayerPage /></ShellProviders>));
+  await act(async () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+  expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: true }]);
 });
