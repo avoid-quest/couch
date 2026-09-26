@@ -196,15 +196,15 @@ impl Player {
         if self.state.playback_id.is_some() || std::time::Instant::now() >= deadline {
             return Err("Native readiness requires an idle player and a current request".into());
         }
-        #[cfg(all(target_os = "linux", feature = "desktop-playback"))]
+        #[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
         {
             use tauri_plugin_video::VideoExt;
             app.video().desktop().readiness_native(deadline).map_err(|error| error.to_string())
         }
-        #[cfg(not(all(target_os = "linux", feature = "desktop-playback")))]
+        #[cfg(not(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback")))]
         {
             let _ = app;
-            Err("Native update readiness requires the Ubuntu player".into())
+            Err("Native update readiness requires desktop playback".into())
         }
     }
 

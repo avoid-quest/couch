@@ -204,6 +204,11 @@ impl<R: Runtime> DesktopVideo<R> {
         result
     }
 
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn readiness_native(&self, deadline: std::time::Instant) -> crate::Result<()> {
+        self.mpv.readiness(deadline)
+    }
+
     // Readiness shares GTK's existing singleton and never opens a media source.
     #[cfg(target_os = "linux")]
     pub fn readiness_native(&self, deadline: std::time::Instant) -> crate::Result<()> {
