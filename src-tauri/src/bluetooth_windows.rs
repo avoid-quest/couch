@@ -209,7 +209,7 @@ impl Bluetooth {
             .get()
             .map_err(error)?;
         if adapter.as_raw().is_null() {
-            return Ok(json!({"adapter":"absent","devices":[],"operation":operation}));
+            return Ok(json!({"adapter":"absent","devices":[],"operation":operation,"support":super::support::windows()}));
         }
         let radio = adapter
             .GetRadioAsync()
@@ -221,7 +221,7 @@ impl Bluetooth {
         } else {
             "off"
         };
-        Ok(json!({"adapter":state,"devices":self.devices().await?,"operation":operation}))
+        Ok(json!({"adapter":state,"devices":self.devices().await?,"operation":operation,"support":super::support::windows()}))
     }
 
     async fn perform(&self, action: &Action) -> Result<(), String> {

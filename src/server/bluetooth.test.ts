@@ -1,3 +1,5 @@
+import inventories from "../../tests/fixtures/bluetooth-inventories.json";
+import { bluetoothView } from "../client/api/settings";
 import { expect, test } from "bun:test";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
@@ -70,4 +72,49 @@ test("only the selected output remembers its Bluetooth reconnect identity", () =
     store.saveAudioOutput("hdmi", { card: "alsa_card.tv", profile: "output:hdmi-stereo" });
     expect(store.audioProfile()?.bluetoothAddress).toBeUndefined();
   } finally { store.close(); }
+});
+
+
+for (const platform of ["linux", "macos", "windows"] as const) {
+  test(`${platform} inventory support crosses native transport, authorized reads and mutation reconciliation unchanged`, async () => {
+    const inventory = structuredClone(inventories[platform]) as BluetoothState;
+    const calls: BluetoothAction[] = [];
+    const bridge = createNativeBluetooth((requestId, action) => {
+      calls.push(action);
+      bridge.receive({ requestId, state: inventory });
+    });
+    try {
+      const invoke = (action: BluetoothAction) => bridge.request(action);
+      expect((await bluetoothSettings(request(), () => null, invoke)).status).toBe(401);
+      expect((await bluetoothSettings(request(), () => ({ ...admin, authority: "controller" }), invoke)).status).toBe(403);
+      expect(calls).toEqual([]);
+      const read = await (await bluetoothSettings(request(), () => admin, invoke)).json() as BluetoothState;
+      expect(read).toEqual(inventory);
+      const before = bluetoothView(null, read);
+      inventory.devices.reverse();
+      inventory.operation = { id: "scan", kind: "scan", status: "running", device: null, endsAt: 60_000, message: null, prompt: null };
+      const mutation = await (await bluetoothSettings(request({ op: "scan", owner: "forged" }), () => admin, invoke)).json() as BluetoothState;
+      const after = bluetoothView(before, mutation, true);
+      expect(after.support).toEqual(inventories[platform].support);
+      expect(after.devices.map(device => device.address)).toEqual(before.devices.map(device => device.address));
+      expect(after.operation).toEqual(inventory.operation);
+      expect(calls.map(action => action.owner)).toEqual(["admin-one", "admin-one"]);
+    } finally { bridge.close(); }
+  });
+}
+
+test("reconciliation replaces support, preserves discovery order and reconciles Forget with old-host fallback", () => {
+  const windows = structuredClone(inventories.windows) as BluetoothState;
+  const before = bluetoothView(null, windows);
+  const oldHost: BluetoothState = { adapter: "available", devices: [...windows.devices].reverse(), operation: null };
+  const legacy = bluetoothView(before, oldHost);
+  expect(legacy.support).toBeUndefined();
+  expect(legacy.devices.map(device => device.address)).toEqual(before.devices.map(device => device.address));
+  const mac = bluetoothView(legacy, inventories.macos as BluetoothState);
+  expect(mac.support?.connectUnavailableReason).toBeUndefined();
+  expect(mac.support?.forgetUnavailableReason).toBeTruthy();
+  const forget: BluetoothState = { ...windows, operation: { id: "forget", kind: "forget", device: windows.devices[0]!.address, status: "finished", endsAt: 0, message: null, prompt: null } };
+  const after = bluetoothView(before, forget);
+  expect(after.support).toEqual(windows.support);
+  expect(after.devices.map(device => device.address)).toEqual(before.devices.slice(1).map(device => device.address));
 });
