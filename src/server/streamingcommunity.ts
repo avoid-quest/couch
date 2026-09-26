@@ -98,6 +98,28 @@ function titleUrl(id: number, slug: string, origin: string) {
   return `${origin}/${locale}/titles/${id}-${slug}`;
 }
 
+export async function streamingCommunityWatchContext(value: string, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<{ title: string; titleUrl: string; seasonUrl?: string; episodeId?: number }> {
+  signal?.throwIfAborted();
+  let url: URL;
+  try { url = new URL(value); } catch { throw new ProviderError("Choose a StreamingCommunity watch link.", 400); }
+  const match = /^\/(?:[a-z]{2}\/)?watch\/(\d+)$/.exec(url.pathname);
+  if (!validStreamingCommunityOrigin(url.origin) || url.username || url.password || url.hash || !match || value.length > 2048
+    || url.search && !/^\?e=\d+$/.test(url.search)) throw new ProviderError("Choose a StreamingCommunity watch link.", 400);
+  const page = parseInertiaPage(await streamingCommunityBody(url, {}, signal, fetchPage));
+  signal?.throwIfAborted();
+  const title = object(page.props.title) ? page.props.title : undefined;
+  const id = integer(title?.id), slug = clean(title?.slug, 200);
+  const name = translated(title ?? {}, "name", 200) || clean(title?.name, 200);
+  if (page.component !== "Titles/Watch" || id !== Number(match[1]) || !/^[\w-]+$/.test(slug) || !name) throw changed();
+  const canonical = titleUrl(id!, slug, url.origin);
+  if (!url.search) return { title: name, titleUrl: canonical };
+  const episode = object(page.props.episode) ? page.props.episode : undefined;
+  const episodeId = integer(episode?.id);
+  const season = object(episode?.season) ? integer(episode.season.number) : undefined;
+  if (episodeId !== Number(url.searchParams.get("e")) || !season) throw changed();
+  return { title: name, titleUrl: canonical, seasonUrl: `${canonical}/season-${season}`, episodeId };
+}
+
 function listItem(row: Record<string, unknown>, cdn: string, origin: string): ProviderItem | undefined {
   const id = integer(row.id);
   const slug = clean(row.slug, 200) || clean(translated(row, "slug", 200), 200);

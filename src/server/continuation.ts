@@ -4,6 +4,7 @@ import { isYouTubePlaylistUrl, providerForUrl } from "../shared/providers";
 import type { JellyfinSource } from "./jellyfin";
 import type { Library } from "./library";
 import { loadProviderList } from "./providers";
+import { streamingCommunityWatchContext } from "./streamingcommunity";
 
 export type PlaybackContinuation = { title: string; entries: QueueEntry[] };
 
@@ -33,7 +34,8 @@ export function createContinuationResolver({ library, jellyfin, loadList = loadP
     if (entry.source.startsWith("jellyfin:")) return jellyfin.continuation(entry.source.slice(9), signal);
     if (entry.source.startsWith("web:")) {
       const url = entry.source.slice(4), episode = streamingEpisode(url);
-      let collection = entry.collection ?? (episode ? { title: entry.title, url: `${episode.origin}/it/titles/${episode.title}`, index: undefined } : null);
+      const watch = !entry.collection && episode ? await streamingCommunityWatchContext(url, signal) : null;
+      let collection = entry.collection ?? (watch ? { title: watch.title, url: watch.titleUrl, index: undefined } : null);
       if (!collection) return null;
       const provider = providerForUrl(url);
       if (!provider || provider !== providerForUrl(collection.url) || !["youtube", "bandcamp", "streamingcommunity"].includes(provider)

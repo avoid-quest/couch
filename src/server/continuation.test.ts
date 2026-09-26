@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -107,12 +107,19 @@ test("a Bandcamp album continues only after its selected track and preserves art
 test("historical StreamingCommunity episodes recover only their own title's confirmed sequence", async () => {
   const origin = "https://streamingcommunityz.photos";
   const requested: string[] = [];
-  const items: ProviderItem[] = [100, 200, 300].map(id => ({ id: String(id), provider: "streamingcommunity", kind: "media", title: `Episode ${id}`, url: `${origin}/it/watch/12?e=${id}` }));
-  const { resolve } = fixture(async (_provider, url) => { requested.push(url); return { title: "The series", items }; });
-  const result = await resolve({ id: "current", title: "Old episode", source: `web:${origin}/watch/12?e=200` }, signal());
-  expect(requested).toEqual([`${origin}/it/titles/12`]);
+  const items: ProviderItem[] = [17206, 17207, 17208].map(id => ({ id: String(id), provider: "streamingcommunity", kind: "media", title: `Episode ${id}`, url: `${origin}/it/watch/1955?e=${id}` }));
+  const watch = await Bun.file(new URL("./providers/streamingcommunity.fixtures/watch-episode.json", import.meta.url)).text();
+  const request = spyOn(globalThis, "fetch").mockResolvedValue(new Response(`<div data-page="${watch.replace(/"/g, "&quot;")}"></div>`));
+  cleanup.push(() => request.mockRestore());
+  const { resolve } = fixture(async (_provider, url) => {
+    requested.push(url);
+    if (url !== `${origin}/it/titles/1955-masterchef-italia`) throw new Error("404: canonical slug required");
+    return { title: "MasterChef Italia", items };
+  });
+  const result = await resolve({ id: "current", title: "Old episode", source: `web:${origin}/it/watch/1955?e=17207` }, signal());
+  expect(requested).toEqual([`${origin}/it/titles/1955-masterchef-italia`]);
   expect(result?.entries.map(entry => entry.source)).toEqual([`web:${items[2]!.url}`]);
-  expect(await resolve({ id: "current", title: "Unknown episode", source: `web:${origin}/watch/12?e=999` }, signal())).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 test("a StreamingCommunity episode selected in a season continues into the next season of its series", async () => {
