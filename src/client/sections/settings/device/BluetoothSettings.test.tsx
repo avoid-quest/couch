@@ -10,7 +10,7 @@ setupUiTests();
 let request: ReturnType<typeof spyOn>;
 beforeEach(() => {
   request = spyOn(globalThis, "fetch").mockImplementation((async input => {
-    if (new URL(String(input)).pathname === "/api/bluetooth") return Response.json({ error: "Allow Couch to use Bluetooth in System Settings on the playback host." }, { status: 503 });
+    if (new URL(String(input)).pathname === "/api/bluetooth") return Response.json({ error: "Allow Couch to use Bluetooth in System Settings on this computer." }, { status: 503 });
     return Response.json({ outputs: [], routing: {} });
   }) as typeof fetch);
 });
@@ -60,7 +60,7 @@ const platformState = (platform: keyof typeof inventories): BluetoothState => st
 test("Mac power guidance precedes any mutation while Bluetooth is off", async () => {
   const state = { ...platformState("macos"), adapter: "off" as const };
   const { actions, user } = await inventoryView(state);
-  expect(screen.getByText(/Couch cannot yet turn on Bluetooth on macOS/)).toHaveTextContent("running Couch");
+  expect(screen.getByText(/Couch can't yet turn on Bluetooth on macOS/)).toHaveTextContent("this computer");
   const power = screen.getByRole("button", { name: "Turn on" });
   expect(power).toBeDisabled();
   await user.click(power);
@@ -69,7 +69,7 @@ test("Mac power guidance precedes any mutation while Bluetooth is off", async ()
 
 test("Mac Forget is guidance-only while Connect and Disconnect stay supported", async () => {
   const { actions, user } = await inventoryView(platformState("macos"));
-  expect(screen.getAllByText(/Couch cannot yet forget devices on macOS/)).toHaveLength(2);
+  expect(screen.getAllByText(/Couch can't yet forget devices on macOS/)).toHaveLength(2);
   const forget = screen.getByRole("button", { name: "Forget Speaker" });
   expect(forget).toBeDisabled();
   await user.click(forget);
@@ -82,8 +82,8 @@ test("Mac Forget is guidance-only while Connect and Disconnect stay supported", 
 
 test("Windows connection guidance prevents mutations and destructive confirmations but preserves Forget", async () => {
   const { actions, user } = await inventoryView(platformState("windows"));
-  expect(screen.getByText(/Couch cannot yet connect paired devices on Windows/)).toHaveTextContent("running Couch");
-  expect(screen.getByText(/Couch cannot yet disconnect devices on Windows/)).toHaveTextContent("running Couch");
+  expect(screen.getByText(/Couch can't yet connect paired devices on Windows/)).toHaveTextContent("this computer");
+  expect(screen.getByText(/Couch can't yet disconnect devices on Windows/)).toHaveTextContent("this computer");
   for (const name of ["Connect Headphones", "Disconnect Speaker"]) {
     const button = screen.getByRole("button", { name });
     expect(button).toBeDisabled();
@@ -99,7 +99,7 @@ test("Windows connection guidance prevents mutations and destructive confirmatio
 
 test("Windows explains playback-desktop consent before starting supported pairing", async () => {
   const { actions, user } = await inventoryView(platformState("windows"));
-  expect(screen.getByText(/Pairing needs your confirmation/)).toHaveTextContent("Windows computer running Couch");
+  expect(screen.getByText(/Pairing needs your confirmation/)).toHaveTextContent("this computer");
   expect(screen.getByText(/Cancelling in Couch may not dismiss that prompt/)).toBeInTheDocument();
   expect(actions).toEqual([]);
   await user.click(screen.getByRole("button", { name: "Connect New speaker" }));
@@ -166,5 +166,5 @@ test("runtime operation failure remains visible alongside adapter guidance", asy
   state.operation = { id: "failed", kind: "pair", device: state.devices[2]!.address, status: "error", endsAt: 0, prompt: null, message: "Windows Bluetooth pair ended with code 5." };
   await inventoryView(state);
   expect(screen.getByRole("status")).toHaveTextContent("Windows Bluetooth pair ended with code 5.");
-  expect(screen.getByText(/Couch cannot yet connect paired devices on Windows/)).toBeInTheDocument();
+  expect(screen.getByText(/Couch can't yet connect paired devices on Windows/)).toBeInTheDocument();
 });

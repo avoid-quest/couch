@@ -139,8 +139,8 @@ static NSDictionary *request(NSDictionary *input) {
     if (!device) return @{@"error": @"That audio output is unavailable."};
     if ([op isEqualToString:@"default"]) {
         AudioObjectPropertyAddress property = address(kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, 0);
-        if (!writable(kAudioObjectSystemObject, property)) return @{@"error": @"Check in System Settings on the playback host."};
-        return AudioObjectSetPropertyData(kAudioObjectSystemObject, &property, 0, NULL, sizeof(device), &device) == noErr ? @{@"ok": @YES} : @{@"error": @"Could not select the Mac system output."};
+        if (!writable(kAudioObjectSystemObject, property)) return @{@"error": @"Check in System Settings on this computer."};
+        return AudioObjectSetPropertyData(kAudioObjectSystemObject, &property, 0, NULL, sizeof(device), &device) == noErr ? @{@"ok": @YES} : @{@"error": @"Couldn't select the Mac system output."};
     }
     if ([op isEqualToString:@"profile"]) {
         NSString *sourceID = input[@"profile"];
@@ -149,10 +149,10 @@ static NSDictionary *request(NSDictionary *input) {
         char *end = NULL;
         unsigned long long parsed = strtoull(digits, &end, 10);
         AudioObjectPropertyAddress property = address(kAudioDevicePropertyDataSource, kAudioDevicePropertyScopeOutput, 0);
-        if (!writable(device, property) || end == digits || *end || parsed > UINT32_MAX) return @{@"error": @"Check in System Settings on the playback host."};
+        if (!writable(device, property) || end == digits || *end || parsed > UINT32_MAX) return @{@"error": @"Check in System Settings on this computer."};
         UInt32 source = parsed;
         if (![objects(device, address(kAudioDevicePropertyDataSources, kAudioDevicePropertyScopeOutput, 0)) containsObject:@(source)]) return @{@"error": @"That output configuration is unavailable."};
-        return AudioObjectSetPropertyData(device, &property, 0, NULL, sizeof(source), &source) == noErr ? @{@"ok": @YES} : @{@"error": @"Could not select the output configuration."};
+        return AudioObjectSetPropertyData(device, &property, 0, NULL, sizeof(source), &source) == noErr ? @{@"ok": @YES} : @{@"error": @"Couldn't select the output configuration."};
     }
     AudioObjectPropertySelector selector = [op isEqualToString:@"volume"] ? kAudioDevicePropertyVolumeScalar : kAudioDevicePropertyMute;
     NSNumber *value = input[@"value"];
@@ -161,12 +161,12 @@ static NSDictionary *request(NSDictionary *input) {
     NSMutableArray *targets = [NSMutableArray array];
     for (NSDictionary *item in available) if ([item[@"writable"] boolValue] && [item[@"channel"] unsignedIntValue] == 0) [targets addObject:item];
     if (!targets.count) for (NSDictionary *item in available) if ([item[@"writable"] boolValue]) [targets addObject:item];
-    if (!targets.count) return @{@"error": @"Check in System Settings on the playback host."};
+    if (!targets.count) return @{@"error": @"Check in System Settings on this computer."};
     for (NSDictionary *item in targets) {
         AudioObjectPropertyAddress property = address(selector, kAudioDevicePropertyScopeOutput, [item[@"channel"] unsignedIntValue]);
         Float32 scalar = value.floatValue;
         UInt32 muted = value.boolValue;
-        if (AudioObjectSetPropertyData(device, &property, 0, NULL, sizeof(UInt32), selector == kAudioDevicePropertyVolumeScalar ? (void *)&scalar : (void *)&muted) != noErr) return @{@"error": @"Could not change the Mac output level."};
+        if (AudioObjectSetPropertyData(device, &property, 0, NULL, sizeof(UInt32), selector == kAudioDevicePropertyVolumeScalar ? (void *)&scalar : (void *)&muted) != noErr) return @{@"error": @"Couldn't change the Mac output level."};
     }
     return @{@"ok": @YES};
 }

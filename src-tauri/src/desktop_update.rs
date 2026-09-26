@@ -165,7 +165,7 @@ fn trial_failure(
             .as_u64()
             .is_some_and(|format| current["dataFormat"] != format);
     error.map(str::to_owned).or_else(|| {
-        wrong_identity.then(|| "The running app does not match the installed update. Retry or reinstall a verified compatible release without removing Couch data.".into())
+        wrong_identity.then(|| "The running app does not match the installed update. Try again or reinstall a verified compatible release without removing Couch data.".into())
     })
 }
 
@@ -403,7 +403,7 @@ pub async fn run(
                 Some("succeeded" | "failed" | "operator-required" | "trial")
             )
         {
-            journal(&directory, &mut transaction, "operator-required", Some("The update stopped during replacement. Retry or reinstall a verified compatible release without removing Couch data.".into()))?;
+            journal(&directory, &mut transaction, "operator-required", Some("The update stopped during replacement. Try again or reinstall a verified compatible release without removing Couch data.".into()))?;
         }
         Ok(())
     });
@@ -562,7 +562,7 @@ pub async fn run(
                         return Ok(serde_json::json!({"ok":true,"transaction":previous}));
                     }
                     if when_idle && crate::operating_mode::idle_blocked(&app)? {
-                        return Err("Waiting for this app to be idle before automatic installation.".into());
+                        return Err("Waiting for Couch to be idle before installing the update.".into());
                     }
                     let (_, update, summary) = selected
                         .as_ref()
@@ -622,7 +622,7 @@ pub async fn run(
                         } else {
                             "failed"
                         };
-                        if let Err(storage) = journal(&directory, &mut transaction, phase, Some(format!("{message} Retry or reinstall a verified compatible release without removing Couch data."))) {
+                        if let Err(storage) = journal(&directory, &mut transaction, phase, Some(format!("{message} Try again or reinstall a verified compatible release without removing Couch data."))) {
                             app.exit(1);
                             return Err(format!("Cannot save the update failure: {storage}"));
                         }

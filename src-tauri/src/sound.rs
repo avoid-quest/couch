@@ -24,7 +24,7 @@ pub use windows::request;
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn request(_: serde_json::Value) -> Result<serde_json::Value, String> {
-    Err("Mac sound requires a Mac playback host.".into())
+    Err("Mac sound requires macOS on this computer.".into())
 }
 
 #[cfg(all(test, target_os = "macos"))]

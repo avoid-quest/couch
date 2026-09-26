@@ -2,7 +2,6 @@
 @source "./";
 @source "../../../src/client";
 
-body { background: #000; }
 main { min-height: 100svh; display: grid; place-items: center; position: relative; }
 main > img { width: min(100%, 96rem); height: 85svh; object-fit: contain; }
 .brand-lockup { position: absolute; right: 6vw; bottom: 7svh; }

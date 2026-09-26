@@ -21,7 +21,7 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8], description: &str) -> Resu
         let _ = std::fs::remove_file(&temporary);
     }
     result.map_err(|error| {
-        format!("Could not save the {description}: {error}. No complete file was saved.")
+        format!("Couldn't save the {description}: {error}. No complete file was saved.")
     })
 }
 

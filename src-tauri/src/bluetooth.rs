@@ -34,7 +34,7 @@ pub use windows::Bluetooth;
 pub struct Bluetooth;
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 impl Bluetooth {
-    pub async fn request(&self, _: Action) -> Result<Value, String> { Err("Bluetooth management is unavailable on this playback host.".into()) }
+    pub async fn request(&self, _: Action) -> Result<Value, String> { Err("Bluetooth management is unavailable on this computer.".into()) }
     pub fn close(&self) {}
 }
 

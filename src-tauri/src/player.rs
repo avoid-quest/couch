@@ -278,7 +278,7 @@ impl Player {
                         .is_err()
                     {
                         self.state.subtitle_error = Some(
-                            "Could not load the subtitle. Try another SRT, VTT or ASS file.".into(),
+                            "Couldn't load the subtitle. Try another SRT, VTT or ASS file.".into(),
                         );
                     }
                 }
@@ -369,7 +369,7 @@ impl Player {
                     volume: self.state.volume,
                     ..PlayerState::default()
                 };
-                result.map_err(|error| format!("Could not stop native playback: {error}"))
+                result.map_err(|error| format!("Couldn't stop native playback: {error}"))
             }
         }
     }

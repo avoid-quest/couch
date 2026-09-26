@@ -141,9 +141,9 @@ pub(crate) fn request_quit(app: &tauri::AppHandle) {
                 return;
             }
             Ok(Some("playback")) => "Local playback is active. Quit Couch and stop playback?".to_string(),
-            Ok(Some("sharing")) => "Remote control is enabled. Quit Couch and disconnect controllers?".to_string(),
+            Ok(Some("sharing")) => "Remote control is enabled. Quit Couch and disconnect remotes?".to_string(),
             Ok(Some(_)) => "Local playback and remote control are active. Quit Couch and stop both?".to_string(),
-            Err(error) => format!("Couch cannot check local playback or sharing ({error}). Quit and stop the local host?"),
+            Err(error) => format!("Couch can't check playback or sharing on this computer ({error}). Quit Couch and stop both?"),
         };
         log::info!("Showing Quit confirmation");
         show(&app);

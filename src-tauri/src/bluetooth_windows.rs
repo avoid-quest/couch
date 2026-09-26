@@ -231,7 +231,7 @@ impl Bluetooth {
                 if adapter.as_raw().is_null() { return Err("No Bluetooth adapter is available.".into()); }
                 let radio = adapter.GetRadioAsync().map_err(error)?.get().map_err(error)?;
                 let status = radio.SetStateAsync(RadioState::On).map_err(error)?.get().map_err(error)?;
-                if status == RadioAccessStatus::Allowed { Ok(()) } else { Err("Windows denied Bluetooth power control. Check Bluetooth in System Settings on the playback host.".into()) }
+                if status == RadioAccessStatus::Allowed { Ok(()) } else { Err("Windows denied Bluetooth power control. Check Bluetooth in System Settings on this computer.".into()) }
             }
             "scan" => {
                 // Headsets use classic Bluetooth; Win32 inquiry finds them even when the WinRT AEP watcher does not.
@@ -268,7 +268,7 @@ impl Bluetooth {
                     else { Err(format!("Windows could not forget the device (status {}).", status.0)) }
                 }
             }
-            "connect" | "reconnect" | "disconnect" => Err("Change this Bluetooth device's connection in Windows System Settings on the playback host, then return to Couch to select its audio output.".into()),
+            "connect" | "reconnect" | "disconnect" => Err("Change this Bluetooth device's connection in Windows System Settings on this computer, then return to Couch to select its audio output.".into()),
             _ => Err("Unknown Bluetooth action.".into()),
         }
     }

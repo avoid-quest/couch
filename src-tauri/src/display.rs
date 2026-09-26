@@ -314,7 +314,7 @@ pub fn run(app: AppHandle, path: PathBuf, requests: mpsc::Receiver<Request>) {
                         let temporary = path.with_extension("tmp");
                         std::fs::write(&temporary, &pending.target)
                             .and_then(|_| std::fs::rename(&temporary, &path))
-                            .map_err(|_| "Could not save the display. The preview will revert.")?;
+                            .map_err(|_| "Couldn't save the display. The preview will revert.")?;
                         saved = Some(pending.target.clone());
                         preview = None;
                         notice = None;

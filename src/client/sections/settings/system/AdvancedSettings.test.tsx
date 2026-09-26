@@ -68,7 +68,7 @@ test("cancel and denied destination give distinct feedback", async () => {
   saveResult = false;
   await render(); await save();
   await waitFor(() => expect(lastToast()).toBe("Canceled."));
-  saveResult = "Could not save the diagnostics report: Permission denied. No complete file was saved.";
+  saveResult = "Couldn't save the diagnostics report: Permission denied. No complete file was saved.";
   await save();
   expect(await screen.findByText(/Permission denied/)).toBeInTheDocument();
 });
