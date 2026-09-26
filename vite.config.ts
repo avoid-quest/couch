@@ -26,7 +26,7 @@ export default defineConfig(({ command }) => ({
   base: "/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
-    tanstackRouter({ routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
+    tanstackRouter({ autoCodeSplitting: true, routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
     react(),
     tailwindcss(),
     // App-shell precache only (#338): the generated worker precaches the build's
