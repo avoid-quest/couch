@@ -36,7 +36,14 @@ export async function captureBandcampAudio(ui: UiDriver, title: string, name: st
     const artwork = document.querySelector('[data-player-art] img');
     return document.querySelector('[data-player-audio-copy] h2')?.textContent === arguments[0] && artwork?.naturalWidth > 0 && artwork.getBoundingClientRect().width >= 200;
   `, [title]));
-  const rect = await ui.execute("return document.querySelector('[data-player-art]').getBoundingClientRect().toJSON()");
+  const rect = await ui.execute(`
+    const image = document.querySelector('[data-player-art] img');
+    const box = image.getBoundingClientRect();
+    const scale = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
+    const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+    const x = box.x + (box.width - width) / 2, y = box.y + (box.height - height) / 2;
+    return { x, y, width, height, right: x + width, bottom: y + height };
+  `);
   assert.deepEqual(await ui.execute("return [innerWidth, innerHeight, devicePixelRatio]"), [1600, 1000, 1], "Audio artwork CSS coordinates match the native display");
   await screenshot(name);
   const decode = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", `${artifacts}/${name}.png`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { stdout: "pipe", stderr: "inherit" });
