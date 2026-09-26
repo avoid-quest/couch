@@ -37,6 +37,7 @@ export function createProviderMetadata({ store, cachedItem, resolve = resolvePro
   const shutdown = new AbortController();
   const cache = new Map<string, { value: ProviderMetadata; expires: number }>();
   const pending = new Map<string, Promise<ProviderMetadata>>();
+  const waiting: Array<() => void> = [];
   let active = 0;
   const cached = (url: string) => {
     const item = cachedItem(url);
@@ -49,17 +50,22 @@ export function createProviderMetadata({ store, cachedItem, resolve = resolvePro
     if (known) return Promise.resolve(known);
     const existing = pending.get(url);
     if (existing) return existing;
-    if (shutdown.signal.aborted || active >= 2 || providerForUrl(url) !== "streamingcommunity") return Promise.resolve({});
-    active++;
-    const task = resolve(url, shutdown.signal).catch(() => ({})).then(value => {
-      if (!shutdown.signal.aborted) {
-        if (cache.size >= 100) cache.delete(cache.keys().next().value!);
-        cache.set(url, { value, expires: Date.now() + (Object.keys(value).length ? 20 : 5) * 60_000 });
-      }
-      return value;
-    }).finally(() => { active--; pending.delete(url); });
-    pending.set(url, task);
-    return task;
+    if (shutdown.signal.aborted || pending.size >= 100 || providerForUrl(url) !== "streamingcommunity") return Promise.resolve({});
+    const task = Promise.withResolvers<ProviderMetadata>();
+    const start = () => {
+      if (shutdown.signal.aborted) { pending.delete(url); task.resolve({}); return; }
+      active++;
+      void Promise.resolve().then(() => resolve(url, shutdown.signal)).catch(() => ({})).then(value => {
+        if (!shutdown.signal.aborted) {
+          if (cache.size >= 100) cache.delete(cache.keys().next().value!);
+          cache.set(url, { value, expires: Date.now() + (Object.keys(value).length ? 20 : 5) * 60_000 });
+        }
+        task.resolve(value);
+      }).finally(() => { active--; pending.delete(url); waiting.shift()?.(); });
+    };
+    pending.set(url, task.promise);
+    if (active < 2) start(); else waiting.push(start);
+    return task.promise;
   };
   return {
     cached, load,
@@ -72,6 +78,6 @@ export function createProviderMetadata({ store, cachedItem, resolve = resolvePro
         }).catch(() => {});
       }
     },
-    close() { shutdown.abort(); cache.clear(); },
+    close() { shutdown.abort(); cache.clear(); for (const start of waiting.splice(0)) start(); },
   };
 }

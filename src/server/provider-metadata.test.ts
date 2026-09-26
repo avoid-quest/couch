@@ -45,6 +45,7 @@ test("history refresh is nonblocking, deduplicated and preserves observed facts 
   const metadata = createProviderMetadata({ store, cachedItem: () => undefined, resolve: () => { calls++; return new Promise(resolve => { complete = resolve; }); }, onChange: () => changes++ });
   try {
     metadata.refreshHistory([progress]); metadata.refreshHistory([progress]);
+    await Promise.resolve();
     expect(calls).toBe(1);
     expect(store.historySource(mediaId)?.description).toBeUndefined();
     complete(details); await flush();
@@ -83,7 +84,7 @@ test("refresh skips zero-position and watched rows, bounds concurrent requests, 
       const row = { ...progress, mediaId: playbackMediaId(source)!, position: index < 4 ? 0 : 10 };
       store.saveProgress("household", row, source); return row;
     });
-    metadata.refreshHistory(rows); expect(calls).toBe(2);
+    metadata.refreshHistory(rows); await Promise.resolve(); expect(calls).toBe(2);
     metadata.close(); finishes.forEach(finish => finish()); await flush();
     expect(store.historySource(rows[4]!.mediaId)?.description).toBeUndefined();
   } finally { metadata.close(); store.close(); }
@@ -110,5 +111,27 @@ test("cached early history rows do not starve later unfinished episodes", async 
     for (let batch = 0; batch < 3; batch++) { metadata.refreshHistory(rows); await flush(); }
     expect(calls).toBe(6);
     expect(rows.every(row => store.historySource(row.mediaId)?.description === details.description)).toBe(true);
+  } finally { metadata.close(); store.close(); }
+});
+
+test("one refresh drains later entries even when the first lookups fail or return no metadata", async () => {
+  const store = openStore(":memory:");
+  let calls = 0;
+  const completed = Promise.withResolvers<void>();
+  const metadata = createProviderMetadata({ store, cachedItem: () => undefined, resolve: async () => {
+    calls++;
+    if (calls === 1) throw new Error("Unavailable catalogue");
+    return calls === 2 ? {} : details;
+  }, onChange: () => completed.resolve() });
+  try {
+    const rows = Array.from({ length: 3 }, (_, index) => {
+      const source = { ...entry, source: `web:${origin}/it/watch/${index + 1}?e=1` };
+      const row = { ...progress, mediaId: playbackMediaId(source)! };
+      store.saveProgress("household", row, source); return row;
+    });
+    metadata.refreshHistory(rows);
+    await completed.promise;
+    expect(calls).toBe(3);
+    expect(store.historySource(rows[2]!.mediaId)).toMatchObject(details);
   } finally { metadata.close(); store.close(); }
 });
