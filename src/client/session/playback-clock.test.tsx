@@ -1,4 +1,4 @@
-import { setupUiTests, act, render, screen, fireEvent, waitFor } from "@/testing/react";
+import { setupUiTests, act, render, screen, fireEvent, waitFor, within } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Profiler } from "react";
 import { toast } from "sonner";
@@ -109,13 +109,23 @@ test.each(["/find", "/settings/sources"])("real gate and shell keep %s stable wh
   expect(screen.getByRole("radio", { name: /Second chapter/ }).getAttribute("aria-checked")).toBe("true");
   expect(gate).toBe(initialGate);
   expect(shell).toBe(initialShell);
-  expect(screen.getByText("3:00")).toBeVisible();
-  expect(screen.getByText(`−8:00 ends ${formatEndTime(480)}`)).toBeVisible();
-  expect(screen.getByRole("slider", { name: "Playback position" }).getAttribute("aria-valuenow")).toBe("180");
-  expect(screen.getByRole("slider", { name: "Playback position" }).getAttribute("aria-valuemax")).toBe("660");
+  const elapsedLabels = screen.getAllByText("3:00");
+  expect(elapsedLabels).toHaveLength(2);
+  for (const label of elapsedLabels) expect(label).toBeVisible();
+  const remaining = screen.getByText("−8:00");
+  expect(remaining).toBeVisible();
+  expect(remaining).toHaveTextContent(`−8:00 ends ${formatEndTime(480)}`);
+  const timelines = screen.getAllByRole("slider", { name: "Playback position" });
+  expect(timelines).toHaveLength(2);
+  for (const timeline of timelines) {
+    expect(timeline).toHaveAttribute("aria-valuenow", "180");
+    expect(timeline).toHaveAttribute("aria-valuemax", "660");
+  }
   expect(screen.getByRole("list", { name: "Up next" }).textContent).not.toBe(firstQueue);
   expect(screen.getByRole("list", { name: "Up next" }).textContent).toContain(`starts ${formatEndTime(480)}`);
-  expect(screen.getByText(`3:00 / 11:00 · ends ${formatEndTime(480)}`)).toBeVisible();
+  const mini = within(screen.getByRole("contentinfo", { name: "Now playing" }));
+  expect(mini.getByText("11:00")).toBeVisible();
+  expect(mini.getByRole("status")).toHaveTextContent(`Ends ${formatEndTime(480)}`);
 });
 
 test("relative seeks and Undo capture a clock delivered before React commits", async () => {

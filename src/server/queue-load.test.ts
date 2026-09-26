@@ -91,11 +91,12 @@ test.each(["replace", "play"] as const)("failed %s preserves progress observatio
   expect(store.progress("household", "library:current")?.position).toBe(100);
   failProgress = false;
   failQueue = true;
-  expect(() => session.loadQueue(entries, mode)).toThrow("Queue write failed");
+  expect(() => session.loadQueue(entries, mode)).toThrow(mode === "play" ? "Couldn't save your place in Up next" : "Queue write failed");
   expect(session.state.queue).toEqual(before.queue);
   expect(session.state.player).toEqual(before.player);
   expect(commands).toHaveLength(sent);
-  expect(store.progress("household", "library:current")?.position).toBe(120);
+  expect(store.queueCursorEntryId()).toBe(before.queueCursorEntryId!);
+  expect(store.progress("household", "library:current")?.position).toBe(mode === "play" ? 100 : 120);
   failQueue = false;
   time = 20_000;
   session.observe({ ...observed, position: 150 });
@@ -120,8 +121,12 @@ test.each(["replace", "play"] as const)("%s marks a near-end item watched only a
   session.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "library:current" } });
   session.command({ type: "play", entryId: "current" });
   session.observe({ ...idle, playbackId: session.state.player.playbackId, status: "playing", position: 950, duration: 1000, seekable: true });
+  const before = session.state;
   failQueue = true;
-  expect(() => session.loadQueue(entries, mode)).toThrow("Queue write failed");
+  expect(() => session.loadQueue(entries, mode)).toThrow(mode === "play" ? "Couldn't save your place in Up next" : "Queue write failed");
+  expect(session.state.queue).toEqual(before.queue);
+  expect(session.state.player).toEqual(before.player);
+  expect(store.queueCursorEntryId()).toBe(before.queueCursorEntryId!);
   expect(store.progress("household", "library:current")).toMatchObject({ position: 950, watched: false });
   failQueue = false;
   session.loadQueue(entries, mode);
@@ -129,7 +134,7 @@ test.each(["replace", "play"] as const)("%s marks a near-end item watched only a
   store.close();
 });
 
-test("a completion-write failure after queue commit stops the removed item and retains its pending progress", () => {
+test("a completion-write failure rolls back playlist Play and keeps observing the current item", () => {
   const store = openStore(":memory:");
   let failCompletion = true;
   const commands: PlaybackCommand[] = [];
@@ -140,12 +145,22 @@ test("a completion-write failure after queue commit stops the removed item and r
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "library:current" }, playNow: true });
   session.observe({ ...idle, playbackId: session.state.player.playbackId, status: "playing", position: 950, duration: 1000, seekable: true });
+  const before = session.state;
+  const sent = commands.length;
   expect(() => session.loadQueue(entries, "play")).toThrow("Couldn't save your progress");
-  expect(session.state.queue.map(entry => entry.title)).toEqual(entries.map(entry => entry.title));
-  expect(session.state.currentEntryId).toBeNull();
-  expect(commands.at(-1)).toEqual({ type: "stop" });
+  expect(session.state.queue).toEqual(before.queue);
+  expect(session.state.player).toEqual(before.player);
+  expect(session.state.currentEntryId).toBe("current");
+  expect(store.queueCursorEntryId()).toBe("current");
+  expect(commands).toHaveLength(sent);
+  expect(store.progress("household", "library:current")).toMatchObject({ position: 950, watched: false });
   failCompletion = false;
-  session.observe(idle);
+  session.observe({ ...before.player, status: "paused", position: 960 });
+  expect(store.progress("household", "library:current")).toMatchObject({ position: 960, watched: false });
+  const added = session.loadQueue(entries, "play");
+  expect(session.state.queue).toEqual(added);
+  expect(session.state.currentEntryId).toBe(added[0]!.id);
+  expect(commands.at(-1)).toMatchObject({ type: "load", source: entries[0]!.source });
   expect(store.progress("household", "library:current")).toMatchObject({ position: 0, watched: true });
   store.close();
 });

@@ -22,9 +22,10 @@ export async function verifyAcceptedUx(context: MusicContext) {
     for (const [name, driver] of [["TV", ui], ["phone", httpRemote.ui]] as const) {
       if (name === "phone") await httpRemote.restore(); else await httpRemote.minimize();
       await driver.section("Queue");
+      await driver.button("Played", "[data-queue-panel]");
       await until(`${name} separates current, next and played queue entries`, () => driver.execute(`
         const ids = label => [...document.querySelectorAll('[data-queue-panel] [aria-label="' + label + '"] [data-queue-entry-id]')].map(row => row.dataset.queueEntryId);
-        return document.querySelector('[data-player-heading] h1')?.textContent === 'Search local video'
+        return document.querySelector('[aria-label=Player] h1')?.textContent === 'Search local video'
           && JSON.stringify([ids('Up next'), ids('Played')]) === JSON.stringify([[arguments[0]], [arguments[1]]]);
       `, [ids[2], ids[0]]));
       if (name === "phone") { await assertResponsive(driver, "Phone current session"); await httpRemote.screenshot("accepted-current-session"); }
@@ -52,7 +53,10 @@ export async function verifyAcceptedUx(context: MusicContext) {
     await until("native For later save reaches the paired HTTP API", async () => (await api("/api/for-later", undefined, 1)).items.some((saved: any) => saved.title === item.title));
     await ui.section("Queue");
     await ui.button("Save as list", "[data-queue-panel]");
-    await until("native playlist save reaches the paired HTTP API", async () => (await api("/api/playlists", undefined, 1)).playlists.some((saved: any) => saved.name.startsWith("Up next,")));
+    const listName = `Accepted UX ${ids[0]}`;
+    await ui.type("#queue-list-name", listName);
+    await ui.button("Save list", "[role=dialog]");
+    await until("native playlist save reaches the paired HTTP API", async () => (await api("/api/playlists", undefined, 1)).playlists.some((saved: any) => saved.name === listName));
     const savedItems = await api("/api/for-later"), savedPlaylists = await api("/api/playlists");
     const queueIds = first().queue.map(entry => entry.id);
     profile = (await api("/api/profiles", { name: `Accepted UX ${crypto.randomUUID().slice(0, 8)}` })).profile;

@@ -135,7 +135,7 @@ export async function verifyReplayGain(context: Context) {
     const playbackId = first().player.playbackId;
     await httpRemote.minimize(); await otherRemote.minimize();
     await ui.controls();
-    await ui.button("Settings", "[data-player-tools]");
+    await ui.button("Playback", "[data-player-tools]");
     await ui.button("Track", "[data-player-sheet]");
     await until("TV current ReplayGain changes only the paused item", () => all(state => state.player.replayGain === "track" && state.preferences?.profile.replayGain === "off" && state.player.playbackId === playbackId));
     assert.deepEqual(await ui.execute("return [innerWidth, innerHeight, devicePixelRatio]"), [1600, 1000, 1]);
@@ -143,7 +143,7 @@ export async function verifyReplayGain(context: Context) {
     await close(ui);
     await httpRemote.restore();
     await httpRemote.ui.section("Now");
-    await httpRemote.ui.button("Settings", "[data-player-tools]");
+    await httpRemote.ui.button("Playback", "[data-player-tools]");
     await httpRemote.ui.button("Album", "[data-player-sheet]");
     await until("first real HTTP browser changes native gain without changing the saved profile", () => all(state => state.player.replayGain === "album" && state.preferences?.profile.replayGain === "off"));
     await httpRemote.ui.button("Save volume leveling as default");
@@ -163,7 +163,7 @@ export async function verifyReplayGain(context: Context) {
     await otherRemote.refresh();
     await until("a real HTTP browser reconnects", () => otherRemote.ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
     await otherRemote.ui.section("Now");
-    await otherRemote.ui.button("Settings", "[data-player-tools]");
+    await otherRemote.ui.button("Playback", "[data-player-tools]");
     await until("reconnected browser receives observed Album", () => otherRemote.ui.execute("return [...document.querySelectorAll('[data-player-sheet] button')].some(button => button.textContent.trim() === 'Album' && button.getAttribute('aria-pressed') === 'true')"));
     await close(otherRemote.ui);
     await savedSettings(otherRemote.ui);

@@ -212,10 +212,10 @@ try {
       if (provider.catalog) {
         phase = "show current provider media on the native player";
         await ui.controls();
-        await until(async () => await execute("return document.querySelector('[data-player-heading] h1')?.textContent === arguments[0]", [entry!.title]));
+        await until(async () => await execute("return document.querySelector('[aria-label=Player] h1')?.textContent === arguments[0]", [entry!.title]));
         if (provider.catalog.provider === "bandcamp") await until(async () => await execute("return document.querySelector('[data-player-art] img')?.naturalWidth > 0"));
         else {
-          await ui.button("Settings", "[data-player-tools]");
+          await ui.button("Playback", "[data-player-tools]");
           await until(async () => await execute("return [...document.querySelectorAll('[data-player-sheet] button')].some(button => button.textContent.trim() === '720p' && button.getAttribute('aria-pressed') === 'true')"));
           await ui.key(keys.escape);
         }

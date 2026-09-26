@@ -34,7 +34,7 @@ type Context = {
 export async function captureBandcampAudio(ui: UiDriver, title: string, name: string, artifacts: string, screenshot: Context["screenshot"]) {
   await ui.waitFor("Bandcamp audio shows its title and decoded artwork on the TV", () => ui.execute(`
     const artwork = document.querySelector('[data-player-art] img');
-    return document.querySelector('[data-player-audio-copy] h2')?.textContent === arguments[0] && artwork?.naturalWidth > 0 && artwork.getBoundingClientRect().width >= 200;
+    return document.querySelector('[data-player-audio-copy] h1')?.textContent === arguments[0] && artwork?.naturalWidth > 0 && artwork.getBoundingClientRect().width >= 200;
   `, [title]));
   const rect = await ui.execute(`
     const image = document.querySelector('[data-player-art] img');
@@ -169,7 +169,7 @@ export async function verifyBandcamp(context: Context) {
     await captureBandcampAudio(ui, replacement.title, "bandcamp-native-audio", artifacts, screenshot);
     phase = "stop Bandcamp through the actual TV control";
     await ui.controls();
-    await ui.button("Stop");
+    await ui.stopPlayback();
     await idle();
     return { entries, observations: [first, next, replaced], qualification: "Native audio tracks and advancing position observed through two paired controllers. No gapless or physical audio claim." };
   });
@@ -199,11 +199,11 @@ export async function verifyBandcamp(context: Context) {
     await phone.ui.key(keys.escape);
     phase = "show native playback and stop from the phone";
     await phone.ui.controls();
-    await until(async () => await phone!.ui.execute("return document.querySelector('[data-player-heading] h1')?.textContent === 'Intro' && !!document.querySelector('[data-player-band=shown]')"));
+    await until(async () => await phone!.ui.execute("return document.querySelector('[data-player-audio-copy] h1')?.textContent === 'Intro' && !!document.querySelector('[data-player-band=shown]')"));
     await phone.ui.execute("window.scrollTo(0, 0)");
     await assertResponsive(phone.ui, "Phone Bandcamp playback controls");
     await phone.screenshot("bandcamp-http-controls");
-    await phone.ui.button("Stop");
+    await phone.ui.stopPlayback();
     await idle();
     await phone.ui.section("Queue");
     await phone.minimize();

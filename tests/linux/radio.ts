@@ -96,11 +96,11 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
     // in both session snapshots above and below, independently of presentation.
     await httpRemote.restore();
     await httpRemote.ui.section("Now");
-    await until("paired HTTP phone displays the playing station", async () => await httpRemote.ui.execute("return document.querySelector('[data-mini-player] strong, [data-player-heading] h1')?.textContent === arguments[0]", [metadata.station.name]));
-    await until("phone displays native ICY title and artist", async () => await httpRemote.ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${initialRadioTitle}`]));
+    await until("paired HTTP phone displays the playing station", async () => await httpRemote.ui.execute("return document.querySelector('[aria-label=Player] h1')?.textContent === arguments[0]", [metadata.station.name]));
+    await until("phone displays native ICY title and artist", async () => await httpRemote.ui.execute("return document.querySelector('[data-player-audio-copy] [role=status]')?.textContent === arguments[0]", [`${suppliedRadioArtist} — ${initialRadioTitle}`]));
     fixture.setTitle(metadata.key, changedRadioTitle);
     await until("a second ICY title updates while the same native playback continues", () => all(state => state.player.playbackId === playbackId && state.player.nowPlaying?.title === changedRadioTitle && state.player.nowPlaying.artist === suppliedRadioArtist && state.queue.find(entry => entry.id === metadataEntryId)?.title === metadata.station.name), 15_000);
-    await until("phone displays the changed native ICY title", async () => await httpRemote.ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${changedRadioTitle}`]));
+    await until("phone displays the changed native ICY title", async () => await httpRemote.ui.execute("return document.querySelector('[data-player-audio-copy] [role=status]')?.textContent === arguments[0]", [`${suppliedRadioArtist} — ${changedRadioTitle}`]));
     for (const driver of [ui, httpRemote.ui]) assert.equal(await driver.execute("return !!document.querySelector('[data-radio-fixture]')"), false, "Radio metadata never inserts HTML");
     await assertResponsive(httpRemote.ui, "Phone radio current track");
     await httpRemote.screenshot("http-radio-metadata");
@@ -114,7 +114,7 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
       plainEntryId = first().currentEntryId ?? "";
       return !!plainEntryId && plainEntryId !== metadataEntryId && playing(plainEntryId) && all(state => !state.player.nowPlaying && !state.radioRetry);
     }, 25_000);
-    for (const driver of [ui, httpRemote.ui]) await until("untagged radio has no stale current-track label", async () => await driver.execute("return !document.querySelector('.radio-now-playing')"));
+    for (const driver of [ui, httpRemote.ui]) await until("untagged radio has no stale current-track label", async () => await driver.execute("return !document.querySelector('[data-player-audio-copy] [role=status]')"));
     const ordinary = originalQueue.find(entry => entry.source === "http://127.0.0.1:4200/multitrack.mkv");
     assert.ok(ordinary, "Ordinary multitrack fixture remains available for radio source cleanup");
     await clients[1]!.command({ type: "play", entryId: ordinary.id, fromStart: true });

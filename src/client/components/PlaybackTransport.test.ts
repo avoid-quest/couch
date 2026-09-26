@@ -21,6 +21,6 @@ test("nonlive playback retains elapsed and remaining time when seeking is unavai
   } } as unknown as SessionState;
   render(createElement(PlaybackClockContext.Provider, { value: state.player }, createElement(PlaybackTimeline, { state, connected: true, run: async () => true })));
   expect(screen.getByText("1:00")).toBeInTheDocument();
-  expect(screen.getByText(/−4:00 ends /)).toBeInTheDocument();
+  expect(screen.getByText(/−4:00/)).toHaveTextContent(/−4:00 ends /);
   expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 });

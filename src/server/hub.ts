@@ -235,8 +235,8 @@ export function createHub(options: HubOptions) {
     },
     reservePlay: () => session.reservePlay(),
     enqueue: (entry, intent, authorize, playedBy) => {
-      session.command({ type: "enqueue", entry }, authorize, playedBy);
-      if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize, playedBy);
+      if (intent !== undefined) session.playNewEntries([entry], { intent, authorize, playedBy });
+      else session.command({ type: "enqueue", entry }, authorize, playedBy);
     },
   });
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
@@ -372,12 +372,10 @@ export function createHub(options: HubOptions) {
       // an already prepared atom/album/radio command before its queue mutation.
       const prepared = pending instanceof Promise ? await pending : pending;
       if (!prepared || !authorized()) return;
-      let entries: QueueEntry[], fromStart: boolean | undefined, selectedEntryIds: string[] = [];
       if ("entry" in prepared) {
         const { entry, inspectUrl } = prepared;
-        session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
-        entries = [entry];
-        fromStart = prepared.fromStart;
+        if (intent !== undefined) session.playNewEntries([entry], { intent, fromStart: prepared.fromStart, authorize, playedBy });
+        else session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
         if (inspectUrl) {
           const controller = new AbortController();
           inspections.set(entry.id, controller);
@@ -388,11 +386,9 @@ export function createHub(options: HubOptions) {
           });
         }
       } else {
-        entries = session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
-        fromStart = true;
-        selectedEntryIds = entries.map(entry => entry.id);
+        if (intent !== undefined) session.playNewEntries(prepared.entries.map(entry => ({ ...entry, id: crypto.randomUUID() })), { intent, fromStart: true, authorize, playedBy });
+        else session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
       }
-      if (intent !== undefined && entries[0]) session.playIfCurrent(intent, entries[0].id, fromStart, authorize, playedBy, selectedEntryIds);
     })();
   };
 

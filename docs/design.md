@@ -16,12 +16,25 @@ catalog provides interface icons, not brand identities.
 ## Principles
 
 - **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
-  full-bleed player with one solid control band, and "Playing on" one step away.
-- **The player is one tap away.** While something plays, every browse page ends
-  in the mini player: its artwork and title open the player, beside Play/Pause,
-  Next and the volume slider. Volume is always a mute button and a slider.
-  The player fits the viewport at every interface size, with contained artwork
-  and no page scrolling. Long show details open in its existing side sheet.
+  full-bleed player with a compact bottom control band, and "Playing on" one
+  step away.
+- **The player is one tap away.** The mini dock opens the player through its
+  artwork and title, with direct transport and Up next actions. Volume uses
+  an inline slider where space permits and a Popover in compact windows.
+  Audio and remote playback place contained artwork beside a persistent
+  desktop queue. On phones, Up next replaces the artwork while transport stays
+  available. Video uses the full viewport until Up next opens beside it.
+  Queue navigation survives playback changes; track-specific settings reset.
+  Audio keeps controls visible; idle video hides them. The player fits the
+  viewport at every interface size. Plain playback glyphs keep artwork central;
+  Playback and show details use Sheets. Stage CSS handles native video bounds
+  and the responsive queue workspace; controls reuse shadcn components.
+- **Up next is a deliberate list.** Keep Playing separate and Played collapsed.
+  Compact artwork rows have one menu for Play next, ordering, Save for later
+  and Remove. Removal leaves focus on an adjacent action menu. Save as list
+  asks for a name and preserves errors there for retry. Queue-specific rows
+  keep actions beside titles where MediaRow would stack them; shadcn/Radix
+  Dropdown Menu supplies keyboard navigation and typeahead.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
   on the right. Rows appear only when they have something in them: Now,
@@ -70,7 +83,8 @@ the TV and a desktop window show the same layout. Use Tailwind's rem sizes only.
 
 | Role | Classes |
 | --- | --- |
-| Display (search field, player title) | `text-3xl font-semibold tracking-tight` |
+| Display (search field) | `text-3xl font-semibold tracking-tight` |
+| Player artwork title | `text-2xl font-medium tracking-tight` |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
 | Section title | `text-base font-medium` |
 | Row title, settings label | `text-base` |
@@ -94,7 +108,7 @@ owned by Couch; the Mira defaults were changed only where Clock needs it:
 Shared building blocks in `src/client/components`:
 
 - `MediaRow` / `MediaList`: thumbnail, title, meta, length bar, one main verb
-  and actions revealed on hover or focus. Home, Find, Saved and Up next.
+  and actions revealed on hover or focus. Home, Find and Saved.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.

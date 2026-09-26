@@ -278,20 +278,22 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     broadcast();
     return true;
   };
-  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) => {
+  const assertCurrentPlay = (intent: number) => { if (intent !== playIntent) throw new Error(PLAY_CANCELED); };
+  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue) => {
     authorize();
     available();
     options.prepareAudio?.();
     audioInterrupted = false;
-    const entry = state.queue.find(entry => entry.id === entryId);
+    const entry = proposedQueue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
-    const index = state.queue.indexOf(entry);
-    const cursor = state.queue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
+    const index = proposedQueue.indexOf(entry);
+    const cursor = proposedQueue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
     // Play now moves the chosen item or explicit album ahead of waiting entries.
-    // Next and replay keep the existing order before the playback boundary.
+    // Replaying history moves only that entry to the boundary, keeping older plays out of Up next.
     const selected = new Set([entryId, ...selectedEntryIds]);
-    const waiting = state.queue.slice(cursor + 1);
-    const queue = index > cursor + 1 ? [...state.queue.slice(0, cursor + 1), ...waiting.filter(item => selected.has(item.id)), ...waiting.filter(item => !selected.has(item.id))] : state.queue;
+    const waiting = proposedQueue.slice(cursor + 1);
+    const queue = index < cursor ? [...proposedQueue.slice(0, cursor + 1).filter(item => item.id !== entryId), entry, ...waiting]
+      : index > cursor + 1 ? [...proposedQueue.slice(0, cursor + 1), ...waiting.filter(item => selected.has(item.id)), ...waiting.filter(item => !selected.has(item.id))] : proposedQueue;
     audioOnly = false;
     cancelPreparation();
     progress.finish(true, save => saveQueueCursor(entry.id, true, () => persistProgress(save, true), queue));
@@ -439,6 +441,22 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     finally { options.deactivate?.(); }
   };
 
+  const playNewEntries = (entries: QueueEntry[], { intent, fromStart = false, authorize = () => {}, playedBy }: { intent?: number; fromStart?: boolean; authorize?: () => void; playedBy?: PlaybackActor } = {}) => {
+    assertAdmitted();
+    authorize();
+    if (intent !== undefined) assertCurrentPlay(intent);
+    if (!entries.length) throw new Error("This playlist is empty. Add items before playing it.");
+    if (state.queue.length + entries.length > 500) throw new Error(QUEUE_FULL);
+    const ids = new Set(state.queue.map(entry => entry.id));
+    for (const entry of entries) {
+      if (ids.has(entry.id)) throw new Error("That queue entry already exists.");
+      ids.add(entry.id);
+    }
+    const added = entries.map(entry => ({ ...entry, addedBy: playedBy ? { ...playedBy } : entry.addedBy }));
+    play(added[0]!.id, fromStart, false, authorize, false, playedBy, added.map(entry => entry.id), [...state.queue, ...added]);
+    return added;
+  };
+
   return {
     updateSystemAudio(audio: import("../shared/sound").SoundRouteState) {
       state.systemAudio = audio;
@@ -488,18 +506,19 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       }
       if (entries.length + (mode === "append" ? state.queue.length : 0) > 500) throw new Error(QUEUE_FULL);
       const added = entries.map(entry => ({ ...entry, id: crypto.randomUUID(), ...(playedBy ? { addedBy: { ...playedBy } } : {}) }));
-      if (mode !== "append") persistProgress(progress.checkpoint, true);
-      const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
-      saveQueue(mode === "append" ? placement === "next" ? [...state.queue.slice(0, cursor + 1), ...added, ...state.queue.slice(cursor + 1)] : [...state.queue, ...added] : added);
       if (mode === "play") {
-        try { play(added[0]!.id, true, false, authorize, false, playedBy); }
+        try { play(added[0]!.id, true, false, authorize, false, playedBy, [], added); }
         catch (error) {
-          if (state.currentEntryId !== added[0]!.id || !state.radioRetry) stop();
+          if (state.currentEntryId === added[0]!.id && !state.radioRetry) stop();
           throw error;
         }
+      } else {
+        if (mode === "replace") persistProgress(progress.checkpoint, true);
+        const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
+        saveQueue(mode === "append" ? placement === "next" ? [...state.queue.slice(0, cursor + 1), ...added, ...state.queue.slice(cursor + 1)] : [...state.queue, ...added] : added);
+        if (mode === "replace") stop();
+        else broadcast();
       }
-      else if (mode === "replace") stop();
-      else broadcast();
       return added;
     },
     addSubtitle(playbackId: string, subtitle: { source: string; title: string; language?: string }) {
@@ -507,6 +526,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (!["playing", "paused"].includes(state.player.status)) throw new Error("Wait for this item to finish loading before adding subtitles.");
       send({ type: "addSubtitle", playbackId, ...subtitle });
     },
+    playNewEntries,
     reservePlay() {
       available();
       qualityResolution?.abort();
@@ -516,7 +536,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       return ++playIntent;
     },
     playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) {
-      if (intent !== playIntent) throw new Error(PLAY_CANCELED);
+      assertCurrentPlay(intent);
       play(entryId, fromStart, false, authorize, false, playedBy, selectedEntryIds);
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
@@ -527,12 +547,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
       const saved = existing ?? store.historySource(mediaId);
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
+      if (!existing && state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
       const entry = existing ?? { ...saved, id: crypto.randomUUID() };
-      if (!existing) {
-        if (state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
-        saveQueue([...state.queue, entry]);
-      }
-      play(entry.id, fromStart, false, authorize, false, playedBy);
+      if (existing) play(entry.id, fromStart, false, authorize, false, playedBy);
+      else playNewEntries([entry], { fromStart, authorize, playedBy });
     },
     close() { if (!quiescing) end(false); },
     checkpoint() { persistProgress(progress.checkpoint, true); },
@@ -620,9 +638,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           if (state.queue.some(entry => entry.id === action.entry.id)) throw new Error("That queue entry already exists.");
           const entry = { ...action.entry, title: action.entry.title.trim(), addedBy: playedBy ? { ...playedBy } : undefined };
           const cursor = state.queue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
-          saveQueue(action.placement === "next" ? [...state.queue.slice(0, cursor + 1), entry, ...state.queue.slice(cursor + 1)] : [...state.queue, entry]);
-          if (action.playNow) play(action.entry.id, true, false, authorize, false, playedBy);
-          else broadcast();
+          if (action.playNow) playNewEntries([entry], { fromStart: true, authorize, playedBy });
+          else {
+            saveQueue(action.placement === "next" ? [...state.queue.slice(0, cursor + 1), entry, ...state.queue.slice(cursor + 1)] : [...state.queue, entry]);
+            broadcast();
+          }
           break;
         case "remove": {
           const index = state.queue.findIndex(entry => entry.id === action.entryId);

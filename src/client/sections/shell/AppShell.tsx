@@ -60,8 +60,8 @@ function useShellValue() {
   const lastBrowsePath = useRef("/");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   useEffect(() => {
-    if (section === "Now" && state && !state.currentEntryId) router.history.replace(lastBrowsePath.current);
-  }, [section, state?.currentEntryId, state?.queue.length, !!state, router]);
+    if (section === "Now" && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
+  }, [section, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
   const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
@@ -94,6 +94,9 @@ function useShellValue() {
   const changeSection = (name: string) => {
     if (name === "Remote") { setRemoteOpen(true); return; }
     changePage(name);
+  };
+  const openPlayer = (panel?: "queue") => {
+    void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
   const leavePlayer = () => {
     if (playerTransition) void router.navigate({ href: lastBrowsePath.current, viewTransition: true });
@@ -178,7 +181,7 @@ function useShellValue() {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
-    changeSection, leavePlayer, browseSection, gotoSearch, changeSearch, changeSettingsSection,
+    changeSection, openPlayer, leavePlayer, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
     remoteOpen, pairingOpen, onlineRequest, setupSource, sourcesOpen,
@@ -303,7 +306,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage /> : <>
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={() => shell.changeSection("Now")} />}
+            {current && (active || player?.status === "error") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>

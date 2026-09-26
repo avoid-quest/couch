@@ -47,7 +47,7 @@ test("legacy entries stay upcoming; Stop and restart retain position without aut
   expect(restarted.commands).toEqual([{ type: "volume", volume: 42 }]);
 });
 
-test("restart during playback retains the last selection and replay moves the boundary backward", () => {
+test("restart during playback retains the last selection and replay preserves the waiting boundary", () => {
   const f = fixture();
   f.session.command({ type: "play", entryId: "one" });
   f.session.command({ type: "next", playbackId: f.session.state.player.playbackId! });
@@ -56,7 +56,7 @@ test("restart during playback retains the last selection and replay moves the bo
   const restarted = f.start();
   expect(restarted.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "three" });
   restarted.session.command({ type: "play", entryId: "one" });
-  expect(restarted.session.state).toMatchObject({ currentEntryId: "one", queueCursorEntryId: "one", queue: entries });
+  expect(restarted.session.state).toMatchObject({ currentEntryId: "one", queueCursorEntryId: "one", queue: [entries[1], entries[2], entries[0], entries[3]] });
   expect(restarted.store.history("household")).toEqual([]);
 });
 

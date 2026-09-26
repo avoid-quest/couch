@@ -93,7 +93,7 @@ for (const shape of ["atom", "playlist"] as const) test.each([false, true])(`gen
   } finally { expand.mockRestore(); resolve.mockRestore(); }
 });
 
-for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement} cancels delayed generic provider playlist playback, not its queue addition`, async () => {
+for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement} cancels delayed generic provider playlist playback and its queue addition`, async () => {
   const entered = Promise.withResolvers<void>(), output = Promise.withResolvers<ProviderPage>();
   const expand = spyOn(providers, "loadProviderList").mockImplementation(async () => { entered.resolve(); return output.promise; });
   try {
@@ -104,8 +104,8 @@ for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement
     await entered.promise;
     expect(await second.command(replacement === "stop" ? { type: "stop" } : { type: "play", entryId: "replacement" })).toMatchObject({ ok: true });
     output.resolve(page);
-    expect(await pending).toMatchObject({ ok: false, error: "Queued. Another action canceled playback." });
-    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Replacement", "Episode 1", "Episode 2"]);
+    expect(await pending).toMatchObject({ ok: false, error: "Another action canceled playback." });
+    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Replacement"]);
     expect(hub.session.state.currentEntryId).toBe(replacement === "stop" ? null : "replacement");
     expect(commands.filter(command => command.type === "load")).toHaveLength(replacement === "stop" ? 0 : 1);
   } finally { output.resolve(page); expand.mockRestore(); }
