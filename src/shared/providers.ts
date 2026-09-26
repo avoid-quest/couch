@@ -19,7 +19,7 @@ export type ProviderItem = {
   live?: boolean;
 };
 
-export type ProviderPage = { items: ProviderItem[]; nextCursor?: string; title?: string; thumbnail?: string; description?: string; subtitle?: string };
+export type ProviderPage = { item?: ProviderItem; items: ProviderItem[]; nextCursor?: string; title?: string; thumbnail?: string; description?: string; subtitle?: string };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
 
 export const providerShape = (item: Pick<ProviderItem, "kind">): MediaShape =>

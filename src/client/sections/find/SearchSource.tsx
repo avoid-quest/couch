@@ -1,17 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AuthArtwork } from "@/components/AuthArtwork";
 import type { JellyfinItems } from "../../../shared/jellyfin";
 import type { LibrarySearch } from "../../../shared/library";
 import { apiFetch } from "@/api/client";
 import { librarySourcesQuery } from "@/api/library";
 import { jellyfinQuery } from "@/api/jellyfin";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { SaveForLater } from "@/components/SaveForLater";
-import { MetadataEditor } from "@/components/MetadataEditor";
-import { formatDuration } from "@/time-format";
 import type { Props } from "./SearchPanel";
 import { searchError, type SearchResultSummary, type SearchFacet, type SearchHit } from "./SearchOnlineResults";
 
@@ -21,6 +17,7 @@ type Result = { artworkId?: string | null; video?: boolean; id: string; title: s
 type Page = { items: Result[]; total: number; warning?: string };
 
 export function SearchSource({ source, query, ...props }: Props & { source: Source; query: string; retry?: number; onResults: (source: string, summary: SearchResultSummary) => void }) {
+  const navigation = useDetailNavigation();
   const label = source === "Library" ? "Folders" : source;
   const pageSize = source === "Library" ? 30 : 50;
   const folders = useQuery({ ...librarySourcesQuery(props), enabled: props.connected && source === "Library" });
@@ -51,27 +48,9 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
   const error = failure ? searchError(failure) : null;
   const unavailable = folders.data?.sources.filter(folder => folder.status === "unavailable" || folder.status === "error") ?? [];
   const warning = source !== "Library" ? undefined : unavailable.length ? `Can't reach ${unavailable.map(folder => folder.name).join(", ")}. Showing earlier results.` : folders.data?.sources.some(folder => folder.status === "scanning") ? "Still scanning. More results soon." : undefined;
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const detail = items.find(item => item.id === detailId) ?? null;
   const [pending, setPending] = useState(false);
-  const trigger = useRef<HTMLButtonElement | null>(null);
-  const restoreFocus = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => { const operation = new AbortController(); lifetime.current = operation; setPending(false); return () => operation.abort(); }, [props.origin, props.token, props.connected]);
-  useEffect(() => { setDetailId(null); }, [query, source]);
-  useEffect(() => {
-    if (!props.active) {
-      if (detail) { restoreFocus.current = true; setDetailId(null); }
-      return;
-    }
-    if (!restoreFocus.current) return;
-    const frame = requestAnimationFrame(() => {
-      if (trigger.current?.isConnected && !trigger.current.closest("[hidden]")
-        && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) trigger.current.focus({ preventScroll: true });
-      restoreFocus.current = false;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [props.active]);
   const facet = (item: Result): SearchFacet => ({ kind: item.video ? "Video" : "Music", duration: item.duration });
 
   async function enqueue(item: Result, options?: Options) {
@@ -90,28 +69,12 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
         ...(item.position ? [{ label: "From start", disabled: !props.canPlay || blocked(item), run: () => void enqueue(item, { playNow: true, fromStart: true }) }] : []),
         { label: "Play next", disabled: blocked(item), run: () => void enqueue(item, { placement: "next" }) },
         { label: "Queue", disabled: blocked(item), run: () => void enqueue(item) },
-        { label: "Details", run: () => { trigger.current = document.activeElement as HTMLButtonElement; setDetailId(item.id); } },
+        { label: "Details", run: () => navigation.open(itemLocation(source === "Library" ? "library" : "jellyfin", item.id)) },
         { label: "Save", node: save(item) },
       ],
     }));
     props.onResults(label, { count: pages?.[0]?.total ?? 0, loading, error: !!error, errorMessage: error ?? undefined, retry: () => { void metadata.refetch(); if (source === "Library" || jellyfin.data?.connected) void result.refetch(); }, warning,
       more: result.hasNextPage ? () => void result.fetchNextPage() : undefined, moreDisabled: loading, facets: items.map(facet), hits });
   }, [source, pages, loading, error, warning, pending, result.hasNextPage, props.onResults, props.canPlay, props.connected, props.origin, props.token]);
-  return <Dialog open={props.active && detail !== null} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}>
-    {detail && <>
-      <AuthArtwork origin={props.origin} token={props.token} id={detail.artworkId} video={detail.video} className="aspect-video h-auto w-full rounded-none" />
-      <DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[label, detail.detail, detail.duration !== null && formatDuration(detail.duration)].filter(Boolean).join(" · ")}</DialogDescription></DialogHeader>
-      {detail.plot && <p className="text-sm break-words">{detail.plot}</p>}
-      {detail.position > 0 && <p className="text-sm text-muted-foreground">Resume at {formatDuration(detail.position)}</p>}
-      {!detail.available && <p className="text-sm text-muted-foreground">Missing. Check the folder in Settings → Sources → Folders.</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button aria-label={`${detail.position ? "Resume" : "Play"} ${detail.title}`} disabled={!props.canPlay || blocked(detail)} onClick={() => void enqueue(detail, { playNow: true })}>{detail.position ? "Resume" : "Play"}</Button>
-        {!!detail.position && <Button variant="ghost" aria-label={`From start ${detail.title}`} disabled={!props.canPlay || blocked(detail)} onClick={() => void enqueue(detail, { playNow: true, fromStart: true })}>From start</Button>}
-        <Button variant="ghost" aria-label={`Play next ${detail.title}`} disabled={blocked(detail)} onClick={() => void enqueue(detail, { placement: "next" })}>Play next</Button>
-        <Button variant="ghost" aria-label={`Queue ${detail.title}`} disabled={blocked(detail)} onClick={() => void enqueue(detail)}>Queue</Button>
-        {save(detail)}
-      </div>
-      {source === "Library" && detail.video && props.canManageMetadata && <MetadataEditor key={detail.id} origin={props.origin} token={props.token} id={detail.id} connected={props.connected} onSaved={() => void result.refetch()} />}
-    </>}
-  </DialogContent></Dialog>;
+  return null;
 }

@@ -1,5 +1,5 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
-import { ProviderError, providerItemId, providerJson } from "./http";
+import { ProviderError, providerItemId, providerJson, withProviderItem } from "./http";
 
 // Twitch publishes this web client ID in its public HTML. The Kodi add-on also
 // uses it for account-free catalog search; it is not an OAuth token.
@@ -134,22 +134,23 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
     const item = channel(data.user);
     if (!item || !object(data.user)) throw unavailable();
     const broadcasts = items(data.user.videos, video);
-    return { title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] };
+    return withProviderItem("twitch", item.url, "channel", { title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] });
   }
   if (target.kind === "categories") {
     const data = await query(`{ games(first:20) { edges { node { ${categoryFields} } } } }`, {}, signal);
-    return { title: "Twitch categories", items: items(data.games, category) };
+    return withProviderItem("twitch", "https://www.twitch.tv/directory", "collection", { title: "Twitch categories", items: items(data.games, category) });
   }
   if (target.kind === "category") {
     const data = await query(`query Category($slug:String!) { game(slug:$slug) { name streams(first:20) { ${streamEdges} } } }`, { slug: target.slug }, signal);
     if (data.game === null) throw new ProviderError("Twitch category not found.", 404);
     if (!object(data.game)) throw unavailable();
-    return { title: text(data.game.name) || target.slug, items: items(data.game.streams, streamItem) };
+    return withProviderItem("twitch", `https://www.twitch.tv/directory/category/${encodeURIComponent(target.slug)}`, "collection", { title: text(data.game.name) || target.slug, items: items(data.game.streams, streamItem) });
   }
   const data = await query(`{ streams(first:20) { ${streamEdges} } }`, {}, signal);
   const url = "https://www.twitch.tv/directory";
-  return { title: "Live on Twitch", items: [
+  const page: ProviderPage = { title: "Live on Twitch", items: [
     { id: providerItemId("twitch", url), provider: "twitch", kind: "collection", title: "Browse categories", url },
     ...items(data.streams, streamItem),
   ] };
+  return request.url ? withProviderItem("twitch", "https://www.twitch.tv/directory/all", "collection", page) : page;
 }

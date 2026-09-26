@@ -149,15 +149,21 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     ...(item.detail ? { subtitle: item.detail } : {}), ...(item.description ? { description: item.description } : {}),
     ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration == null ? {} : { duration: item.duration }),
   });
-  const fetchItemData = async (itemId: string, signal?: AbortSignal) => {
+  const readItemData = async (itemId: string, signal?: AbortSignal) => {
     const current = connection();
     try {
-      const result = await getUserLibraryApi(current.api).getItem({ userId: current.configuration.userId, itemId: checkedId(itemId) }, { signal });
+      const result = await getUserLibraryApi(current.api).getItem({ userId: current.configuration.userId, itemId: checkedId(itemId) }, { signal, validateStatus: status => status === 404 || status >= 200 && status < 300 });
       if (current.api !== api) throw new Error();
+      if (result.status === 404) return null;
       const item = itemView(result.data);
       if (!item || item.id !== itemId) throw new Error();
       return result.data;
     } catch { signal?.throwIfAborted(); throw new Error("This Jellyfin item is unavailable. Refresh the library and try again."); }
+  };
+  const fetchItemData = async (itemId: string, signal?: AbortSignal) => {
+    const data = await readItemData(itemId, signal);
+    if (!data) throw new Error("This Jellyfin item is unavailable. Refresh the library and try again.");
+    return data;
   };
   const fetchItem = async (itemId: string, signal?: AbortSignal) => viewItem(await fetchItemData(itemId, signal))!;
   const externalSubtitles = (current: Api, itemId: string, media: MediaSourceInfo) => {
@@ -256,6 +262,10 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       db.run("UPDATE jellyfin SET configuration = NULL WHERE id = 1");
       changed();
       await configure(async () => { await stopped; await revoke(previous); });
+    },
+    async getItem(itemId: string, signal?: AbortSignal): Promise<JellyfinItem | null> {
+      const data = await readItemData(itemId, signal);
+      return data ? viewItem(data) : null;
     },
     async items({ query = "", startIndex = 0, resume = false }: { query?: string; startIndex?: number; resume?: boolean } = {}): Promise<JellyfinItems> {
       const current = connection();

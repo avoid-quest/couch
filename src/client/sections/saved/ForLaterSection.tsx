@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
-import { collectionTarget } from "@/collection-target";
-import { MediaDetails } from "@/components/MediaDetails";
-import { providerForUrl, type ProviderItem } from "../../../shared/providers";
+import { itemLocation, useDetailNavigation } from "@/detail-navigation";
+import { savedSourceLabel } from "@/saved-source";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -25,20 +24,10 @@ export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: s
   return next && next.map(item => item.id);
 }
 
-function sourceLabel(item: ForLaterItem) {
-  if (item.kind === "radio") return "Radio";
-  if (!item.url) return "";
-  try {
-    const provider = providerForUrl(item.url);
-    return provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : new URL(item.url).hostname.replace(/^www\./, "");
-  } catch { return ""; }
-}
-
 type Mode = "play" | "append" | "remove";
 
-export function ForLaterSection({ origin, token, connected, canPlay, onFind, onOpenProvider, showHeading = true, mediaOnly = false, limit }: {
+export function ForLaterSection({ origin, token, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: {
   origin: string; token: string; connected: boolean; canPlay: boolean;
-  onOpenProvider?: (item: ProviderItem, returnFocusLabel?: string) => void;
   /** Shown as the empty state's next step. */
   onFind?: () => void;
   /** A visible section title (Find). Saved titles the tab with its PageHeader. */
@@ -50,6 +39,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, onO
 }) {
   // The session invalidates ["for-later"] whenever any remote changes the list.
   const session = useOptionalSessionGate();
+  const details = useDetailNavigation();
   const queryClient = useQueryClient();
   const credentials = { origin, token };
   const refresh = () => queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
@@ -109,14 +99,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, onO
         <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
           {items.map((item, index) => {
             const art = item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="size-full rounded-none" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />;
-            const meta = [item.subtitle, sourceLabel(item)].filter(Boolean).join(" · ");
-            const collection = collectionTarget(item.collection);
+            const meta = [item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ");
+            const inspect = () => details.open(itemLocation("saved", item.id));
             const play = <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => act(item, "play", index)}>Play</Button>;
-            return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaDetails title={item.title} meta={meta} description={item.description} art={art} actions={<>
-              {action.error && action.variables?.item.id === item.id && <SavedError message={action.error.message || "Couldn't use this item."} />}
-              {play}
-              {collection && onOpenProvider && <Button variant="ghost" aria-label={`Browse ${collection.title}`} onClick={() => onOpenProvider(collection, `[data-saved-details="${CSS.escape(item.id)}"] [data-play]`)}>Browse</Button>}
-            </>}>{inspect => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
+            return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
               art={<Button variant="ghost" className="h-auto p-0 touch:h-auto" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
               artFit="contain"
               title={item.title}
@@ -130,7 +116,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, onO
                 {drag.handle}
               </>}>
               {(item.duration != null || item.live) && <DurationBar duration={item.duration} live={item.live} />}
-            </MediaRow>}</MediaDetails>}</SortableRow>;
+            </MediaRow>}</SortableRow>;
           })}
         </SortableContext>
       </MediaList>}

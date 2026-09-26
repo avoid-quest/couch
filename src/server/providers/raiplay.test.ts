@@ -44,6 +44,7 @@ test("programs expose sets and episodes as canonical page URLs with bounded pagi
     blocks: [{ name: "Puntate", sets: [{ name: "Stagione 2025-2026", path_id: setPath }] }],
   } : { name: "Stagione 2025-2026", items: Array.from({ length: 30 }, (_, index) => ({ ...episode, path_id: `/video/2026/05/Report-${index}.json` })) });
   const sets = await api.browse({ url: `${origin}/programmi/report` });
+  expect(sets.item).toMatchObject({ url: `${origin}/programmi/report`, title: "Report", kind: "collection" });
   expect(sets.items[0]!.kind).toBe("media");
   expect(sets.items[1]).toMatchObject({ kind: "collection", title: "Puntate - Stagione 2025-2026", url: origin + setPath });
   const first = await api.browse({ url: sets.items[1]!.url });

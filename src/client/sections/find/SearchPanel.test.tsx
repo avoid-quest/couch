@@ -10,7 +10,7 @@ import type { RadioStation } from "../../../shared/radio";
 setupUiTests();
 afterEach(() => toast.dismiss());
 let view: ReturnType<typeof renderUI>, queryClient: QueryClient;
-const paths: string[] = [], queued: unknown[] = [];
+const paths: string[] = [], queued: unknown[] = [], opened: ProviderItem[] = [];
 let empty = false;
 const commands: Action[] = [];
 let integrated = false, youtubeError = false;
@@ -29,11 +29,11 @@ async function search(query: string) {
 }
 async function render() {
   const { SearchPanel } = await import("./SearchPanel");
-  view.rerender(<QueryClientProvider client={queryClient}><Toaster /><SearchPanel origin="http://localhost" token="paired" connected canPlay active defaultQuality="1080p" onCommand={async command => { commands.push(command); return true; }} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
+  view.rerender(<QueryClientProvider client={queryClient}><Toaster /><SearchPanel origin="http://localhost" token="paired" connected canPlay active defaultQuality="1080p" onOpenCollection={item => opened.push(item)} onCommand={async command => { commands.push(command); return true; }} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
 }
 beforeEach(async () => {
   commands.length = 0; integrated = youtubeError = false; onlineFavorites = []; radioFavorites = [];
-  paths.length = 0; queued.length = 0; empty = false;
+  paths.length = 0; queued.length = 0; opened.length = 0; empty = false;
   queryClient = createTestQueryClient();
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); paths.push(url.pathname + url.search);
@@ -95,14 +95,12 @@ test("playback, queueing and save toggles stay quiet", async () => {
   expect(toast.getToasts()).toHaveLength(0);
 });
 
-test("opening and leaving a collection restores focus to its result", async () => {
+test("opening a collection delegates navigation without replacing search results", async () => {
   integrated = true; await render(); await search("Evening");
-  await screen.findByRole("button", { name: "Open Evening collection" });
   await click("Open Evening collection");
-  await screen.findByRole("button", { name: "Play Collection episode" });
-  expect(document.activeElement).toBe(button("Results"));
-  await click("Results");
-  await waitFor(() => expect(screen.getByRole("button", { name: "Open Evening collection" })).toHaveFocus());
+  expect(opened).toEqual([collection]);
+  expect(screen.getByRole("button", { name: "Play Evening video" })).toBeInTheDocument();
+  expect(commands).toEqual([]);
 });
 
 test("one failed provider stays visible as feedback while other results work, and retry is independent", async () => {
@@ -259,4 +257,18 @@ test("search waits for IME composition to finish before starting its debounce", 
   jest.useRealTimers();
   await act(async () => fireEvent.compositionEnd(input, { data: "映画" }));
   await waitFor(() => expect(paths.filter(path => path.startsWith("/api/library/items"))).toEqual(["/api/library/items?q=%E6%98%A0%E7%94%BB&offset=0&limit=30"]));
+});
+
+test("route filters restore their selected values and preserve other filters on edit", async () => {
+  integrated = true;
+  const changes: unknown[] = [];
+  const { SearchPanel } = await import("./SearchPanel");
+  view.rerender(<QueryClientProvider client={queryClient}><SearchPanel origin="http://localhost" token="paired" connected canPlay active searchState={{ query: "Evening", source: "Folders", kind: "Video", length: "Under 10 min" }} onSearchChange={state => changes.push(state)} onEnqueue={async () => true} /></QueryClientProvider>);
+  await screen.findByRole("button", { name: "Resume Evening movie" });
+  const what = screen.getByRole("radiogroup", { name: "What filter" });
+  const length = screen.getByRole("radiogroup", { name: "Length filter" });
+  expect(within(what).getByRole("radio", { name: /^Video/ })).toBeChecked();
+  expect(within(length).getByRole("radio", { name: /^Under 10 min/ })).toBeChecked();
+  await userEvent.click(within(what).getByRole("radio", { name: /^All/ }));
+  expect(changes.at(-1)).toEqual({ query: "Evening", source: "Folders", kind: undefined, length: "Under 10 min" });
 });

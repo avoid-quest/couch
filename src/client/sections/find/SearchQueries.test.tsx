@@ -12,17 +12,19 @@ let requests: Array<{ path: string; token: string | null; signal?: AbortSignal |
 let delayed: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
 let favorite = false, savedWeb = false, pageFails = false, raiFails = false;
 let query = "first", provider: ProviderId = "youtube", token = "paired";
+let opened: ProviderItem | undefined;
+let collectionUrl: string | undefined;
 let summary: import("./SearchOnlineResults").SearchResultSummary;
 async function render() {
   const { SearchOnlineResults } = await import("./SearchOnlineResults");
   await act(async () => view.rerender(<QueryClientProvider client={client}><SearchOnlineResults
-    origin="http://localhost" token={token} provider={provider} query={query} quality="auto" connected canPlay active
+    origin="http://localhost" token={token} provider={provider} query={query} url={collectionUrl} onOpenCollection={item => { opened = item; }} quality="auto" connected canPlay active
     onCommand={async () => true} onEnqueued={() => {}} onResults={(_, next) => { summary = next; }} />
   </QueryClientProvider>));
 }
 
 beforeEach(async () => {
-  query = "first"; provider = "youtube"; token = "paired";
+  query = "first"; provider = "youtube"; token = "paired"; opened = undefined; collectionUrl = undefined;
   favorite = savedWeb = pageFails = raiFails = false; requests = []; delayed = undefined;
   client = createTestQueryClient();
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -79,13 +81,15 @@ test("provider pagination preserves first-page hits and retries a failed next pa
   expect(summary.more).toBeUndefined();
 });
 
-test("a collection exposes its opener and returns to the original provider hits", async () => {
+test("collections navigate using their identity and load independently from their URL", async () => {
   await render(); await waitFor(() => expect(hit("A collection")).toBeDefined());
   await run(hit("A collection")?.primary.run);
+  expect(opened).toEqual(collection);
+  expect(summary.collection).toBeUndefined();
+  collectionUrl = collection.url; await render();
   await waitFor(() => expect(hit("Collection episode")).toBeDefined());
   expect(summary.collection?.title).toBe("A collection");
-  expect(summary.collection?.openerId).toBe("youtube:collection");
-  await run(summary.collection?.back);
+  collectionUrl = undefined; await render();
   await waitFor(() => expect(hit("A collection")).toBeDefined());
   expect(summary.collection).toBeUndefined();
 });

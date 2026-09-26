@@ -33,7 +33,7 @@ catalog provides interface icons, not brand identities.
   overlaid text readable without an abrupt edge that resembles cropping. Hidden
   controls are inert and let pointer input reach the video. The player fits the
   viewport at every interface size. Plain playback glyphs keep artwork central;
-  Playback and show details use Sheets. Stage CSS handles native video bounds
+  Playback settings use Sheets. Stage CSS handles native video bounds
   and the responsive queue workspace; controls reuse shadcn components.
 - **Keyboard control stays inside Couch.** TanStack Hotkeys shares shortcuts
   between the browser and desktop window; Tauri global shortcuts would also
@@ -66,6 +66,11 @@ catalog provides interface icons, not brand identities.
   the collection instead of pretending to describe each episode. Posters and
   album art stay uncropped. This extends the existing shadcn Item-based
   MediaRow; no additional preview panel or per-result request is needed.
+- **Details are destinations.** Item details and provider collections have
+  their own URLs, resolved from stable item IDs or canonical provider URLs.
+  Refresh loads the same content; Back restores the previous page, filters,
+  scroll and focus. Reuse PageHeader and existing media rows. Dialogs remain
+  reserved for focused tasks such as pairing and source setup.
 - **Browsing stays grounded.** The sticky header and scroll edges share the
   solid black page background on desktop and web. Native video alone clears
   its full-screen ancestors so the picture can show through. Source results

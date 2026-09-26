@@ -4,8 +4,9 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { JellyfinItems } from "../shared/jellyfin";
+import type { JellyfinItem, JellyfinItems } from "../shared/jellyfin";
 import { createCatalog } from "./catalog";
+import { ControllerError } from "./controllers";
 import { createJellyfinSettings } from "./jellyfin-settings";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
@@ -36,6 +37,9 @@ function fixture() {
       return jellyfin.status();
     },
     disconnect: async (_authorize?: () => void, changed?: () => void) => { connected = false; changed?.(); },
+    getItem: async (id: string): Promise<JellyfinItem | null> => id === "a".repeat(32)
+      ? { id, title: "A movie", kind: "Movie", detail: "2026", description: "Movie details", duration: 120, played: false, resumePosition: 12 }
+      : null,
     items: async (options: { query?: string; startIndex?: number } = {}): Promise<JellyfinItems> => {
       if (options.query === "fail") throw new Error("Authorization: secret-token");
       return { items: [], total: 0, startIndex: options.startIndex ?? 0 };
@@ -304,7 +308,7 @@ test("history removal clears every profile's row and refuses entries that are pl
   store.saveProgress("household", { mediaId, title: "Shared item", libraryItemId: "a".repeat(40), position: 10, duration: 100, watched: false, lastPlayedAt: 100 });
   store.saveProgress("guest", { mediaId, title: "Shared item", libraryItemId: "a".repeat(40), position: 20, duration: 100, watched: true, lastPlayedAt: 90 });
   expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [{ mediaId, watched: false }] });
-  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "GET")).status).toBe(405);
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "PUT")).status).toBe(405);
   expect((await request(`/api/progress/${"b".repeat(64)}`, "DELETE")).status).toBe(400);
   expect((await request("/api/progress/library%3Amissing", "DELETE")).status).toBe(404);
   session.command({ type: "enqueue", entry: { id: "queued", title: "Shared item", source: mediaId } });
@@ -486,4 +490,100 @@ test("history identifies the playing occurrence when the same media appears agai
   const mediaId = playbackMediaId(entry)!;
   store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 70, duration: 200, watched: false, lastPlayedAt: 100 }, entry);
   expect((await (await request("/api/progress/history")).json()).items[0].queueEntryId).toBe(entry.id);
+});
+
+
+test("library item pages read the public item by ID with shared progress and no disk paths", async () => {
+  const { directory, library, request, store } = fixture();
+  writeFileSync(join(directory, "Detail song.mp3"), "audio fixture");
+  const source = await library.addSource(directory);
+  await library.scan(source.id);
+  const item = library.search().items[0]!;
+  const profile = store.createProfile("Previous viewer");
+  store.saveProgress(profile.id, { mediaId: `library:${item.id}`, title: item.title, libraryItemId: item.id, position: 18, duration: 120, watched: false, lastPlayedAt: 100 });
+  const endpoint = `/api/library/items/${item.id}`;
+  const response = await request(endpoint);
+  expect(response.status).toBe(200);
+  const data = await response.json();
+  expect(data.item).toMatchObject({ id: item.id, title: "Detail song", progress: { position: 18, duration: 120 } });
+  expect(JSON.stringify(data)).not.toContain(directory);
+  expect(JSON.stringify(data)).not.toContain('"path"');
+  expect((await request("/api/library/items/missing")).status).toBe(404);
+  expect((await request(endpoint, "POST", {})).status).toBe(405);
+});
+
+test("history item pages survive the history list limit and expose the same shared public view", async () => {
+  const { request, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const profile = store.createProfile("Previous viewer");
+  const entry = { id: "old-track", title: "Old track", source: "file:/private/music/old-track.mp3", description: "Remembered details" };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress(profile.id, { mediaId, title: entry.title, libraryItemId: null, position: 18, duration: 120, watched: false, lastPlayedAt: 100 }, entry);
+  const endpoint = `/api/progress/${encodeURIComponent(mediaId)}`;
+  const expected = (await (await request("/api/progress/history")).json()).items[0];
+  for (let i = 0; i < 101; i++) store.saveProgress("household", { mediaId: `library:new-${i}`, title: `New ${i}`, libraryItemId: `new-${i}`, position: 0, duration: 120, watched: false, lastPlayedAt: 101 + i });
+  expect((await (await request("/api/progress/history?limit=100")).json()).items.some((item: { mediaId: string }) => item.mediaId === mediaId)).toBe(false);
+  const response = await request(endpoint);
+  expect(response.status).toBe(200);
+  const data = await response.json();
+  expect(data.item).toEqual(expected);
+  expect(data.item).toMatchObject({ description: "Remembered details", position: 18, playable: true });
+  expect(JSON.stringify(data)).not.toContain("/private/");
+  expect(JSON.stringify(data)).not.toContain(profile.id);
+  expect((await request("/api/progress/library%3Amissing")).status).toBe(404);
+  expect((await request("/api/progress/file%3Aprivate-path")).status).toBe(400);
+  store.editSharedProgress("household", "library:never-played", { watched: true }, { title: "Unplayed", libraryItemId: "never-played" });
+  expect((await request("/api/progress/library%3Anever-played")).status).toBe(404);
+  store.takeSharedProgress(mediaId);
+  expect((await request(endpoint)).status).toBe(404);
+});
+
+test("Jellyfin item pages distinguish missing items, disconnected servers and safe upstream failures", async () => {
+  const { request, jellyfin } = fixture();
+  const endpoint = `/api/jellyfin/items/${"a".repeat(32)}`;
+  expect((await request(endpoint)).status).toBe(409);
+  await jellyfin.connect({ url: "https://library.example", username: "viewer", password: "valid" });
+  expect(await (await request(endpoint)).json()).toEqual({ item: await jellyfin.getItem("a".repeat(32)) });
+  expect((await request(`/api/jellyfin/items/${"b".repeat(32)}`)).status).toBe(404);
+  expect((await request(endpoint, "POST", {})).status).toBe(405);
+  const failure = spyOn(jellyfin, "getItem").mockRejectedValue(new Error("/private/path password=secret"));
+  try {
+    const response = await request(endpoint);
+    expect(response.status).toBe(502);
+    const text = await response.text();
+    expect(text).not.toContain("secret");
+    expect(text).not.toContain("/private/");
+  } finally { failure.mockRestore(); }
+});
+
+test("radio item pages read a saved station by its stable ID", async () => {
+  const { request, radio } = fixture();
+  const station = radio.saveFavorite({ id: "01234567-89ab-cdef-0123-456789abcdef", name: "Saved radio", url: "https://example.com/live", homepage: null, countryCode: "", codec: "", bitrate: 0 });
+  const endpoint = `/api/radio/stations/${station.id}`;
+  expect(await (await request(endpoint)).json()).toEqual({ station });
+  expect((await request(endpoint, "POST", {})).status).toBe(405);
+  expect((await request("/api/radio/stations/invalid")).status).toBe(400);
+});
+
+
+test("late Jellyfin and radio details respect controller revocation", async () => {
+  const { catalog, jellyfin, radio } = fixture();
+  await jellyfin.connect({ url: "https://library.example", username: "viewer", password: "valid" });
+  const waitingItem = Promise.withResolvers<JellyfinItem | null>();
+  const waitingStation = Promise.withResolvers<Awaited<ReturnType<typeof radio.getStation>>>();
+  const itemRead = spyOn(jellyfin, "getItem").mockImplementation(() => waitingItem.promise);
+  const stationRead = spyOn(radio, "getStation").mockImplementation(() => waitingStation.promise);
+  let paired = true;
+  const authorize = () => { if (!paired) throw new ControllerError("Pair again.", 401); };
+  try {
+    const item = catalog.handle(new Request(`http://localhost/api/jellyfin/items/${"a".repeat(32)}`), false, authorize);
+    const station = catalog.handle(new Request("http://localhost/api/radio/stations/01234567-89ab-cdef-0123-456789abcdef"), false, authorize);
+    paired = false;
+    waitingItem.resolve({ id: "a".repeat(32), title: "Hidden", kind: "Movie", detail: null, duration: null, resumePosition: 0, played: false });
+    waitingStation.resolve({ id: "01234567-89ab-cdef-0123-456789abcdef", name: "Hidden", url: "https://example.com/live", homepage: null, countryCode: "", codec: "", bitrate: 0 });
+    for (const response of await Promise.all([item, station])) {
+      expect(response.status).toBe(401);
+      expect(await response.text()).not.toContain("Hidden");
+    }
+  } finally { itemRead.mockRestore(); stationRead.mockRestore(); }
 });

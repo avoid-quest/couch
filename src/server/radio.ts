@@ -180,11 +180,11 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     return discovery;
   }
 
-  async function searchProvider(query: URLSearchParams): Promise<RadioStation[]> {
+  async function directoryStations(path: string): Promise<RadioStation[]> {
     try {
       for (const server of (await servers()).slice(0, 3)) {
         try {
-          const response = await request(`${server}/json/stations/search?${query}`, {
+          const response = await request(`${server}/json/stations/${path}`, {
             headers: { "User-Agent": "Couch/0.1", Accept: "application/json" },
             signal: AbortSignal.timeout(3_000),
           });
@@ -235,7 +235,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       if (cached && cached.expires > Date.now()) return cached.stations;
       let result = pending.get(key);
       if (!result) {
-        result = searchProvider(query).then(stations => {
+        result = directoryStations(`search?${query}`).then(stations => {
           if (cache.size >= 50) cache.delete(cache.keys().next().value!);
           cache.set(key, { stations, expires: Date.now() + 5 * 60_000 });
           return stations;
@@ -243,6 +243,17 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
         pending.set(key, result);
       }
       return result;
+    },
+    async getStation(id: string): Promise<RadioStation> {
+      assertOpen();
+      if (!uuid.test(id)) throw new RadioError("Invalid radio station ID.");
+      id = id.toLowerCase();
+      const row = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(id)
+        ?? db.query<{ station: string }, [string]>("SELECT station FROM radio_favorites WHERE id = ?").get(id);
+      if (row) return station(JSON.parse(row.station));
+      const current = (await directoryStations(`byuuid/${id}`)).find(station => station.id === id);
+      if (!current) throw new RadioError("Radio station not found. Refresh its playlist or add it again.", 404);
+      return current;
     },
     favorites(): RadioStation[] {
       assertOpen();

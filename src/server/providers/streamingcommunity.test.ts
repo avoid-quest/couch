@@ -79,6 +79,7 @@ test("search sends q and paginates at sixty results", async () => {
 test("a series opens into season collections and a season into play-ready episodes", async () => {
   const seasons = await browse({ url: `${origin}/it/titles/${series.id}-${series.slug}` });
   expect(seasons.title).toBe("Johnny Test");
+  expect(seasons.item).toMatchObject({ title: seasons.title, url: `${origin}/it/titles/${series.id}-${series.slug}`, kind: "collection" });
   expect(seasons.items.map(item => [item.title, item.url])).toEqual([
     ["Season 1", `${origin}/it/titles/${series.id}-${series.slug}/season-1`],
     ["Season 2", `${origin}/it/titles/${series.id}-${series.slug}/season-2`],
@@ -88,6 +89,7 @@ test("a series opens into season collections and a season into play-ready episod
   const seasonUrl = `${origin}/it/titles/${series.id}-${series.slug}/season-1`;
   const [episodes, again] = await Promise.all([browse({ url: seasonUrl }), browse({ url: seasonUrl })]);
   expect(episodes.title).toBe("Johnny Test - Season 1");
+  expect(episodes.item).toMatchObject({ title: episodes.title, url: seasonUrl, kind: "collection", description: episodes.description, thumbnail: episodes.thumbnail });
   expect(episodes.items[0]).toMatchObject({ kind: "media", url: `${origin}/it/watch/${series.id}?e=69717`, duration: 21 * 60, title: "S01E01 · Johnny al centro della Terra / Johnny X" });
   expect(episodes.items[0]!.id).toBe(again.items[0]!.id);
 });

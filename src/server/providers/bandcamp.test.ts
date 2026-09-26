@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { BrowseRequest } from "../../shared/providers";
+import type { BrowseRequest, ProviderItem } from "../../shared/providers";
 import type { YtDlpOptions } from "../yt-dlp";
 import { createBandcampCatalog } from "./bandcamp";
 import { providerItemId } from "./http";
@@ -43,7 +43,8 @@ test("Bandcamp suggestions are public album links and need no extraction", async
 test("Bandcamp track browsing returns only public metadata and extracts one audio item", async () => {
   const { browse, calls } = fixture([track]);
   const page = await browse({ query: " http://BLAZO.bandcamp.com/track/intro/?from=search#lyrics " });
-  expect(page).toEqual({ title: "Intro", items: [{ id: providerItemId("bandcamp", trackUrl), provider: "bandcamp", kind: "media", title: "Intro", subtitle: "Blazo", url: trackUrl, thumbnail: image, duration: 19.335 }] });
+  const item: ProviderItem = { id: providerItemId("bandcamp", trackUrl), provider: "bandcamp", kind: "media", title: "Intro", subtitle: "Blazo", url: trackUrl, thumbnail: image, duration: 19.335 };
+  expect(page).toEqual({ title: "Intro", item, items: [item] });
   expect(calls[0]!.args).toEqual(["--use-extractors", "bandcamp,bandcamp:album,end", "--dump-single-json", "--no-playlist", "--playlist-items", "1", "--format", "bestaudio/best", "--", trackUrl]);
   expect(JSON.stringify(page)).not.toContain("private-");
   expect(JSON.stringify(page)).not.toContain("http_headers");
@@ -66,6 +67,7 @@ test("Bandcamp album loading preserves flat order and enriches artwork with one 
   expect(JSON.stringify(page)).not.toContain("private-");
   const fromBrowse = await fixture().browse({ url: albumUrl });
   expect(fromBrowse).toEqual(page);
+  expect(page.item).toMatchObject({ id: providerItemId("bandcamp", albumUrl), url: albumUrl, title: page.title, kind: "collection" });
 });
 
 test("Bandcamp album artist is shared without replacing ordered track names", async () => {

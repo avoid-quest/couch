@@ -49,6 +49,7 @@ test("returns 24 entries with a lookahead cursor and advances the upstream range
   const entries = Array.from({ length: 25 }, (_, index) => ({ ...video, id: String(index).padStart(11, "0"), url: `https://www.youtube.com/watch?v=${String(index).padStart(11, "0")}` }));
   const { browse, calls } = fixture({ title: "Playlist", entries });
   const first = await browse({ url: playlist });
+  expect(first.item).toMatchObject({ id: providerItemId("youtube", playlist), url: playlist, kind: "collection", title: "Playlist" });
   expect(first.items).toHaveLength(24);
   expect(first.nextCursor).toBe("24");
   const second = await browse({ url: playlist, cursor: first.nextCursor });
@@ -65,6 +66,7 @@ test("suggested channels and channel sections work without a subprocess", async 
   expect(home.title).toBe("Suggested channels");
   expect(home.items.every(item => item.kind === "channel")).toBeTrue();
   const sections = await browse({ query: "@NASA" });
+  expect(sections.item).toMatchObject({ url: "https://www.youtube.com/@NASA", kind: "channel", title: "@NASA" });
   expect(sections.items.map(item => item.title)).toEqual(["Videos", "Playlists", "Shorts", "Live streams"]);
   expect(sections.items.map(item => item.url)).toEqual(["videos", "playlists", "shorts", "streams"].map(tab => `https://www.youtube.com/@NASA/${tab}`));
   expect(calls).toHaveLength(0);

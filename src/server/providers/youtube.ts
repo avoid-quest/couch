@@ -1,7 +1,7 @@
 import { isYouTubePlaylistUrl } from "../../shared/providers";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { runYtDlp } from "../yt-dlp";
-import { ProviderError, providerItemId } from "./http";
+import { ProviderError, providerItemId, withProviderItem } from "./http";
 
 const pageSize = 24;
 const maxOffset = 2_400;
@@ -97,7 +97,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     const source = target(request.url || (/^https?:\/\//i.test(query) ? query : query.startsWith("@") ? `https://www.youtube.com/${encodeURIComponent(query).replace(/^%40/, "@")}` : searchUrl(query)));
     if (source.kind === "channel") {
       if (offset) throw new ProviderError("Invalid YouTube page. Open a channel section first.", 400);
-      return channelPage(source.url);
+      return withProviderItem("youtube", source.url, "channel", channelPage(source.url));
     }
     if (source.kind === "media" && offset) throw new ProviderError("Invalid YouTube page. Start a new search.", 400);
     const output = await run(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", `${offset + 1}:${offset + pageSize + 1}`, "--", source.url], { signal });
@@ -106,7 +106,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     try { info = JSON.parse(output); } catch { throw new Error("YouTube returned invalid catalog information. Update yt-dlp and try again."); }
     if (!object(info) || (info.entries !== undefined && !Array.isArray(info.entries))) throw new Error("YouTube returned invalid catalog information.");
     const entries = Array.isArray(info.entries) ? info.entries : [info];
-    return {
+    const page: ProviderPage = {
       title: label(info.title) ?? "YouTube",
       ...(source.kind === "collection" ? { thumbnail: thumbnail(info, source), description: label(info.description, 2000), subtitle: label(info.channel) ?? label(info.uploader) } : {}),
       items: entries.slice(0, pageSize).map((raw, index) => {
@@ -115,6 +115,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
       }).filter((entry): entry is ProviderItem => entry !== null),
       ...(entries.length > pageSize && offset < maxOffset ? { nextCursor: String(offset + pageSize) } : {}),
     };
+    return source.kind === "search" ? page : withProviderItem("youtube", source.url, source.kind, page);
   };
 }
 

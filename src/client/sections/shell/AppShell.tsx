@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
 import { useNavigation } from "@/navigation";
+import { collectionLocation, DetailFocusRestoration, useDetailNavigation } from "@/detail-navigation";
 import { cn } from "cn";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
@@ -54,12 +55,13 @@ import { useShell } from "./shell-context";
 function useShellValue() {
   const { credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
   const router = useRouter();
+  const detailNavigation = useDetailNavigation();
   const location = useLocation();
   const section = sectionForPath(location.pathname) ?? "Home";
   const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
   const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "playback" : null);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
-  if (section === "Find") rememberedSearch.current = readSearchState(location.searchStr);
+  if (location.pathname === "/find") rememberedSearch.current = readSearchState(location.searchStr);
   const lastBrowsePath = useRef("/");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   useEffect(() => {
@@ -73,9 +75,7 @@ function useShellValue() {
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingRequested, setPairingOpen] = useState(false);
   const pairingOpen = pairingRequested && remoteControlEnabled;
-  const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number; returnPath: string; returnLabel: string; focusSelector?: string } | null>(null);
-  useEffect(() => { if (section !== "Find") setOnlineRequest(null); }, [section]);
-  useEffect(() => { setOnlineRequest(null); setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
+  useEffect(() => { setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
   useEffect(() => {
@@ -84,8 +84,6 @@ function useShellValue() {
 
   const at = location.pathname + location.searchStr;
   const changePage = (name: string) => {
-    if (name === "Find" && section === "Find" && onlineRequest) { setOnlineRequest(null); return; }
-    if (section === "Find" && name !== "Find") setOnlineRequest(null);
     // Big-picture behavior: while playing, any navigation opens the browsing
     // layer over the player instead of floating the controls above the page.
     const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
@@ -102,7 +100,6 @@ function useShellValue() {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
   const focusSearch = () => {
-    setOnlineRequest(null);
     void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };
   const leavePlayer = () => {
@@ -127,7 +124,7 @@ function useShellValue() {
   };
   useNavigation(() => {
     if (remoteOpen) { setRemoteOpen(false); return; }
-    if (onlineRequest) { closeOnlineRequest(true); return; }
+    if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/find"); return; }
     if (section === "Now") leavePlayer();
     else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
     else if (section !== "Home") changeSection("Home");
@@ -152,19 +149,7 @@ function useShellValue() {
     });
     return result;
   };
-  const closeOnlineRequest = (returnToOrigin = false) => {
-    const request = onlineRequest;
-    setOnlineRequest(null);
-    if (!request || !returnToOrigin) return;
-    void router.navigate({ href: request.returnPath, replace: true }).then(() => requestAnimationFrame(() => {
-      const target = request.focusSelector ? document.querySelector<HTMLElement>(request.focusSelector) : null;
-      (target ?? document.querySelector<HTMLElement>("[data-page-first]:not(:disabled)"))?.focus({ preventScroll: true });
-    }));
-  };
-  const openProvider = (item: ProviderItem, focusSelector?: string) => {
-    setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1, returnPath: at, returnLabel: section, focusSelector }));
-    browseSection("Online");
-  };
+  const openProvider = (item: ProviderItem, focusSelector?: string) => detailNavigation.open(collectionLocation(item), focusSelector);
   const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean; placement?: "next" }) =>
     run({ type, itemId, entryId: createId(), ...options });
 
@@ -200,8 +185,7 @@ function useShellValue() {
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
-    remoteOpen, pairingOpen, onlineRequest, setupSource, sourcesOpen,
-    closeOnlineRequest,
+    remoteOpen, pairingOpen, setupSource, sourcesOpen,
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
 }
@@ -222,7 +206,7 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><NativeMediaBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  return <ShellErrorBoundary><DetailFocusRestoration /><NativeMediaBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
 function NativeMediaBridge() { useNativeMediaSession(); return null; }
@@ -272,7 +256,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const { section, statusLabel, active, current } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const setupPending = useLocalSetupPending(credentials);
-  useEffect(() => { window.scrollTo(0, 0); }, [section]);
   useEffect(() => {
     if (!tvPresentation) return;
     const onHome = () => shell.changeSection("Home");
@@ -309,7 +292,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           <header className={cn("app-header sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0 max-[359px]:has-[.tv-remote-shortcut]:h-auto max-[359px]:has-[.tv-remote-shortcut]:flex-wrap max-[359px]:has-[.tv-remote-shortcut]:py-1.5", onPlayer && "hidden")}>
             <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
               {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-1.5 max-sm:text-sm">
-                <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined} onClick={() => { if (name === "Find") shell.closeOnlineRequest(); }}>{name}</Link>
+                <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{name}</Link>
               </Button>)}
             </nav>
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
