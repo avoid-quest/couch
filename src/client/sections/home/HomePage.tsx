@@ -153,7 +153,7 @@ export function HomePage() {
               <span className="size-12 shrink-0 overflow-hidden bg-muted"><MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="aspect-square size-full text-sm" /></span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-medium">{station.name}</span>
-                <span className="truncate text-sm text-muted-foreground group-focus-visible:text-inherit">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode)}</span>
+                <span className="truncate text-sm text-muted-foreground">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode)}</span>
               </span>
             </Button><Button variant="ghost" aria-label={`Play ${station.name}`} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)}>Play</Button></div>}
           </MediaDetails></li>;
@@ -185,9 +185,9 @@ export function HomePage() {
     </Empty>}
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
-      <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>
-        <SheetHeader className="flex-row items-center gap-2 px-6 pt-6 pb-2"><SheetClose asChild><Button variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">Up next</SheetTitle></SheetHeader>
-        <div className="px-6 pb-8"><QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} titled={false} /></div>
+      <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false}>
+        <SheetHeader className="sticky top-0 z-10 flex-row items-center gap-2 border-b bg-background px-6 py-4"><SheetClose asChild><Button variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">Up next</SheetTitle></SheetHeader>
+        <div className="px-6 pt-4 pb-8"><QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} titled={false} /></div>
       </SheetContent>
     </Sheet>
   </section>;
@@ -214,7 +214,7 @@ function UpNextStrip({ plan, more, now, disabled, pageFirst, art, onPlay, onMore
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal disabled:opacity-100">
           <span className="flex items-baseline justify-between gap-2 text-sm tabular-nums">
             <span>{starts == null ? "Later" : formatEndTime(starts, now)}</span>
-            <span className="text-muted-foreground group-focus-visible:text-inherit">{entry.live ? "Live" : seconds == null ? "" : formatDuration(seconds)}</span>
+            <span className="text-muted-foreground">{entry.live ? "Live" : seconds == null ? "" : formatDuration(seconds)}</span>
           </span>
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover">{art(entry)}</span>
           <span className="line-clamp-2 text-base font-medium">{entry.title}</span>
@@ -236,7 +236,7 @@ function RecentRail({ items, credentials, disabled, onPlay, onBrowse }: { items:
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork credentials={credentials} item={item} /></span>
           <span className="line-clamp-2 text-base font-medium">{item.title}</span>
-          <span className="truncate text-sm text-muted-foreground tabular-nums group-focus-visible:text-inherit">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
+          <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
         </Button>{play}</>}
       </MediaDetails></li>;
     })}
@@ -245,7 +245,7 @@ function RecentRail({ items, credentials, disabled, onPlay, onBrowse }: { items:
 
 /** A divided row: the section name and its clock time on the left, content on the right. */
 function HomeRow({ title, time, action, children }: { title: string; time?: string; action?: ReactNode; children: ReactNode }) {
-  return <section aria-label={title} className="grid gap-x-12 gap-y-3 border-t py-6 lg:grid-cols-[10rem_minmax(0,1fr)]">
+  return <section aria-label={title} className="grid gap-x-12 gap-y-3 border-t py-6 lg:grid-cols-[12rem_minmax(0,1fr)]">
     <header className="flex flex-wrap items-baseline gap-x-3 lg:flex-col lg:items-start lg:gap-y-1">
       <h2 className="text-base font-medium">{title}</h2>
       {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}

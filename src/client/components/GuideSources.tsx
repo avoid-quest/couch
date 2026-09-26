@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useState, type FormEvent } from "react";
 import { Settings2 } from "lucide-react";
 import { useSessionGate } from "@/session/session-context";
@@ -43,7 +44,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
   const disabled = busy || !connected;
   const content = <>
     <SettingsSection aria-label="Live TV sources">
-      {!sources.length && <p className="text-sm text-muted-foreground">No sources yet.</p>}
+      {!sources.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No sources yet. Add an M3U channel list and its XMLTV guide below.</EmptyDescription></EmptyHeader></Empty>}
       {sources.map(source => <SettingsRow key={source.id} label={<span className="break-words">{source.name}</span>} description={<>
         {source.channelCount} channels · {source.programCount} programs · {updated(source.updatedAt)}
         {source.error && <span className="block text-destructive">{source.error}</span>}

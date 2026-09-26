@@ -1,3 +1,5 @@
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -43,7 +45,7 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
     <PageHeader title={title} back={{ label: view.kind === "album" ? view.artist?.name ?? "Albums" : view.kind === "albums" && view.artist ? "Artists" : "Find", onClick: back }} />
     {(view.kind === "artists" || !view.artist && view.kind === "albums") && <ChoiceGroup label="Music view" value={view.kind} onValueChange={kind => setView({ kind, offset: 0 })} options={[{ value: "artists", label: "Artists" }, { value: "albums", label: "Albums" }]} />}
     {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to browse music.</p>}
-    {query.isPending && connected && <p className="text-sm text-muted-foreground" role="status">Loading music…</p>}
+    {query.isPending && connected && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Loading music…</p>}
     {query.error && <Alert variant="destructive"><AlertDescription>Couldn't load music.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>}
     {view.kind === "artists" && !!artists.data?.items.length && <MediaList aria-label="Artists">{artists.data.items.map(artist => <MediaRow key={artist.id} title={artist.name} meta={`${artist.albumCount} album${artist.albumCount === 1 ? "" : "s"} · ${artist.trackCount} tracks`}
       art={artist.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={artist.artworkId} /> : undefined}
@@ -64,8 +66,8 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
       </MediaRow>)}</MediaList>
     </>}
     {!query.isPending && !query.error && !total && view.kind !== "album" && (view.kind === "albums" && view.artist
-      ? <p className="text-sm text-muted-foreground">No albums for this artist.</p>
-      : <div className="grid justify-items-start gap-3"><p className="text-sm text-muted-foreground">No tagged music yet. Add a folder of music, then scan it.</p><Button variant="outline" onClick={() => void navigate({ to: "/settings/sources" })}>Add a folder</Button></div>)}
+      ? <Empty className="py-0"><EmptyHeader><EmptyDescription>No albums for this artist. Choose another artist.</EmptyDescription></EmptyHeader></Empty>
+      : <Empty className="py-0"><EmptyHeader><EmptyDescription>No tagged music yet. Add a folder of music, then scan it.</EmptyDescription></EmptyHeader><EmptyContent><Button variant="outline" onClick={() => void navigate({ to: "/settings/sources/folders" })}>Add a folder</Button></EmptyContent></Empty>)}
     {view.kind !== "album" && total > musicPageSize && <nav className="flex items-center gap-3" aria-label="Music pages">
       <Button variant="ghost" disabled={view.offset === 0} onClick={() => setView({ ...view, offset: Math.max(0, view.offset - musicPageSize) })}>Previous</Button>
       <span className="text-sm text-muted-foreground">{view.offset + 1}–{Math.min(view.offset + musicPageSize, total)} of {total}</span>

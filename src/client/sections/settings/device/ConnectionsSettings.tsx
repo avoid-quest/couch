@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
@@ -75,14 +76,14 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         </form>
       </SettingsRow>}
       {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Allow remotes.")}</AlertDescription></Alert>}
-      {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription></Alert>}
+      {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
       <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />
     </SettingsSection>}
     {host && remoteControlEnabled && !administratorClaimed && (
       <SettingsSection title="Make a remote the admin" description="Pair a remote, then enter this one-time code on it." data-administrator-setup>
         <div className="flex min-w-0 flex-col gap-1">
           {setupCode.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
-            : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription></Alert>
+            : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || setupCode.isFetching} onClick={() => void setupCode.refetch()}>Try again</Button></AlertAction></Alert>
             : <><p className="font-mono text-3xl tracking-wider" data-administrator-code>{setupCode.data.code}</p><a className="break-all text-sm text-muted-foreground underline underline-offset-4" href={pairUrl}>{pairUrl}</a></>}
         </div>
       </SettingsSection>
@@ -101,7 +102,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
     {manager && <SettingsSection title="Paired remotes" data-remotes>
       {controllers.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
         : controllers.isError ? <Alert variant="destructive"><AlertDescription>Couldn't load remotes.</AlertDescription><AlertAction><Button variant="outline" size="sm" onClick={() => void controllers.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>
-        : !controllers.data.length ? <p className="text-sm text-muted-foreground">No remotes yet.</p>
+        : !controllers.data.length ? <Empty className="py-0"><EmptyHeader><EmptyDescription>No remotes yet. Use Pair a remote to connect one.</EmptyDescription></EmptyHeader></Empty>
         : controllers.data.map(device => (
             <SettingsRow key={device.id} data-remote={device.id} label={<>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this remote)</span>}</>}
               description={[device.role === "administrator" && "Admin", formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>

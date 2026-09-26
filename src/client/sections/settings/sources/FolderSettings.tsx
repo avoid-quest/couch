@@ -1,8 +1,9 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -51,7 +52,7 @@ export function FolderSettings({ credentials, connected, canManage, hostName }: 
       <SettingsSection description={`Folders on ${deviceName(hostName)}, not this remote.`} data-tv-local-only>
         {!canManage && <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
         {available && page.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
-        {page.data && !sources.length && <p className="text-sm text-muted-foreground">No folders yet.</p>}
+        {page.data && !sources.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No folders yet. Add a folder to find its media.</EmptyDescription></EmptyHeader></Empty>}
         {sources.map(source => (
           <SettingsRow key={source.id} data-folder-source={source.id} label={<span className="break-all">{source.name}</span>} description={<>
             {canManage && source.path && <span className="block break-all">{source.path}</span>}
@@ -69,7 +70,7 @@ export function FolderSettings({ credentials, connected, canManage, hostName }: 
           </SettingsRow>
         ))}
         {canManage && !browserOpen && <div><Button disabled={!canWrite} onClick={() => setBrowserOpen(true)}>Add folder</Button></div>}
-        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{page.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!available || mutation.isPending} onClick={() => void page.refetch()}>Try again</Button></AlertAction>}</Alert>}
       </SettingsSection>
       {canManage && browserOpen && credentials && <FolderBrowser canWrite={canWrite} credentials={credentials} hostName={hostName} adding={mutation.isPending && mutation.variables?.action === "add"} onAdd={path => update("add", undefined, path)} onCancel={() => setBrowserOpen(false)} />}
       <AlertDialog open={!!confirm} onOpenChange={open => { if (!open) setConfirm(null); }}>

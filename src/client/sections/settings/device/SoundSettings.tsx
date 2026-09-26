@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { soundQuery, soundView, type SoundView } from "@/api/settings";
@@ -43,7 +44,7 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
               {"output" in choice ? choice.output.name : `${choice.profile.name} · Pauses playback`}
             </SelectItem>)}</SelectContent>
           </Select>
-        ) : <span className="text-sm text-muted-foreground">No outputs found.</span>
+        ) : <Empty className="py-0"><EmptyHeader><EmptyDescription>No outputs found. Add speakers in Bluetooth.</EmptyDescription></EmptyHeader></Empty>
           : connected && <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</span>}
       </SettingsRow>}
       {unavailableSelected && <Alert><AlertDescription>Output unavailable. Reconnect it or pick another.</AlertDescription></Alert>}

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { avoidRadioPlaylistId, type RadioPlaylist } from "../../../../shared/radio";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +63,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
             <Button variant="ghost" disabled={!canWrite} onClick={() => setRemoving(source)}>Remove</Button>
           </SettingsRow>
         ))}
-        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{page.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => void page.refetch()}>Try again</Button></AlertAction>}</Alert>}
       </SettingsSection>
       <form onSubmit={add}>
         <SettingsSection title="Add playlist" description="An extended M3U URL. Adding it again refreshes it.">

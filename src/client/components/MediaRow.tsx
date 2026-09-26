@@ -28,7 +28,7 @@ type Props = {
 
 /**
  * Clock media row: thumbnail, title, meta and the length bar, with one main
- * verb and quiet secondary actions. Used by Find, Saved and Up next.
+ * verb and quiet secondary actions. Used by Home, Find and Saved; Up next has its own compact rows.
  */
 export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, className, ...props }: Props) {
   const body = <>

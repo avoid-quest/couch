@@ -246,7 +246,7 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
       <DialogTrigger asChild><Button variant="ghost" size="icon-lg" aria-label="Playback settings" title="Playback settings"><Settings aria-hidden="true" /></Button></DialogTrigger>
       <DialogContent className="sm:max-w-2xl" aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Playback settings</DialogTitle></DialogHeader>
-        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
           {showQuality && <QualitySelect id="playback-quality" label="Quality" value={entry?.quality ?? "auto"} disabled={disabled || !qualityAvailable} onChange={quality => {
             setDefaultError(null);
             if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }, "playback-quality").then(ok => { if (!ok) setDefaultError("Couldn't change quality."); });

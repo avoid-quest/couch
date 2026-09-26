@@ -6,11 +6,11 @@ import { AppShell } from "../sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 
-function RootError({ error }: ErrorComponentProps) {
+function RootError({ error, reset }: ErrorComponentProps) {
   return (
     <main id="main" className="px-(--gutter) py-6">
       <Alert variant="destructive"><AlertDescription>{error instanceof Error ? error.message : String(error)}</AlertDescription>
-        <AlertAction><Button variant="ghost" size="sm" asChild><Link to="/">Back to Couch</Link></Button></AlertAction>
+        <AlertAction><Button variant="ghost" size="sm" onClick={reset}>Try again</Button><Button variant="ghost" size="sm" asChild><Link to="/">Back to Couch</Link></Button></AlertAction>
       </Alert>
     </main>
   );

@@ -96,7 +96,8 @@ body { min-width: 0; }
 /* Clock focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
    Unlayered on purpose so it wins over component rings and hover backgrounds. */
 :is(button, a, [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
-[data-slot="button"][data-variant="default"]:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+[data-slot="button"][data-variant="default"]:focus-visible,
+:is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 :is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
 html { view-transition-name: none; }
 

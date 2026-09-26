@@ -56,7 +56,7 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
   ] as const;
 
   return <section ref={page} className="min-w-0 pb-8" aria-label="Saved">
-    <Tabs value={tab} onValueChange={value => onTabChange(value as SavedTab)} orientation={wide ? "vertical" : "horizontal"} className="grid gap-6 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-8">
+    <Tabs value={tab} onValueChange={value => onTabChange(value as SavedTab)} orientation={wide ? "vertical" : "horizontal"} className="grid gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
       <div className="min-w-0">
         <p className="mb-1 truncate text-xs text-muted-foreground md:px-2.5">Shared on {deviceName(state?.installationName)}</p>
         <TabsList variant="line" aria-label="Saved sections" className="h-auto w-full items-stretch justify-start gap-0 p-0 group-data-horizontal/tabs:h-auto group-data-horizontal/tabs:overflow-x-auto group-data-horizontal/tabs:border-b">

@@ -1,9 +1,10 @@
+import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { displayQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { DisplayState } from "../../../../shared/display";
 
@@ -29,6 +30,7 @@ export function DisplaySettings({ credentials, connected }: { credentials: ApiCr
 
   return (
     <SettingsSection description="Pick a screen. Confirm within 20 seconds or it switches back.">
+      {connected && display.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
       {state?.outputs.map(output => (
         <SettingsRow key={output.id} label={output.name} description={[
           state.current === output.id && "Current", state.saved === output.id && "Saved",
@@ -43,7 +45,7 @@ export function DisplaySettings({ credentials, connected }: { credentials: ApiCr
         <Button variant="outline" disabled={pending || !connected} onClick={() => change("cancel", { token: state.preview!.token })}>Revert</Button>
       </div>}
       {state?.notice && <p role="status" className="text-sm text-muted-foreground">{state.notice}</p>}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{display.error && !changeMutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void display.refetch()}>Try again</Button></AlertAction>}</Alert>}
       <p className="text-sm text-muted-foreground">Resolution and refresh rate don't change.</p>
     </SettingsSection>
   );

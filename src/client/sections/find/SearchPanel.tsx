@@ -171,7 +171,7 @@ export function SearchPanel(props: Props) {
     {search.query && !url && (collection ? <div className="min-w-0 space-y-6">
       <CollectionHeader collection={collection} back={collection.root ? "Results" : "Back"} onBack={backFromCollection} canPlay={props.canPlay} />
       {results(`${collection.title} items`)}
-    </div> : <div className={total ? "grid min-w-0 gap-6 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-8" : "min-w-0"}>
+    </div> : <div className={total ? "grid min-w-0 gap-6 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-12" : "min-w-0"}>
       {total > 0 && <>
         <div className="xl:hidden"><Button variant="ghost" className="-ml-2.5" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}>Filters{activeFilters && <span className="text-muted-foreground">{activeFilters}</span>}</Button></div>
         <aside className={filtersOpen ? "grid gap-6 sm:grid-cols-3 xl:block xl:space-y-6" : "hidden xl:block xl:space-y-6"} aria-label="Filter search results">{filters}</aside>

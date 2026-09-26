@@ -1,7 +1,8 @@
+import { Spinner } from "@/components/ui/spinner";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ADMIN_ONLY } from "@/copy";
@@ -33,13 +34,14 @@ export function StreamingCommunitySettings({ credentials, connected, canManage }
 
   return (
     <SettingsSection aria-label="StreamingCommunity settings" description="If the site moves, update its address here." data-tv-local-only>
+      {available && page.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
       {canManage ? <SettingsRow label="Site address" htmlFor="streamingcommunity-origin">
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
           <Input autoComplete="off" className="min-w-0 flex-1" disabled={!available || page.isFetching || pending} id="streamingcommunity-origin" maxLength={254} onChange={event => setDraft(event.target.value)} placeholder={streamingCommunityOrigin} spellCheck={false} type="url" value={site} />
           <Button type="submit" variant="outline" disabled={!available || page.isFetching || pending || value === page.data?.origin || !validStreamingCommunityOrigin(value)}>{pending ? "Saving…" : "Save"}</Button>
         </form>
       </SettingsRow> : <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{page.error && !saving.error && <AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => void page.refetch()}>Try again</Button></AlertAction>}</Alert>}
     </SettingsSection>
   );
 }

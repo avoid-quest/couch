@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import type { ApiCredentials } from "@/api/client";
@@ -21,7 +21,12 @@ export function ToolsSettings({ credentials, connected }: Props) {
   const loading = tools.isFetching;
   const refresh = () => { void tools.refetch(); void packagesQuery.refetch(); };
 
-  return <SettingsSection title="Tools" description="yt-dlp and Deno ship with Couch. Site errors don't mean a tool is broken.">
+  return <SettingsSection>
+    <SettingsRow label="Tools" description="yt-dlp and Deno ship with Couch. Site errors don't mean a tool is broken.">
+      <Button variant="outline" disabled={!connected || loading} onClick={refresh}>Check tools</Button>
+    </SettingsRow>
+    {loading ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Checking…</p>
+      : report && <p className="text-sm text-muted-foreground">Checked {when(report.checkedAt)}</p>}
     {report && <FactList>
       {report.tools.map(tool => <Fact key={tool.name} name={tool.name}
         value={`${tool.installed.version ?? "Not verified"} · ${tool.installed.status === "ready" ? "Verified" : statuses[tool.installed.status]}`}
@@ -30,11 +35,6 @@ export function ToolsSettings({ credentials, connected }: Props) {
       {packages && <Fact name="System packages" value={typeof packages.available === "number" ? `${packages.available} updates (${packages.security} security)${packages.broken ? ` · Broken: ${packages.broken}` : ""}` : packages.error || "Unknown"}
         note={`Read-only. Couch doesn't install system updates.${packages.indexUpdatedAt ? ` Index refreshed ${when(packages.indexUpdatedAt)}.` : ""}`} />}
     </FactList>}
-    <div className="flex flex-wrap items-center gap-3">
-      <Button variant="outline" disabled={!connected || loading} onClick={refresh}>Check tools</Button>
-      {loading ? <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Checking…</span>
-        : report && <span className="text-sm text-muted-foreground">Checked {when(report.checkedAt)}</span>}
-    </div>
-    {tools.error && <Alert variant="destructive"><AlertDescription>Couldn't check tools.</AlertDescription></Alert>}
+    {(tools.error || packagesQuery.error) && <Alert variant="destructive"><AlertDescription>Couldn't check tools.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || loading} onClick={refresh}>Try again</Button></AlertAction></Alert>}
   </SettingsSection>;
 }

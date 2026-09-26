@@ -1,6 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { librarySourcesQuery, metadataProviderQuery } from "@/api/library";
 import { jellyfinQuery } from "@/api/jellyfin";
 import { radioSourcesQuery } from "@/api/radio";
@@ -40,6 +44,8 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
   const streaming = useQuery({ ...streamingCommunityQuery(credentials ?? empty), enabled: available && canManage });
   const folderSources = folders.data?.sources;
   const radioSources = radio.data?.sources.filter(item => item.id !== avoidRadioPlaylistId);
+  const queries = [folders, iptv, jellyfin, ...(canManage ? [radio, metadata, streaming] : [])];
+  const failed = queries.filter(query => query.isError);
   const status: Record<SourceKind, string | undefined> = {
     folders: folderSources && (folderSources.length ? `${plural(folderSources.length, "folder")} · ${plural(folderSources.reduce((total, item) => total + item.itemCount, 0), "item")}` : "Not set up"),
     jellyfin: jellyfin.data && (jellyfin.data.connected ? jellyfin.data.serverName || "Connected" : "Not set up"),
@@ -50,16 +56,14 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
   };
 
   return (
-    <nav aria-label="Sources" className="flex min-w-0 flex-col border-t">
+    <SettingsSection aria-label="Sources">
+      {available && queries.some(query => query.isPending) && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
       {sourcePages.map(id => (
-        <div key={id} className="border-b py-1"><Link to={settingsPages[`source-${id}` as SettingsPage].path} className="-mx-2 flex min-w-0 items-center gap-4 rounded-sm px-2 py-2 hover:bg-muted">
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5 md:flex-row md:items-baseline md:gap-8">
-            <span className="shrink-0 text-base md:w-56">{settingsPages[`source-${id}` as SettingsPage].label}</span>
-            <span className="truncate text-sm text-muted-foreground">{status[id]}</span>
-          </span>
-          <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-        </Link></div>
+        <SettingsRow key={id} label={settingsPages[`source-${id}` as SettingsPage].label} description={status[id]}>
+          <Button variant="ghost" asChild><Link to={settingsPages[`source-${id}` as SettingsPage].path} aria-label={`Open ${settingsPages[`source-${id}` as SettingsPage].label}`}>Open<ChevronRight aria-hidden="true" /></Link></Button>
+        </SettingsRow>
       ))}
-    </nav>
+      {failed.length > 0 && <Alert variant="destructive"><AlertDescription>Couldn't load sources.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => failed.forEach(query => void query.refetch())}>Try again</Button></AlertAction></Alert>}
+    </SettingsSection>
   );
 }

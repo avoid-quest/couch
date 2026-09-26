@@ -274,14 +274,14 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
     <AlertDialog open={dialog === "confirmation"} onOpenChange={value => { if (!value) close(); }}>
       <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onEscapeKeyDown={pendingGuard}>
         <AlertDialogHeader><AlertDialogTitle>Switch to {hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>{confirmationText(warning)}</AlertDialogDescription></AlertDialogHeader>
-        <AlertDialogFooter><Button variant="ghost" onClick={close} disabled={device.pending}>Cancel</Button><Button onClick={() => void select("remote", address, true)} disabled={device.pending}>Stop and switch</Button></AlertDialogFooter>
+        <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction onClick={event => { event.preventDefault(); void select("remote", address, true); }} disabled={device.pending}>Stop and switch</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
     <AlertDialog open={dialog === "forget"} onOpenChange={value => { if (!value) close(); }}>
       <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onEscapeKeyDown={pendingGuard}>
         <AlertDialogHeader><AlertDialogTitle>Forget {nameOf(address) || hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>This computer will forget its address and pairing. That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
-        <AlertDialogFooter><Button variant="ghost" onClick={close} disabled={device.pending}>Cancel</Button><Button variant="destructive" onClick={async () => { if (await device.forget(address)) { setNames(targetNames()); setAddress(""); close(); } }} disabled={device.pending}>{device.pending ? "Forgetting…" : "Forget"}</Button></AlertDialogFooter>
+        <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={async event => { event.preventDefault(); if (await device.forget(address)) { setNames(targetNames()); setAddress(""); close(); } }} disabled={device.pending}>{device.pending ? "Forgetting…" : "Forget"}</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
     <Dialog open={dialog === "address"} onOpenChange={value => { if (!value) close(); }}>
