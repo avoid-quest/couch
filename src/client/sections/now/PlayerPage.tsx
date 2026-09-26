@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Captions, ListVideo, Music2, Settings2 } from "lucide-react";
+import { ArrowLeft, Captions, ListVideo, Maximize, Minimize, Music2, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -16,6 +16,7 @@ import { deviceName } from "@/copy";
 import { VideoStage } from "@/sections/shell/VideoStage";
 import { useBottomBar } from "@/sections/shell/MiniPlayer";
 import { QueuePanel } from "./QueuePanel";
+import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & 
 
 export function PlayerPage() {
   const playbackClock = usePlaybackClock();
+  const fullscreen = usePlayerFullscreen();
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
   const { state, connected, run, nativeHost, localHost, videoQualityPreference } = useSessionGate();
@@ -78,7 +80,9 @@ export function PlayerPage() {
       if (event.key === "Escape" || event.key === "BrowserBack") {
         if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="listbox"][data-state="open"], [data-slot="popover-content"][data-state="open"]')) return;
         event.preventDefault(); event.stopImmediatePropagation();
-        if (panel) setPanelState(null); else shell.leavePlayer();
+        if (panel) setPanelState(null);
+        else if (event.key === "Escape" && fullscreen.supported && fullscreen.fullscreen) void fullscreen.toggle();
+        else shell.leavePlayer();
         return;
       }
       const inPlayer = root.current?.contains(document.activeElement) || document.activeElement === document.body;
@@ -94,7 +98,7 @@ export function PlayerPage() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [shown, panel, playing, transportReady, player?.playbackId, run, shell.leavePlayer]);
+  }, [shown, panel, playing, transportReady, player?.playbackId, run, shell.leavePlayer, fullscreen]);
   // The shell sends an idle player back to Home, which shows Up next.
   if (!current) return null;
 
@@ -162,6 +166,7 @@ export function PlayerPage() {
         <div data-player-tools className="ml-auto flex min-w-0 flex-wrap items-center gap-1 max-sm:w-full">
           {state && <PlaybackVolume state={state} connected={connected} run={run} className="max-w-64" />}
           {!audioOnly && <Button data-panel="tracks" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "tracks"} title="Audio & subtitles" onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
+          {fullscreen.supported && <Button variant="ghost" size="icon" className="touch:min-w-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           <Button data-panel="settings" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "settings"} title="Playback" onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Playback</span></Button>
         </div>
       </div>

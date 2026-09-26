@@ -196,3 +196,27 @@ test("native cursor follows player controls and is restored when leaving", async
   await act(async () => view.unmount());
   expect(invoke).toHaveBeenLastCalledWith("plugin:window|set_cursor_visible", { label: "main", value: true });
 });
+
+test("fullscreen control labels follow the browser and Escape exits before leaving the player", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
+  const change = (element: Element | null) => {
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, value: element });
+    document.dispatchEvent(new Event("fullscreenchange"));
+  };
+  document.documentElement.requestFullscreen = async () => change(document.documentElement);
+  document.exitFullscreen = async () => change(null);
+  try {
+    await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
+    await userEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeInTheDocument();
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeInTheDocument();
+    expect(leaves).toBe(0);
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    expect(leaves).toBe(1);
+  } finally {
+    for (const key of ["fullscreenEnabled", "fullscreenElement", "exitFullscreen"]) Reflect.deleteProperty(document, key);
+    Reflect.deleteProperty(document.documentElement, "requestFullscreen");
+  }
+});
