@@ -141,7 +141,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />;
 
-  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
+  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {!elsewhere && <VideoStage active={active} audioOnly={audioOnly} />}
     </div>

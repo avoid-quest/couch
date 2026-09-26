@@ -168,6 +168,9 @@ test("idle player hides its cursor and pointer movement restores controls", asyn
   await act(async () => player.dispatchEvent(new Event("pointermove", { bubbles: true })));
   expect(player).not.toHaveClass("cursor-none");
   expect(player.querySelector("[data-player-band]")).not.toHaveAttribute("inert");
+  await act(async () => player.dispatchEvent(new Event("pointerout", { bubbles: true })));
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(player).not.toHaveClass("cursor-none");
 });
 
 test("keyboard-focused player controls stay visible until focus leaves", async () => {
