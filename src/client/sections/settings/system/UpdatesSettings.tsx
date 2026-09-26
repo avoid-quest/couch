@@ -120,7 +120,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       </SettingsRow>
       </>}
       {state.error && <Alert variant={state.status === "unavailable" ? "default" : "destructive"}><AlertDescription>{signingKeyMismatch
-        ? `This installation cannot verify the update's signing key. Reinstall Couch${ownApp ? "" : ` on ${hostName}`} from the official installer. Your data stays.`
+        ? `${ownApp ? "This computer" : hostName} can't verify the update's signing key. Reinstall Couch${ownApp ? "" : ` on ${hostName}`} from the official installer. Your data stays.`
         : ownApp && state.status === "unavailable" ? "Update with the Couch installer. Your data stays." : state.error}</AlertDescription></Alert>}
       {candidate && <SettingsRow label={state.currentCheck ? "New version" : "Last seen version"} description={<span className="whitespace-pre-wrap">{candidate.notes}</span>}><span className="break-all text-sm">{candidate.version}</span></SettingsRow>}
       {canRepair && <SettingsRow label="Repair" description={`Reinstall ${current.version}. Your data stays.`}>

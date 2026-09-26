@@ -35,7 +35,7 @@ afterEach(async () => {
 
 test("source forms mount without legacy version props or an offline read", async () => {
   await render({ source: "metadata" });
-  expect(document.querySelector('[aria-label="TMDB metadata settings"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Movie & show info settings"]')).not.toBeNull();
   await render({ source: "streaming-community" });
   expect(document.querySelector('[aria-label="StreamingCommunity settings"]')).not.toBeNull();
   expect(request).not.toHaveBeenCalled();

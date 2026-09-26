@@ -17,11 +17,16 @@ catalog provides interface icons, not brand identities.
 
 - **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
   full-bleed player with one solid control band, and "Playing on" one step away.
+- **The player is one tap away.** While something plays, every browse page ends
+  in the mini player: its artwork and title open the player, beside Play/Pause,
+  Next and the volume slider. Volume is always a mute button and a slider.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
-  on the right. Rows appear only when they have something in them: Now, Up
-  next, Continue, Radio and For later. Up next is one ruler split by each
-  entry's length, so the evening's shape is visible before its titles.
+  on the right. Rows appear only when they have something in them: Now,
+  Continue, For later, Radio, Played recently and Up next. Customize Home lets
+  each device choose its rows and their order. Up next is off by default but
+  shows whenever nothing is playing, since the player band isn't there to reach
+  it. It is one ruler split by each entry's length.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29".
 - **Colour only when it means something.** Destructive red is the only colour.

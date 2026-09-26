@@ -47,7 +47,7 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
     <SettingsSection>
       <SettingsRow label="Diagnostics" description="JSON report without URLs or credentials.">
         <Button variant="outline" disabled={!connected || loading || exporting || !report} onClick={() => exportDiagnostics.mutate()}>{exporting ? "Exporting…" : "Export"}</Button>
-        <Button variant="ghost" disabled={!connected || loading || exporting} onClick={() => void diagnostics.refetch()}>Refresh</Button>
+        <Button variant="ghost" disabled={!connected || loading || exporting} onClick={() => void diagnostics.refetch()}>Collect again</Button>
       </SettingsRow>
       {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Collecting…</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

@@ -63,7 +63,7 @@ async function render(sharing = false) {
 
 async function openUpdates() {
   await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
-  await act(async () => fireEvent.click(button("Update this app"))); await flush();
+  await act(async () => fireEvent.click(button("Update Couch on this computer"))); await flush();
 }
 
 test("first launch chooses a device before requesting local startup", async () => {
@@ -80,7 +80,7 @@ test("Client-only Windows offers remote playback and keeps offline recovery remo
   buildInfo.clientOnly = true;
   await render();
   expect(screen.getByRole("heading", { name: "Connect to a Couch" })).toBeDefined();
-  expect(screen.getByText(/controls a Couch on your network/)).toBeDefined();
+  expect(screen.getByText(/remote for a Couch on your network/)).toBeDefined();
   expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
   await act(async () => fireEvent.change(screen.getByRole("textbox", { name: "Couch address" }), { target: { value: "192.168.1.10:4100" } }));
   await act(async () => fireEvent.click(button("Connect"))); await flush();
@@ -276,8 +276,8 @@ test("an offline remote keeps this installation's update controls and shared-win
   expect(invoke.mock.calls.some(([name]) => name === "local_update_activity")).toBe(true);
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(false);
   await openUpdates();
-  expect(screen.getByRole("dialog", { name: "Update this app" })).toBeDefined();
-  expect(screen.getByText(/Only this app/)).toBeDefined();
+  expect(screen.getByRole("dialog", { name: "Update Couch on this computer" })).toBeDefined();
+  expect(screen.getByText(/Only Couch on this computer/)).toBeDefined();
   expect(screen.getByText("Hosted update")).toBeDefined();
   expect(button("Install").disabled).toBe(false);
   expect(screen.getByLabelText("Channel")).toBeDefined();
@@ -311,7 +311,7 @@ test("this app gives recovery guidance without Linux appliance instructions", as
   }) as typeof fetch);
   await render();
   await openUpdates();
-  expect(screen.getByRole("dialog", { name: "Update this app" })).toBeDefined();
+  expect(screen.getByRole("dialog", { name: "Update Couch on this computer" })).toBeDefined();
   expect(screen.getByText("Needs repair")).toBeDefined();
   expect(screen.getAllByText(/Reinstall Couch from its installer/)).toHaveLength(1);
   expect(screen.getByText("Update with the Couch installer. Your data stays.")).toBeDefined();

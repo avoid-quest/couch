@@ -20,7 +20,7 @@ export function AppearanceSettings({ tvPresentation, credentials, connected, adm
       {(tvPresentation || scope !== "device") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} />}
       {!tvPresentation && scope !== "tv" && (
         <SettingsRow label="Size on this device" description="Doesn't affect video or subtitles.">
-          <ChoiceGroup label="This client interface size" value={String(size)} options={sizeChoices} onValueChange={value => void change(Number(value) as InterfaceSize)} />
+          <ChoiceGroup label="Size on this device" value={String(size)} options={sizeChoices} onValueChange={value => void change(Number(value) as InterfaceSize)} />
         </SettingsRow>
       )}
       {unsaved && <Alert><AlertDescription>Applied, but couldn't save on this device.</AlertDescription></Alert>}

@@ -56,7 +56,7 @@ test("player keys leave focused buttons outside the player available", async () 
   expect(space.defaultPrevented).toBe(false);
   expect(document.activeElement).toBe(outside);
   expect(actions).toEqual([]);
-  expect(document.querySelector('[role="slider"][aria-label="Volume"]')).toBeNull();
+  expect(document.querySelector('[role="slider"][aria-label="Volume"]')).not.toBeNull();
   expect(document.querySelector('[role="group"][aria-label="Couch volume"]')?.textContent).toContain("40%");
 });
 

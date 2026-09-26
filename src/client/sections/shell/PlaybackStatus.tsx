@@ -1,9 +1,7 @@
 import type { ClientSessionState } from "@/session/session";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -16,7 +14,9 @@ import { soundQuery, soundView, type SoundView } from "@/api/settings";
 import type { Credentials } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
 import { knownConnection } from "@/session/connection";
-import { ADMIN_ONLY, deviceName } from "@/copy";
+import { deviceName } from "@/copy";
+import { useOptionalSessionGate } from "@/session/session-context";
+import { RangeControl } from "@/components/RangeControl";
 import { StatusDot } from "./StatusLine";
 
 function destinationOrigin(address: string): string | null {
@@ -38,6 +38,8 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
   onClose?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const gate = useOptionalSessionGate();
+  const admin = !!gate?.localHost || gate?.identity?.authority === "host" || gate?.identity?.authority === "administrator";
   const enabled = open && !!credentials && connected;
   const soundRead = useQuery({ ...soundQuery(credentials ?? noCredentials), enabled });
   const sound = enabled ? soundRead.data ?? null : null;
@@ -48,20 +50,20 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
   const outputs = sound?.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked) ?? [];
   const selected = sound?.routing?.selectedOutput ?? sound?.defaultOutput ?? null;
   const observed = sound?.outputs.find(output => output.id === sound.routing?.observedOutput);
-  const unavailable = soundRead.error ? soundRead.error instanceof ApiError && soundRead.error.status === 403 ? ADMIN_ONLY : "Couldn't load outputs."
+  const forbidden = soundRead.error instanceof ApiError && soundRead.error.status === 403;
+  const unavailable = soundRead.error ? "Couldn't load outputs."
     : soundRead.isLoading ? "Checking outputs…" : "No outputs.";
   const volume = state?.player.volume ?? sound?.routing?.volume ?? null;
   const volumeReady = connected && !!run && volume !== null && state?.player.status !== "unavailable" && state?.systemAudio?.volumeWritable !== false && sound?.routing?.volumeWritable !== false;
-  const changeVolume = (step: number) => { if (volumeReady && volume !== null) void run({ type: "volume", volume: Math.max(0, Math.min(100, Math.round(volume + step))) }); };
   // Offline, the shell's status line already says so; there is nothing to adjust.
   if (!connected) return null;
   return <section aria-labelledby="sound-controls-title" className="grid gap-2 border-t pt-3">
     <h3 id="sound-controls-title" className="text-sm font-medium">Sound</h3>
-    {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={output.isPending || !connected} onValueChange={value => { if (credentials) output.mutate(value); }} className="gap-0">{outputs.map((item, index) => <Field orientation="horizontal" className="items-center py-1.5" key={item.id}><RadioGroupItem id={`quick-output-${index}`} value={item.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{item.name || item.id}</FieldLabel></Field>)}</RadioGroup> : <p className="text-muted-foreground">{unavailable}</p>}
+    {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={output.isPending || !connected} onValueChange={value => { if (credentials) output.mutate(value); }} className="gap-0">{outputs.map((item, index) => <Field orientation="horizontal" className="items-center py-1.5" key={item.id}><RadioGroupItem id={`quick-output-${index}`} value={item.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{item.name || item.id}</FieldLabel></Field>)}</RadioGroup> : !forbidden && <p className="text-muted-foreground">{unavailable}</p>}
     {observed && observed.id !== selected && <p className="text-muted-foreground">Playing through {observed.name || observed.id}.</p>}
-    <div className="flex items-center justify-between gap-2" role="group" aria-label="Volume"><span>Volume</span><ButtonGroup aria-label="Volume adjustment"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}><Minus aria-hidden="true" /></Button><span className="min-w-8 self-center text-center tabular-nums" aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}><Plus aria-hidden="true" /></Button></ButtonGroup></div>
+    <div className="flex items-center gap-3"><span>Volume</span><RangeControl label="Volume" value={volume ?? 0} max={100} disabled={!volumeReady} onCommit={next => run ? run({ type: "volume", volume: next }) : Promise.resolve(false)} /><span className="w-8 shrink-0 text-right tabular-nums">{volume === null ? "—" : Math.round(volume)}</span></div>
     {output.error && <Alert variant="destructive"><AlertDescription>{output.error.message || "Couldn't change the output."}</AlertDescription></Alert>}
-    {credentials && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
+    {credentials && admin && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
   </section>;
 }
 

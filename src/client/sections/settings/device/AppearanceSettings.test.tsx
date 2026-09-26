@@ -42,7 +42,7 @@ test("desktop size changes this client without touching the selected host's TV s
 test("TV presentation keeps its preview request separate from client storage", async () => {
   const { AppearanceSettings } = await import("./AppearanceSettings");
   await act(async () => root.render(<QueryClientProvider client={queryClient}><AppearanceSettings scope="device" tvPresentation credentials={{ origin: "http://localhost", token: "admin" }} connected administrator /></QueryClientProvider>));
-  expect(screen.queryByRole("group", { name: "This client interface size" })).toBeNull();
+  expect(screen.queryByRole("group", { name: "Size on this device" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Larger" })));
   expect(request).toHaveBeenCalledTimes(1);
   expect((request.mock.calls[0] as unknown[])[0]).toBe("http://localhost/api/appearance");

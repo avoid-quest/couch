@@ -18,10 +18,10 @@ export function SettingsNav({ active }: Props) {
     && (id !== "display" || !!details?.tvPresentation)
     && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
   const groups = ([
-    ["Playback", ["playback", "appearance"]],
+    ["Preferences", ["playback", "appearance"]],
     ["Library", ["sources"]],
-    [deviceName(state?.installationName ?? details?.name), ["general", "sound", "display", "tv-appearance"]],
-    ["Connections", ["connection", "bluetooth"]],
+    [deviceName(state?.installationName ?? details?.name), ["general", "sound", "bluetooth", "display", "tv-appearance"]],
+    ["Connections", ["connection"]],
     ["System", ["updates", "advanced"]],
   ] as const).map(([label, pages]) => ({ label, pages: pages.filter(visible) })).filter(group => group.pages.length);
   const current = active.startsWith("source-") ? "sources" : active;

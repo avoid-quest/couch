@@ -65,7 +65,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {host && <SettingsRow label="Allow remotes" description="Phones and computers on your network can pair.">
         <Switch aria-label="Allow remotes" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
       </SettingsRow>}
-      <SettingsRow label="New remote" description={remoteControlEnabled ? "Scan a code with your phone." : "Turn on Allow remotes first."}>
+      <SettingsRow label="New remote" description={remoteControlEnabled ? "Scan a code with your phone." : host ? "Turn on Allow remotes first." : `Turn on Allow remotes on ${hostName} first.`}>
         <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
       </SettingsRow>
       {managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A name that points to ${hostName}. Add a port if 80 is taken.`}>
@@ -89,7 +89,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
     )}
     {identity.authority === "controller" && identity.claimAvailable && (
       <SettingsSection data-admin-claim>
-        <SettingsRow label="Admin code" htmlFor="administrator-code" description="Shown on the computer running Couch.">
+        <SettingsRow label="Admin code" htmlFor="administrator-code" description={`Shown on ${hostName} in Settings → Remotes.`}>
           <form className="flex w-full flex-wrap items-center gap-2" onSubmit={claim}>
             <Input id="administrator-code" className="min-w-0 flex-1" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming.isPending} />
             <Button type="submit" disabled={claiming.isPending || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming.isPending ? "Checking…" : "Become admin"}</Button>

@@ -53,7 +53,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
       <SettingsSection aria-label="Radio playlists">
         {available && page.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
         {page.data && <SettingsRow data-avoid-radio label="avoid radio" description={<>{["Built in", builtIn?.updatedAt && `${builtIn.stationCount} stations`, builtIn?.updatedAt && updated(builtIn.updatedAt)].filter(Boolean).join(" · ")}{builtIn?.error && <span className="block text-destructive">{builtIn.error}</span>}</>}>
-          <Button variant="outline" disabled={!canWrite} onClick={() => update("avoid?refresh=true", "GET")}>Refresh</Button>
+          <Button variant="outline" disabled={!canWrite} onClick={() => update("avoid?refresh=true", "GET")}>Update stations</Button>
         </SettingsRow>}
         {sources.filter(source => source.id !== avoidRadioPlaylistId).map(source => (
           <SettingsRow key={source.id} data-radio-source-id={source.id} label={<span className="break-words">{source.name}</span>} description={<>
@@ -61,7 +61,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
             <span className="block">{source.updatedAt ? `${source.stationCount} stations · ${updated(source.updatedAt)}` : updated(null)}</span>
             {source.error && <span className="block text-destructive">{source.error}{source.updatedAt && " Showing the last stations."}</span>}
           </>}>
-            <Button variant="outline" disabled={!canWrite} onClick={() => update(`playlists/${encodeURIComponent(source.id)}/refresh`, "POST")}>Refresh</Button>
+            <Button variant="outline" disabled={!canWrite} onClick={() => update(`playlists/${encodeURIComponent(source.id)}/refresh`, "POST")}>Update stations</Button>
             <Button variant="ghost" disabled={!canWrite} onClick={() => setRemoving(source)}>Remove</Button>
           </SettingsRow>
         ))}

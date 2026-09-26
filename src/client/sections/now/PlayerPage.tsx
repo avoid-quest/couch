@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Captions, ListVideo, Music2, Settings2, SkipForward } from "lucide-react";
+import { ArrowLeft, Captions, ListVideo, Music2, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -19,7 +19,7 @@ import { useSessionGate } from "@/session/session-context";
 import { cn } from "@/lib/utils";
 
 type Panel = "queue" | "tracks" | "settings";
-const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Settings" };
+const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Playback" };
 
 export function PlayerPage() {
   const playbackClock = usePlaybackClock();
@@ -128,7 +128,7 @@ export function PlayerPage() {
         {(retry || player?.status === "error") && <div className="mt-4 flex flex-wrap gap-2">
           <Button disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>{retry ? "Try now" : "Try again"}</Button>
           <Button variant="ghost" disabled={!available} onClick={skip}>Skip</Button>
-          {player?.status === "error" && <Button variant="ghost" onClick={shell.leavePlayer}>Find</Button>}
+          {player?.status === "error" && <Button variant="ghost" onClick={shell.leavePlayer}>{shell.playerBackLabel || "Find"}</Button>}
         </div>}
       </div>
     </div>}
@@ -142,14 +142,13 @@ export function PlayerPage() {
         : state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst />}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-2">
         {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst />}
-        {!following && <Button variant="ghost" size="icon-lg" aria-label="Next" disabled><SkipForward aria-hidden="true" className="fill-current" /></Button>}
         <Button data-panel="queue" variant="ghost" className="min-w-0 max-w-full flex-1 basis-48 justify-start sm:ml-4 sm:flex-none" aria-pressed={panel === "queue"} onClick={event => openPanel("queue", event.currentTarget)}>
           <ListVideo aria-hidden="true" />{following ? <><span className="truncate">Next: {following.title}</span><span className="shrink-0 font-normal text-muted-foreground">{remaining !== null && `in ${formatDuration(remaining)}`}{currentIndex + 2 < (state?.queue.length ?? 0) && `, then ${(state?.queue.length ?? 0) - currentIndex - 2} more`}</span></> : "Up next"}
         </Button>
-        <div data-player-tools className="ml-auto flex items-center gap-1">
-          {state && <PlaybackVolume state={state} connected={connected} run={run} showSlider={false} />}
-          {!audioOnly && <Button data-panel="tracks" variant="ghost" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
-          <Button data-panel="settings" variant="ghost" aria-pressed={panel === "settings"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Settings</span></Button>
+        <div data-player-tools className="ml-auto flex min-w-0 flex-wrap items-center gap-1 max-sm:w-full">
+          {state && <PlaybackVolume state={state} connected={connected} run={run} className="max-w-64" />}
+          {!audioOnly && <Button data-panel="tracks" variant="ghost" aria-pressed={panel === "tracks"} title="Audio & subtitles" onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
+          <Button data-panel="settings" variant="ghost" aria-pressed={panel === "settings"} title="Playback" onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Playback</span></Button>
         </div>
       </div>
     </div>

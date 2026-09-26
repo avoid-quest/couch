@@ -248,7 +248,7 @@ try {
     await remoteHost.exited;
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"Offline. Reconnecting")]'), 30_000);
     await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
-    await click(native.session, '//button[normalize-space(.)="Update this app"]');
+    await click(native.session, '//button[normalize-space(.)="Update Couch on this computer"]');
     await until("local updater loads while selected host is offline", () => role(native.session, `//div[@role="dialog"]//*[normalize-space(.)="${process.env.COUCH_SOURCE_REVISION}"]`), 30_000);
     await command("xdotool", "key", "Escape");
     await until("local updater closes without changing playback device", async () => !await role(native.session, '//div[@role="dialog"]'));
@@ -293,7 +293,7 @@ try {
     await click(native.session, '//nav[@aria-label="Settings pages"]//a[normalize-space(.)="Updates"]');
     await until("restarted administrator sees selected-host update target", () => role(native.session, `//section[@aria-label="Settings"]//*[normalize-space(.)="${process.env.COUCH_SOURCE_REVISION}"]`));
     await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
-    await until("local update access stays separate after relaunch", () => role(native.session, '//button[normalize-space(.)="Update this app"]'));
+    await until("local update access stays separate after relaunch", () => role(native.session, '//button[normalize-space(.)="Update Couch on this computer"]'));
   } finally { await closeDriver(native); }
 } finally { remoteHost.kill(); await remoteHost.exited; }
 
