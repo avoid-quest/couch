@@ -86,7 +86,7 @@ test("omits invalid optional metadata and allows previews before live streams ha
   expect((await live.resolve(page)).metadata).toEqual({ title: "x".repeat(200), duration: 0, live: true });
   const playlist = await fixture(output({ _type: "playlist", entries: [combined] }));
   await expect(playlist.inspect(page)).rejects.toThrow("specific video or track");
-});
+}, 15_000); // Six sequential extractor fixtures each have a 2s deadline.
 
 test("preserves split best-quality media with identical effective headers", async () => {
   const { resolve } = await fixture(output({ http_headers: { "User-Agent": "Extractor agent" }, requested_formats: [

@@ -11,6 +11,8 @@ export function MediaList({ className, ...props }: ComponentProps<"ul">) {
 type Props = {
   /** Thumbnail node, drawn 16:9. Omit for text-only rows (Up next). */
   art?: ReactNode;
+  /** Keep posters and album covers intact inside the thumbnail column. */
+  artFit?: "cover" | "contain";
   title: string;
   meta?: ReactNode;
   /** Extra line under the meta, e.g. a DurationBar. */
@@ -28,9 +30,9 @@ type Props = {
  * Clock media row: thumbnail, title, meta and the length bar, with one main
  * verb and quiet secondary actions. Used by Find, Saved and Up next.
  */
-export function MediaRow({ art, title, meta, children, description, primary, actions, className, ...props }: Props) {
+export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, className, ...props }: Props) {
   const body = <>
-    <span className="w-full truncate text-base font-medium">{title}</span>
+    <span className="line-clamp-2 w-full text-base font-medium">{title}</span>
     {meta && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
     {children}
     {description && <span className="line-clamp-2 max-w-prose text-sm text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
@@ -38,7 +40,7 @@ export function MediaRow({ art, title, meta, children, description, primary, act
   return (
     <Item asChild size="xs" className={cn("grid gap-x-4 gap-y-1 rounded-none border-0 border-b border-border px-0 py-2", art ? "grid-cols-[5rem_minmax(0,1fr)] @md:grid-cols-[7rem_minmax(0,1fr)] @3xl:grid-cols-[7rem_minmax(0,1fr)_auto]" : "grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_auto]", className)}>
       <li data-nav-row {...props}>
-        {art && <ItemMedia className="aspect-video w-full self-center overflow-hidden bg-muted *:size-full *:rounded-none [&_img]:object-cover">{art}</ItemMedia>}
+        {art && <ItemMedia className={cn("aspect-video w-full self-center overflow-hidden bg-muted *:size-full *:rounded-none", artFit === "contain" ? "[&_img]:object-contain" : "[&_img]:object-cover")}>{art}</ItemMedia>}
         {primary ? <Button variant="ghost" data-play aria-label={`${primary.label} ${title}`} disabled={primary.disabled} onClick={primary.onClick}
           className="group/main h-auto min-w-0 touch:h-auto flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal disabled:opacity-100">
           {body}

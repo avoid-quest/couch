@@ -130,6 +130,7 @@ try {
   assert.equal(await ui.execute("return location.origin"), origin);
   assert.equal(await ui.execute("return !!window.__TAURI_INTERNALS__"), false);
   await ui.section("Now");
+  await assertResponsive(ui, "Phone Up next");
   await ui.button(`Play ${entry.title}`);
   await until("browser Play reaches the coordinator and its native pipe", () => latest?.currentEntryId === entry.id && latest.player.status === "playing" && commands.some(command => command.type === "load" && command.source === entry.source));
   assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host", "Playback is attributed to the paired browser");

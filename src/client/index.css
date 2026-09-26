@@ -8,8 +8,9 @@
 @import "@fontsource-variable/inter-tight";
 
 @layer components {
-/* Shared media and native display plumbing. */
-html:has(body.native-host), body.native-host { background: transparent; }
+/* Keep scroll edges continuous with the black page and sticky navigation. */
+html { background: var(--background); scroll-padding-top: calc(4rem * var(--interface-scale)); }
+html, body { overscroll-behavior: none; }
 [hidden] { display: none !important; }
 button, a, input { -webkit-tap-highlight-color: transparent; }
 a { text-underline-offset: 4px; }
@@ -103,6 +104,7 @@ html { view-transition-name: none; }
 ::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
+.app-shell { min-height: calc(100dvh / var(--interface-scale)); }
 .app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
@@ -163,12 +165,9 @@ html { view-transition-name: none; }
 .player-page[data-player-idle] .player-main { display: none; }
 .player-page[data-player-idle][data-queue-open] .player-queue { display: flex; width: 100%; max-width: 48rem; border: 0; padding: 0; }
 
-/* One dark glass surface on Mac avoids a seam between chrome and page. */
-html.native-macos body.native-host .glass-shell { background: rgb(0 0 0 / 85%); }
-html.native-macos body.native-host .glass-shell .app-header { background: transparent; }
-
 /* macOS mpv sits behind the WebView. Every full-screen ancestor of its video
    rectangle must be clear; the band, status text and open sheet stay solid. */
+html:has(body.native-host .player-page .video-stage.has-video),
 body.native-host:has(.player-page .video-stage.has-video),
 body.native-host:has(.player-page .video-stage.has-video) .app-shell,
 body.native-host:has(.player-page .video-stage.has-video) .tv-browser,

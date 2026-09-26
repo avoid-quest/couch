@@ -167,3 +167,10 @@ test("Bandcamp forwards cancellation and rejects output arriving after cancellat
   await expect(album(albumUrl, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
   expect(calls).toHaveLength(0);
 });
+
+test("album previews keep album metadata separate from ordered track descriptions", async () => {
+  const page = await fixture([{ ...albumInfo, description: "Three recordings from the mixtape." }, track]).album(albumUrl);
+  expect(page).toMatchObject({ title: albumInfo.title, thumbnail: image, subtitle: "Blazo", description: "Three recordings from the mixtape." });
+  expect(page.items.map(item => item.collection)).toEqual(entries.map((_, index) => ({ title: albumInfo.title, url: albumUrl, index })));
+  expect(page.items.every(item => !item.description)).toBeTrue();
+});

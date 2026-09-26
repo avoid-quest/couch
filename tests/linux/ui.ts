@@ -168,13 +168,17 @@ export class UiDriver {
         await this.waitFor("Up next opens from the bottom player", () => this.execute("return !!document.querySelector('[data-player-queue]')?.getClientRects().length"));
         return;
       }
-      // The player opens at /now while something plays; otherwise it returns to Home, which shows Up next.
+      // A stopped player returns to Home; its header opens the deliberate queue.
       if (!await this.execute("return !!document.querySelector('[data-page=Now]')")) {
-        const path = label === "Queue" ? "/" : "/now";
+        const path = label === "Queue" ? "/now?queue=true" : "/now";
         const route = await this.execute("return window.__TAURI_INTERNALS__ ? '#' + arguments[0] : arguments[0]", [path]);
         await this.request(`/session/${this.session()}/url`, { url: new URL(route, await this.execute("return location.href")).href });
       }
       await this.waitFor("Now or Home opens", () => this.execute("return !!document.querySelector('[data-page=Now], [data-page=Home]')"));
+      if (await this.execute("return !!document.querySelector('[data-page=Home]') && !!document.querySelector('.app-header [aria-label=\"Up next\"]')")) {
+        await this.click('.app-header [aria-label="Up next"]');
+        await this.waitFor("Header Up next opens the queue", () => this.execute("return !!document.querySelector('[data-queue-panel]')?.getClientRects().length"));
+      }
       if (label === "Queue" && !await this.execute("return !!document.querySelector('[data-queue-panel]')?.getClientRects().length")) {
         if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
         await this.click('[data-panel="queue"]');

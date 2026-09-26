@@ -167,3 +167,30 @@ test("the providers route exposes previews and accepts streamingcommunity favori
     catalog.close();
   }
 });
+
+test("opened shows and seasons retain their artwork and synopsis without inventing episode plots", async () => {
+  const show = await browse({ url: `${origin}/it/titles/${series.id}-${series.slug}` });
+  expect(show.thumbnail).toBe(show.items[0]!.thumbnail);
+  expect(show.description).toContain("L'undicenne Johnny Test");
+  expect(show.items[0]!.subtitle).toBe("Johnny Test · 13 episodes");
+  expect(show.items[0]!.description).toContain("first season");
+  const seasonUrl = `${origin}/it/titles/${series.id}-${series.slug}/season-1`;
+  const season = await browse({ url: seasonUrl });
+  expect(season.thumbnail).toBe(show.thumbnail);
+  expect(season.description).toBe(show.items[0]!.description);
+  expect(season.items[0]).toMatchObject({ subtitle: "Johnny Test", thumbnail: show.thumbnail, collection: { title: "Johnny Test - Season 1", url: seasonUrl } });
+  expect(season.items[0]!.description).toBeUndefined();
+});
+
+test("episode metadata uses translated plot and its own cover, with canonical numeric order", async () => {
+  const captured = parseInertiaPage(await fixture("season.html"));
+  const loaded = captured.props.loadedSeason as { episodes: Array<Record<string, unknown>> };
+  loaded.episodes.reverse();
+  loaded.episodes[0]!.translations = [{ locale: "it", key: "plot", value: "Una nuova missione per Johnny." }];
+  loaded.episodes[0]!.images = [{ type: "cover", filename: "episode-cover.webp" }];
+  const html = `<div data-page="${JSON.stringify(captured).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"></div>`;
+  const page = await streamingCommunityBrowse({ url: `${origin}/it/titles/${series.id}-${series.slug}/season-1` }, origin, undefined, respond(html));
+  expect(page.items.map(item => item.title.slice(0, 6))).toEqual(["S01E01", "S01E02"]);
+  expect(page.items[1]).toMatchObject({ description: "Una nuova missione per Johnny.", thumbnail: `https://cdn.streamingcommunityz.academy/images/episode-cover.webp` });
+  expect(page.items[0]!.description).toBeUndefined();
+});

@@ -41,11 +41,21 @@ catalog provides interface icons, not brand identities.
   Continue, For later, Radio, Played recently and Up next. Radio always has
   the built-in stations, so a fresh Couch opens on something playable. With
   nothing playing or to continue, the first show on air leads its row.
-  Customize Home sits above the rows at the right and lets each device choose
-  their visibility and order. Home ends with its content; source setup belongs
-  in Settings. Up next is off by default but shows whenever nothing is playing,
-  since the player band isn't there to reach it. It is one ruler split by each
-  entry's length.
+  Settings → Home controls each device's row visibility and order. Saved
+  visibility always applies; the header keeps Up next reachable while stopped.
+  Home ends with its content. Up next is off by default and, when enabled,
+  appears as one ruler split by each entry's length.
+- **Keep discovery context visible.** Opened shows, seasons and albums retain
+  a contained cover and a short synopsis above their divided rows. Episode
+  rows use their own descriptions when available; a show synopsis stays with
+  the collection instead of pretending to describe each episode. Posters and
+  album art stay uncropped. This extends the existing shadcn Item-based
+  MediaRow; no additional preview panel or per-result request is needed.
+- **Browsing stays grounded.** The sticky header and scroll edges share the
+  solid black page background on desktop and web. Native video alone clears
+  its full-screen ancestors so the picture can show through. Source results
+  pair artwork with available synopsis and episode metadata; collection
+  headers contain their artwork instead of cropping covers.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29".
 - **Colour only when it means something.** Destructive red is the only colour.
