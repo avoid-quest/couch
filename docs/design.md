@@ -101,6 +101,10 @@ values in components.
 **Focus** inverts the focused control to white with black text. It is the only
 focus treatment; white controls (slider, Switch, Checkbox and RadioGroupItem) use a 2px foreground outline with a 2px offset on `:focus-visible` (see the unlayered rule in `index.css`).
 
+**Hover** uses a white tint on actions, brighter field borders and quiet rings on
+small controls. Reuse shadcn variants; artwork-only buttons dim the image because
+it covers their background. Keep hover on enabled controls and preserve focus inversion.
+
 ## Scale
 
 `html` font size is `clamp(16px, 1.25vw, 24px)`: 1rem is 1/80 of the width, so

@@ -308,7 +308,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
           <header className={cn("app-header sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0 max-[359px]:has-[.tv-remote-shortcut]:h-auto max-[359px]:has-[.tv-remote-shortcut]:flex-wrap max-[359px]:has-[.tv-remote-shortcut]:py-1.5", onPlayer && "hidden")}>
             <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
-              {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground hover:bg-transparent aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-1.5 max-sm:text-sm">
+              {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-1.5 max-sm:text-sm">
                 <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined} onClick={() => { if (name === "Find") shell.closeOnlineRequest(); }}>{name}</Link>
               </Button>)}
             </nav>

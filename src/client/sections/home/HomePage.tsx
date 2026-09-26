@@ -258,7 +258,7 @@ function HomeRow({ title, time, action, children }: { title: string; time?: stri
 /** The one large item on a row: artwork beside a display title and its verbs. */
 function Feature({ art, artFit = "cover", title, meta, detail, children, onInspect }: { art: ReactNode; artFit?: "cover" | "contain"; title: string; meta?: string; detail?: ReactNode; children: ReactNode; onInspect?: (event?: MouseEvent<HTMLElement>) => void }) {
   return <div className={cn("grid items-center gap-x-8 gap-y-4", artFit === "contain" ? "md:grid-cols-[fit-content(24rem)_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
-    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`Artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0">{art}</Button> : art}</div>
+    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`Artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0 hover:opacity-80">{art}</Button> : art}</div>
     <div className="grid min-w-0 gap-2">
       <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto touch:h-auto min-h-11 justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
@@ -334,7 +334,7 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
       </>}>{resume(item)}{secondary(item)}</Feature></div> : <MediaRow title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
-        art={<Button variant="ghost" className="size-full rounded-none p-0" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
+        art={<Button variant="ghost" className="size-full rounded-none p-0 hover:opacity-80" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
         primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>}
