@@ -673,8 +673,9 @@ for evidence and the remaining display, sound, sizing, real-folder, first-run an
 YouTube rendering checks. Existing software evidence does not finish those gates.
 
 Growing timeshift is deferred in [#67](https://github.com/avoid-quest/couch/issues/67).
-CEC is not planned. Native Mac/Windows playback and a full Rust port are not
-delivered. Jellyfin remuxing/transcoding, DRM/account-login video, crossfade and
+CEC is not planned. All supported native desktop builds include local playback;
+see the [current architecture](architecture.md). A full Rust port,
+Jellyfin remuxing/transcoding, DRM/account-login video, crossfade and
 speaker multiroom remain outside the delivered scope. Live TMDB qualification
 requires authorized access. HDR and refresh switching are unqualified.
 
