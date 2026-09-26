@@ -430,3 +430,18 @@ test("provider history filters before the limit, deduplicates shared plays and k
   expect((await request("/api/progress/history?provider=unknown")).status).toBe(400);
   expect((await (await request("/api/progress/history?provider=youtube&limit=1")).json()).items).toMatchObject([{ mediaId: ids[0], position: 40 }]);
 });
+
+test("history exposes trusted provider context even when the queued snapshot predates enrichment", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "episode", title: "S11E07", source: "web:https://streamingcommunityz.photos/it/watch/1955?e=17207", thumbnail: "https://example.com/show.jpg" };
+  const mediaId = playbackMediaId(entry)!;
+  session.command({ type: "enqueue", entry });
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 100, duration: 4209, watched: false, lastPlayedAt: 200 }, entry);
+  const details = { subtitle: "MasterChef Italia", description: "Episode synopsis", thumbnail: "https://example.com/episode.jpg" };
+  store.enrichHistorySource(mediaId, entry.source, details);
+  const data = await (await request("/api/progress/history")).json();
+  expect(data.items[0]).toMatchObject({ ...details, sourceLabel: "StreamingCommunity", queueEntryId: entry.id, position: 100, duration: 4209, lastPlayedAt: 200 });
+  expect(session.state.queue[0]).toEqual(entry);
+  expect(JSON.stringify(data)).not.toContain(entry.source);
+});

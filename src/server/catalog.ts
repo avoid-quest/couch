@@ -14,7 +14,7 @@ type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations">;
   jellyfin: Pick<JellyfinSource, "status" | "items">;
-  viewing?: { store: Store; session: ReturnType<typeof createSession> };
+  viewing?: { store: Store; session: ReturnType<typeof createSession>; refreshHistory?: (items: import("../shared/library").HistoryItem[]) => void };
 };
 
 const progressIdentity = /^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64}|media:[a-f0-9]{64})$/;
@@ -108,10 +108,13 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
             return !!source && source.kind !== "radio" && providerForUrl(source.source.replace(/^web:/, "")) === provider;
           }).map(item => {
             const queueEntry = queued.get(item.mediaId);
-            const source = queueEntry ?? viewing.store.historySource(item.mediaId);
-            const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : "Online";
-            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, sourceLabel } : {}) };
+            const saved = viewing.store.historySource(item.mediaId);
+            const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail } : {}) } : saved;
+            const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
+            const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : "Online";
+            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, subtitle: source.subtitle, description: source.description, sourceLabel } : {}) };
           });
+          viewing.refreshHistory?.(items);
           return Response.json({ items, profile: activeProfile });
         }
         if (viewing && pathname === "/api/progress/undo") {

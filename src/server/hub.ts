@@ -30,6 +30,8 @@ import { createRadioSettings } from "./radio-settings";
 import { createJellyfin } from "./jellyfin";
 import { createJellyfinSettings } from "./jellyfin-settings";
 import { createCatalog } from "./catalog";
+import { createProviderMetadata, providerMetadata } from "./provider-metadata";
+import { playbackMediaId } from "./progress";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
@@ -96,7 +98,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   return url.origin;
 };
 type SocketData = { playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
-const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
+const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
@@ -277,7 +279,8 @@ export function createHub(options: HubOptions) {
   } : undefined);
   manual = options.updater ? createManualUpdate(options.updater, admitted, updates.candidateReady, updates.canRepair) : undefined;
   const appearance = createAppearance(store, value => session.updateAppearance(value));
-  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
+  const metadata = createProviderMetadata({ store, cachedItem: providers.cachedItem, onChange: () => session.invalidate("progress") });
+  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session, refreshHistory: metadata.refreshHistory } });
   const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
     const state = session.state;
     if (state.queue.find(entry => entry.id === state.currentEntryId)?.source.startsWith("jellyfin:")) session.command({ type: "stop" });
@@ -330,7 +333,7 @@ export function createHub(options: HubOptions) {
     const authorized = () => { if (closed) return false; authorize(); return true; };
     const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
       const title = item.title?.trim();
-      return { entry: { id: item.entryId, source: `web:${item.url}`, title: title || new URL(item.url).hostname, automaticTitle: !title, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.quality ? { quality: item.quality } : {}) }, fromStart: item.fromStart, ...(!title ? { inspectUrl: item.url } : {}) };
+      return { entry: { id: item.entryId, source: `web:${item.url}`, title: title || new URL(item.url).hostname, automaticTitle: !title, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...metadata.cached(item.url), ...(item.quality ? { quality: item.quality } : {}) }, fromStart: item.fromStart, ...(!title ? { inspectUrl: item.url } : {}) };
     };
     const list = async (provider: ProviderId, url: string, quality?: VideoQuality): Promise<Intake> => {
       const page = await loadProviderList(provider, url, shutdown.signal);
@@ -375,11 +378,23 @@ export function createHub(options: HubOptions) {
       // an already prepared atom/album/radio command before its queue mutation.
       const prepared = pending instanceof Promise ? await pending : pending;
       if (!prepared || !authorized()) return;
+      for (const entry of "entry" in prepared ? [prepared.entry] : prepared.entries) {
+        const mediaId = playbackMediaId(entry);
+        if (mediaId && (entry.subtitle || entry.description || entry.thumbnail)) {
+          const details = { ...(entry.subtitle ? { subtitle: entry.subtitle } : {}), ...(entry.description ? { description: entry.description } : {}), ...(entry.thumbnail ? { thumbnail: entry.thumbnail } : {}) };
+          try { if (store.enrichHistorySource(mediaId, entry.source, details)) session.invalidate("progress"); } catch { /* Optional catalogue refresh must not prevent playback. */ }
+        }
+      }
       if ("entry" in prepared) {
         const { entry, inspectUrl } = prepared;
         if (action.type === "enqueueProvider" && action.collection) entry.collection = action.collection;
         if (intent !== undefined) session.playNewEntries([entry], { intent, fromStart: prepared.fromStart, authorize, playedBy });
         else session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
+        if (entry.source.startsWith("web:")) {
+          void metadata.load(entry.source.slice(4)).then(details => {
+            if (!closed && Object.keys(details).length) { authorize(); session.enrichEntry(entry.id, entry.source, details, true); }
+          }).catch(() => {});
+        }
         if (inspectUrl) {
           const controller = new AbortController();
           inspections.set(entry.id, controller);
@@ -700,6 +715,7 @@ export function createHub(options: HubOptions) {
     soundRouting?.close();
     appearance.close();
     guide.close();
+    metadata.close();
     providers.close();
     subtitles.close();
     playlists.close();

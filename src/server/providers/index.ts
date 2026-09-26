@@ -89,6 +89,11 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
   const wrongMethod = (allow: string) => Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: allow } });
 
   return {
+    cachedItem(url: string): ProviderItem | undefined {
+      for (const { page, expires } of [...cache.values()].reverse()) {
+        if (expires > Date.now()) { const item = page.items.find(item => item.kind === "media" && item.url === url); if (item) return item; }
+      }
+    },
     async handle(request: Request, authorize = () => {}): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {

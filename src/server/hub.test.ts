@@ -1939,3 +1939,20 @@ test("modern-only observations never construct legacy wire snapshots; reconnect,
   expect(await closed).toBe(4001);
   expect((await fetch(`${hub.origin}/api/ws?token=${token}&playbackClock=1`, { headers: { Origin: hub.origin } })).status).toBe(401);
 });
+
+test("trusted provider list metadata survives intake, playback and history without extractor descriptions", async () => {
+  const item = { id: "track", title: "Track", provider: "bandcamp" as const, kind: "media" as const, url: "https://artist.bandcamp.com/track/one", subtitle: "Artist · Album", description: "Album liner notes", thumbnail: "https://f4.bcbits.com/img/album.jpg" };
+  const list = spyOn(providersModule, "loadProviderList").mockResolvedValue({ title: "Album", items: [item] });
+  const resolve = spyOn(webMediaModule, "resolveWebMedia").mockResolvedValue({ source: "https://audio.example/track.mp3", metadata: { title: "Track", thumbnail: "https://audio.example/generic.jpg" } });
+  try {
+    const { hub, waitForCommand } = fixture(); hub.session.observe(idle);
+    const token = await pair(hub), remote = new Peer(hub, token); await remote.ready();
+    expect(await remote.command({ type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true })).toMatchObject({ ok: true });
+    const command = await waitForCommand(command => command.type === "load");
+    if (command.type !== "load") throw new Error("Expected playback");
+    hub.session.observe({ ...idle, playbackId: command.playbackId, status: "playing", seekable: true, position: 25, duration: 200 });
+    const response = await controllerApi(hub, token, "/api/progress/history");
+    expect((await response.json()).items[0]).toMatchObject({ title: "Track", subtitle: item.subtitle, description: item.description, sourceLabel: "Bandcamp", thumbnail: item.thumbnail, position: 25, duration: 200 });
+    expect(hub.session.state.queue[0]).toMatchObject({ subtitle: item.subtitle, description: item.description });
+  } finally { list.mockRestore(); resolve.mockRestore(); }
+});

@@ -54,6 +54,15 @@ export function createProgress(store: Store, committed: (final: boolean) => void
         item: { ...(playedBy ? { playedBy: { ...playedBy } } : {}), mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
       } : null;
     },
+    enrichEntry(entry: QueueEntry) {
+      for (const progress of [...pending, active]) {
+        if (progress?.entry.id !== entry.id || progress.entry.source !== entry.source) continue;
+        progress.entry = { ...entry };
+        progress.item.title = entry.title;
+        progress.lastSaved = "";
+      }
+      flush();
+    },
     replaceTransport(previousPlaybackId: string | null, playbackId: string, entry?: QueueEntry) {
       if (!active || active.playbackId !== previousPlaybackId) return;
       active.playbackId = playbackId;

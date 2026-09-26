@@ -9,7 +9,7 @@ import type { WebMediaSource } from "./web-media";
 import { UPDATING_PAUSED, RECORDINGS_UNSUPPORTED, QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
-type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
+type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   admitted?: () => boolean;
@@ -185,14 +185,19 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       // Missing sequence metadata never interrupts the item the user chose.
     });
   };
-  const enrichEntry = (entryId: string, source: string, metadata: Metadata) => {
+  const enrichEntry = (entryId: string, source: string, metadata: Metadata, catalogue = false) => {
     assertAdmitted();
     const entry = state.queue.find(entry => entry.id === entryId && entry.source === source);
     if (!entry) return;
     const { title, ...details } = metadata;
-    const next = { ...entry, ...details, ...(entry.automaticTitle && title ? { title } : {}) };
+    const mediaId = playbackMediaId(entry);
+    if (mediaId && (catalogue || details.subtitle || details.description)) persistProgress(() => {
+      if (store.enrichHistorySource(mediaId, source, { ...(details.subtitle ? { subtitle: details.subtitle } : {}), ...(details.description ? { description: details.description } : {}), ...(details.thumbnail ? { thumbnail: details.thumbnail } : {}) })) invalidate("progress");
+    });
+    const next = { ...entry, ...details, ...(!catalogue && entry.thumbnail && (entry.subtitle || entry.description) ? { thumbnail: entry.thumbnail } : {}), ...(entry.automaticTitle && title ? { title } : {}) };
     if (JSON.stringify(next) === JSON.stringify(entry)) return;
     saveQueue(state.queue.map(entry => entry.id === entryId ? next : entry));
+    persistProgress(() => progress.enrichEntry(next));
     broadcast();
   };
   const available = () => {
