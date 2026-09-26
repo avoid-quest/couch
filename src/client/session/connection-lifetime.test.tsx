@@ -1,24 +1,23 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
-import { onlineManager, QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { setupUiTests, act, renderWithQueryClient, createTestQueryClient, screen, userEvent, fireEvent, waitFor } from "@/testing/react";
+import { afterEach, beforeEach, expect, jest, spyOn, test } from "bun:test";
+import { onlineManager, type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isRedirect } from "@tanstack/react-router";
 import type { ServerMessage, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
 import { historyQuery } from "../api/library";
-import { screen, fireEvent } from "../testing";
 import { requireAdministrator } from "../routes/settings/-administrator";
 import type { useSessionGate } from "./session-context";
 
+setupUiTests();
+
+const originalWebSocket = globalThis.WebSocket;
+afterEach(() => { globalThis.WebSocket = originalWebSocket; });
+
 const origin = "http://localhost";
 const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
-const originals = new Map<string, PropertyDescriptor | undefined>();
 const sockets: Socket[] = [];
-let root: Root | undefined, window: Window, outer: QueryClient, client: QueryClient;
+let client: QueryClient;
 let gate: ReturnType<typeof useSessionGate>;
-let fetchSpy: ReturnType<typeof spyOn>;
-const storageSpies: Array<ReturnType<typeof spyOn>> = [];
 const requests: Array<{ path: string; token: string | null; signal?: AbortSignal | null }> = [];
 let sharing = true;
 let installation: string, role: "administrator" | "controller", title: string;
@@ -40,21 +39,14 @@ class Socket {
 }
 
 const history = (name: string) => Response.json({ items: [{ mediaId: "library:movie", title: name, libraryItemId: "movie", position: 0, duration: null, watched: false, lastPlayedAt: 1 }] });
-const flush = () => act(async () => { await Bun.sleep(15); });
-async function until(predicate: () => boolean) {
-  const deadline = Date.now() + 2_000;
-  while (!predicate()) { if (Date.now() > deadline) throw new Error("Connection behavior did not settle"); await flush(); }
-}
 async function connected() {
-  await until(() => !!sockets.at(-1) && sockets.at(-1)!.readyState === 1);
+  await waitFor(() => expect(sockets.at(-1)?.readyState).toBe(1));
   await act(async () => sockets.at(-1)!.emit({ type: "state", state }));
-  await until(() => gate.connected);
-  await flush();
+  await waitFor(() => expect(gate.connected).toBe(true));
 }
 async function mount() {
   const { SessionGate, useSessionGate } = await import("./session-context");
   const { PairForm } = await import("../sections/shell/PairForm");
-  const { createRoot } = await import("react-dom/client");
   function Probe() {
     gate = useSessionGate(); client = useQueryClient();
     const query = useQuery({ ...historyQuery(gate.credentials ?? { origin, token: "" }), enabled: gate.connected && !gate.pairingRequired });
@@ -65,18 +57,14 @@ async function mount() {
       <PairForm />
     </>;
   }
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-  // Retain the former outer provider so the same public behavior cases also
-  // characterize the pre-fix gate. The gate's own provider must supersede it.
-  outer = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root!.render(<QueryClientProvider client={outer}><SessionGate><Probe /></SessionGate></QueryClientProvider>));
-  await flush();
+  // The gate must own a separate query cache for each connection.
+  await act(async () => { renderWithQueryClient(<SessionGate><Probe /></SessionGate>, createTestQueryClient()); });
 }
 async function pair() {
   const { requestPairing } = await import("../sections/shell/PairForm");
   const count = sockets.length;
   await act(async () => gate.savePairing(await requestPairing(gate.pairingOrigin, "123456", "Memory remote")));
-  await until(() => sockets.length > count);
+  await waitFor(() => expect(sockets.length).toBeGreaterThan(count));
   await connected();
 }
 
@@ -84,15 +72,10 @@ beforeEach(() => {
   sharing = true; installation = "installation"; role = "administrator"; title = "Old household";
   delayedRead = delayedPair = undefined; readSignal = undefined;
   sockets.length = requests.length = 0;
-  window = new Window({ url: origin });
-  for (const key of ["CSS", "window", "document", "location", "history", "navigator", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "Event", "MouseEvent", "KeyboardEvent", "CustomEvent", "MutationObserver", "ResizeObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "WebSocket" ? Socket : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
+  globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   localStorage.setItem("couch.remote-token", "old-secret");
   localStorage.setItem("couch.remote-installation-id", installation);
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     requests.push({ path, token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
     if (path === "/api/connection") return Response.json({ name: "Couch", installationId: installation, urls: [origin], player: "idle", remoteControlEnabled: sharing });
@@ -111,44 +94,41 @@ beforeEach(() => {
 afterEach(async () => {
   delayedRead?.resolve(history("Retired household"));
   delayedPair?.resolve(Response.json({ token: "late-secret", installationId: installation }));
-  if (root) await act(async () => root!.unmount()); root = undefined;
-  outer?.clear(); client?.clear();
-  fetchSpy?.mockRestore();
-  for (const spy of storageSpies.splice(0)) spy.mockRestore();
-  await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  client?.clear();
 });
 
 test("unpair retires in-flight reads; re-pair cannot display a late old household response", async () => {
   await mount(); await connected();
-  await until(() => !!screen.queryByText("Old household"));
+  await screen.findByText("Old household");
   const previous = client;
   delayedRead = Promise.withResolvers<Response>();
   void previous.invalidateQueries({ queryKey: ["progress", "history"] });
-  await until(() => !!readSignal);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Unpair" })));
+  await waitFor(() => expect(readSignal).toBeTruthy());
+  await userEvent.click(screen.getByRole("button", { name: "Unpair" }));
   expect(client).not.toBe(previous);
   expect(readSignal?.aborted).toBe(true);
   expect(screen.queryByText("Old household")).toBeNull();
   const late = delayedRead; delayedRead = undefined; title = "New household";
   await pair();
-  late.resolve(history("Retired household"));
-  await until(() => !!screen.queryByText("New household"));
+  await act(async () => late.resolve(history("Retired household")));
+  await screen.findByText("New household");
   expect(screen.queryByText("Retired household")).toBeNull();
   expect(previous.getQueryCache().getAll()).toEqual([]);
   expect(JSON.stringify(client.getQueryCache().getAll().map(query => query.queryKey))).not.toContain("secret");
 });
 
 test("storage-disabled pairing supplies live administrator authority and authenticated reads", async () => {
+  const storage = Object.getOwnPropertyDescriptor(globalThis, "localStorage")!;
   Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("Storage disabled"); } });
-  await mount();
-  expect(gate.credentials).toBeNull();
-  await pair();
-  expect(gate.credentials?.token).toBe("new-secret");
-  const context = { queryClient: client, identity: gate.identity, connected: gate.connected };
-  await requireAdministrator({ context });
-  expect(requests.some(request => request.path === "/api/progress/history" && request.token === "Bearer new-secret")).toBe(true);
+  try {
+    await mount();
+    expect(gate.credentials).toBeNull();
+    await pair();
+    expect(gate.credentials?.token).toBe("new-secret");
+    const context = { queryClient: client, identity: gate.identity, connected: gate.connected };
+    await requireAdministrator({ context });
+    expect(requests.some(request => request.path === "/api/progress/history" && request.token === "Bearer new-secret")).toBe(true);
+  } finally { Object.defineProperty(globalThis, "localStorage", storage); }
 });
 
 test("an older paired remote keeps its token when Couch reads the current installation ID", async () => {
@@ -166,7 +146,7 @@ test("a role change retires administrator data and immediately changes route aut
   previous.setQueryData(["controllers", "list"], [{ name: "Administrator-only data" }]);
   role = "controller";
   await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { controllers: 1 } } }));
-  await until(() => gate.identity?.authority === "controller");
+  await waitFor(() => expect(gate.identity?.authority).toBe("controller"));
   expect(client).not.toBe(previous);
   expect(client.getQueryData(["controllers", "list"])).toBeUndefined();
   const context = { queryClient: client, identity: gate.identity, connected: gate.connected };
@@ -176,7 +156,7 @@ test("a role change retires administrator data and immediately changes route aut
 
 test("revocation clears visible data and repairing the same origin uses a new cache", async () => {
   await mount(); await connected();
-  await until(() => !!screen.queryByText("Old household"));
+  await screen.findByText("Old household");
   const previous = client;
   await act(async () => sockets.at(-1)!.close(4001));
   expect(gate.pairingRequired).toBe(true);
@@ -185,7 +165,7 @@ test("revocation clears visible data and repairing the same origin uses a new ca
   expect(screen.queryByText("Old household")).toBeNull();
   title = "New household";
   await pair();
-  await until(() => !!screen.queryByText("New household"));
+  await screen.findByText("New household");
 });
 
 test("installation replacement at the same address does not send the old token to identity reads", async () => {
@@ -193,7 +173,7 @@ test("installation replacement at the same address does not send the old token t
   const previous = client, start = requests.length;
   installation = "replacement-installation";
   await act(async () => gate.reconnect());
-  await until(() => gate.pairingRequired);
+  await waitFor(() => expect(gate.pairingRequired).toBe(true));
   expect(client).not.toBe(previous);
   expect(gate.identity).toBeNull();
   expect(requests.slice(start).filter(request => request.path === "/api/controllers/me")).toEqual([]);
@@ -201,13 +181,13 @@ test("installation replacement at the same address does not send the old token t
 
 test("ordinary reconnect revalidates cached reads even when server version counters restart at zero", async () => {
   await mount(); await connected();
-  await until(() => !!screen.queryByText("Old household"));
+  await screen.findByText("Old household");
   const count = sockets.length, previous = client;
   title = "Updated household";
   await act(async () => gate.reconnect());
-  await until(() => sockets.length > count);
+  await waitFor(() => expect(sockets.length).toBeGreaterThan(count));
   await connected();
-  await until(() => !!screen.queryByText("Updated household"));
+  await screen.findByText("Updated household");
   expect(client).toBe(previous);
 });
 
@@ -215,11 +195,10 @@ test("unpair cancels a pending pairing response rather than silently pairing the
   window.history.replaceState(null, "", "/#pair=123456");
   await mount(); await connected();
   delayedPair = Promise.withResolvers<Response>();
-  await act(async () => fireEvent.submit(document.querySelector("form.pair-form")!));
+  await userEvent.click(screen.getByRole("button", { name: "Pair" }));
   expect(requests.at(-1)?.path).toBe("/api/pair");
   await act(async () => gate.unpair());
-  delayedPair.resolve(Response.json({ token: "late-secret", installationId: installation }));
-  await flush();
+  await act(async () => delayedPair!.resolve(Response.json({ token: "late-secret", installationId: installation })));
   expect(gate.credentials).toBeNull();
   expect(localStorage.getItem("couch.remote-token")).toBeNull();
 });
@@ -229,10 +208,10 @@ test("a reachable local coordinator still serves and refreshes reads when the br
   onlineManager.setOnline(false);
   try {
     await mount(); await connected();
-    await until(() => !!screen.queryByText("Old household"));
+    await screen.findByText("Old household");
     title = "Updated local library";
     await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { progress: 1 } } }));
-    await until(() => !!screen.queryByText("Updated local library"));
+    await screen.findByText("Updated local library");
     expect(onlineManager.isOnline()).toBe(false);
     expect(gate.connected).toBe(true);
   } finally { await act(async () => onlineManager.setOnline(wasOnline)); }
@@ -256,23 +235,20 @@ test("live sharing changes update the connected gate", async () => {
   expect(gate.remoteControlEnabled).toBe(true);
   sharing = false;
   await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { controllers: 1 } } }));
-  await flush(); await flush();
-  expect(gate.remoteControlEnabled).toBe(false);
+  await waitFor(() => expect(gate.remoteControlEnabled).toBe(false));
 });
 
 
 test("typing coalesces activity reports and unpairing cancels the trailing report", async () => {
   await mount(); await connected();
+  jest.useFakeTimers();
   const activity = () => requests.filter(request => request.path === "/api/activity");
-  for (let key = 0; key < 12; key++) {
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
-    await flush();
-  }
+  for (let key = 0; key < 12; key++) fireEvent.keyDown(document, { key: "a" });
   expect(activity()).toHaveLength(1);
-  await act(async () => { await Bun.sleep(1_050); });
+  await act(async () => jest.advanceTimersByTime(1_000));
   expect(activity()).toHaveLength(2);
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "b", bubbles: true }));
+  fireEvent.keyDown(document, { key: "b" });
   await act(async () => gate.unpair());
-  await act(async () => { await Bun.sleep(1_050); });
+  await act(async () => jest.advanceTimersByTime(1_000));
   expect(activity()).toHaveLength(2);
 });

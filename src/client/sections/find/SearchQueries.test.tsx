@@ -1,49 +1,31 @@
+import { setupUiTests, render as renderUI, act, waitFor, createTestQueryClient } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import type { ProviderId, ProviderItem } from "../../../shared/providers";
-import { fireEvent, screen, within } from "../../testing";
+
+setupUiTests();
 
 const item = (id: string, title = id): ProviderItem => ({ id, title, provider: "youtube", kind: "media", url: `https://www.youtube.com/watch?v=${id}` });
 const collection: ProviderItem = { ...item("collection", "A collection"), kind: "collection", url: "https://www.youtube.com/playlist?list=PL1234567890" };
-const originals = new Map<string, PropertyDescriptor | undefined>();
-let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>;
+let view: ReturnType<typeof renderUI>, client: QueryClient;
 let requests: Array<{ path: string; token: string | null; signal?: AbortSignal | null }>;
 let delayed: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
 let favorite = false, savedWeb = false, pageFails = false, raiFails = false;
 let query = "first", provider: ProviderId = "youtube", token = "paired";
 let summary: import("./SearchOnlineResults").SearchResultSummary;
-const flush = () => act(async () => { await Bun.sleep(15); });
-async function until(predicate: () => boolean) {
-  const deadline = Date.now() + 2_000;
-  while (!predicate()) { if (Date.now() > deadline) throw new Error("Provider query behavior did not settle"); await flush(); }
-}
 async function render() {
   const { SearchOnlineResults } = await import("./SearchOnlineResults");
-  await act(async () => root.render(<QueryClientProvider client={client}><SearchOnlineResults
+  await act(async () => view.rerender(<QueryClientProvider client={client}><SearchOnlineResults
     origin="http://localhost" token={token} provider={provider} query={query} quality="auto" connected canPlay active
     onCommand={async () => true} onEnqueued={() => {}} onResults={(_, next) => { summary = next; }} />
   </QueryClientProvider>));
-  await flush();
-}
-async function click(name: string) {
-  await act(async () => fireEvent.click(screen.getByRole("button", { name, exact: true })));
-  await flush();
 }
 
 beforeEach(async () => {
-  window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
   query = "first"; provider = "youtube"; token = "paired";
   favorite = savedWeb = pageFails = raiFails = false; requests = []; delayed = undefined;
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+  client = createTestQueryClient();
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     requests.push({ path: url.pathname + url.search, token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
     if (url.pathname === "/api/providers/favorites") {
@@ -65,73 +47,68 @@ beforeEach(async () => {
     const current = url.searchParams.get("q") || "first";
     return Response.json({ items: [item(current), collection], nextCursor: "next" });
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+  view = renderUI(<></>);
 });
 afterEach(async () => {
   delayed?.resolve(Response.json({ items: [] }));
-  await act(async () => root.unmount()); client.clear(); fetchSpy.mockRestore();
-  await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+
 });
 
-
 const hit = (title: string) => summary.hits?.find(item => item.title === title);
-const run = async (action?: () => void) => { await act(async () => action?.()); await flush(); };
+const run = async (action?: () => void) => { await act(async () => action?.()); };
 
 test("a rapid query change cancels the old provider request and reports only current hits", async () => {
   query = "slow"; delayed = Promise.withResolvers<Response>(); await render();
+  await waitFor(() => expect(requests.some(request => request.path.includes("q=slow"))).toBe(true));
   const old = requests.find(request => request.path.includes("q=slow"));
   query = "new"; await render();
-  await until(() => !!hit("new"));
-  delayed.resolve(Response.json({ items: [item("retired", "Retired result")] }));
-  await flush();
+  await waitFor(() => expect(hit("new")).toBeDefined());
+  await act(async () => { delayed!.resolve(Response.json({ items: [item("retired", "Retired result")] })); });
   expect(old?.signal?.aborted).toBe(true);
   expect(hit("Retired result")).toBeUndefined();
 });
 
 test("provider pagination preserves first-page hits and retries a failed next page", async () => {
-  await render(); await until(() => !!hit("first"));
+  await render(); await waitFor(() => expect(hit("first")).toBeDefined());
   pageFails = true; await run(summary.more);
-  await until(() => !!summary.error);
-  expect(summary.errorMessage).toContain("Second page unavailable");
+  await waitFor(() => expect(summary.errorMessage).toContain("Second page unavailable"));
   expect(hit("first")).toBeDefined();
   pageFails = false; await run(summary.retry);
-  await until(() => !!hit("Second page"));
+  await waitFor(() => expect(hit("Second page")).toBeDefined());
   expect(summary.hits?.filter(item => item.title === "first")).toHaveLength(1);
   expect(summary.more).toBeUndefined();
 });
 
 test("a collection exposes its opener and returns to the original provider hits", async () => {
-  await render(); await until(() => !!hit("A collection"));
+  await render(); await waitFor(() => expect(hit("A collection")).toBeDefined());
   await run(hit("A collection")?.primary.run);
-  await until(() => !!hit("Collection episode"));
+  await waitFor(() => expect(hit("Collection episode")).toBeDefined());
   expect(summary.collection?.title).toBe("A collection");
   expect(summary.collection?.openerId).toBe("youtube:collection");
   await run(summary.collection?.back);
-  await until(() => !!hit("A collection"));
+  await waitFor(() => expect(hit("A collection")).toBeDefined());
   expect(summary.collection).toBeUndefined();
 });
 
 test("favorite changes refresh saved status through the shared provider cache", async () => {
-  await render(); await until(() => !!hit("first"));
+  await render(); await waitFor(() => expect(hit("first")).toBeDefined());
   await run(hit("first")?.actions.find(action => action.label === "Save")?.run);
-  await until(() => !!hit("first")?.actions.find(action => action.label === "Saved"));
+  await waitFor(() => expect(hit("first")?.actions.find(action => action.label === "Saved")).toBeDefined());
   expect(savedWeb).toBe(true);
   await run(hit("first")?.actions.find(action => action.label === "Saved")?.run);
-  await until(() => !!hit("first")?.actions.find(action => action.label === "Save"));
+  await waitFor(() => expect(hit("first")?.actions.find(action => action.label === "Save")).toBeDefined());
   expect(savedWeb).toBe(false);
 });
 
 test("provider reads use current credentials after client retirement", async () => {
   query = "slow"; delayed = Promise.withResolvers<Response>(); await render();
+  await waitFor(() => expect(requests.some(request => request.path.includes("q=slow"))).toBe(true));
   const old = requests.find(request => request.path.includes("q=slow"));
   const previous = client;
-  previous.clear(); client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  previous.clear(); client = createTestQueryClient();
   token = "new-pairing"; query = "new-household"; await render();
-  delayed.resolve(Response.json({ items: [item("retired", "Retired result")] }));
-  await until(() => !!hit("new-household"));
+  await act(async () => { delayed!.resolve(Response.json({ items: [item("retired", "Retired result")] })); });
+  await waitFor(() => expect(hit("new-household")).toBeDefined());
   expect(old?.signal?.aborted).toBe(true);
   expect(requests.some(request => request.path.includes("q=new-household") && request.token === "Bearer new-pairing")).toBe(true);
   expect(hit("Retired result")).toBeUndefined();

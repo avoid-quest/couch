@@ -1,4 +1,4 @@
-import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { afterEach, expect, jest, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmod, link, mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { createToolHealth } from "./tool-health";
 
 const administrator: ControllerIdentity = { authority: "administrator", controller: null, claimAvailable: false };
 const roots: string[] = [];
-afterEach(async () => { setSystemTime(); await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
+afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
 const request = () => new Request("http://localhost/api/tools");
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "couch-tool-health-")); roots.push(directory);
@@ -161,21 +161,24 @@ test("administrator revocation and shutdown take effect while local probes are p
 });
 
 test("a timed-out check stays the only unfinished job even after cache expiry", async () => {
-  const f = await fixture(), gate = Promise.withResolvers<string>(); let calls = 0;
-  const health = createToolHealth({ ...f.options, command: () => { calls++; return gate.promise; } });
-  const report = await (await health.handle(request(), () => administrator)).json() as ToolHealth;
-  expect(report.tools.every(tool => tool.installed.status === "unknown")).toBe(true);
-  expect(calls).toBe(1);
-  setSystemTime(new Date(Date.now() + 11_000));
-  const next = health.handle(request(), () => administrator);
-  expect(calls).toBe(1);
-  let stopped = false;
-  const closing = health.close().then(() => stopped = true);
-  await closing;
-  expect(stopped).toBe(true);
-  gate.resolve("2026.08.19");
-  expect((await next).status).toBe(503);
-}, 15_000);
+  const f = await fixture(), gate = Promise.withResolvers<string>(), started = Promise.withResolvers<void>(); let calls = 0;
+  const health = createToolHealth({ ...f.options, command: () => { calls++; started.resolve(); return gate.promise; } });
+  jest.useFakeTimers();
+  try {
+    const pending = health.handle(request(), () => administrator);
+    await started.promise;
+    jest.advanceTimersByTime(10_000);
+    const report = await (await pending).json() as ToolHealth;
+    expect(report.tools.every(tool => tool.installed.status === "unknown")).toBe(true);
+    expect(calls).toBe(1);
+    jest.advanceTimersByTime(11_000);
+    const next = health.handle(request(), () => administrator);
+    expect(calls).toBe(1);
+    await health.close();
+    gate.resolve("2026.08.19");
+    expect((await next).status).toBe(503);
+  } finally { gate.resolve("2026.08.19"); await health.close(); jest.useRealTimers(); }
+});
 
 test("System package status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
   const f = await fixture(); let calls = 0;
