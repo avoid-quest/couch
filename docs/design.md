@@ -25,7 +25,10 @@ catalog provides interface icons, not brand identities.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
   on the right. Rows appear only when they have something in them: Now,
-  Continue, For later, Radio, Played recently and Up next. Customize Home lets
+  Continue, For later, Radio, Played recently and Up next. Radio always has
+  the built-in stations, so a fresh Couch opens on something playable. With
+  nothing playing or to continue, the first show on air leads its row. Copy
+  names only the sources this Couch has set up. Customize Home lets
   each device choose its rows and their order. Up next is off by default but
   shows whenever nothing is playing, since the player band isn't there to reach
   it. It is one ruler split by each entry's length.

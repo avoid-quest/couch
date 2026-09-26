@@ -17,9 +17,9 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { apiFetch } from "@/api/client";
 import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/library";
 import { forLaterQuery } from "@/api/for-later";
-import { radioFavoritesListQuery, radioProgrammesQuery } from "@/api/radio";
+import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { ForLaterSection } from "@/sections/saved/ForLaterSection";
-import { SourcesStatus } from "@/sections/find/BrowseHome";
+import { searchReach, useLibraryReach } from "@/sections/find/BrowseHome";
 import { QueuePanel } from "@/sections/now/QueuePanel";
 import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
@@ -63,6 +63,9 @@ export function HomePage() {
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
   const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && hasRow("radio") });
+  // Built-in stations fill the row, so a fresh Couch opens on something playable.
+  const builtIn = useQuery({ ...radioSearchQuery(credentials, "avoid radio", ""), enabled: connected && hasRow("radio") });
+  const library = useLibraryReach(credentials, connected);
 
   const player = state?.player;
   const queue = state?.queue ?? [];
@@ -83,7 +86,7 @@ export function HomePage() {
   const unfinished = (history.data?.items ?? []).filter(item => item.position > 0 && !item.watched);
   const recent = (history.data?.items ?? []).filter(item => !(item.position > 0 && !item.watched)).slice(0, shown.recent);
   const savedMedia = later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [];
-  const stations = [...shell.recentRadio, ...favorites.data?.favorites ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index).slice(0, shown.radio);
+  const stations = [...shell.recentRadio, ...favorites.data?.favorites ?? [], ...builtIn.data?.stations ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index).slice(0, shown.radio + 1);
   const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && hasRow("radio") && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
   const onAir = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
   const queries = [
@@ -92,9 +95,12 @@ export function HomePage() {
     ...(hasRow("radio") ? [favorites] : []),
   ];
   const filled: Record<HomeRowId, boolean> = { now: !!current, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
-  const empty = !playerFallback && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
+  const empty = !playerFallback && !builtIn.isLoading && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
   const featureContinue = !(current && layout.rows.find(row => row.id === "now")?.shown);
   const canManage = identity?.authority === "host" || identity?.authority === "administrator";
+  // Nothing playing or to continue: the first station on air leads its row.
+  const lead = !current && !unfinished.length ? stations.find(station => onAir(station.id)) : undefined;
+  const leadShow = lead && onAir(lead.id);
 
   const art = (item: { artworkId?: string; thumbnail?: string; title: string }) => <Artwork credentials={credentials} item={item} />;
   const queueHistory = async (item: HistoryItem) => {
@@ -130,10 +136,14 @@ export function HomePage() {
 
     continue: <ContinueSection credentials={credentials} connected={connected} canPlay={available} feature={featureContinue} onPlay={shell.playHistory} onAdd={queueHistory} />,
 
-    radio: !!stations.length && <HomeRow title="Radio" time={stations.some(station => onAir(station.id)) ? "On air now" : plural(stations.length, "station")}
+    radio: !!stations.length && <HomeRow title="Radio" time={stations.some(station => onAir(station.id)) ? "On air now" : plural(Math.min(stations.length, shown.radio), "station")}
       action={<Button variant="ghost" onClick={() => void navigate({ href: "/find?browse=radio" })}>Browse</Button>}>
+      {lead && leadShow && <div className="mb-6"><Feature art={<MediaArtwork thumbnail={leadShow.artworkUrl ?? lead.logoUrl} title={lead.name} />} title={leadShow.title} meta={[lead.name, leadShow.genre].filter(Boolean).join(" · ")}
+        detail={leadShow.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{leadShow.description}</p>}>
+        <Button data-page-first disabled={!available} onClick={() => void shell.enqueueRadio(lead, true)}><Play aria-hidden="true" className="fill-current" />Play {lead.name}</Button>
+      </Feature></div>}
       <ul aria-label="Radio stations" className="grid border-t sm:grid-cols-2 sm:gap-x-6 xl:grid-cols-3">
-        {stations.map(station => {
+        {stations.filter(station => station !== lead).slice(0, shown.radio).map(station => {
           const onNow = onAir(station.id);
           return <li key={station.id} className="border-b">
             <Button variant="ghost" aria-label={`Play ${station.name}`} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)}
@@ -141,7 +151,7 @@ export function HomePage() {
               <span className="size-12 shrink-0 overflow-hidden bg-muted"><MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="aspect-square size-full text-sm" /></span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-medium">{station.name}</span>
-                <span className="truncate text-sm text-muted-foreground group-focus-visible:text-inherit">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || station.groupTitle || station.countryCode}</span>
+                <span className="truncate text-sm text-muted-foreground group-focus-visible:text-inherit">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode)}</span>
               </span>
             </Button>
           </li>;
@@ -168,12 +178,14 @@ export function HomePage() {
     {onHome.map(row => <Fragment key={row.id}>{rows[row.id]}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">
-      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle><EmptyDescription>Couch searches YouTube, Twitch, RaiPlay, radio and your folders at once. What you watch, queue and save shows up here.</EmptyDescription></EmptyHeader>
+      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle><EmptyDescription>Search {searchReach(library)} or paste a link. What you play, queue and save shows up here.</EmptyDescription></EmptyHeader>
       <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>
-      {canManage && <SourcesStatus credentials={credentials} connected={connected} active onAddSource={() => void navigate({ to: "/settings/sources" })} />}
     </Empty>}
 
-    <footer className="border-t py-6"><Button variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={() => setCustomizing(true)}>Customize Home</Button></footer>
+    <footer className="flex flex-wrap gap-x-4 border-t py-6">
+      <Button variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={() => setCustomizing(true)}>Customize Home</Button>
+      {canManage && library.ready && !library.any && <Button variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={() => void navigate({ to: "/settings/sources" })}>Add folders, Jellyfin or Live TV</Button>}
+    </footer>
 
     <Sheet modal={false} open={customizing} onOpenChange={setCustomizing}>
       <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>

@@ -203,7 +203,7 @@ export const HitList = memo(function HitList({ hits, label, origin, token }: { h
   if (!hits.length) return null;
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
-    <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>
+    {hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
     <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} description={hit.description}
       art={hit.artworkId ? <AuthArtwork origin={origin} token={token} id={hit.artworkId} video={hit.video} /> : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
       primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled }}
