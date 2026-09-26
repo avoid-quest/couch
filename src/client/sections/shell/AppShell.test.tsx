@@ -4,7 +4,6 @@ import { ShellProviders } from "./test-providers";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import type { SessionState } from "../../../shared/protocol";
 import type { ShellValue } from "./AppShell";
-import { buildInfo } from "../../../shared/build";
 
 setupUiTests();
 
@@ -24,11 +23,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  buildInfo.clientOnly = false;
   Reflect.deleteProperty(window, "__COUCH_NATIVE_HOST__");
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   fetchSpy = null;
-
 });
 
 async function renderUpdates(authority: "host" | "administrator" | "controller", localHost: boolean) {
@@ -134,10 +131,9 @@ test("a missing player is a quiet status line while browsing Find", async () => 
   expect(screen.getByText("Find view")).toBeDefined();
 });
 
-test("a Client-only app keeps offline recovery on the selected remote", async () => {
-  buildInfo.clientOnly = true;
+test("a desktop app keeps offline recovery on the selected remote and offers an explicit local choice", async () => {
   await render("unavailable", true);
   expect(screen.getByText("Offline. Reconnecting to Desk Couch…")).toBeDefined();
   expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
-  expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Use this computer" })).toBeDefined();
 });

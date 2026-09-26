@@ -11,11 +11,6 @@ use tauri::{Manager, Url};
 const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
 const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
-pub(crate) fn local_playback_unavailable() -> bool {
-    !cfg!(feature = "desktop-playback")
-        || (cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true))
-}
-
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Choice {
@@ -55,15 +50,8 @@ impl Modes {
             last_input: Mutex::new(Instant::now()),
         })
     }
-    fn saved(&self) -> Choice {
-        self.choice.lock().expect("mode lock poisoned").clone()
-    }
     fn current(&self) -> Choice {
-        let mut choice = self.saved();
-        if local_playback_unavailable() && choice.mode == Some(Mode::Local) {
-            choice.mode = None;
-        }
-        choice
+        self.choice.lock().expect("mode lock poisoned").clone()
     }
     fn save(&self, mut choice: Choice) -> Result<Choice, String> {
         if let Some(address) = &choice.address {
@@ -464,9 +452,6 @@ pub async fn select_playback_device(
     confirm_interrupt: bool,
 ) -> Result<Choice, String> {
     trusted(&window)?;
-    if mode == Mode::Local && local_playback_unavailable() {
-        return Err("Local playback is unavailable in this Client-only build. Connect to another Couch.".into());
-    }
     let modes = app.state::<Modes>();
     let _guard = modes.operation.lock().await;
     let mut choice = modes.current();
@@ -501,7 +486,7 @@ pub async fn retry_playback_device(
     trusted(&window)?;
     let modes = app.state::<Modes>();
     let _guard = modes.operation.lock().await;
-    let choice = modes.saved();
+    let choice = modes.current();
     match choice.mode {
         Some(Mode::Local) => crate::start_local(&app),
         Some(Mode::Remote) => {
@@ -784,13 +769,14 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
-    #[cfg(not(feature = "desktop-playback"))]
     #[test]
-    fn client_only_ignores_remembered_local_mode_without_erasing_it() {
+    fn remembered_local_mode_and_setup_survive_without_rewriting_saved_state() {
         let path = std::env::temp_dir().join(format!("couch-mode-{}.json", uuid::Uuid::new_v4()));
         let saved = r#"{"mode":"local","localSetupComplete":true}"#;
         std::fs::write(&path, saved).unwrap();
-        assert!(Modes::load(path.clone()).unwrap().current().mode.is_none());
+        let remembered = Modes::load(path.clone()).unwrap().current();
+        assert!(remembered.mode == Some(Mode::Local));
+        assert!(remembered.local_setup_complete);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), saved);
         std::fs::remove_file(path).unwrap();
     }

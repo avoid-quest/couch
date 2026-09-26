@@ -1,6 +1,6 @@
 # Control Couch from Mac or Windows
 
-Open the playback computer's address in a browser. The published Debian TV owns
+Open the playback computer's address in a browser. The selected Couch owns
 playback, its media folders and the shared queue. You do not need Bun, Rust,
 Docker or a native Couch package on the controller computer.
 
@@ -32,27 +32,27 @@ another player. Folder paths refer to the playback computer, including any NAS
 shares mounted there. Your laptop's files do not become available by entering
 their paths in a remote.
 
-## Native Mac development app
+## Native desktop app
 
-The [native Mac source workflow](usage.md#native-mac-development) runs one app
-with **This computer** and **Another Couch** modes. This computer owns a local
-Bun host, trusted Settings access and local playback. The local owner or a
-paired Administrator can select its output and control volume and mute; Couch
-also shows external changes.
-Another Couch opens the selected host's UI in a separate window;
-it uses that host's paired role and does not run a local player or share the
-Mac's files. The trusted local window keeps device selection and **Update this
-app** access even if the selected host is offline. That control checks this
-installation; source builds have no published Mac update to install. A paired
-Administrator's **Settings > Updates** applies to the selected host. A
-Controller cannot install that host's updates.
+Every supported desktop build includes **This computer** and **Another Couch**
+modes. This computer owns a local Bun host, trusted Settings access and local
+playback. The local owner or a paired Administrator can select its output and
+control volume and mute; Couch also shows external changes.
 
-The app remembers the selected device. If it is unreachable, use **Retry**, check
-its address or choose **Use this computer**; Couch does not switch hosts or start
-playback on its own. Close keeps the app running. On Mac, reopen it from the
-Dock or **Show Couch** in the app menu; **Quit Couch** ends the app and its owned
-local host after any interruption confirmation. This source workflow is not a
-published Mac installer or proof of physical speaker behavior.
+Another Couch uses the selected host in the same bundled app window, with that
+host's paired role. It keeps the local player stopped and does not share this
+computer's files. **Update this app** uses this installation's private maintenance
+coordinator, even if the selected host is offline. A paired Administrator's
+**Settings > Updates** applies to the selected host; a Controller cannot install
+that host's updates. Source builds have no packaged update to install.
+
+The app remembers the selected device, targets and exact-address pairings. If
+it is unreachable, use **Try again**, check its address or choose **Use this
+computer**; Couch does not switch hosts or start playback on its own. Desktop
+Close keeps the app running when a reopen path is available. On Mac, reopen it
+from the Dock or **Show Couch** in the app menu; **Quit Couch** ends the app and
+its owned local coordinator after any interruption confirmation. See the
+[current architecture](architecture.md) and [native Mac source workflow](usage.md#native-mac-development).
 
 ## Keep a shortcut
 
@@ -68,7 +68,7 @@ the browsers also provide their own website-app installation:
   pair if prompted. In `edge://apps`, its **Details** page can pin it to Start or
   the taskbar. See [Microsoft's app guide](https://support.microsoft.com/en-us/edge/install-manage-or-uninstall-apps-in-microsoft-edge).
 
-The shortcut opens the TV's current app. The Debian TV must be running and
+The shortcut opens the TV's current app. The selected Couch must be running and
 reachable. Browser installation does not provide offline playback.
 
 ## Reconnect

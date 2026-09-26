@@ -4,7 +4,6 @@ import * as core from "@tauri-apps/api/core";
 import { onlineManager } from "@tanstack/react-query";
 import { isNativeHost } from "@/session/native-context";
 import { applyTvNavigation } from "@/navigation";
-import { buildInfo } from "../../../shared/build";
 
 setupUiTests();
 let invoke: Mock<typeof core.invoke>, request: ReturnType<typeof spyOn>;
@@ -34,7 +33,6 @@ beforeEach(() => {
   request = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ enabled: false }));
 });
 afterEach(() => {
-  buildInfo.clientOnly = false;
   Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
   onlineManager.setOnline(true);
   Reflect.deleteProperty(window, "isTauri");
@@ -63,12 +61,10 @@ test("first launch chooses a device before requesting local startup", async () =
   expect(screen.getByText("Local installation")).toBeInTheDocument();
 });
 
-test("Client-only Windows offers remote playback and keeps offline recovery remote", async () => {
-  buildInfo.clientOnly = true;
+test("Another Couch survives restart and offers local playback only by explicit choice", async () => {
   await render();
-  expect(screen.getByRole("heading", { name: "Connect to a Couch" })).toBeInTheDocument();
-  expect(screen.getByText(/controls a Couch on your network/)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(button("This computer")).toBeInTheDocument();
   await user.type(screen.getByRole("textbox", { name: "Couch address" }), "192.168.1.10:4100");
   await user.click(button("Connect"));
   expect(choice.mode).toBe("remote");
@@ -76,9 +72,9 @@ test("Client-only Windows offers remote playback and keeps offline recovery remo
   cleanup();
   await render();
   expect(button("Try again")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Use this computer" })).toBeInTheDocument();
   await user.click(button("Playing on 192.168.1.10:4100"));
-  expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
+  expect(screen.getByRole("radio", { name: "This computer" })).not.toBeChecked();
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(false);
 });
 

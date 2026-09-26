@@ -32,12 +32,23 @@ actual artifact layout and include notices in their resource map.
 
 ## Current dependency closure
 
-| Capability | Current native and helper dependencies | Packaging status |
-| --- | --- | --- |
-| Client-only, all targets | Tauri/WebView runtime and Bun maintenance coordinator. The Debian and AppImage packages also carry the three local-media helpers. | A later limited Client-only artifact may omit those helpers; its payload must then record an empty enabled-helper list. The target installer tickets must prove their installed runtime closure. |
-| Full on Linux | Client-only closure plus `yt-dlp`, Deno, `ffprobe`, GTK/WebKit, `libmpv2`, FFmpeg libraries, GL/video drivers and audio libraries. The Linux video plugin's `mpv-runtime` feature is linked into the app even when the user selects a remote host. | Debian declares host packages in `packaging/debian.json`; its artifact verifier checks those dependencies and rejects bundled shared libraries missing from the payload inventory. The Debian archive bundles no shared libraries; APT supplies them and the installed fixture checks their linkage. The AppImage verifier inventories libraries after Tauri bundles them. Installed Full remains a separate acceptance gate. |
-| Full on macOS | Client-only closure plus the selected libmpv runtime and its transitive libraries. | [#478](https://github.com/avoid-quest/couch/issues/478) owns the Client-only DMG's installed closure; the production Mac player and native dependency bundle belong to the Mac playback and helper tickets. A development Homebrew link is not installed proof. |
-| Full on Windows | Client-only closure plus the native player and its DLL closure after the Windows composition decision. | [#479](https://github.com/avoid-quest/couch/issues/479) owns the Client-only NSIS artifact's static closure; [#492](https://github.com/avoid-quest/couch/issues/492) owns installed Windows runtime and trust checks. No production Windows native player is present yet. |
+All supported desktop packages include playback, Tauri/WebView, the Bun
+coordinator and local-media helpers. **Another Couch** is an operating mode,
+not a reduced package: it keeps playback stopped while the private maintenance
+coordinator remains available. Emitted build and release identity retains
+`clientOnly: false` for artifact and release verification compatibility.
+
+- Linux uses GTK/WebKit, libmpv, FFmpeg, graphics and audio libraries. Debian
+  declares host packages in `packaging/debian.json`; its verifier rejects
+  unrecorded bundled libraries. The AppImage verifier inventories libraries
+  after Tauri bundles them.
+- macOS bundles libmpv and its transitive libraries; the
+  [Mac package verifier](packaging-macos.md) checks the installed loader paths.
+- Windows bundles libmpv and its DLL closure; the NSIS verifier checks PE
+  imports against the bundle and reviewed system allowlist.
+
+See the [current architecture](architecture.md) for runtime ownership. Package
+inspection does not replace installed playback or physical hardware checks.
 
 `packaging/inputs.json` pins the current Debian helper archives, Bun notice,
 Tauri AppImage tools and builder images. `resources/tools.json` records each
@@ -45,8 +56,7 @@ staged helper's version, installed hash and archive hash. `build-inputs.json`
 records the source locks, Bun/Rust revisions and builder inputs; Debian also
 ships `build-packages.tsv` and the complete copyright/license files gathered by
 `package-prepare.ts`. The release payload checks that the bundled helper bytes
-match `tools.json`. Native libraries copied by a future installer need their own
-target-specific inventory and license evidence before Full qualification.
+match `tools.json`. Bundled native libraries require target-specific inventory and license evidence.
 
 The Debian payload records its direct APT requirements as declared host packages
 and an empty bundled-library list. `package-deb-verify.ts` compares that list
@@ -58,13 +68,13 @@ configuration alone cannot establish which libraries Tauri actually bundled.
 The current Debian package and TV setup remain on `package:build deb` and their
 existing qualification path. `package:build appimage` builds the Linux desktop
 artifact without Debian TV policy. The AppImage fixture checks a fresh
-Client-only launch and pairing in disposable X11; downloaded-artifact upgrades,
+Another Couch launch and pairing in disposable X11; downloaded-artifact upgrades,
 Wayland and broad Linux installations remain separate acceptance work. This
 source inventory cannot establish a clean installed launch on macOS or Windows.
 Those checks belong to the target installer tickets and their
 downloaded-artifact acceptance tests.
 
-## Windows Client-only package
+## Windows desktop package
 
 The [GitHub desktop package job](../.github/workflows/package-desktop.yml) installs
 Rust's `x86_64-pc-windows-msvc` target, `cargo-xwin`, LLVM, NSIS,
