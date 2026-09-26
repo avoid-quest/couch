@@ -18,26 +18,23 @@ catalog provides interface icons, not brand identities.
 - **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
   full-bleed player with a compact bottom control band, and "Playing on" one
   step away.
-- **The player is one tap away.** The mini player is a quiet dock: thumbnail
-  and title open the player, plain Play/Pause or live-radio Stop and Next sit
-  in the centre, and volume sits on the right. Wide windows place the slim
-  scrub bar below transport; compact windows keep them inline. On phones and
-  compact windows, volume opens a Popover with mute and a slider so the row
-  stays compact.
-  The full player centres contained artwork above a modest title and station
-  line, with transport centred beneath it and volume and tools to either side.
-  Phones keep transport centred above the secondary controls. Video keeps
-  transport on the left and exposes Audio & subtitles directly on desktop;
-  the same option remains in Playback on phones. Back sits above; Up next,
-  Playback and fullscreen stay in the bottom band. Plain playback glyphs
-  keep the picture prominent.
-  The player fits the viewport at every interface size without page scrolling.
-  Audio keeps controls visible; video hides them when idle. Playback groups
-  secondary options in a Sheet; the info icon beside a show title opens its
-  details. On narrow screens, a visible timeline supplies seeking while
-  redundant ten-second buttons yield space to the core controls.
-  Custom stage CSS fits native video and artwork to the viewport; controls
-  reuse shadcn Button, Slider, Popover and Sheet.
+- **The player is one tap away.** The mini dock opens the player through its
+  artwork and title, with direct transport and Up next actions. Volume uses
+  an inline slider where space permits and a Popover in compact windows.
+  Audio and remote playback place contained artwork beside a persistent
+  desktop queue. On phones, Up next replaces the artwork while transport stays
+  available. Video uses the full viewport until Up next opens beside it.
+  Queue navigation survives playback changes; track-specific settings reset.
+  Audio keeps controls visible; idle video hides them. The player fits the
+  viewport at every interface size. Plain playback glyphs keep artwork central;
+  Playback and show details use Sheets. Stage CSS handles native video bounds
+  and the responsive queue workspace; controls reuse shadcn components.
+- **Up next is a deliberate list.** Keep Playing separate and Played collapsed.
+  Compact artwork rows have one menu for Play next, ordering, Save for later
+  and Remove. Removal leaves focus on an adjacent action menu. Save as list
+  asks for a name and preserves errors there for retry. Queue-specific rows
+  keep actions beside titles where MediaRow would stack them; shadcn/Radix
+  Dropdown Menu supplies keyboard navigation and typeahead.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
   on the right. Rows appear only when they have something in them: Now,
@@ -111,7 +108,7 @@ owned by Couch; the Mira defaults were changed only where Clock needs it:
 Shared building blocks in `src/client/components`:
 
 - `MediaRow` / `MediaList`: thumbnail, title, meta, length bar, one main verb
-  and actions revealed on hover or focus. Home, Find, Saved and Up next.
+  and actions revealed on hover or focus. Home, Find and Saved.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.

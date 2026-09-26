@@ -11,7 +11,7 @@ const state: SessionState = {
   installationName: "Living room", activeProfile: { id: "household", name: "Household" },
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 40, seekable: true, error: null },
 };
-const render = (value: SessionState, connected: boolean, run: (action: Action) => Promise<boolean> = async () => true, onOpen = () => {}) => renderUI(<ShellProviders value={{ state: value }}><MiniPlayer state={value} connected={connected} run={run} onOpen={onOpen} /></ShellProviders>);
+const render = (value: SessionState, connected: boolean, run: (action: Action) => Promise<boolean> = async () => true, onOpen: (panel?: "queue") => void = () => {}) => renderUI(<ShellProviders value={{ state: value }}><MiniPlayer state={value} connected={connected} run={run} onOpen={onOpen} /></ShellProviders>);
 
 test("the mini player names the host while reconnecting", () => {
   render(state, false);
@@ -60,6 +60,33 @@ test("the current radio programme opens the player while retaining station conte
 test("loading live media reports loading instead of claiming it is live", () => {
   render({ ...state, queue: [{ ...state.queue[0]!, live: true }], player: { ...state.player, status: "loading" } }, true);
   expect(screen.getByRole("status")).toHaveTextContent("Loading…");
+});
+
+test("Up next opens the queue directly without changing playback", () => {
+  const onOpen = mock((_panel?: "queue") => {});
+  const run = mock(async (_action: Action) => true);
+  render(state, true, run, onOpen);
+  fireEvent.click(screen.getByRole("button", { name: "Up next" }));
+  expect(onOpen).toHaveBeenCalledWith("queue");
+  expect(run).not.toHaveBeenCalled();
+});
+
+test("expand opens the player without selecting a panel", () => {
+  const onOpen = mock((_panel?: "queue") => {});
+  render(state, true, undefined, onOpen);
+  fireEvent.click(screen.getByRole("button", { name: "Expand player" }));
+  expect(onOpen).toHaveBeenCalledWith();
+});
+
+test("Next targets the active playback and is disabled while reconnecting", () => {
+  const run = mock(async (_action: Action) => true);
+  const queued = { ...state, queue: [...state.queue, { id: "two", title: "Next movie", source: "library:next" }] };
+  const view = render(queued, true, run);
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(run).toHaveBeenCalledWith({ type: "next", playbackId: "playback" });
+  view.unmount();
+  render(queued, false, run);
+  expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 });
 
 

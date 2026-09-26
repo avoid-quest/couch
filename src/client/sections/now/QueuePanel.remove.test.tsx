@@ -21,6 +21,7 @@ beforeEach(async () => {
 
 test("a queue entry removes itself through the socket remove action", async () => {
   expect(actions).toEqual([]);
-  await userEvent.click(screen.getByRole("button", { name: "Remove two" }));
+  await userEvent.click(screen.getByRole("button", { name: "Options for two" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "Remove" }));
   expect(actions).toEqual([{ type: "remove", entryId: "two" }]);
 });

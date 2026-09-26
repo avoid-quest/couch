@@ -118,7 +118,7 @@ test("an idle player renders nothing; the shell returns to Home, which shows Up 
 test("a sheet does not reopen when playback ends and a new item starts", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
-  await userEvent.click(screen.getByRole("button", { name: /^Up next/ }));
+  await userEvent.click(screen.getByRole("button", { name: "Playback" }));
   expect(screen.queryByRole("dialog")).not.toBeNull();
   const idle = { ...shell, active: false, current: undefined, state: { ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
   await act(async () => view.rerender(<ShellProviders value={idle}><PlayerPage /></ShellProviders>));
@@ -316,4 +316,72 @@ test("video opens Audio & subtitles directly and restores the initiating control
   expect(screen.getByRole("dialog")).toHaveAccessibleName("Audio & subtitles");
   await userEvent.click(screen.getByRole("button", { name: "Close" }));
   expect(document.activeElement).toBe(trigger);
+});
+
+test.each([true, false])("Up next stays open when playback changes (Play action: %s)", async playNow => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const next = { id: "next", title: "Next movie", source: "library:next", duration: 120 };
+  const after = { id: "after", title: "After that", source: "library:after", duration: 120 };
+  const queued = { ...shell, state: { ...state, queue: [...state.queue, next, after] } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={queued}><PlayerPage /></ShellProviders>));
+  await userEvent.click(screen.getByRole("button", { name: "Up next" }));
+  const queue = document.querySelector<HTMLElement>("[data-queue-panel]")!;
+  if (playNow) {
+    await userEvent.click(within(queue).getByRole("button", { name: "Play Next movie" }));
+    expect(actions).toContainEqual({ type: "play", entryId: "next" });
+  }
+  const advanced = { ...queued, current: next, state: { ...state, queue: [...state.queue, next, after], currentEntryId: next.id, player: { ...state.player, playbackId: "next-playback" } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={advanced}><PlayerPage /></ShellProviders>));
+  expect(queue.isConnected).toBe(true);
+  expect(within(queue).getByRole("button", { name: "Play After that" })).toBeInTheDocument();
+});
+
+
+test("a direct queue request keeps transport available and Escape closes the queue first", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const changes: boolean[] = [];
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage queueOpen onQueueOpenChange={open => changes.push(open)} /></ShellProviders>));
+  expect(screen.getByRole("complementary", { name: "Up next" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+  expect(changes).toEqual([false]);
+  expect(leaves).toBe(0);
+});
+
+test("returning from the persistent queue focuses transport when its trigger is hidden", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const changes: boolean[] = [];
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage queueOpen onQueueOpenChange={open => changes.push(open)} /></ShellProviders>));
+  spyOn(screen.getByRole("button", { name: "Up next" }), "getClientRects").mockReturnValue([] as unknown as DOMRectList);
+  await userEvent.click(screen.getByRole("button", { name: "Back to player" }));
+  expect(changes).toEqual([false]);
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Pause");
+});
+
+test("playback changes close track settings while keeping the queue open", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage queueOpen /></ShellProviders>));
+  await userEvent.click(screen.getByRole("button", { name: "Audio & subtitles" }));
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Audio & subtitles");
+  const changed = { ...shell, state: { ...state, player: { ...state.player, playbackId: "another-playback" } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={changed}><PlayerPage queueOpen /></ShellProviders>));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("complementary", { name: "Up next" })).toBeInTheDocument();
+});
+
+test("stopping preserves the open queue and its management context", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const next = { id: "next", title: "Next movie", source: "library:next", duration: 120 };
+  const queued = { ...shell, state: { ...state, queue: [...state.queue, next] } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={queued}><PlayerPage queueOpen /></ShellProviders>));
+  const queue = document.querySelector<HTMLElement>("[data-queue-panel]")!;
+  const idle = { ...queued, current: undefined, active: false, state: { ...state, queue: [...state.queue, next], currentEntryId: null, queueCursorEntryId: "current", player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={idle}><PlayerPage queueOpen /></ShellProviders>));
+  expect(queue.isConnected).toBe(true);
+  expect(within(queue).getByRole("button", { name: "Play Next movie" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+  expect(document.querySelector("[data-back]")).toBeInTheDocument();
+  await act(async () => view.rerender(<ShellProviders value={queued}><PlayerPage queueOpen /></ShellProviders>));
+  expect(queue.isConnected).toBe(true);
+  expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
 });

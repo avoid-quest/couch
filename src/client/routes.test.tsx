@@ -16,3 +16,15 @@ test("malformed search filters use truthful defaults", () => {
   expect(searchLocation({ query: "", source: "All" })).toBe("/find");
   expect(readSearchState("?source=TV%20folders").source).toBe("Folders");
 });
+
+test("Up next can open directly and close without adding a history entry", async () => {
+  const history = createMemoryHistory({ initialEntries: ["/find", "/now?queue=true"] });
+  const router = createRouter({ routeTree, context: { queryClient: new QueryClient(), identity: null, connected: false }, history });
+  await router.load();
+  expect(router.state.matches.at(-1)?.search).toMatchObject({ queue: true });
+  const closed = router.buildLocation({ to: "/now", search: {} });
+  expect(closed.href).toBe("/now");
+  history.replace(closed.href);
+  history.back();
+  expect(history.location.pathname).toBe("/find");
+});

@@ -1,4 +1,4 @@
-import { setupUiTests, screen, within, renderWithQueryClient } from "@/testing/react";
+import { setupUiTests, screen, within, renderWithQueryClient, userEvent } from "@/testing/react";
 import { expect, test } from "bun:test";
 import type { SessionState } from "../../../shared/protocol";
 import { QueuePanel } from "./QueuePanel";
@@ -10,9 +10,11 @@ const state: SessionState = { queue, currentEntryId: "Current", queueCursorEntry
 const panel = (value: SessionState) => <QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} />;
 const titles = (name: string) => within(screen.getByRole("list", { name })).getAllByRole("button", { name: /^Play / }).map(button => button.getAttribute("aria-label"));
 
-test("the queue separates upcoming and played items and estimates its finish", () => {
+test("the queue separates upcoming and played items and estimates its finish", async () => {
   renderWithQueryClient(panel(state));
   expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
+  expect(screen.queryByRole("list", { name: "Played" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Played" }));
   expect(titles("Played")).toEqual(["Play Played"]);
   expect(screen.getByRole("heading", { name: /^2 to play · done by/ })).toBeInTheDocument();
 });
@@ -27,8 +29,9 @@ test("unknown or live lengths suppress uncertain start and finish times", () => 
   expect(screen.getByRole("heading", { name: "2 to play" })).toBeInTheDocument();
 });
 
-test("a stopped queue honors its cursor and an exhausted queue offers an empty state", () => {
+test("a stopped queue honors its cursor and an exhausted queue offers an empty state", async () => {
   const view = renderWithQueryClient(panel({ ...state, currentEntryId: null }));
+  await userEvent.click(screen.getByRole("button", { name: "Played" }));
   expect(titles("Played")).toEqual(["Play Current", "Play Played"]);
   expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
   view.rerender(panel({ ...state, currentEntryId: null, queueCursorEntryId: "Last" }));

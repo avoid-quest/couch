@@ -26,15 +26,15 @@ beforeEach(async () => {
 test("focus follows an upcoming item when it becomes played", async () => {
   await act(async () => play("two").focus());
   await render({ ...state, currentEntryId: "two", queueCursorEntryId: "two" });
-  expect(document.activeElement).toBe(play("three"));
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Options for three" }));
   await render({ ...state, currentEntryId: "three", queueCursorEntryId: "three" });
-  expect(document.activeElement).toBe(play("two"));
+  expect(screen.getByRole("button", { name: "Played" })).toHaveFocus();
 });
 
 test("removing the focused last upcoming row restores Close for D-pad selection", async () => {
   const lastUpcoming = { ...state, queue: queue.slice(0, 2) };
   await render(lastUpcoming);
-  await act(async () => screen.getByRole("button", { name: "Remove two" }).focus());
+  await act(async () => screen.getByRole("button", { name: "Options for two" }).focus());
   await render({ ...lastUpcoming, queue: queue.slice(0, 1) });
   const close = screen.getByRole("button", { name: "Close" });
   expect(document.activeElement).toBe(close);
@@ -48,7 +48,7 @@ test("removing the focused last upcoming row restores Find on the idle page", as
   const idle = { ...state, currentEntryId: null, queueCursorEntryId: null, queue: queue.slice(1, 2) };
   const renderIdle = (value: SessionState) => act(async () => view.rerender(<section data-player-idle data-page="Now"><button data-page-first onClick={() => closeCount++}>Find something to play</button><QueryClientProvider client={queryClient}><QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} /></QueryClientProvider></section>));
   await renderIdle(idle);
-  await act(async () => screen.getByRole("button", { name: "Remove two" }).focus());
+  await act(async () => screen.getByRole("button", { name: "Options for two" }).focus());
   await renderIdle({ ...idle, queue: [] });
   const find = screen.getByRole("button", { name: "Find something to play" });
   expect(find).toHaveFocus();

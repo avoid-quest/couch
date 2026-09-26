@@ -163,6 +163,11 @@ export class UiDriver {
     const source = ({ Files: "Folders", Library: "Folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
     const destination = label === "Queue" || label === "Now" ? "Now" : label === "For later" ? "Saved" : source || ["Online", "Home", "Search"].includes(label) ? "Find" : label;
     if (destination === "Now") {
+      if (label === "Queue" && await this.execute("return !!document.querySelector('[data-mini-player] [aria-label=\"Up next\"]')")) {
+        await this.click('[data-mini-player] [aria-label="Up next"]');
+        await this.waitFor("Up next opens from the bottom player", () => this.execute("return !!document.querySelector('[data-player-queue]')?.getClientRects().length"));
+        return;
+      }
       // The player opens at /now while something plays; otherwise it returns to Home, which shows Up next.
       if (!await this.execute("return !!document.querySelector('[data-page=Now]')")) {
         const path = label === "Queue" ? "/" : "/now";
@@ -170,14 +175,16 @@ export class UiDriver {
         await this.request(`/session/${this.session()}/url`, { url: new URL(route, await this.execute("return location.href")).href });
       }
       await this.waitFor("Now or Home opens", () => this.execute("return !!document.querySelector('[data-page=Now], [data-page=Home]')"));
-      if (label === "Queue" && !await this.execute("return !!document.querySelector('[data-queue-panel]')")) {
+      if (label === "Queue" && !await this.execute("return !!document.querySelector('[data-queue-panel]')?.getClientRects().length")) {
         if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
         await this.click('[data-panel="queue"]');
+        await this.waitFor("Up next becomes visible", () => this.execute("return !!document.querySelector('[data-queue-panel]')?.getClientRects().length"));
       }
       return;
     }
     if (await this.execute("return !!document.querySelector('.player-page')")) {
       if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
+      if (await this.execute("return !!document.querySelector('[data-queue-open]')")) await this.key(keys.escape);
       await this.key(keys.escape);
     }
     const target = `[data-app-nav] a[href*="/${destination.toLowerCase()}"]`;
