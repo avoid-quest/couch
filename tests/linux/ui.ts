@@ -171,7 +171,7 @@ export class UiDriver {
     }
     if (await this.execute("return !!document.querySelector('.player-page')")) {
       if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
-      await this.click(".player-page [data-back]");
+      await this.key(keys.escape);
     }
     const target = `[data-app-nav] a[href*="/${destination.toLowerCase()}"]`;
     await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
