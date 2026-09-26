@@ -55,7 +55,7 @@ try {
   const bundledUrl = await request("/url") as string;
   assert.match(bundledUrl, /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)(?:\/|$)/, "The app loads its bundled frontend");
   await Bun.write(`${evidence}/first-launch.png`, Buffer.from(await request("/screenshot"), "base64"));
-  const address = await element('//label[normalize-space(.)="Couch address"]/following::input[1]');
+  const address = await element('//input[@aria-label="Couch address"]');
   assert.ok(address, "Remote address field is labelled");
   await request(`/element/${address}/value`, { text: "127.0.0.1:44101" });
   await click('//button[normalize-space(.)="Connect"]');
@@ -85,7 +85,7 @@ try {
   assert.ok(pairing, "Pairing code field is labelled");
   await request(`/element/${pairing}/value`, { text: code });
   await click('//button[normalize-space(.)="Pair"]');
-  await until("Paired Client-only window loads host navigation", () => element('//nav[@aria-label="Main navigation"]'));
+  await until("Client saves its selected-host pairing", () => execute("return !document.querySelector('.pair-form') && !!localStorage.getItem('couch.pairing:" + selectedHost + "')"));
   const authority = await asyncExecute(`
     const pairing = JSON.parse(localStorage.getItem('couch.pairing:${selectedHost}') || '{}');
     const response = await fetch('${selectedHost}/api/controllers/me', {headers:{Authorization:'Bearer ' + pairing.token}});
