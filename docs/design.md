@@ -25,7 +25,10 @@ catalog provides interface icons, not brand identities.
   desktop queue. On phones, Up next replaces the artwork while transport stays
   available. Video uses the full viewport until Up next opens beside it.
   Queue navigation survives playback changes; track-specific settings reset.
-  Audio keeps controls visible; idle video hides them. The player fits the
+  Audio keeps its solid controls visible. Video controls fade over a transparent
+  black scrim, preserving the picture bounds; the gradient exists only to keep
+  overlaid text readable without an abrupt edge that resembles cropping. Hidden
+  controls are inert and let pointer input reach the video. The player fits the
   viewport at every interface size. Plain playback glyphs keep artwork central;
   Playback and show details use Sheets. Stage CSS handles native video bounds
   and the responsive queue workspace; controls reuse shadcn components.
