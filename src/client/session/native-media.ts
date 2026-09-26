@@ -37,7 +37,7 @@ export function nativeMedia(state: ClientSessionState | null, connected: boolean
 
 export function nativeMediaAction(event: NativeMediaCommand, media: NativeMedia | null, playbackId: string | null): Action | null {
   if (!media || event.id !== media.id || !playbackId) return null;
-  if (event.command === "stop") return { type: "stop" };
+  if (event.command === "stop") return { type: "stop", playbackId };
   if (event.command === "next") return media.canNext ? { type: "next", playbackId } : null;
   if (event.command === "seek") return media.canSeek && Number.isFinite(event.position)
     ? { type: "seek", playbackId, position: Math.max(0, Math.min(media.duration ?? Infinity, event.position)) } : null;

@@ -244,10 +244,7 @@ async fn run(
     let fallback = artwork_file(super::FALLBACK_ARTWORK)?;
     let handle = app.clone();
     player.connect_raise(move |_| {
-        if let Some(window) = handle.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+        crate::desktop_lifecycle::show(&handle);
     });
     let current = Rc::new(RefCell::new(None));
     macro_rules! connect {

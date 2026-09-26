@@ -842,7 +842,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           } else send(action);
           break;
         case "next": currentPlayback(action.playbackId); next(authorize, playedBy); break;
-        case "stop": stop(); break;
+        case "stop": if (action.playbackId !== undefined) currentPlayback(action.playbackId); stop(); break;
         case "enqueueLibrary": case "enqueueAlbum": case "enqueueJellyfin": case "enqueueRadio": case "enqueueWeb": throw new Error("Resolve this catalog item before adding it to the queue.");
       }
     },

@@ -44,7 +44,7 @@ test("system controls use playback IDs, clamp seeks, and reject stale session ev
   expect(command("toggle")).toEqual({ type: "pause", playbackId: "playback", paused: true });
   expect(command("play")).toEqual({ type: "pause", playbackId: "playback", paused: false });
   expect(command("next")).toEqual({ type: "next", playbackId: "playback" });
-  expect(command("stop")).toEqual({ type: "stop" });
+  expect(command("stop")).toEqual({ type: "stop", playbackId: "playback" });
   expect(command("seek", 500)).toEqual({ type: "seek", playbackId: "playback", position: 100 });
   expect(command("seek", -10)).toEqual({ type: "seek", playbackId: "playback", position: 0 });
   expect(command("seek", NaN)).toBeNull();
