@@ -8,6 +8,7 @@ mod diagnostics_export;
 mod display;
 mod file_export;
 mod metadata_export;
+mod native_cursor;
 mod native_window_title;
 mod now_playing;
 mod operating_mode;
@@ -640,7 +641,8 @@ pub fn run() {
             operating_mode::local_update_activity,
             operating_mode::desktop_interface_size,
             now_playing::set_now_playing,
-            native_window_title::set_native_window_title
+            native_window_title::set_native_window_title,
+            native_cursor::set_native_cursor_visible
         ])
         .setup(|app| {
             let data_dir = match std::env::var_os("COUCH_DATA_DIR") {

@@ -192,9 +192,13 @@ test("native cursor follows player controls and is restored when leaving", async
   jest.useFakeTimers();
   await act(async () => view.rerender(<ShellProviders value={{ ...shell, nativeHost: true }}><PlayerPage /></ShellProviders>));
   await act(async () => jest.advanceTimersByTime(4000));
-  expect(invoke).toHaveBeenLastCalledWith("plugin:window|set_cursor_visible", { label: "main", value: false });
+  expect(invoke).toHaveBeenLastCalledWith("set_native_cursor_visible", { visible: false });
+  await act(async () => screen.getByRole("region", { name: "Player" }).dispatchEvent(new Event("pointermove", { bubbles: true })));
+  expect(invoke).toHaveBeenLastCalledWith("set_native_cursor_visible", { visible: true });
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(invoke).toHaveBeenLastCalledWith("set_native_cursor_visible", { visible: false });
   await act(async () => view.unmount());
-  expect(invoke).toHaveBeenLastCalledWith("plugin:window|set_cursor_visible", { label: "main", value: true });
+  expect(invoke).toHaveBeenLastCalledWith("set_native_cursor_visible", { visible: true });
 });
 
 test("fullscreen control labels follow the browser and Escape exits before leaving the player", async () => {

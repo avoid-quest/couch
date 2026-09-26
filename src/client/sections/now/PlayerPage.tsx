@@ -1,4 +1,4 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,9 +77,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   }, [autoHide, panel, queueOpen]);
   useEffect(() => {
     if (!nativeHost || !current || shown) return;
-    const playerWindow = getCurrentWindow();
-    void playerWindow.setCursorVisible(false).catch(() => {});
-    return () => { void playerWindow.setCursorVisible(true).catch(() => {}); };
+    void invoke("set_native_cursor_visible", { visible: false }).catch(() => {});
+    return () => { void invoke("set_native_cursor_visible", { visible: true }).catch(() => {}); };
   }, [nativeHost, !!current, shown]);
   useEffect(() => {
     if (!retry) return;

@@ -3,6 +3,8 @@ fn main() {
         cc::Build::new().file("src/sound.m").flag("-fobjc-arc").compile("couch_sound");
         cc::Build::new().file("src/now_playing.m").flag("-fobjc-arc").compile("couch_now_playing");
         cc::Build::new().file("src/native_window_title.m").flag("-fobjc-arc").compile("couch_window_title");
+        cc::Build::new().file("src/native_cursor.m").flag("-fobjc-arc").compile("couch_cursor");
+        println!("cargo:rerun-if-changed=src/native_cursor.m");
         println!("cargo:rustc-link-lib=framework=MediaPlayer");
         println!("cargo:rustc-link-lib=framework=AppKit");
         println!("cargo:rerun-if-changed=src/now_playing.m");
@@ -32,6 +34,7 @@ fn main() {
             "desktop_interface_size",
             "set_now_playing",
             "set_native_window_title",
+            "set_native_cursor_visible",
         ]),
     ))
     .expect("Cannot generate native command permissions");
