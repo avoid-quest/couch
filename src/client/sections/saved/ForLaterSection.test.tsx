@@ -60,7 +60,7 @@ test("saved shared items display without queue writes; explicit actions retain t
   expect(calls).toEqual([{ path: "/api/for-later", method: "GET", body: undefined }]);
   await click("Queue Evening movie"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
-  expect(toasts()).toEqual(["Queued Evening movie."]);
+  expect(toasts()).toHaveLength(0);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 
@@ -119,7 +119,7 @@ test("saving a library result posts only its catalog identity and never a queue 
   await act(async () => view.rerender(<QueryClientProvider client={client}><SaveForLater origin="http://localhost" token="paired" connected reference={{ kind: "library", id: "movie" }} title="Evening movie" /></QueryClientProvider>));
   await click("Save Evening movie");
   expect(calls).toEqual([{ path: "/api/for-later", method: "POST", body: { reference: { kind: "library", id: "movie" } } }]);
-  expect(toasts()).toEqual(["Saved Evening movie."]);
+  expect(toasts()).toHaveLength(0);
 });
 
 test("a successful append whose Play was canceled reports that outcome instead of a source error or retry", async () => {

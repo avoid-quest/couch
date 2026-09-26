@@ -1,5 +1,6 @@
 import { setupUiTests, render as renderUI, act, screen, within, fireEvent, createTestQueryClient, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { toast } from "sonner";
 import { ShellProviders } from "./test-providers";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import type { SessionState } from "../../../shared/protocol";
@@ -10,14 +11,17 @@ setupUiTests();
 let view: ReturnType<typeof renderUI>;
 let fetchSpy: ReturnType<typeof spyOn> | null = null;
 const videoRects: unknown[] = [];
+const titles: string[] = [];
 const playerPanels: ("queue" | undefined)[] = [];
 
 beforeEach(async () => {
+  titles.length = 0;
   videoRects.length = 0;
   playerPanels.length = 0;
   testWindow.happyDOM.setURL("tauri://localhost/find");
   Object.defineProperty(window, "__COUCH_NATIVE_HOST__", { configurable: true, value: true });
-  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string, args?: { rect?: unknown }) => {
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { metadata: { currentWindow: { label: "main" } }, invoke: async (command: string, args?: { rect?: unknown; title?: string }) => {
+    if (command === "set_native_window_title" && args?.title) titles.push(args.title);
     if (command === "set_video_rect") videoRects.push(args?.rect);
     return command === "playback_device" ? { mode: "local", address: null, targets: [], localSetupComplete: true } : undefined;
   } } });
@@ -28,6 +32,7 @@ afterEach(async () => {
   Reflect.deleteProperty(window, "__COUCH_NATIVE_HOST__");
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   fetchSpy = null;
+  toast.dismiss();
 });
 
 async function renderUpdates(authority: "host" | "administrator" | "controller", localHost: boolean) {
@@ -68,12 +73,12 @@ test("the local host's update page offers its controls", async () => {
   expect(screen.getByLabelText("Install updates")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false) {
+async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
-  if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
+  if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { metadata: { currentWindow: { label: "main" } }, invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
   const state: SessionState = {
-    installationName: "Desk Couch",
+    installationName: "Desk Couch", activity,
     activeProfile: { id: "household", name: "Household" },
     queue: status === "unavailable" || emptyQueue ? [] : [{ id: "movie", title: "Movie", source: "library:movie" }],
     currentEntryId: status === "playing" || status === "ended" ? "movie" : null,
@@ -81,6 +86,7 @@ async function render(status: "playing" | "unavailable" | "idle" | "ended", remo
   };
   const shell = {
     nativeHost: true, localHost: !remoteOffline, tvPresentation: false, credentials: { origin: remoteOffline ? "http://192.168.1.10:4100" : "http://localhost", token: "host" },
+    identity: { authority: controllerId ? "controller" : "host", controller: controllerId ? { id: controllerId } : null },
     state, status: remoteOffline ? "server-unavailable" : "connected", statusLabel: remoteOffline ? "Server unavailable" : "Connected", details: { tvPresentation: false },
     connected: !remoteOffline, active: status === "playing", current: status === "playing" || status === "ended" ? state.queue[0] : null,
     available: status !== "unavailable", section: "Find", tv: { browsing: true, controlsVisible: false },
@@ -102,6 +108,7 @@ test("the shared browsing shell leaves video to the player page", async () => {
   await render("playing");
   expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
+  expect(titles).toEqual(["Couch · Desk Couch · Movie"]);
   expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeDefined();
   expect(within(screen.getByRole("navigation", { name: "Main navigation" })).getAllByRole("link").map(link => link.textContent)).toEqual(["Home", "Find", "Saved", "Settings"]);
 });
@@ -153,3 +160,15 @@ test("an ended item keeps Replay accessible in the dock while browsing", async (
   await render("ended");
   expect(screen.getByRole("button", { name: "Replay" })).toBeEnabled();
 });
+
+for (const [actorId, controllerId, expected] of [["host", undefined, 0], ["phone", "phone", 0], ["phone", undefined, 1], ["host", "phone", 1]] as const) {
+  test(`${controllerId ?? "native host"} only receives activity from other devices (${actorId})`, async () => {
+    await render("playing", false, false, { id: "activity", actor: { deviceId: actorId, name: "Living room" }, text: "Living room queued Movie" }, controllerId);
+    expect(toast.getToasts()).toHaveLength(expected);
+    if (expected) {
+      expect(toast.getToasts().at(-1)).toMatchObject({ title: "Living room queued Movie" });
+      expect(document.querySelector("[data-sonner-toaster]")).toHaveAttribute("data-x-position", "right");
+      expect(document.querySelector("[data-sonner-toaster]")).toHaveAttribute("data-y-position", "bottom");
+    }
+  });
+}

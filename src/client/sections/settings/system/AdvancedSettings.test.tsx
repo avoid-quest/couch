@@ -7,7 +7,6 @@ import { AdvancedSettings } from "./AdvancedSettings";
 
 setupUiTests();
 
-const lastToast = () => { const item = toast.getToasts().at(-1); return item && "title" in item ? item.title : undefined; };
 const report: Diagnostics = {
   formatVersion: 2, sessionId: "session", sessionStartedAt: "2026-09-23T10:00:00Z", historyError: null,
   collectedAt: "2026-09-23T10:00:00Z", collectionMs: 1,
@@ -53,7 +52,8 @@ async function save() {
 
 test("local owner saves the selected installation's sanitized JSON", async () => {
   await render(); await save();
-  await waitFor(() => expect(lastToast()).toBe("Exported."));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Export" })).toBeEnabled());
+  expect(toast.getToasts()).toHaveLength(0);
   expect((request.mock.calls as Array<[RequestInfo | URL]>).some(call => String(call[0]) === "http://local-installation/api/diagnostics/export")).toBe(true);
   expect(invoke).toHaveBeenCalledWith("save_diagnostics_export", bytes);
 });
@@ -64,10 +64,11 @@ test("bundled remote Administrator saves the selected remote installation", asyn
   expect((request.mock.calls as Array<[RequestInfo | URL]>).some(call => String(call[0]) === "http://selected-remote:4100/api/diagnostics/export")).toBe(true);
 });
 
-test("cancel and denied destination give distinct feedback", async () => {
+test("cancel stays quiet while a denied destination shows the error", async () => {
   saveResult = false;
   await render(); await save();
-  await waitFor(() => expect(lastToast()).toBe("Canceled."));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Export" })).toBeEnabled());
+  expect(toast.getToasts()).toHaveLength(0);
   saveResult = "Couldn't save the diagnostics report: Permission denied. No complete file was saved.";
   await save();
   expect(await screen.findByText(/Permission denied/)).toBeInTheDocument();
@@ -89,7 +90,8 @@ test("browser retains a JSON download", async () => {
   const create = spyOn(URL, "createObjectURL").mockReturnValue("blob:diagnostics");
   const click = spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   await render(); await save();
-  await waitFor(() => expect(lastToast()).toBe("Downloaded."));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Export" })).toBeEnabled());
+  expect(toast.getToasts()).toHaveLength(0);
   expect(create).toHaveBeenCalledTimes(1);
   expect(click).toHaveBeenCalledTimes(1);
   expect(invoke).not.toHaveBeenCalled();

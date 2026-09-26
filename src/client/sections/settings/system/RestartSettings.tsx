@@ -1,6 +1,5 @@
 import { waitForRestart } from "../../../restart-request";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -25,7 +24,6 @@ export function RestartSettings({ credentials, connected, hostName = "Couch" }: 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Couldn't restart.");
       await waitForRestart(endpoint, headers, result.instanceId, controller.signal);
-      toast("Restarted.");
     } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Couldn't restart."); }
     finally { operation.current = null; if (!controller.signal.aborted) setPending(false); }
   };

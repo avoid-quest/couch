@@ -17,7 +17,7 @@ import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
-import { playNotice, savedNotice } from "@/copy";
+import { savedNotice } from "@/copy";
 
 // The gesture for one drop, as the ordered ids the server persists.
 export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: string): string[] | null {
@@ -66,7 +66,6 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, onO
     onSuccess: async (body, { item, mode }) => {
       if (mode !== "remove") {
         if (body?.notice) toast(body.notice);
-        else if (mode === "append") toast(playNotice(item.title, "queue"));
         return;
       }
       const text = savedNotice(item.title, false);
@@ -75,7 +74,6 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, onO
         await apiSend(credentials, "/api/for-later/restore", { token: undoToken }, "POST", 10_000);
         await refresh();
       });
-      else toast(text);
       await refresh();
     },
   });

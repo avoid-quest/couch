@@ -8,8 +8,6 @@ export type UndoPlan = {
   expectedQueueIds: string[];
   resume: Resume;
   removed?: { entryId: string; token: string; beforeEntryId: string | null };
-  addedIds?: string[];
-  moved?: { entryId: string; beforeEntryId: string | null };
 };
 
 function resume(state: SessionState): Resume {
@@ -31,22 +29,6 @@ export function undoPlan(action: Action, before: SessionState, after: SessionSta
       resume: before.currentEntryId === action.entryId ? resume(before) : null,
       removed: { entryId: action.entryId, token: after.queueRemoval.token, beforeEntryId: before.queue[index + 1]?.id ?? null },
     };
-  }
-  if (action.type === "play" && action.entryId !== before.currentEntryId && after.currentEntryId === action.entryId && resume(before)) {
-    const index = before.queue.findIndex(entry => entry.id === action.entryId);
-    return {
-      text: `Playing ${before.queue[index]?.title ?? "item"}.`,
-      expectedCurrent: action.entryId,
-      expectedQueueIds,
-      resume: resume(before),
-      ...(index >= 0 ? { moved: { entryId: action.entryId, beforeEntryId: before.queue[index + 1]?.id ?? null } } : {}),
-    };
-  }
-  if ("playNow" in action && action.playNow && resume(before)) {
-    const existing = new Set(before.queue.map(entry => entry.id));
-    const addedIds = after.queue.filter(entry => !existing.has(entry.id)).map(entry => entry.id);
-    if (!after.currentEntryId || !addedIds.includes(after.currentEntryId)) return null;
-    return { text: "Replaced what was playing.", expectedCurrent: after.currentEntryId, expectedQueueIds, resume: resume(before), addedIds };
   }
   return null;
 }
@@ -79,13 +61,6 @@ function reorderedForPlay(state: SessionState, entryId: string) {
   return index > cursor + 1 ? [...queue.slice(0, cursor + 1), entryId, ...queue.slice(cursor + 1).filter(id => id !== entryId)] : queue;
 }
 
-function reorderedForMove(queue: string[], entryId: string, beforeEntryId: string | null) {
-  if (!queue.includes(entryId) || beforeEntryId && !queue.includes(beforeEntryId)) throw changed();
-  const moved = queue.filter(id => id !== entryId);
-  moved.splice(beforeEntryId ? moved.indexOf(beforeEntryId) : moved.length, 0, entryId);
-  return moved;
-}
-
 export async function applyUndo(plan: UndoPlan, command: (action: Action) => Promise<void>, current: () => SessionState | null) {
   let state = current();
   if (!state || state.currentEntryId !== plan.expectedCurrent || !same(ids(state), plan.expectedQueueIds)) throw changed();
@@ -99,14 +74,6 @@ export async function applyUndo(plan: UndoPlan, command: (action: Action) => Pro
     assertCurrent(current, state);
     await command({ type: "restoreRemoved", token: plan.removed.token });
     state = await observe(current, prior, state.currentEntryId, restored, state.currentEntryId);
-  }
-  for (const entryId of plan.addedIds ?? []) {
-    const prior = ids(state);
-    if (!prior.includes(entryId)) throw changed();
-    const nextCurrent = state.currentEntryId === entryId ? null : state.currentEntryId;
-    assertCurrent(current, state);
-    await command({ type: "remove", entryId });
-    state = await observe(current, prior, state.currentEntryId, prior.filter(id => id !== entryId), nextCurrent);
   }
   if (plan.resume) {
     const nextQueue = reorderedForPlay(state, plan.resume.entryId);
@@ -132,12 +99,5 @@ export async function applyUndo(plan: UndoPlan, command: (action: Action) => Pro
         if (plan.resume.paused && player.status !== "paused") await command({ type: "pause", playbackId: player.playbackId, paused: true });
       } else throw new Error("Couldn't fully undo.");
     }
-  }
-  if (plan.moved) {
-    const nextQueue = reorderedForMove(ids(state), plan.moved.entryId, plan.moved.beforeEntryId);
-    const prior = ids(state);
-    assertCurrent(current, state);
-    await command({ type: "move", entryId: plan.moved.entryId, beforeEntryId: plan.moved.beforeEntryId });
-    state = await observe(current, prior, state.currentEntryId, nextQueue, state.currentEntryId);
   }
 }

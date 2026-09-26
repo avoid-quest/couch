@@ -3,7 +3,6 @@ import type { ClientSessionState } from "@/session/session";
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
-import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -78,7 +77,6 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     try {
       const name = listName.trim();
       await keep.mutateAsync(name);
-      toast(`Saved as ${name}.`);
       setSaveOpen(false);
     } catch { /* The dialog keeps the name and shows the mutation error for retry. */ }
   };

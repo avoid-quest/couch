@@ -75,11 +75,11 @@ test("Find merges local, Jellyfin, provider and radio results with direct action
   for (const label of ["Resume Evening movie", "Play Evening song", "Play Evening video", "Play Evening radio"]) expect(button(label)).toBeInTheDocument();
   for (const path of ["/api/providers/youtube/items?q=Evening", "/api/radio/playlists/own/stations?q=Evening", "/api/library/items?q=Evening&offset=0&limit=30"]) expect(paths).toContain(path);
   await click("Queue Evening movie"); expect(queued.at(-1)).toEqual(["Library", "local", undefined]);
-  await screen.findByText("Queued Evening movie.");
+  expect(toast.getToasts()).toHaveLength(0);
   await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", url: video.url, playNow: true });
 });
 
-test("playback and save toggles stay quiet while queue actions give one confirmation", async () => {
+test("playback, queueing and save toggles stay quiet", async () => {
   integrated = true; await render(); await search("Evening");
   await screen.findByRole("button", { name: "Play Evening video" });
   await click("Resume Evening movie");
@@ -92,7 +92,7 @@ test("playback and save toggles stay quiet while queue actions give one confirma
   expect(toast.getToasts()).toHaveLength(0);
   await click("Queue Evening radio");
   await click("Play next Evening video");
-  expect(toast.getToasts().map(item => "title" in item ? item.title : "")).toEqual(["Queued Evening radio.", "Evening video plays next."]);
+  expect(toast.getToasts()).toHaveLength(0);
 });
 
 test("opening and leaving a collection restores focus to its result", async () => {

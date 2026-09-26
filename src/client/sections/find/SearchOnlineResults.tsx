@@ -7,7 +7,6 @@ import { providerShape } from "../../../shared/providers";
 import { providerBrowseQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
 import { forLaterQuery } from "@/api/for-later";
 import { apiFetch } from "@/api/client";
-import { playNotice } from "@/copy";
 
 export type SearchKind = "Video" | "Music" | "Live" | "Radio" | "Channels";
 export type SearchLength = "Under 10 min" | "10–60 min" | "Over 1 hr";
@@ -102,11 +101,11 @@ function OnlineResults(props: Props) {
   }
   function open(item: ProviderItem, opener = item.id) { views.current.set(key, visible); setTrail(current => [...current, { request: { url: item.url }, title: item.title, opener, item: { ...item, thumbnail: item.thumbnail ?? page?.thumbnail, description: item.description ?? page?.description } }]); }
   function back() { if (trail.length > 1) setTrail(current => current.slice(0, -1)); else props.onClose?.(); }
-  async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done?: string) {
+  async function action(work: (signal: AbortSignal) => Promise<boolean | void>) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setBusy(true);
-    try { const ok = await work(signal); if (!signal.aborted && ok !== false && done) toast(done); }
+    try { await work(signal); }
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setBusy(false); }
   }
@@ -115,7 +114,7 @@ function OnlineResults(props: Props) {
       const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}) });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
-    }, playNow ? undefined : playNotice(item.title, placement ?? "queue"));
+    });
   }
   function save(item: ProviderItem, saved: boolean) {
     void action(async signal => {
@@ -151,7 +150,7 @@ function OnlineResults(props: Props) {
     const selected = location.item;
     const parent = [...trail].reverse().find(entry => entry.item?.thumbnail || entry.item?.description)?.item;
     const selectedSaved = !!selected && !!favorites?.some(entry => entry.id === selected.id);
-    const list = (playNow: boolean) => location.request.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: location.request.url!, shape: "playlist", playNow, quality: props.quality }) ?? Promise.resolve(false), playNow ? undefined : playNotice(page.title || location.title, "queue")) : undefined;
+    const list = (playNow: boolean) => location.request.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: location.request.url!, shape: "playlist", playNow, quality: props.quality }) ?? Promise.resolve(false)) : undefined;
     props.onResults?.(providerNames[provider], { count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: visible < (page?.items.length ?? 0) || browse.hasNextPage ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
       ...(inCollection ? { collection: { title: page?.title || location.title, thumbnail: page?.thumbnail ?? selected?.thumbnail ?? parent?.thumbnail, description: page?.description ?? selected?.description ?? parent?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], openerId: `${provider}:${location.opener}`, back, root: trail.length === (opened ? 1 : 2), disabled: busy,
         playAll: list(true), queueAll: list(false),

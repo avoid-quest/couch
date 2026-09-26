@@ -53,7 +53,7 @@ test("Lists opens a list, queues it and offers Undo after deletion", async () =>
   expect(writes).toEqual([]);
   await click(button("Queue"));
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
-  expect(toast.getToasts().at(-1)).toMatchObject({ title: "Queued Friday night." });
+  expect(toast.getToasts()).toHaveLength(0);
   await click(button("Delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
   expect(await screen.findByRole("heading", { name: "Lists" })).toBeInTheDocument();

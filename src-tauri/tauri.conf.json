@@ -24,7 +24,7 @@
         "decorations": true,
         "theme": "Dark",
         "titleBarStyle": "Transparent",
-        "hiddenTitle": true,
+        "hiddenTitle": false,
         "scrollBarStyle": "fluentOverlay",
         "transparent": true,
         "backgroundColor": "#000000",

@@ -1,7 +1,6 @@
 import { Spinner } from "@/components/ui/spinner";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -22,7 +21,7 @@ export function MetadataSettings({ credentials, connected, canManage, hostName }
   const page = useQuery({ ...metadataProviderQuery(credentials ?? empty), enabled: available });
   const saving = useMutation({
     mutationFn: (clear: boolean) => apiSend<{ configured: boolean; provider: string }>(credentials!, "/api/metadata/provider", { token: clear ? "" : token }),
-    onSuccess: (value, clear) => { queryClient.setQueryData(metadataProviderQuery(credentials!).queryKey, value); setToken(""); toast(clear ? "Token cleared." : "Token saved. Use Edit details on any video to match it."); },
+    onSuccess: value => { queryClient.setQueryData(metadataProviderQuery(credentials!).queryKey, value); setToken(""); },
   });
   const pending = saving.isPending;
   const error = saving.error ? saving.error.message || "Couldn't save the token." : page.error ? "Couldn't read TMDB setup." : null;
@@ -33,7 +32,7 @@ export function MetadataSettings({ credentials, connected, canManage, hostName }
   }
 
   return (
-    <SettingsSection aria-label="Movie & show info settings" description={`Add a TMDB token to match videos. It stays on ${deviceName(hostName)}.`} data-tv-local-only>
+    <SettingsSection aria-label="Movie & show info settings" description={`Add a TMDB token, then use Edit details on a video to match it. It stays on ${deviceName(hostName)}.`} data-tv-local-only>
       {canManage ? <SettingsRow label="TMDB token" htmlFor="metadata-token" description={<span role="status" className="flex items-center gap-2">{page.isFetching && <Spinner />}{page.isFetching ? "Checking…" : page.data?.configured ? "Token saved" : "No token"}</span>}>
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
           <Input autoComplete="new-password" className="min-w-0 flex-1" disabled={!available || pending} id="metadata-token" maxLength={2048} onChange={event => setToken(event.target.value)} placeholder="TMDB read access token" spellCheck={false} type="password" value={token} />

@@ -194,3 +194,16 @@ test("disconnect, reconnect, replacement and unpairing never expose a retired cl
   expect(clock).toEqual({ playbackId: null, position: 0, duration: null });
   expect(gate.state).toBeNull();
 });
+
+test("playing a different item stays quiet while changing the shared session", async () => {
+  await mount();
+  const peer = sockets.at(-1)!;
+  await act(async () => {
+    const done = gate.run({ type: "play", entryId: "two" });
+    peer.emit({ type: "state", state: { ...snapshot, currentEntryId: "two", player: { ...snapshot.player, playbackId: "next-playback", position: 0, duration: 120 } } });
+    peer.confirm();
+    expect(await done).toBe(true);
+  });
+  expect(gate.state?.currentEntryId).toBe("two");
+  expect(toast.getToasts()).toHaveLength(0);
+});

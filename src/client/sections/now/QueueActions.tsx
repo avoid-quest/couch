@@ -3,7 +3,6 @@ import { useMutation } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { apiSend } from "@/api/client";
-import { savedNotice } from "@/copy";
 import type { Credentials } from "../../session/session";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,6 @@ export function QueueActions({ entry, index, queue, connected, run, credentials,
   const trigger = useRef<HTMLButtonElement>(null);
   const save = useMutation({
     mutationFn: () => apiSend(credentials, "/api/for-later", { reference: { kind: "queue", id: entry.id } }, "POST", 20_000),
-    onSuccess: () => toast(savedNotice(entry.title, true)),
     onError: error => toast.error(error.message || `Couldn't save ${entry.title}.`),
   });
   return <DropdownMenu modal={false} onOpenChange={open => { if (open) trigger.current?.focus(); }}>

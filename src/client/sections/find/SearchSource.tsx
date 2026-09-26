@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SaveForLater } from "@/components/SaveForLater";
 import { MetadataEditor } from "@/components/MetadataEditor";
-import { playNotice } from "@/copy";
 import { formatDuration } from "@/time-format";
 import type { Props } from "./SearchPanel";
 import { searchError, type SearchResultSummary, type SearchFacet, type SearchHit } from "./SearchOnlineResults";
@@ -78,7 +77,7 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
   async function enqueue(item: Result, options?: Options) {
     const signal = lifetime.current?.signal;
     setPending(true);
-    try { if (await props.onEnqueue(source, item.id, options) && !signal?.aborted && !options?.playNow) toast(playNotice(item.title, options?.placement ?? "queue")); }
+    try { await props.onEnqueue(source, item.id, options); }
     catch (reason) { if (!signal?.aborted) toast.error(searchError(reason)); }
     finally { if (!signal?.aborted) setPending(false); }
   }
