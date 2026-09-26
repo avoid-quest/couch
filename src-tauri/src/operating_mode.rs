@@ -730,11 +730,11 @@ mod tests {
         assert!(response("200 OK", r#"{"desktopClientProtocol":2}"#)
             .await
             .unwrap_err()
-            .contains("incompatible desktop client protocol"));
+            .contains("Couch versions don't match"));
         assert!(response("200 OK", r#"{}"#)
             .await
             .unwrap_err()
-            .contains("incompatible desktop client protocol"));
+            .contains("Couch versions don't match"));
         assert!(response(
             "200 OK",
             r#"{"desktopClientProtocol":1,"remoteControlEnabled":false}"#
