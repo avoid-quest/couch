@@ -17,7 +17,6 @@ type Connection = JellyfinConnection | JellyfinStatus;
 type Action = "connect" | "test" | "disconnect";
 const isConnection = (value: Connection | null): value is JellyfinConnection => !!value && "url" in value;
 const empty: SourceCredentials = { origin: "", token: "" };
-const notices: Record<Action, string> = { connect: "Connected.", test: "Connection works.", disconnect: "Disconnected." };
 
 export function JellyfinSettings({ credentials, connected, canManage, hostName }: SourceSettingsProps) {
   const queryClient = useQueryClient();
@@ -32,8 +31,7 @@ export function JellyfinSettings({ credentials, connected, canManage, hostName }
   const mutation = useMutation({
     mutationFn: (action: Action) => apiSend(credentials!, `/api/jellyfin${action === "test" ? "/test" : ""}`, action === "connect" ? { url: url.trim(), username: username.trim(), password } : undefined, action === "disconnect" ? "DELETE" : "POST"),
     onSuccess: async (_, action) => {
-      toast(notices[action]);
-      if (action === "test") return;
+      if (action === "test") { toast("Connection works."); return; }
       await queryClient.invalidateQueries({ queryKey: ["jellyfin"] });
       setEditing(false);
     },

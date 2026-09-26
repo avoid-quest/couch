@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { avoidRadioPlaylistId, type RadioPlaylist } from "../../../../shared/radio";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -30,8 +29,7 @@ export function RadioSettings({ credentials, connected, canManage }: SourceSetti
       if (result?.playlist?.error) throw new Error(result.playlist.error);
       return result?.playlist;
     },
-    onSuccess: async (playlist, { method, body }) => {
-      toast(method === "DELETE" ? "Removed." : `${playlist?.name}: ${playlist?.stationCount} stations.`);
+    onSuccess: async (_, { body }) => {
       if (body) { setName(""); setUrl(""); }
       await queryClient.invalidateQueries({ queryKey: ["radio"] });
     },

@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,7 @@ export function TvNameSettings({ credentials, connected, canWrite, name: savedNa
   const name = draft ?? savedName ?? "";
   const saving = useMutation({
     mutationFn: (value: string) => apiSend(credentials, "/api/settings", { name: value }),
-    onSuccess: () => { setDraft(null); toast("Saved."); },
+    onSuccess: () => setDraft(null),
   });
 
   function save(event: FormEvent) {

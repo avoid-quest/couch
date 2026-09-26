@@ -154,7 +154,7 @@ export function HomePage() {
     </HomeRow>,
 
     recent: !!recent.length && <HomeRow title="Played recently" time={plural(recent.length, "title")}>
-      <RecentRail items={recent} credentials={credentials} disabled={!available} onPlay={item => void shell.playHistory(item, { fromStart: true }).then(ok => { if (ok) toast(playNotice(item.title, "play")); }, reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
+      <RecentRail items={recent} credentials={credentials} disabled={!available} onPlay={item => void shell.playHistory(item, { fromStart: true }).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
     </HomeRow>,
   };
 
@@ -304,8 +304,10 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
         return;
       }
       const ok = action === "queue" ? await onAdd(item) : await onPlay(item, { fromStart: action === "start" });
-      if (ok) toast(playNotice(item.title, action === "queue" ? "queue" : action === "start" ? "play" : "resume"));
-      else if (action === "queue") toast.error(`Couldn't queue ${item.title}.`);
+      if (action === "queue") {
+        if (ok) toast(playNotice(item.title, "queue"));
+        else toast.error(`Couldn't queue ${item.title}.`);
+      }
     } catch (reason) { toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
     finally { setPending(false); }
   }

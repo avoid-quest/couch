@@ -252,7 +252,7 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
-    try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) { onDone(); toast(playNotice(hostname, playNow ? "play" : "queue")); } }
+    try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) { onDone(); if (!playNow) toast(playNotice(hostname, "queue")); } }
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setPending(false); }
   }

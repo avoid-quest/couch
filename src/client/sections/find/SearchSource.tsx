@@ -78,7 +78,7 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
   async function enqueue(item: Result, options?: Options) {
     const signal = lifetime.current?.signal;
     setPending(true);
-    try { if (await props.onEnqueue(source, item.id, options) && !signal?.aborted) toast(playNotice(item.title, options?.playNow ? item.position && !options.fromStart ? "resume" : "play" : options?.placement ?? "queue")); }
+    try { if (await props.onEnqueue(source, item.id, options) && !signal?.aborted && !options?.playNow) toast(playNotice(item.title, options?.placement ?? "queue")); }
     catch (reason) { if (!signal?.aborted) toast.error(searchError(reason)); }
     finally { if (!signal?.aborted) setPending(false); }
   }

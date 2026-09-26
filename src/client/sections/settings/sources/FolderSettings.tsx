@@ -17,7 +17,7 @@ import type { SourceSettingsProps, SourceCredentials } from "@/components/source
 type FolderView = LibrarySource & Partial<Pick<ManagedFolder, "verified" | "scannedItems">>;
 type FolderAction = "add" | "scan" | "test" | "verify" | "remove";
 export const folderStatus: Record<LibrarySource["status"], string> = { idle: "Not scanned", scanning: "Scanning", ready: "Up to date", unavailable: "Unavailable", error: "Scan failed" };
-const notices: Record<FolderAction, string> = { add: "Added. Scan it to see its media.", scan: "Scanning…", test: "Folder is readable.", verify: "Verified.", remove: "Removed. Your files weren't touched." };
+const notices: Partial<Record<FolderAction, string>> = { add: "Added. Scan it to see its media.", test: "Folder is readable.", remove: "Removed. Your files weren't touched." };
 const empty: SourceCredentials = { origin: "", token: "" };
 
 export function FolderSettings({ credentials, connected, canManage, hostName }: SourceSettingsProps) {
@@ -38,7 +38,7 @@ export function FolderSettings({ credentials, connected, canManage, hostName }: 
     onSuccess: async (_, { action }) => {
       await queryClient.invalidateQueries({ queryKey: ["library"] });
       setBrowserOpen(false);
-      toast(notices[action]);
+      if (notices[action]) toast(notices[action]);
     },
   });
   const canWrite = available && canManage && !mutation.isPending;
