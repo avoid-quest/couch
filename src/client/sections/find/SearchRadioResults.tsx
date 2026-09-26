@@ -7,7 +7,7 @@ import { createId } from "../../session/session";
 import { playNotice, savedNotice } from "@/copy";
 import { readSearch, searchError, type SearchPlaybackProps, type SearchHit } from "./SearchOnlineResults";
 
-type Props = SearchPlaybackProps & { query: string; source: "avoid radio" | "Radio playlists" | "Radio directory" };
+type Props = SearchPlaybackProps & { query: string; retry?: number; source: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
   return <RadioResults key={JSON.stringify([props.origin, props.token, props.source, props.query])} {...props} />;
 }
@@ -18,7 +18,7 @@ function RadioResults(props: Props) {
   const title = props.source;
   const directory = title === "Radio directory", avoid = title === "avoid radio";
   const options = radioSearchQuery(props, title, props.query);
-  const search = useQuery({ ...options, enabled: props.connected });
+  const search = useQuery({ ...options, enabled: props.connected, refetchOnMount: props.retry ? "always" : true });
   const kept = useQuery({ ...radioFavoritesListQuery(props), enabled: props.connected, retry: false });
   const stations = useMemo(() => search.data?.stations ?? [], [search.data?.stations]);
   const favorites = useMemo(() => kept.error ? null : kept.data?.favorites ?? null, [kept.error, kept.data?.favorites]);

@@ -182,8 +182,8 @@ export function SearchPanel(props: Props) {
     </div>)}
     {search.query && providers.map(provider => <SearchOnlineResults key={`${provider}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} onCollectionChange={open => setOpenedProvider(open ? provider : null)} active={props.active && showSource(providerNames[provider])} provider={provider} query={search.query} quality={quality} onEnqueued={resetQuality} />)}
     {search.query && !url && <>
-      {radioSources.map(source => <SearchRadioResults key={`${source}:${search.query}:${search.attempt}`} {...props} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} />)}
-      {(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.query}:${search.attempt}`} {...props} onResults={reportResults} active={props.active && showSource(source === "Library" ? "Folders" : source)} source={source} query={search.query} />)}
+      {radioSources.map(source => <SearchRadioResults key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} />)}
+      {(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && showSource(source === "Library" ? "Folders" : source)} source={source} query={search.query} />)}
     </>}
     {url && <PastedLink key={`${url}:${search.attempt}`} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
   </section>;

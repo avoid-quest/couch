@@ -228,3 +228,30 @@ test("debounced drafts survive frequent parent renders, use the latest callback 
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))); await flush();
   expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(reads + 1);
 });
+
+
+test("successive searches reuse supporting reads and revisiting a fresh query reuses its results", async () => {
+  integrated = true;
+  await render(); await search("Evening");
+  await until(() => !!button("Resume Evening movie") && !!button("Play Evening song"));
+  await search("new");
+  await until(() => !!button("Resume New movie"));
+  for (const path of ["/api/providers/favorites", "/api/radio/favorites", "/api/for-later", "/api/library/sources", "/api/jellyfin", "/api/radio/avoid"]) expect(paths.filter(value => value === path)).toHaveLength(1);
+  const reads = paths.length;
+  await search("Evening");
+  await until(() => !!button("Resume Evening movie"));
+  expect(paths).toHaveLength(reads);
+  await click("More from Jellyfin");
+  expect(paths.filter(path => path === "/api/jellyfin")).toHaveLength(1);
+  expect(paths).toContain("/api/jellyfin/items?q=Evening&startIndex=50");
+});
+
+test("explicit resubmission refreshes cached local and radio results", async () => {
+  await render(); await search("Evening");
+  await until(() => !!button("Resume Evening movie"));
+  const reads = paths.filter(path => path.startsWith("/api/library/items")).length;
+  const radioReads = paths.filter(path => path === "/api/radio/avoid").length;
+  await search("Evening");
+  await until(() => paths.filter(path => path.startsWith("/api/library/items")).length > reads);
+  expect(paths.filter(path => path === "/api/radio/avoid")).toHaveLength(radioReads + 1);
+});

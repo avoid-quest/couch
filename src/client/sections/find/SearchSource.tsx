@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AuthArtwork } from "@/components/AuthArtwork";
-import type { JellyfinItems, JellyfinStatus } from "../../../shared/jellyfin";
-import type { LibrarySearch, LibrarySource } from "../../../shared/library";
+import type { JellyfinItems } from "../../../shared/jellyfin";
+import type { LibrarySearch } from "../../../shared/library";
 import { apiFetch } from "@/api/client";
+import { librarySourcesQuery } from "@/api/library";
+import { jellyfinQuery } from "@/api/jellyfin";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SaveForLater } from "@/components/SaveForLater";
@@ -19,34 +21,37 @@ type Options = { playNow?: boolean; fromStart?: boolean; placement?: "next" };
 type Result = { artworkId?: string | null; video?: boolean; id: string; title: string; detail: string; plot?: string | null; available: boolean; position: number; duration: number | null; watched: boolean };
 type Page = { items: Result[]; total: number; warning?: string };
 
-export function SearchSource({ source, query, ...props }: Props & { source: Source; query: string; onResults: (source: string, summary: SearchResultSummary) => void }) {
+export function SearchSource({ source, query, ...props }: Props & { source: Source; query: string; retry?: number; onResults: (source: string, summary: SearchResultSummary) => void }) {
   const label = source === "Library" ? "Folders" : source;
   const pageSize = source === "Library" ? 30 : 50;
+  const folders = useQuery({ ...librarySourcesQuery(props), enabled: props.connected && source === "Library" });
+  const jellyfin = useQuery({ ...jellyfinQuery(props), enabled: props.connected && source === "Jellyfin", retry: false });
   const result = useInfiniteQuery({
     queryKey: [source === "Library" ? "library" : "jellyfin", "search", query],
-    enabled: props.connected, retry: false,
+    enabled: props.connected && (source === "Library" || jellyfin.data?.connected === true), retry: false,
+    staleTime: 30_000,
+    refetchOnMount: props.retry ? "always" : true,
     initialPageParam: 0,
     getNextPageParam: (last: Page, _pages: Page[], offset: number) => offset + pageSize < last.total ? offset + pageSize : undefined,
     queryFn: async ({ pageParam: offset, signal }): Promise<Page> => {
       const read = <T,>(path: string) => apiFetch(props, path, { signal }, 20_000).then(response => response.json() as Promise<T>);
       if (source === "Jellyfin") {
-        // Jellyfin that isn't set up is not a search problem; it has no results.
-        if (!(await read<JellyfinStatus>("/api/jellyfin")).connected) return { items: [], total: 0 };
         const result = await read<JellyfinItems>(`/api/jellyfin/items?${new URLSearchParams({ q: query, startIndex: String(offset) })}`);
         return { total: result.total, items: result.items.map(item => ({ id: item.id, title: item.title, video: item.kind !== "Audio", detail: [item.kind, item.detail].filter(Boolean).join(" · "), available: true, position: item.resumePosition, duration: item.duration, watched: item.played })) };
       }
-      const [result, folders] = await Promise.all([
-        read<LibrarySearch>(`/api/library/items?${new URLSearchParams({ q: query, offset: String(offset), limit: String(pageSize) })}`), offset ? null : read<{ sources: LibrarySource[] }>("/api/library/sources"),
-      ]);
-      const unavailable = folders?.sources.filter(folder => folder.status === "unavailable" || folder.status === "error") ?? [];
-      return { total: result.total, warning: unavailable.length ? `Can't reach ${unavailable.map(folder => folder.name).join(", ")}. Showing earlier results.` : folders?.sources.some(folder => folder.status === "scanning") ? "Still scanning. More results soon." : undefined,
+      const result = await read<LibrarySearch>(`/api/library/items?${new URLSearchParams({ q: query, offset: String(offset), limit: String(pageSize) })}`);
+      return { total: result.total,
         items: result.items.map(item => ({ id: item.id, title: item.title, artworkId: item.artworkId, video: item.kind === "video", detail: [item.video?.show?.title, item.artist, item.album, item.video?.year, item.kind].filter(Boolean).join(" · "), plot: item.video?.plot, available: item.available, position: item.progress?.position ?? 0, duration: item.duration, watched: item.progress?.watched ?? false })) };
     },
   });
   const pages = result.data?.pages;
   const items = pages?.flatMap(page => page.items) ?? [];
-  const loading = props.connected && result.isFetching;
-  const error = result.error ? searchError(result.error) : null;
+  const metadata = source === "Library" ? folders : jellyfin;
+  const loading = props.connected && (result.isFetching || metadata.isFetching);
+  const failure = result.error ?? metadata.error;
+  const error = failure ? searchError(failure) : null;
+  const unavailable = folders.data?.sources.filter(folder => folder.status === "unavailable" || folder.status === "error") ?? [];
+  const warning = source !== "Library" ? undefined : unavailable.length ? `Can't reach ${unavailable.map(folder => folder.name).join(", ")}. Showing earlier results.` : folders.data?.sources.some(folder => folder.status === "scanning") ? "Still scanning. More results soon." : undefined;
   const [detailId, setDetailId] = useState<string | null>(null);
   const detail = items.find(item => item.id === detailId) ?? null;
   const [pending, setPending] = useState(false);
@@ -90,9 +95,9 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
         { label: "Save", node: save(item) },
       ],
     }));
-    props.onResults(label, { count: pages?.[0]?.total ?? 0, loading, error: !!error, errorMessage: error ?? undefined, retry: () => void result.refetch(), warning: pages?.[0]?.warning,
+    props.onResults(label, { count: pages?.[0]?.total ?? 0, loading, error: !!error, errorMessage: error ?? undefined, retry: () => { void metadata.refetch(); if (source === "Library" || jellyfin.data?.connected) void result.refetch(); }, warning,
       more: result.hasNextPage ? () => void result.fetchNextPage() : undefined, moreDisabled: loading, facets: items.map(facet), hits });
-  }, [source, pages, loading, error, pending, result.hasNextPage, props.onResults, props.canPlay, props.connected, props.origin, props.token]);
+  }, [source, pages, loading, error, warning, pending, result.hasNextPage, props.onResults, props.canPlay, props.connected, props.origin, props.token]);
   return <Dialog open={props.active && detail !== null} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}>
     {detail && <>
       <AuthArtwork origin={props.origin} token={props.token} id={detail.artworkId} video={detail.video} className="aspect-video h-auto w-full rounded-none" />
