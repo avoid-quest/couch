@@ -54,7 +54,7 @@ export function MetadataSettings({ credentials, connected, canManage, hostName }
       </SettingsRow> : <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{page.error && !saving.error && <AlertAction><Button variant="outline" size="sm" disabled={!available} onClick={() => void page.refetch()}>Try again</Button></AlertAction>}</Alert>}
       <div aria-label="TMDB credits" className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <a href="https://www.themoviedb.org" rel="noreferrer" target="_blank"><img alt="TMDB" className="w-20" src={tmdbLogo} /></a>
+        <a className="hover:opacity-80" href="https://www.themoviedb.org" rel="noreferrer" target="_blank"><img alt="TMDB" className="w-20" src={tmdbLogo} /></a>
         <p className="min-w-0 flex-1">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
       </div>
     </SettingsSection>

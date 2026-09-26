@@ -84,7 +84,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         <div className="flex min-w-0 flex-col gap-1">
           {setupCode.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
             : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || setupCode.isFetching} onClick={() => void setupCode.refetch()}>Try again</Button></AlertAction></Alert>
-            : <><p className="font-mono text-3xl tracking-wider" data-administrator-code>{setupCode.data.code}</p><a className="break-all text-sm text-muted-foreground underline underline-offset-4" href={pairUrl}>{pairUrl}</a></>}
+            : <><p className="font-mono text-3xl tracking-wider" data-administrator-code>{setupCode.data.code}</p><a className="break-all text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" href={pairUrl}>{pairUrl}</a></>}
         </div>
       </SettingsSection>
     )}

@@ -63,7 +63,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const context = programme ? current.title : current.subtitle;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : current.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} className="rounded-none" /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
   return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] sm:gap-x-4 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
-    <Button variant="ghost" className="h-auto min-w-0 justify-start gap-3 p-0 text-left font-normal hover:bg-transparent touch:h-auto dark:hover:bg-transparent" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
+    <Button variant="ghost" className="h-auto min-w-0 justify-start gap-3 p-0 text-left font-normal touch:h-auto" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
       <span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full">{artwork}</span>
       <span className="grid min-w-0 gap-0.5">
         <span className="truncate text-sm font-medium" title={title}>{title}</span>
