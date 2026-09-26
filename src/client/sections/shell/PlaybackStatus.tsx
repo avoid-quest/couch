@@ -1,3 +1,4 @@
+import type { ClientSessionState } from "@/session/session";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Minus, Plus } from "lucide-react";
@@ -13,7 +14,7 @@ import type { SoundState } from "../../../shared/sound";
 import { ApiError, apiSend } from "@/api/client";
 import { soundQuery, soundView, type SoundView } from "@/api/settings";
 import type { Credentials } from "@/session/session";
-import type { Action, SessionState } from "../../../shared/protocol";
+import type { Action } from "../../../shared/protocol";
 import { knownConnection } from "@/session/connection";
 import { ADMIN_ONLY, deviceName } from "@/copy";
 import { StatusDot } from "./StatusLine";
@@ -32,7 +33,7 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
   credentials: Credentials | null;
   connected: boolean;
   open: boolean;
-  state?: SessionState | null;
+  state?: ClientSessionState | null;
   run?: (action: Action) => Promise<boolean>;
   onClose?: () => void;
 }) {
@@ -72,7 +73,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   status: string;
   installationName?: string;
   localHost?: boolean;
-  state?: SessionState | null;
+  state?: ClientSessionState | null;
   run?: (action: Action) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);

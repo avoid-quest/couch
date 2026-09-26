@@ -17,6 +17,7 @@ const timers: Array<{ handle: ReturnType<typeof setTimeout>; delay: number; fire
 let root: Root | undefined, window: Window | undefined, session: ReturnType<typeof useSession>;
 let fetchSpy: ReturnType<typeof spyOn>, timerSpy: ReturnType<typeof spyOn> | undefined;
 let capability = true;
+const renderedObservations: Array<SessionState | null> = [];
 let mount: (next: Credentials) => Promise<void>;
 
 class Socket {
@@ -53,6 +54,7 @@ beforeEach(async () => {
   const { useSession } = await import("./session");
   function Probe({ connection }: { connection: Credentials }) {
     session = useSession(connection);
+    renderedObservations.push(session.readObservation());
     return <output role="status">{session.status}</output>;
   }
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
@@ -164,7 +166,7 @@ test("clock negotiation retains full old-host fallback", async () => {
   expect(session.connected).toBe(false);
   await act(async () => peer.emit({ type: "state", state: playing }));
   await act(async () => peer.emit({ type: "state", state: { ...playing, player: { ...playing.player, position: 12 } } }));
-  expect(session.state?.player.position).toBe(12);
+  expect(session.clock.position).toBe(12);
   expect(session.connected).toBe(true);
 });
 
@@ -172,10 +174,10 @@ test("only a current baseline and matching playback identity accept clocks, incl
   await act(async () => sockets[0]!.emit({ type: "state", state: playing }));
   const queue = session.state!.queue;
   await act(async () => sockets[0]!.emit({ type: "clock", playbackId: "active", position: 12, duration: 110 }));
-  expect(session.state?.player).toMatchObject({ position: 12, duration: 110 });
+  expect(session.clock).toMatchObject({ position: 12, duration: 110 });
   expect(session.state?.queue).toBe(queue);
   await act(async () => sockets[0]!.emit({ type: "clock", playbackId: "retired", position: 99, duration: 110 }));
-  expect(session.state?.player.position).toBe(12);
+  expect(session.clock.position).toBe(12);
   const retired = sockets[0]!.onmessage!;
   await act(async () => session.reconnect());
   const peer = sockets.at(-1)!;
@@ -185,11 +187,11 @@ test("only a current baseline and matching playback identity accept clocks, incl
   await expect(session.command({ type: "stop" })).rejects.toThrow("Reconnecting");
   await act(async () => peer.emit({ type: "state", state: playing }));
   await act(async () => retired({ data: JSON.stringify({ type: "clock", playbackId: "active", position: 99, duration: 110 }) } as MessageEvent<string>));
-  expect(session.state?.player.position).toBe(0);
+  expect(session.clock.position).toBe(0);
   await act(async () => peer.emit({ type: "state", state }));
   await act(async () => peer.emit({ type: "clock", playbackId: "active", position: 44, duration: 110 }));
   expect(session.state?.player.playbackId).toBeNull();
-  expect(session.state?.player.position).toBe(0);
+  expect(session.clock.position).toBe(0);
   await act(async () => peer.close(4001));
   await act(async () => peer.emit({ type: "clock", playbackId: null, position: 33, duration: null }));
   expect(session.state).toBeNull();
@@ -207,4 +209,17 @@ test.each([
   await act(async () => peer.onmessage!({ data } as MessageEvent<string>));
   expect(close).toHaveBeenCalledWith(4002, "Invalid response");
   expect(session.connected).toBe(false);
+});
+
+
+test("replacement credentials mask the private observation during render, before effect cleanup", async () => {
+  await act(async () => sockets[0]!.emit({ type: "state", state: playing }));
+  const previousReader = session.readObservation;
+  expect(previousReader()?.player.playbackId).toBe("active");
+  renderedObservations.length = 0;
+  await mount({ ...credentials, token: "replacement" });
+  expect(renderedObservations.length).toBeGreaterThan(0);
+  expect(renderedObservations.every(value => value === null)).toBe(true);
+  expect(previousReader()).toBeNull();
+  expect(session.clock).toEqual({ playbackId: null, position: 0, duration: null });
 });

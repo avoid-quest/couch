@@ -1,9 +1,11 @@
+import { usePlaybackClock } from "@/session/playback-clock";
+import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { Minus, Pause, Play, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import { Progress } from "@/components/ui/progress";
-import type { Action, SessionState } from "../../../shared/protocol";
+import type { Action } from "../../../shared/protocol";
 import { deviceName } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 
@@ -29,18 +31,19 @@ export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true) {
   }, [ref, shown]);
 }
 
-export function MiniPlayer({ state, connected, run, onOpen, localHost }: { state: SessionState; connected: boolean; run: (action: Action) => Promise<boolean>; onOpen: () => void; localHost: boolean }) {
+export function MiniPlayer({ state, connected, run, onOpen, localHost }: { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean>; onOpen: () => void; localHost: boolean }) {
+  const playbackClock = usePlaybackClock();
   const bar = useRef<HTMLElement>(null);
   useBottomBar(bar);
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   if (!current) return null;
   const paused = player.status === "paused";
-  const length = player.duration ?? current.duration ?? 0;
-  const remaining = Math.max(0, length - player.position) / (player.speed || 1);
-  const status = !connected ? `Reconnecting to ${deviceName(state.installationName)}…` : player.status === "error" ? `Can't play ${current.title}` : current.live ? "Live" : length ? `${formatDuration(player.position)} / ${formatDuration(length)} · ends ${formatEndTime(remaining)}` : "Loading…";
+  const length = playbackClock.duration ?? current.duration ?? 0;
+  const remaining = Math.max(0, length - playbackClock.position) / (player.speed || 1);
+  const status = !connected ? `Reconnecting to ${deviceName(state.installationName)}…` : player.status === "error" ? `Can't play ${current.title}` : current.live ? "Live" : length ? `${formatDuration(playbackClock.position)} / ${formatDuration(length)} · ends ${formatEndTime(remaining)}` : "Loading…";
   return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 flex items-center gap-3 border-t bg-background px-(--gutter) py-3 [view-transition-name:couch-player-band]">
-    <Progress value={player.duration ? player.position / player.duration * 100 : 0} aria-label="Playback progress" className="absolute inset-x-0 -top-px h-px rounded-none bg-transparent" />
+    <Progress value={playbackClock.duration ? playbackClock.position / playbackClock.duration * 100 : 0} aria-label="Playback progress" className="absolute inset-x-0 -top-px h-px rounded-none bg-transparent" />
     <Button variant="ghost" size="icon" aria-label={paused ? "Play" : "Pause"} disabled={!connected || !player.playbackId || !["playing", "paused"].includes(player.status)} onClick={() => { if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>{paused ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}</Button>
     <p className="grid min-w-0 flex-1">
       <span className="truncate text-base font-medium" title={current.title}>{current.title}</span>

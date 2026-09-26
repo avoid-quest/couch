@@ -1,7 +1,8 @@
+import type { ClientSessionState } from "@/session/session";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import type { SessionState } from "../../../shared/protocol";
+
 import type { Credentials } from "../../session/session";
 import { ForLaterSection } from "./ForLaterSection";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";
@@ -28,7 +29,7 @@ const subscribeWide = (onChange: () => void) => {
 const isWide = () => window.matchMedia?.(wideQuery).matches ?? true;
 
 export function SavedSection({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
-  state: SessionState | null;
+  state: ClientSessionState | null;
   credentials: Credentials;
   connected: boolean;
   canPlay: boolean;

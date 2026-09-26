@@ -1,7 +1,8 @@
+import type { ClientSessionState } from "@/session/session";
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Action, SessionState } from "../../shared/protocol";
+import type { Action } from "../../shared/protocol";
 import type { Credentials } from "../session/session";
 import { PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
 import { deviceName, offline } from "@/copy";
@@ -13,7 +14,7 @@ export function RemotePad({ connected, onNavigate, run, state, credentials }: {
   connected: boolean;
   onNavigate: (key: RemoteKey) => Promise<boolean>;
   run: (action: Action) => Promise<boolean>;
-  state: SessionState | null;
+  state: ClientSessionState | null;
   credentials: Credentials;
 }) {
   const descriptionId = useId();

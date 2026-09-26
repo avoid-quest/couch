@@ -1,3 +1,4 @@
+import type { ClientSessionState } from "@/session/session";
 import { Fragment, createContext, useContext, useEffect, useEffectEvent, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { TRY_AGAIN } from "@/copy";
 import { SoundControls } from "./PlaybackStatus";
 import { Onboarding } from "./Onboarding";
 import { StatusDot, StatusLine } from "./StatusLine";
-import type { Action, SessionState } from "../../../shared/protocol";
+import type { Action } from "../../../shared/protocol";
 
 export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
@@ -183,7 +184,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   credentials?: Credentials | null;
   connected?: boolean;
   installationName?: string;
-  state?: SessionState | null;
+  state?: ClientSessionState | null;
   run?: (action: Action) => Promise<boolean>;
   /** Offer this app's own updater (a remote-mode desktop app). */
   updates?: boolean;

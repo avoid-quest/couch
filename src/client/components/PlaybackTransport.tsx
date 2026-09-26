@@ -1,6 +1,9 @@
+import { useSessionGate } from "@/session/session-context";
+import { usePlaybackClock } from "@/session/playback-clock";
+import type { ClientSessionState } from "@/session/session";
 import { Pause, Play, RotateCcw, RotateCw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Action, SessionState } from "../../shared/protocol";
+import type { Action } from "../../shared/protocol";
 import type { Credentials } from "@/session/session";
 import { deviceName } from "@/copy";
 import { cn } from "@/lib/utils";
@@ -8,9 +11,9 @@ import { formatDuration, formatEndTime } from "@/time-format";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { RangeControl } from "./RangeControl";
 
-type Props = { state: SessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
+type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
-export function playbackCapabilities(state: SessionState | null, connected: boolean) {
+export function playbackCapabilities(state: ClientSessionState | null, connected: boolean) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   const live = current?.live || current?.kind === "radio" || current?.source.startsWith("radio:");
@@ -28,19 +31,20 @@ export function playbackCapabilities(state: SessionState | null, connected: bool
 }
 
 export function PlaybackTimeline({ state, connected, run, pageFirst = false }: Props & { pageFirst?: boolean }) {
+  const playbackClock = usePlaybackClock();
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current) return null;
-  const length = player.duration || current.duration || 0;
-  const remaining = (length - player.position) / (player.speed || 1);
-  const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (player.duration ?? 0)) ?? [];
-  const chapter = player.chapters?.findLast(item => item.position <= player.position);
+  const length = playbackClock.duration || current.duration || 0;
+  const remaining = (length - playbackClock.position) / (player.speed || 1);
+  const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0)) ?? [];
+  const chapter = player.chapters?.findLast(item => item.position <= playbackClock.position);
   return <div className="grid gap-1">
-    {seekable && player.duration ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={player.position || 0} max={player.duration} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
-      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / player.duration! * 100}%` }} />)}</div> : null}
+    {seekable && playbackClock.duration ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={playbackClock.duration} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
+      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}</div> : null}
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
-      <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(player.position || 0)}</span>{chapter && <span className="ml-3">{chapter.title}</span>}</span>
+      <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span className="ml-3">{chapter.title}</span>}</span>
       {length ? <span className="shrink-0">−{formatDuration(remaining)} ends {formatEndTime(remaining)}</span> : null}
     </div>
   </div>;
@@ -53,9 +57,7 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { available, active, transportReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
   const playing = player.status === "playing";
-  const seekBy = (seconds: number) => {
-    if (player.playbackId && transportReady && seekable) void run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) });
-  };
+  const { seekBy } = useSessionGate();
   return <div className="flex items-center gap-0.5" role="group" aria-label="Playback controls">
     {pausable && <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" aria-label={playing ? "Pause" : "Resume"} title={playing ? "Pause" : "Resume"} disabled={!transportReady}
       onClick={() => { if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>{playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}</Button>}

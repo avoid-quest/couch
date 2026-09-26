@@ -17,6 +17,7 @@ import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { desktopClientProtocol } from "../../shared/desktop-protocol";
 import { applyUndo, undoPlan } from "./undo";
+import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
 
 const tokenKey = "couch.remote-token";
@@ -56,7 +57,7 @@ export function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-type SessionBag = ReturnType<typeof useSession>;
+type SessionBag = Omit<ReturnType<typeof useSession>, "clock" | "readObservation">;
 
 export type SessionGateValue = SessionBag & {
   queryClient: QueryClient;
@@ -71,6 +72,7 @@ export type SessionGateValue = SessionBag & {
   error: string | null;
   setError: (error: string | null) => void;
   run: (action: Action) => Promise<boolean>;
+  seekBy: (seconds: number) => Promise<boolean>;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
   // Pairing origin for a new remote, and the code from a scanned pairing link.
   pairingOrigin: string;
@@ -112,7 +114,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
+  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
@@ -216,11 +218,9 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, []);
 
   const currentCredentials = useRef(credentials);
-  const currentState = useRef(state);
   const commandAttempt = useRef(0);
   const undoToast = useRef<string | number | null>(null);
   currentCredentials.current = credentials;
-  currentState.current = state;
 
   const dismissUndo = useCallback(() => {
     if (undoToast.current !== null) toast.dismiss(undoToast.current);
@@ -244,7 +244,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     const owner = currentCredentials.current;
     const current = () => owner === currentCredentials.current;
     const started = performance.now();
-    const before = currentState.current;
+    const before = readObservation();
     dismissUndo();
     const attempt = ++commandAttempt.current;
     setError(null);
@@ -252,15 +252,17 @@ export function SessionGate({ children }: PropsWithChildren) {
       await command(action);
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && (action.type === "stop" || action.type === "play" && action.entryId !== before.currentEntryId || "playNow" in action && action.playNow);
-        let plan = undoable && currentState.current && undoPlan(action, before, currentState.current);
+        let after = readObservation();
+        let plan = undoable && after && undoPlan(action, before, after);
         for (let tries = 0; undoable && !plan && tries < 20 && current() && attempt === commandAttempt.current; tries++) {
           await new Promise(resolve => setTimeout(resolve, 25));
-          plan = currentState.current && undoPlan(action, before, currentState.current);
+          after = readObservation();
+          plan = after && undoPlan(action, before, after);
         }
         const remaining = 6_000 - (performance.now() - started);
         if (plan && remaining > 0 && current() && attempt === commandAttempt.current) {
           const confirmed = plan;
-          offerUndo(confirmed.text, () => applyUndo(confirmed, command, () => currentState.current), remaining);
+          offerUndo(confirmed.text, () => applyUndo(confirmed, command, readObservation), remaining);
         }
       }
       return current();
@@ -268,7 +270,14 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (current() && attempt === commandAttempt.current) setError(errorText(reason));
       return false;
     }
-  }, [command, dismissUndo, offerUndo]);
+  }, [command, dismissUndo, offerUndo, readObservation]);
+
+  const seekBy = useCallback((seconds: number) => {
+    const player = readObservation()?.player;
+    return player?.playbackId && player.seekable && ["playing", "paused"].includes(player.status)
+      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) })
+      : Promise.resolve(false);
+  }, [readObservation, run]);
 
   const savePairing = useCallback((value: Required<Credentials>) => {
     try {
@@ -291,8 +300,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
-    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, offerUndo, reconnect,
+    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
-  return <SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider>;
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

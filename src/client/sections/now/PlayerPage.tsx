@@ -1,3 +1,4 @@
+import { usePlaybackClock } from "@/session/playback-clock";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ListVideo, Music2, Settings2, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ type Panel = "queue" | "tracks" | "settings";
 const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Settings" };
 
 export function PlayerPage() {
+  const playbackClock = usePlaybackClock();
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
   const { state, connected, run, nativeHost, localHost, videoQualityPreference } = useSessionGate();
@@ -44,7 +46,7 @@ export function PlayerPage() {
   const live = !!(current?.live || current?.kind === "radio" || current?.source.startsWith("radio:"));
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;
-  const remaining = current?.duration != null ? Math.max(0, (player?.duration ?? current.duration) - (player?.position ?? 0)) / (player?.speed || 1) : null;
+  const remaining = current?.duration != null ? Math.max(0, (playbackClock.duration ?? current.duration) - (playbackClock.position ?? 0)) / (player?.speed || 1) : null;
   const wake = () => {
     setShown(true);
     clearTimeout(timer.current);

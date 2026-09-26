@@ -13,6 +13,7 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 const requests: Array<{ url: string; authorization: string | null }> = [];
 let root: Root, window: Window, gate: ReturnType<typeof import("./session-context").useSessionGate>;
 let device: NonNullable<ReturnType<typeof import("../sections/shell/PlaybackDevice").usePlaybackDevice>>;
+let clock: import("./playback-clock").PlaybackClock;
 let installation = "remote-installation";
 let remoteRole: "controller" | "administrator" = "controller";
 let remoteProtocol = 1;
@@ -41,9 +42,11 @@ async function pairWith(code: string) {
 
 async function renderGate() {
   const { NativeModeGate, DeviceRecovery, usePlaybackDevice } = await import("../sections/shell/PlaybackDevice");
+  const { usePlaybackClock } = await import("./playback-clock");
   const { SessionGate, useSessionGate } = await import("./session-context");
   const { createRoot } = await import("react-dom/client");
   function Probe() {
+    clock = usePlaybackClock();
     gate = useSessionGate(); device = usePlaybackDevice()!;
     return <><output>{device.mode}: {gate.status}: {gate.identity?.authority ?? "none"}</output><DeviceRecovery /></>;
   }
@@ -164,4 +167,21 @@ test("Retry reconnects the bundled session after an incompatible host upgrades",
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Try again" })));
   expect(document.querySelector("output")!.textContent).toContain("remote: pairing-required");
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+});
+
+
+test("switching native targets clears the old clock before another host sends its baseline", async () => {
+  const localSocket = Socket.instances.at(-1)!;
+  const state = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: "local-playback", status: "playing" as const, position: 200, duration: 600, volume: 80, seekable: true, error: null } };
+  await act(async () => localSocket.emit({ type: "state", state }));
+  expect(clock.position).toBe(200);
+  const retired = localSocket.onmessage!;
+  await act(async () => { await device.choose("remote", remote); });
+  expect(clock).toEqual({ playbackId: null, position: 0, duration: null });
+  expect(gate.state).toBeNull();
+  await pairWith("123456");
+  await act(async () => retired({ data: JSON.stringify({ type: "state", state }) } as MessageEvent<string>));
+  expect(clock.position).toBe(0);
+  await act(async () => Socket.instances.at(-1)!.emit({ type: "state", state: { ...state, player: { ...state.player, playbackId: "remote-playback", position: 15 } } }));
+  expect(clock).toEqual({ playbackId: "remote-playback", position: 15, duration: 600 });
 });
