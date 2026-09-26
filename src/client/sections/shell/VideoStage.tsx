@@ -48,7 +48,7 @@ export function VideoStage({ active, audioOnly = false }: { active: boolean; aud
   // .video-stage and .has-video are global hooks: index.css clears the page behind native video.
   return (
     <div ref={element} className={cn("video-stage absolute inset-0 grid place-items-center", nativeHost && active && !audioOnly && "has-video")} aria-label="Video playback">
-      {error && <p role="status" className="grid max-w-md gap-1 px-(--gutter) pb-48 text-center"><span className="text-base font-medium">Can't show video</span><span className="text-sm text-muted-foreground">{error}</span></p>}
+      {error && <p role="status" className="grid max-w-md gap-1 px-(--gutter) pb-48 text-center"><span className="text-2xl font-semibold tracking-tight break-words">Can't show video</span><span className="text-sm text-muted-foreground">{error}</span></p>}
     </div>
   );
 }

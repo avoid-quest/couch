@@ -90,7 +90,7 @@ values in components.
 | `radius` | `.25rem` | controls |
 
 **Focus** inverts the focused control to white with black text. It is the only
-focus treatment (see the unlayered rule in `index.css`).
+focus treatment; white controls (slider, Switch, Checkbox and RadioGroupItem) use a 2px foreground outline with a 2px offset on `:focus-visible` (see the unlayered rule in `index.css`).
 
 ## Scale
 
@@ -107,11 +107,11 @@ the TV and a desktop window show the same layout. Use Tailwind's rem sizes only.
 | Body, controls, metadata | `text-sm` (metadata adds `text-muted-foreground`) |
 | Caption | `text-xs text-muted-foreground` |
 
-Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12. The page gutter is
-`px-(--gutter)` (3rem, 1rem on phones).
+Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12, plus `gap-0.5`, `py-1.5` and `-ml-2.5` for compact rows and aligned controls. The page gutter is
+`px-(--gutter)` (3rem, 1rem on phones). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
-windows narrower than 960px) raises every control to a 44px target. Sonner toast
+windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
 actions use its `actionButton` classes because its default height is 24px.
 
 ## Components

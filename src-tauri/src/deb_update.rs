@@ -334,7 +334,7 @@ fn account() -> Result<String, String> {
             .into_owned());
     }
     #[cfg(not(unix))]
-    Err("Unsupported installation".into())
+    Err("Updates are unavailable on this computer.".into())
 }
 
 /// The TV runtime account runs under couch-tv.service with Restart=always, so a
@@ -465,7 +465,7 @@ pub async fn run(
                     repair_runtime,
                 } => {
                     if repair_runtime {
-                        return Err("Debian host maintenance requires the machine administrator. App updates cannot change host packages.".into());
+                        return Err("Debian maintenance requires an admin on this computer. Couch updates can't change system packages.".into());
                     }
                     if repair {
                         return Err("The package broker installs only newer Couch releases. Reinstall this version with signed setup to repair it.".into());
@@ -475,7 +475,7 @@ pub async fn run(
                         return Ok(serde_json::json!({"ok":true,"transaction":previous}));
                     }
                     if when_idle && crate::operating_mode::idle_blocked(&app)? {
-                        return Err("Waiting for this app to be idle before automatic installation.".into());
+                        return Err("Waiting for Couch to be idle before installing the update.".into());
                     }
                     let (_, update, summary) = selected
                         .as_ref()

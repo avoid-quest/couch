@@ -16,10 +16,10 @@ test("the queue separates upcoming and played items and estimates its finish", a
   expect(screen.queryByRole("list", { name: "Played" })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Played" }));
   expect(titles("Played")).toEqual(["Play Played"]);
-  expect(screen.getByRole("heading", { name: /^2 to play · done by/ })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /^2 to play · until/ })).toBeInTheDocument();
 });
 
-test.each([["loading", "Loading…"], ["error", "Playback error"], ["unavailable", "Player unavailable"], ["idle", "Ready to play"], ["paused", "Paused"], ["ended", "Finished"]] as const)("the current queue row reports %s truthfully", (status, label) => {
+test.each([["loading", "Loading…"], ["error", "Can't play Current"], ["unavailable", "Player unavailable"], ["idle", "Ready to play"], ["paused", "Paused"], ["ended", "Finished"]] as const)("the current queue row reports %s truthfully", (status, label) => {
   renderWithQueryClient(panel({ ...state, queue: state.queue.map(entry => ({ ...entry, subtitle: "MasterChef Italia" })), player: { ...state.player, status } }));
   expect(screen.getByRole("region", { name: label })).toHaveTextContent("MasterChef Italia");
   expect(screen.queryByRole("heading", { name: "Playing" })).not.toBeInTheDocument();
@@ -55,7 +55,7 @@ test("a stopped queue honors its cursor and an exhausted queue offers an empty s
   expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
   view.rerender(panel({ ...state, currentEntryId: null, queueCursorEntryId: "Last" }));
   expect(screen.queryByRole("list", { name: "Up next" })).not.toBeInTheDocument();
-  expect(screen.getByText("Nothing queued")).toBeInTheDocument();
+  expect(screen.getByText("Up next is empty.")).toBeInTheDocument();
 });
 
 test("Autoplay previews the next episode separately from the explicit queue and can be turned off", async () => {
@@ -64,7 +64,7 @@ test("Autoplay previews the next episode separately from the explicit queue and 
   const view = renderWithQueryClient(<QueuePanel state={{ ...state, autoplay }} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async action => { actions.push(action); return true; }} />);
   expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
   expect(screen.getByRole("list", { name: "Autoplay next" })).toHaveTextContent("Episode two");
-  expect(screen.getByText("Example series · after your queue")).toBeInTheDocument();
+  expect(screen.getByText("Example series · after Up next")).toBeInTheDocument();
   expect(screen.getByLabelText("Autoplay", { selector: "button" })).toHaveRole("switch");
   await userEvent.click(screen.getByText("Autoplay"));
   expect(actions).toEqual([{ type: "preferences", profileId: "household", preferences: { autoplay: false } }]);

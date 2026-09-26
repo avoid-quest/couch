@@ -35,13 +35,13 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
 
       {channels.map(channel => <section aria-label={channel === "preview" ? "Preview downloads" : "Stable downloads"} data-channel={channel} hidden={Object.keys(releases[channel]).length === 0}>
         <h2>{channel === "preview" ? "Preview" : "Stable"}</h2>
-        <div class="cards">
+        <div class="download-rows">
           {formats.map(format => {
             const item = releases[channel][format];
             return <article data-format={format} hidden={!item}>
               <h3>{labels[format].name}</h3>
               <p class="target">{labels[format].target}</p>
-              <a class={buttonVariants({ size: "lg" })} href={item?.url} data-download>{channel === "preview" ? "Download Preview" : "Download Stable"}</a>
+              <a class={buttonVariants()} href={item?.url} data-download>{channel === "preview" ? "Download Preview" : "Download Stable"}</a>
               <p class="version" data-version>{item ? item.version + " · " + item.filename : ""}</p>
               <p class="muted">{labels[format].note}</p>
             </article>;
@@ -54,7 +54,7 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
         <h2 id="install">Install and update</h2>
         <p>Mac: open the DMG and drag Couch to Applications. Windows: run the NSIS installer for your user. Linux AppImage: save it in a writable location, mark it executable and run it. No developer tools are needed.</p>
         <p>OS trust prompts and local network permission are separate from Couch's signed update verification. Approve access only if you want this computer to serve or control another Couch.</p>
-        <p>Couch checks its own Stable or Preview channel. Manual updates are the default; automatic installation is optional when idle. Preview .12 installations need a manual reinstall of .13 to enroll the new updater key. Reinstall in the same location to keep Couch data and pairing. Do not install an older version as a repair.</p>
+        <p>Couch checks its own Stable or Preview channel. Manual updates are the default; automatic updates are optional when idle. Couch Preview .12 needs a manual reinstall of .13 to enroll the new updater key. Reinstall in the same location to keep Couch data and pairing. Do not install an older version as a repair.</p>
       </section>
 
       <section aria-labelledby="tv">
@@ -62,7 +62,7 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
           <summary id="tv">Using a dedicated Debian TV?</summary>
           <p>After downloading the Debian package, open a terminal in its folder and run:</p>
           <pre><code id="deb-command">sudo apt install ./Couch_0.2.0-preview.13_amd64.deb</code></pre>
-          <p>Then run <code>sudo couch-setup --tv</code>. This sets up a dedicated Couch account, automatic sign-in and TV power settings. Your administrator account stays available. Reboot to enter the Couch session.</p>
+          <p>Then run <code>sudo couch-setup --tv</code>. This sets up a dedicated Couch account, automatic sign-in and TV power settings. Your admin account stays available. Reboot to enter the Couch session.</p>
           <p>On first use, choose <strong>This computer</strong>, allow remote control, and pair your phone using the code on screen. Migrating an existing Couch TV keeps its data and paired devices.</p>
         </details>
       </section>
@@ -99,25 +99,26 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
   }
 </script>
 <style>
-  .downloads { display: block; position: static; max-width: 56rem; margin: auto; padding: 2rem 1.5rem 3rem; }
+  .downloads { display: block; position: static; max-width: 56rem; margin: auto; padding: 2rem var(--gutter) 3rem; }
   [hidden] { display: none !important; }
   nav, .target, .version, .muted, footer { color: var(--muted-foreground); }
-  nav { font-size: .85rem; }
+  nav { font-size: .875rem; }
   nav a { display: inline-flex; align-items: center; gap: .5rem; }
   nav img { width: 1.5rem; height: 1.5rem; }
-  header { margin: 4rem 0 3rem; }
-  h1 { position: static; font-size: clamp(2rem, 6vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -.05em; margin: 0 0 1rem; }
-  .intro { font-size: 1.1rem; }
+  header { margin: 3rem 0; }
+  h1 { position: static; font-size: 1.5rem; font-weight: 600; line-height: 2rem; letter-spacing: -.025em; margin: 0 0 1rem; }
+  .intro { font-size: .875rem; }
   section { border-top: 1px solid var(--border); padding: 1.5rem 0; }
   h2, summary { font-size: 1rem; font-weight: 500; }
-  h3 { font-size: 1.05rem; font-weight: 500; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
-  article { border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  h3 { font-size: 1rem; font-weight: 500; }
+  .download-rows { margin-top: 1rem; }
+  article { border-top: 1px solid var(--border); padding-block: 1.5rem; }
   article a { margin-top: .75rem; }
   article a:hover { text-decoration: none; }
   summary { cursor: pointer; }
-  p { font-size: .95rem; line-height: 1.65; margin: .75rem 0; }
-  .target, .version, .muted, footer { font-size: .85rem; }
-  pre { overflow-x: auto; margin: .75rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: .8rem; }
+  p { font-size: .875rem; line-height: 1.65; margin: .75rem 0; }
+  .target, .muted { font-size: .875rem; }
+  .version, footer { font-size: .75rem; }
+  pre { overflow-x: auto; margin: .75rem 0; padding-block: 1rem; border-top: 1px solid var(--border); font-size: .875rem; }
   footer { margin-top: 1.5rem; }
 </style>

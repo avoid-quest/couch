@@ -27,7 +27,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
 import { sourceLabel } from "@/source-label";
-import { deviceName, playNotice, TRY_AGAIN } from "@/copy";
+import { offline, playNotice, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/library";
@@ -113,7 +113,7 @@ export function HomePage() {
   const paused = player?.status === "paused";
   const live = !!(current?.live || current?.kind === "radio");
   const playingArt = programme?.playbackId === player?.playbackId && programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : current && art(current);
-  const playingStatus = !current ? "" : !connected ? `Reconnecting to ${deviceName(state?.installationName)}…`
+  const playingStatus = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
     : [sourceLabel(current.source), paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
 
@@ -153,7 +153,7 @@ export function HomePage() {
               <span className="size-12 shrink-0 overflow-hidden bg-muted"><MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="aspect-square size-full text-sm" /></span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-medium">{station.name}</span>
-                <span className="truncate text-sm text-muted-foreground group-focus-visible:text-inherit">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode)}</span>
+                <span className="truncate text-sm text-muted-foreground">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode)}</span>
               </span>
             </Button><Button variant="ghost" aria-label={`Play ${station.name}`} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)}>Play</Button></div>}
           </MediaDetails></li>;
@@ -185,9 +185,9 @@ export function HomePage() {
     </Empty>}
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
-      <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>
-        <SheetHeader className="flex-row items-center gap-2 px-6 pt-6 pb-2"><SheetClose asChild><Button variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">Up next</SheetTitle></SheetHeader>
-        <div className="px-6 pb-8"><QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} titled={false} /></div>
+      <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false}>
+        <SheetHeader className="sticky top-0 z-10 flex-row items-center gap-2 border-b bg-background px-6 py-4"><SheetClose asChild><Button variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">Up next</SheetTitle></SheetHeader>
+        <div className="px-6 pt-4 pb-8"><QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} titled={false} /></div>
       </SheetContent>
     </Sheet>
   </section>;
@@ -214,7 +214,7 @@ function UpNextStrip({ plan, more, now, disabled, pageFirst, art, onPlay, onMore
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal disabled:opacity-100">
           <span className="flex items-baseline justify-between gap-2 text-sm tabular-nums">
             <span>{starts == null ? "Later" : formatEndTime(starts, now)}</span>
-            <span className="text-muted-foreground group-focus-visible:text-inherit">{entry.live ? "Live" : seconds == null ? "" : formatDuration(seconds)}</span>
+            <span className="text-muted-foreground">{entry.live ? "Live" : seconds == null ? "" : formatDuration(seconds)}</span>
           </span>
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover">{art(entry)}</span>
           <span className="line-clamp-2 text-base font-medium">{entry.title}</span>
@@ -231,12 +231,12 @@ function RecentRail({ items, credentials, disabled, onPlay, onBrowse }: { items:
     {items.map(item => {
       const target = collectionTarget(item.collection);
       const play = <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.libraryItemId || item.queueEntryId)} onClick={() => onPlay(item)}>Play</Button>;
-      return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><MediaDetails title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{play}{target && <Button variant="ghost" onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>}</>}>
+      return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><MediaDetails title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{play}{target && <Button variant="ghost" aria-label={`Browse ${target.title}`} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>}</>}>
         {inspect => <><Button variant="ghost" aria-label={`Details ${item.title}`} onClick={inspect}
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork credentials={credentials} item={item} /></span>
           <span className="line-clamp-2 text-base font-medium">{item.title}</span>
-          <span className="truncate text-sm text-muted-foreground tabular-nums group-focus-visible:text-inherit">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
+          <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
         </Button>{play}</>}
       </MediaDetails></li>;
     })}
@@ -245,7 +245,7 @@ function RecentRail({ items, credentials, disabled, onPlay, onBrowse }: { items:
 
 /** A divided row: the section name and its clock time on the left, content on the right. */
 function HomeRow({ title, time, action, children }: { title: string; time?: string; action?: ReactNode; children: ReactNode }) {
-  return <section aria-label={title} className="grid gap-x-12 gap-y-3 border-t py-6 lg:grid-cols-[10rem_minmax(0,1fr)]">
+  return <section aria-label={title} className="grid gap-x-12 gap-y-3 border-t py-6 lg:grid-cols-[12rem_minmax(0,1fr)]">
     <header className="flex flex-wrap items-baseline gap-x-3 lg:flex-col lg:items-start lg:gap-y-1">
       <h2 className="text-base font-medium">{title}</h2>
       {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}
@@ -258,7 +258,7 @@ function HomeRow({ title, time, action, children }: { title: string; time?: stri
 /** The one large item on a row: artwork beside a display title and its verbs. */
 function Feature({ art, artFit = "cover", title, meta, detail, children, onInspect }: { art: ReactNode; artFit?: "cover" | "contain"; title: string; meta?: string; detail?: ReactNode; children: ReactNode; onInspect?: (event?: MouseEvent<HTMLElement>) => void }) {
   return <div className={cn("grid items-center gap-x-8 gap-y-4", artFit === "contain" ? "md:grid-cols-[fit-content(24rem)_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
-    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`View artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0">{art}</Button> : art}</div>
+    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`Artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0">{art}</Button> : art}</div>
     <div className="grid min-w-0 gap-2">
       <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto touch:h-auto min-h-11 justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
@@ -331,13 +331,13 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
   const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={`Resume ${item.title}`} onClick={() => void act(item, "resume")}>Resume</Button>;
   const preview = (item: HistoryItem, featured: boolean) => {
     const target = collectionTarget(item.collection);
-    const browse = target && onBrowse && <Button variant="ghost" disabled={!connected} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>{target.provider === "streamingcommunity" ? "Browse episodes" : target.provider === "bandcamp" ? "Browse album" : "Browse collection"}</Button>;
+    const browse = target && onBrowse && <Button variant="ghost" aria-label={`Browse ${target.title}`} disabled={!connected} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>;
     return <MediaDetails key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{resume(item)}{secondary(item)}{browse}</>}>
       {inspect => featured ? <div data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork credentials={credentials} item={item} intrinsic />} artFit={item.thumbnail || item.artworkId ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
       </>}>{resume(item)}{secondary(item)}</Feature></div> : <MediaRow title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
-        art={<Button variant="ghost" className="size-full rounded-none p-0" aria-label={`View artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
+        art={<Button variant="ghost" className="size-full rounded-none p-0" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
         primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>}

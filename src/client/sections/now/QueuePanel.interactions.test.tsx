@@ -55,7 +55,7 @@ test("removing a focused queue entry keeps the remaining queue operable", async 
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Options for four");
   await queueAction("two", "Remove");
   await queueAction("four", "Remove");
-  expect(screen.getByText("Nothing queued")).toBeInTheDocument();
+  expect(screen.getByText("Up next is empty.")).toBeInTheDocument();
   expect(document.activeElement).toBe(screen.getByRole("switch", { name: "Autoplay" }));
 });
 

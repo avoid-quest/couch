@@ -1,7 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -10,7 +9,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { PlaybackTimeline, PlaybackTransport, PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
 import { sourceLabel } from "@/source-label";
 import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
-import { deviceName } from "@/copy";
+import { deviceName, offline } from "@/copy";
 import { VideoStage } from "@/sections/shell/VideoStage";
 import { useBottomBar } from "@/sections/shell/MiniPlayer";
 import { QueuePanel } from "./QueuePanel";
@@ -127,8 +126,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const source = current ? sourceLabel(current.source) : "";
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const programmeDetails = currentProgramme && <>
-    {currentProgramme.genre && <Badge variant="secondary" className="h-auto max-w-full whitespace-normal break-words">{currentProgramme.genre}</Badge>}
-    {(currentProgramme.artist || currentProgramme.album || currentProgramme.bitrate) && <p className="text-sm text-muted-foreground">{[currentProgramme.artist, currentProgramme.album, currentProgramme.bitrate && `${currentProgramme.bitrate} kbps`].filter(Boolean).join(" · ")}</p>}
+    {(currentProgramme.genre || currentProgramme.artist || currentProgramme.album || currentProgramme.bitrate) && <p className="text-sm text-muted-foreground">{[currentProgramme.genre, currentProgramme.artist, currentProgramme.album, currentProgramme.bitrate && `${currentProgramme.bitrate} kbps`].filter(Boolean).join(" · ")}</p>}
     {currentProgramme.description && <p className="max-w-prose text-sm text-muted-foreground">{currentProgramme.description}</p>}
     {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a></Button>}
   </>;
@@ -136,7 +134,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.source.startsWith("file:") || current?.source.startsWith("library:") ? "The file is missing from its folder." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
   const status = !current ? null : unavailable ? { title: `Player not running on ${localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
-    : player?.status === "error" ? { title: player.error || `Can't play ${current.title}`, detail: errorDetail }
+    : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }
     : retry ? { title: `Reconnecting to ${current.title}`, detail: `Retrying in ${retrySeconds} s (${retry.attempt} of ${retry.maximum})`, busy: true }
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
     : ended && !artworkStage ? { title: findingNext ? "Finding the next item…" : `Finished ${current.title}`, detail: findingNext ? "" : "Replay to watch again.", busy: !!findingNext }
@@ -165,7 +163,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
           <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${name}` : current.title}</span>}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
-          {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">Reconnecting to {name}…</p>}
+          {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
       </div>}
     {current && status && <div data-player-status className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-(--gutter) pb-48">
@@ -181,7 +179,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>}
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
       <div className="mx-auto grid max-w-6xl gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">Reconnecting to {name}…</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
+        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto size-11 shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
         {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-control-row">
           {artworkStage && volume}
@@ -214,7 +212,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {hasInfo && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "info" }); }}><Info aria-hidden="true" />{infoLabel}<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
             <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" />Stop playback</Button>
           </div>}
-          {panel === "info" ? <div className="grid gap-3"><h3 className="text-xl font-semibold break-words">{currentProgramme?.title || current?.title}</h3>{currentProgramme ? programmeDetails : <>{!hasInfo && <p className="text-sm text-muted-foreground">Programme details are no longer available.</p>}{current?.subtitle && <p className="text-sm text-muted-foreground">{current.subtitle}</p>}{current?.description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{current.description}</p>}</>}{collection && <Button variant="outline" className="w-fit" onClick={() => shell.openProvider(collection, '[data-panel="info"]')}>Browse collection</Button>}</div> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
+          {panel === "info" ? <div className="grid gap-3"><h3 className="text-base font-medium break-words">{currentProgramme?.title || current?.title}</h3>{currentProgramme ? programmeDetails : <>{!hasInfo && <p className="text-sm text-muted-foreground">Programme details are no longer available.</p>}{current?.subtitle && <p className="text-sm text-muted-foreground">{current.subtitle}</p>}{current?.description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{current.description}</p>}</>}{collection && <Button variant="ghost" className="w-fit" aria-label={`Browse ${collection.title}`} onClick={() => shell.openProvider(collection, '[data-panel="info"]')}>Browse</Button>}</div> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>
       </SheetContent>
     </Sheet>

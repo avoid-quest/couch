@@ -1,9 +1,10 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiSend, type ApiCredentials } from "@/api/client";
 import { bluetoothQuery, bluetoothView, soundQuery, type ListedBluetoothState } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,10 +78,10 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
         {active && own && !searching && <Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => change({ op: "cancel", token: current.id })}>Cancel</Button>}
       </div>}
       {prompt && <PairingPrompt key={prompt.id} prompt={prompt} disabled={!connected || pending} onAnswer={answer => change({ op: "answer", token: current!.id, prompt: prompt.id, answer })} />}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{bluetooth.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void bluetooth.refetch()}>Try again</Button></AlertAction>}</Alert>}
     </SettingsSection>
     {state?.adapter === "available" && <SettingsSection title="Devices" description="After connecting a speaker, pick it in Sound.">
-      {state.devices.length === 0 && <p className="text-sm text-muted-foreground">{active ? "No devices found yet." : "No devices found."}</p>}
+      {state.devices.length === 0 && <Empty className="py-0"><EmptyHeader><EmptyDescription>{active ? "No devices found yet." : "No devices found. Put a device in pairing mode, then Search."}</EmptyDescription></EmptyHeader></Empty>}
       {state.devices.map(device => {
         const outputs = sound.data?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
         const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);

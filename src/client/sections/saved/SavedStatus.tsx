@@ -27,7 +27,7 @@ export function SavedError({ message, onRetry }: { message: string; onRetry?: ()
 
 /** An empty tab: what goes here and the next step. */
 export function SavedEmpty({ children, action }: { children: ReactNode; action?: ReactNode }) {
-  return <Empty>
+  return <Empty className="pt-0">
     <EmptyHeader><EmptyDescription>{children}</EmptyDescription></EmptyHeader>
     {action && <EmptyContent>{action}</EmptyContent>}
   </Empty>;

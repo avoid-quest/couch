@@ -19,6 +19,7 @@ import { useOptionalShell } from "@/sections/shell/shell-context";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
+import { offline } from "@/copy";
 import { formatEndTime } from "@/time-format";
 import { QueueActions } from "./QueueActions";
 
@@ -62,8 +63,8 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const previous = queue.slice(0, cursorIndex + 1).filter(entry => entry.id !== state?.currentEntryId);
   const upNext = queue.slice(cursorIndex + 1);
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
-  const currentLabel = !connected ? "Reconnecting…" : state?.player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished"
-    : state?.player.status === "loading" ? "Loading…" : state?.player.status === "error" ? "Playback error" : state?.player.status === "unavailable" ? "Player unavailable"
+  const currentLabel = !connected ? offline(state?.installationName) : state?.player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished"
+    : state?.player.status === "loading" ? "Loading…" : state?.player.status === "error" ? `Can't play ${current?.title ?? "this item"}` : state?.player.status === "unavailable" ? "Player unavailable"
     : state?.player.status === "idle" ? "Ready to play" : state?.player.status === "paused" ? "Paused" : "Playing";
   const currentLength = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
   let startsIn = currentLength == null ? null : Math.max(0, currentLength - (playbackClock.position ?? 0)) / (state?.player.speed || 1);
@@ -110,14 +111,14 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       <DialogContent aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Save as list</DialogTitle></DialogHeader>
         <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void keepUpNext(); }}>
-          <div className="grid gap-2"><label htmlFor="queue-list-name">List name</label><Input id="queue-list-name" value={listName} maxLength={80} onChange={event => setListName(event.target.value)} /></div>
+          <div className="grid gap-2"><Label htmlFor="queue-list-name">List name</Label><Input id="queue-list-name" value={listName} maxLength={80} onChange={event => setListName(event.target.value)} /></div>
           {keep.error && <Alert variant="destructive"><AlertDescription>{keep.error.message || "Couldn't save Up next."}</AlertDescription></Alert>}
           <DialogFooter><DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose><Button type="submit" disabled={!connected || keeping || !upNext.length || !listName.trim()}>{keeping ? "Saving…" : "Save list"}</Button></DialogFooter>
         </form>
       </DialogContent>
     {current && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} credentials={credentials} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
-    {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · done by ${formatEndTime(doneIn)}`}</h3>
+    {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
       <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">{upNext.map((entry, index) => {
         const starts = startsIn;
         const length = knownLength(entry);
@@ -126,13 +127,13 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         return <QueueRow key={entry.id} entry={entry} credentials={credentials} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           actions={<QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />;
       })}</ul>
-    </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Your queue is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
+    </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
     {state?.autoplay && <section aria-label="Autoplay" className="grid gap-2">
-      <div className="flex items-center justify-between gap-4"><h3><Label htmlFor={autoplayId} className="touch:min-h-11 text-base">Autoplay</Label></h3><Switch id={autoplayId} checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
+      <div className="flex items-center justify-between gap-4"><h3><Label htmlFor={autoplayId} className="touch:min-h-11 text-base font-medium">Autoplay</Label></h3><Switch id={autoplayId} checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
       {state.autoplay.enabled && state.autoplay.next ? <>
-        <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after your queue"}</p>
+        <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after Up next"}</p>
         <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} credentials={credentials} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
-      </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after your queued items."}</p>}
+      </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after Up next."}</p>}
     </section>}
     {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="justify-between px-0 text-muted-foreground">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
       <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} credentials={credentials} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} actions={<QueueActions credentials={credentials} entry={entry} index={queue.indexOf(entry)} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />)}</ul>

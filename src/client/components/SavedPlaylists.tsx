@@ -95,7 +95,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
 
   return <section ref={section} aria-label="Lists">
     {!openId ? <>
-      <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save Up next as a list</Button>} />
+      <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
       {connected && cannotSave && <p className="mb-4 text-sm text-muted-foreground">{cannotSave}</p>}
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}

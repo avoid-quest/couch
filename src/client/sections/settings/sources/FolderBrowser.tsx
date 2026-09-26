@@ -1,8 +1,9 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, FolderOpen } from "lucide-react";
 import { SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { deviceName } from "@/copy";
@@ -29,13 +30,13 @@ export function FolderBrowser({ credentials, canWrite, adding, hostName, onAdd, 
       {browser && <ul className="flex min-w-0 flex-col border-t">
         {browser.locations.map(location => (
           <li className="border-b py-1" key={location.path}>
-            <Button className="-mx-2.5 flex h-auto justify-start whitespace-normal text-left font-normal" disabled={!canWrite || !!location.error} variant="ghost" onClick={() => browse(location.path)}>
+            <Button className="-mx-2.5 flex h-auto min-h-8 touch:min-h-11 justify-start whitespace-normal text-left font-normal" disabled={!canWrite || !!location.error} variant="ghost" onClick={() => browse(location.path)}>
               <FolderOpen aria-hidden="true" /><span className="min-w-0 flex-1 break-all">{location.name}</span><ChevronRight aria-hidden="true" className="text-muted-foreground" />
             </Button>
             {location.error && <p className="pb-1 text-xs break-words text-muted-foreground">{location.error}</p>}
           </li>
         ))}
-        {!browser.locations.length && <li className="border-b py-2 text-sm text-muted-foreground">No subfolders here.</li>}
+        {!browser.locations.length && <li><Empty className="py-0"><EmptyHeader><EmptyDescription>No subfolders here. Add this folder or choose another location.</EmptyDescription></EmptyHeader></Empty></li>}
       </ul>}
       {browser && (browser.offset > 0 || browser.more) && <div aria-label="Folder pages" className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={!canWrite || browser.offset === 0} onClick={() => browse(browser.path, Math.max(0, browser.offset - 100))}>Previous</Button>
@@ -45,7 +46,7 @@ export function FolderBrowser({ credentials, canWrite, adding, hostName, onAdd, 
         {path && !["/media", "/mnt"].includes(path) && <Button disabled={!canWrite} onClick={() => onAdd(path)}>{adding ? "Adding…" : "Add this folder"}</Button>}
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
       </div>
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!canWrite} onClick={() => void folders.refetch()}>Try again</Button></AlertAction></Alert>}
     </SettingsSection>
   );
 }

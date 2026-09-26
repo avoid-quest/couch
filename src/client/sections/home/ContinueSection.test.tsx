@@ -116,7 +116,7 @@ for (const feature of [true, false]) {
   });
 }
 
-for (const trigger of ["Details Album track", "View artwork details for Album track"]) {
+for (const trigger of ["Details Album track", "Artwork details for Album track"]) {
   test(`Continue ${trigger} opens a nonplaying preview and restores focus`, async () => {
     historyItems = [{ ...online, description: "The complete episode description remains available without starting playback." }];
     await renderContinue({ feature: true });

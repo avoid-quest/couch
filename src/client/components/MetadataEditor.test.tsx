@@ -59,7 +59,7 @@ test("cancel and denied destination report the outcome", async () => {
   await openEditor();
   await save();
   expect(await screen.findByRole("status")).toHaveTextContent("Canceled.");
-  result = "Could not save the metadata archive: Permission denied. No complete file was saved.";
+  result = "Couldn't save the metadata archive: Permission denied. No complete file was saved.";
   await save();
   expect(await screen.findByRole("alert")).toHaveTextContent("Permission denied");
 });

@@ -104,7 +104,7 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
       <DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[label, detail.detail, detail.duration !== null && formatDuration(detail.duration)].filter(Boolean).join(" · ")}</DialogDescription></DialogHeader>
       {detail.plot && <p className="text-sm break-words">{detail.plot}</p>}
       {detail.position > 0 && <p className="text-sm text-muted-foreground">Resume at {formatDuration(detail.position)}</p>}
-      {!detail.available && <p className="text-sm text-muted-foreground">Missing. Check the folder in Settings → Sources.</p>}
+      {!detail.available && <p className="text-sm text-muted-foreground">Missing. Check the folder in Settings → Sources → Folders.</p>}
       <div className="flex flex-wrap gap-2">
         <Button aria-label={`${detail.position ? "Resume" : "Play"} ${detail.title}`} disabled={!props.canPlay || blocked(detail)} onClick={() => void enqueue(detail, { playNow: true })}>{detail.position ? "Resume" : "Play"}</Button>
         {!!detail.position && <Button variant="ghost" aria-label={`From start ${detail.title}`} disabled={!props.canPlay || blocked(detail)} onClick={() => void enqueue(detail, { playNow: true, fromStart: true })}>From start</Button>}

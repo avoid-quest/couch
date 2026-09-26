@@ -231,7 +231,7 @@ fn validate_requirements(
                     .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"+.-".contains(&b))
         })
     {
-        return Err("The signed app cannot read this installation's data or does not support its host. Obtain a compatible forward release.".into());
+        return Err("This update can't read Couch's data or doesn't support this computer. Download a compatible newer version.".into());
     }
     Ok(())
 }
@@ -285,7 +285,7 @@ async fn host_ready(requirements: &Requirements) -> Result<(), String> {
         || !cfg!(all(target_os = "linux", target_arch = "x86_64"))
         || std::env::var("XDG_SESSION_TYPE").is_ok_and(|session| session != "x11")
     {
-        return Err("Updates require the supported Debian 13 amd64 X11 host.".into());
+        return Err("Updates require Debian 13 amd64 with X11 on this computer.".into());
     }
     let mut packages = tokio::process::Command::new("/usr/bin/dpkg-query");
     let output = tokio::time::timeout(
@@ -304,9 +304,9 @@ async fn host_ready(requirements: &Requirements) -> Result<(), String> {
         || states.lines().count() != requirements.host.packages.len()
         || states.lines().any(|state| state != "installed")
     {
-        return Err("Required Debian host packages are missing or unconfigured. Ask the machine administrator to rerun signed setup before updating.".into());
+        return Err("Required Debian packages are missing or unconfigured. Ask an admin to rerun signed setup on this computer before updating.".into());
     }
-    fs::OpenOptions::new().read(true).write(true).open("/dev/fuse").map_err(|_| "The runtime account cannot access /dev/fuse. Repair Debian host permissions before updating.")?;
+    fs::OpenOptions::new().read(true).write(true).open("/dev/fuse").map_err(|_| "The Couch account can't access /dev/fuse. Repair permissions on this computer before updating.")?;
     Ok(())
 }
 pub(crate) fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -408,16 +408,16 @@ fn installation_lock(application: &Path) -> Result<fs::File, String> {
             ))
         };
         let file = fs::File::open(path)
-            .map_err(|_| "Run signed setup before updating this installation.")?;
+            .map_err(|_| "Run signed setup before updating Couch.")?;
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-            return Err("Another installation or recovery is running.".into());
+            return Err("Another install or recovery is running.".into());
         }
         Ok(file)
     }
     #[cfg(not(unix))]
     {
         let _ = application;
-        Err("Unsupported installation".into())
+        Err("Updates are unavailable on this computer.".into())
     }
 }
 pub(crate) fn build() -> serde_json::Value {
@@ -540,7 +540,7 @@ async fn sizes(program: &str, arguments: &[&str], paths: &[&Path]) -> Result<Vec
         .map_err(|_| "The storage preflight timed out.")?
         .map_err(error)?;
     if !output.status.success() {
-        return Err("Cannot inspect storage before installation.".into());
+        return Err("Can't check storage before installing the update.".into());
     }
     String::from_utf8(output.stdout)
         .map_err(error)?
@@ -673,7 +673,7 @@ async fn backup(
     // cp has completed; flush the filesystem before replacement can begin.
     let mut sync = std::process::Command::new("/usr/bin/sync");
     sync.arg("-f").arg(&destination);
-    command(sync, 120, "Could not flush the recovery backup.").await?;
+    command(sync, 120, "Couldn't flush the recovery backup.").await?;
     Ok(destination)
 }
 
@@ -747,7 +747,7 @@ pub async fn run(
         let operation = async {
             if !running(&app) {
                 return Err::<serde_json::Value, String>(
-                    "Signed AppImage updates require the running AppImage installation.".into(),
+                    "Open Couch from its AppImage to install signed updates.".into(),
                 );
             }
             if let Action::Status { ref request_id } = request.action {
@@ -840,7 +840,7 @@ pub async fn run(
                     repair_runtime,
                 } => {
                     if repair_runtime {
-                        return Err("Debian host maintenance requires the machine administrator. Rerun the verified installer; app updates cannot change host packages.".into());
+                        return Err("Debian maintenance requires an admin on this computer. Rerun the verified installer; Couch updates can't change system packages.".into());
                     }
                     let previous = read_transaction(&directory, Some(request_id))?;
                     if !previous.is_null() {
@@ -850,7 +850,7 @@ pub async fn run(
                         return Err("Recover the retained verified app with couch-recover. Hosted downloads may expire.".into());
                     }
                     if when_idle && crate::operating_mode::idle_blocked(&app)? {
-                        return Err("Waiting for this app to be idle before automatic installation.".into());
+                        return Err("Waiting for Couch to be idle before installing the update.".into());
                     }
                     let application = application(&app)?;
                     let _lock = installation_lock(&application)?;

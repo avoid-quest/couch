@@ -54,8 +54,8 @@
     ],
     "operation": null,
     "support": {
-      "powerUnavailableReason": "Couch cannot yet turn on Bluetooth on macOS. Open System Settings on the Mac running Couch.",
-      "forgetUnavailableReason": "Couch cannot yet forget devices on macOS. Open System Settings on the Mac running Couch."
+      "powerUnavailableReason": "Couch can't yet turn on Bluetooth on macOS. Open System Settings on the computer running Couch.",
+      "forgetUnavailableReason": "Couch can't yet forget devices on macOS. Open System Settings on the computer running Couch."
     }
   },
   "windows": {
@@ -82,9 +82,9 @@
     ],
     "operation": null,
     "support": {
-      "connectUnavailableReason": "Couch cannot yet connect paired devices on Windows. Open System Settings on the Windows computer running Couch.",
-      "disconnectUnavailableReason": "Couch cannot yet disconnect devices on Windows. Open System Settings on the Windows computer running Couch.",
-      "pairingNotice": "Pairing needs your confirmation on the Windows computer running Couch. Be ready to respond to its Windows prompt. Cancelling in Couch may not dismiss that prompt."
+      "connectUnavailableReason": "Couch can't yet connect paired devices on Windows. Open System Settings on the computer running Couch.",
+      "disconnectUnavailableReason": "Couch can't yet disconnect devices on Windows. Open System Settings on the computer running Couch.",
+      "pairingNotice": "Pairing needs your confirmation on the computer running Couch. Be ready to respond to its Windows prompt. Cancelling in Couch may not dismiss that prompt."
     }
   }
 }

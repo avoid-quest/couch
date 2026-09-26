@@ -306,7 +306,7 @@ impl Default for PlayerState {
             subtitle_error: None,
             now_playing: None,
             error: (!cfg!(any(target_os = "linux", target_os = "macos", windows)))
-                .then(|| "Native playback is unavailable on this host.".into()),
+                .then(|| "Native playback is unavailable on this computer.".into()),
         }
     }
 }

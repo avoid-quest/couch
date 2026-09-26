@@ -1,8 +1,9 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { apiFetch, type ApiCredentials } from "@/api/client";
@@ -50,7 +51,7 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
         <Button variant="ghost" disabled={!connected || loading || exporting} onClick={() => void diagnostics.refetch()}>Collect again</Button>
       </SettingsRow>
       {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Collecting…</p>}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || loading || exporting} onClick={() => diagnostics.error ? void diagnostics.refetch() : exportDiagnostics.mutate()}>Try again</Button></AlertAction></Alert>}
       {report && <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for {report.limits.helperSeconds / 60} minutes.</p>}
     </SettingsSection>
     <ToolsSettings credentials={credentials} connected={connected} />
@@ -68,13 +69,13 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
       ]} /> : <p className="text-sm text-muted-foreground">{report.nativeError ?? "Not available."}</p>}</SettingsSection>
       <SettingsSection title="Media helpers"><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></SettingsSection>
       <SettingsSection title="Configuration"><DiagnosticFacts facts={report.configuration} /></SettingsSection>
-      <SettingsSection title="Sources">{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No errors" }))} /> : <p className="text-sm text-muted-foreground">No sources.</p>}</SettingsSection>
+      <SettingsSection title="Sources">{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No errors" }))} /> : <Empty className="py-0"><EmptyHeader><EmptyDescription>No sources. Add one in Settings → Sources.</EmptyDescription></EmptyHeader></Empty>}</SettingsSection>
       <SettingsSection title="Recent errors" description={`Up to ${report.limits.retentionDays} days or ${report.limits.recentEntries} entries, in UTC. This session started ${diagnosticTime(report.sessionStartedAt)}.`}>
         {report.historyError && <Alert><AlertDescription>{report.historyError}</AlertDescription></Alert>}
         {report.recent.length ? <ol className="flex max-h-96 min-w-0 flex-col overflow-y-auto">{report.recent.map((entry, index) => <li key={index} className="min-w-0 border-b py-2 text-sm break-words">
           <p>{entry.message}</p>
           <p className="text-xs text-muted-foreground">{[diagnosticTime(entry.at), entry.source, entry.sessionId === report.sessionId ? "This session" : "Earlier session", `Build ${entry.build.version ?? "unknown"}`, entry.count > 1 && `${entry.count}×, last ${diagnosticTime(entry.lastAt)}`].filter(Boolean).join(" · ")}</p>
-        </li>)}</ol> : <p className="text-sm text-muted-foreground">No recent errors.</p>}
+        </li>)}</ol> : <Empty className="py-0"><EmptyHeader><EmptyDescription>No recent errors.</EmptyDescription></EmptyHeader></Empty>}
       </SettingsSection>
     </>}
   </div>;

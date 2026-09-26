@@ -25,7 +25,7 @@ export async function requestPairing(origin: string, code: string, name: string)
   return { origin, token: result.token, installationId: result.installationId };
 }
 
-const slot = "h-12 min-w-0 w-auto flex-1 text-2xl";
+const slot = "h-8 touch:h-11 min-w-0 w-auto flex-1 text-sm";
 
 // The shell remounts per connection, so a pairing that outlives its form never applies.
 export function PairForm() {

@@ -1,3 +1,4 @@
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
@@ -115,14 +116,14 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
   }
 
   return (
-    <section aria-label="Video metadata corrections" className="min-w-0 space-y-3 border-t pt-3" data-metadata-editor data-tv-local-only>
+    <section aria-label="Video details" className="min-w-0 space-y-3 border-t pt-3" data-metadata-editor data-tv-local-only>
       <Button aria-expanded={open} disabled={!connected} onClick={() => setOpen(value => !value)} type="button" variant="outline">{open ? "Done" : "Edit details"}</Button>
       {open && <>
         <p className="text-sm text-muted-foreground">Edits survive rescans. Your files aren't changed.</p>
         {(page.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Couldn't load details."}</AlertDescription><AlertAction><Button onClick={() => { setError(null); void page.refetch(); }} size="sm" type="button" variant="outline">{TRY_AGAIN}</Button></AlertAction></Alert>}
         {notice && <p className="text-sm" role="status">{notice}</p>}
         {!connected && <p className="text-sm text-muted-foreground" role="status">Offline. Your edits are kept.</p>}
-        {pending && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Working…</p>}
+        {(pending || page.isFetching) && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Working…</p>}
         {metadata && draft && <>
           <form className="space-y-3" onSubmit={save}>
             {(Object.entries(fields) as Array<[Field, string]>).filter(([key]) => metadata.type === "episode" || !["showTitle", "season", "episode"].includes(key)).map(([key, label]) => <div className="space-y-1" key={key}>
@@ -138,18 +139,18 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
           </form>
           <form className="space-y-3 border-t pt-3" onSubmit={event => { event.preventDefault(); void update("search", { query }); }}>
             <Label htmlFor={`${prefix}-search`}>{metadata.type === "episode" ? "Search TMDB shows" : "Search TMDB movies"}</Label><Input data-metadata-search disabled={busy} id={`${prefix}-search`} maxLength={200} onChange={event => setQuery(event.target.value)} required value={query} />
-            <p className="text-sm text-muted-foreground">Needs a TMDB token in Settings → Sources.</p>
+            <p className="text-sm text-muted-foreground">Needs a TMDB token in Settings → Sources → Movie &amp; show info.</p>
             <Button disabled={busy} type="submit" variant="secondary">Search TMDB</Button>
           </form>
-          {results && <ul aria-label="TMDB search results" className="space-y-2">{results.map(result => <li key={result.id}><Button className="h-auto w-full justify-start whitespace-normal text-left" disabled={busy} onClick={() => void update("preview", { revision: metadata.revision, id: result.id, season: draft.season === "" ? null : Number(draft.season), episode: draft.episode === "" ? null : Number(draft.episode) })} type="button" variant="outline">Preview {result.title} {result.year}</Button><p className="text-sm text-muted-foreground">{result.description}</p></li>)}{!results.length && <li className="text-sm text-muted-foreground">No matches. Try another title.</li>}</ul>}
+          {results && <ul aria-label="TMDB search results" className="space-y-2">{results.map(result => <li key={result.id}><Button className="h-auto min-h-8 touch:min-h-11 w-full justify-start whitespace-normal text-left" disabled={busy} onClick={() => void update("preview", { revision: metadata.revision, id: result.id, season: draft.season === "" ? null : Number(draft.season), episode: draft.episode === "" ? null : Number(draft.episode) })} type="button" variant="outline">Preview {result.title} {result.year}</Button><p className="text-sm text-muted-foreground">{result.description}</p></li>)}{!results.length && <li><Empty className="py-0"><EmptyHeader><EmptyDescription>No matches. Try another title.</EmptyDescription></EmptyHeader></Empty></li>}</ul>}
           {preview && <div aria-label="TMDB match preview" className="space-y-3 border-t pt-3">
-            <h4 className="font-medium">Preview: {preview.match.title}</h4>
+            <h4 className="text-base font-medium">Preview: {preview.match.title}</h4>
             {preview.artwork && <img alt="TMDB preview artwork" className="max-h-52 max-w-full object-contain" src={preview.artwork} />}
             <dl className="space-y-2 text-sm">{(Object.keys(fields) as Field[]).filter(key => metadata.type === "episode" || !["showTitle", "season", "episode"].includes(key)).map(key => <div key={key}><dt className="text-muted-foreground">{fields[key]}</dt><dd className="break-words whitespace-pre-wrap">{Array.isArray(preview.values[key]) ? (preview.values[key] as string[]).join(", ") : preview.values[key] ?? "Empty"}</dd></div>)}</dl>
             <p className="text-sm">Replaces these fields and artwork, including your edits.</p>
             <Button disabled={busy} onClick={() => void update("match", { revision: metadata.revision, previewId: preview.id })} type="button">Apply</Button>
           </div>}
-          <div className="space-y-2 border-t pt-3"><h4 className="font-medium">Export</h4><p className="text-sm text-muted-foreground">TAR with NFO, artwork and placement notes. Unsaved edits aren't included.</p><Button disabled={busy} onClick={() => void update("export", { revision: metadata.revision })} type="button" variant="outline">Export</Button></div>
+          <div className="space-y-2 border-t pt-3"><h4 className="text-base font-medium">Export</h4><p className="text-sm text-muted-foreground">TAR with NFO, artwork and placement notes. Unsaved edits aren't included.</p><Button disabled={busy} onClick={() => void update("export", { revision: metadata.revision })} type="button" variant="outline">Export</Button></div>
         </>}
       </>}
     </section>

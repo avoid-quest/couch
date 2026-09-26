@@ -146,7 +146,7 @@ pub(crate) fn idle_blocked(app: &tauri::AppHandle) -> Result<bool, String> {
     Ok(remote_busy(visible, focused, since))
 }
 
-pub(crate) const IDLE_WAIT: &str = "Waiting for this app to be idle before automatic installation.";
+pub(crate) const IDLE_WAIT: &str = "Waiting for Couch to be idle before installing the update.";
 
 pub(crate) async fn resume_idle_quiesce(app: &tauri::AppHandle, nonce: &str) -> Result<(), String> {
     let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -223,7 +223,7 @@ fn target(input: &str) -> Result<Url, String> {
     } else {
         format!("http://{input}")
     })
-    .map_err(|_| "Enter the LAN address shown on the playback computer.")?;
+    .map_err(|_| "Enter the LAN address shown on that Couch.")?;
     if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -258,7 +258,7 @@ fn addresses(url: &Url) -> Result<Vec<SocketAddr>, String> {
     )
         .to_socket_addrs()
         .map_err(|_| {
-            "Cannot find that address. Check the current address on the playback computer."
+            "Can't find that address. Check the current address on that Couch."
         })?
         .collect();
     if addresses.is_empty() || addresses.iter().any(|address| !lan(address.ip())) {
@@ -282,7 +282,7 @@ async fn preflight(url: &Url) -> Result<(), String> {
         tauri::async_runtime::spawn_blocking(move || addresses(&resolve_url)),
     )
     .await
-    .map_err(|_| "Finding the playback computer timed out.")?
+    .map_err(|_| "Finding that Couch timed out.")?
     .map_err(error)??;
     let client = connection_client()
         .timeout(Duration::from_secs(5))
@@ -312,10 +312,10 @@ async fn preflight(url: &Url) -> Result<(), String> {
     let value: serde_json::Value = serde_json::from_slice(&body)
         .map_err(|_| "That address did not return a Couch connection.")?;
     if value["desktopClientProtocol"].as_u64() != Some(DESKTOP_CLIENT_PROTOCOL) {
-        return Err("This Couch uses an incompatible desktop client protocol. Update this app or the playback computer, then retry or choose another address.".into());
+        return Err("Couch versions don't match. Update Couch on both computers, then try again or choose another address.".into());
     }
     if value["remoteControlEnabled"] == false {
-        return Err("Remote control is off. Enable Allow remote control on the playback computer, then retry.".into());
+        return Err("Remote control is off. Turn on Allow remotes on that Couch, then try again.".into());
     }
     Ok(())
 }
@@ -323,11 +323,11 @@ async fn preflight(url: &Url) -> Result<(), String> {
 pub(crate) fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, String> {
     let status = details["player"]
         .as_str()
-        .ok_or("Cannot check local playback. Retry before switching.")?;
+        .ok_or("Can't check playback on this computer. Try again before switching.")?;
     let active = !matches!(status, "idle" | "stopped" | "ended" | "error" | "unavailable");
     let sharing = details["remoteControlEnabled"]
         .as_bool()
-        .ok_or("Cannot check local remote control. Retry before switching.")?;
+        .ok_or("Can't check remote control on this computer. Try again before switching.")?;
     Ok(match (active, sharing) {
         (true, true) => Some("playback,sharing"),
         (true, false) => Some("playback"),
@@ -347,7 +347,7 @@ pub(crate) async fn quit_interruption(
         .connection
         .borrow()
         .clone()
-        .ok_or("The local host is still starting.")??;
+        .ok_or("Couch is still starting on this computer.")??;
     let details: serde_json::Value = connection_client()
         .timeout(Duration::from_secs(3))
         .build()
@@ -401,7 +401,7 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
             .send()
             .await
             .map_err(|_| {
-                "Cannot check local playback. Retry, or confirm stopping this computer."
+                "Can't check playback on this computer. Try again, or confirm stopping this computer."
             })?;
         let details: serde_json::Value = response.json().await.map_err(error)?;
         if let Some(reason) = interruption(&details)? {
@@ -416,7 +416,7 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
     }
     if host.child.lock().expect("sidecar lock poisoned").is_some() {
         tokio::time::timeout(Duration::from_secs(10), exited.wait_for(|done| *done)).await
-            .map_err(|_| "This computer has not finished saving. Retry after it stops; the remote has not opened.")?.map_err(error)?;
+            .map_err(|_| "This computer has not finished saving. Try again after it stops; the remote has not opened.")?.map_err(error)?;
     }
     if host.workers.lock().expect("worker lock poisoned").is_none() {
         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -435,12 +435,12 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
 fn update_allows_mode_change(status: &serde_json::Value) -> Result<(), String> {
     if status["ok"] != true {
         return Err(format!(
-            "Cannot check this computer's update before changing playback device: {}",
+            "Can't check this computer's update before changing where Couch plays: {}",
             status["error"].as_str().unwrap_or("Unknown update status.")
         ));
     }
     if status["transaction"]["phase"] == "trial" {
-        return Err("Finish this computer's update checks before changing playback device.".into());
+        return Err("Finish this computer's update checks before changing where Couch plays.".into());
     }
     Ok(())
 }
@@ -730,11 +730,11 @@ mod tests {
         assert!(response("200 OK", r#"{"desktopClientProtocol":2}"#)
             .await
             .unwrap_err()
-            .contains("incompatible desktop client protocol"));
+            .contains("Couch versions don't match"));
         assert!(response("200 OK", r#"{}"#)
             .await
             .unwrap_err()
-            .contains("incompatible desktop client protocol"));
+            .contains("Couch versions don't match"));
         assert!(response(
             "200 OK",
             r#"{"desktopClientProtocol":1,"remoteControlEnabled":false}"#

@@ -64,7 +64,7 @@ test("Lists opens a list, queues it and offers Undo after deletion", async () =>
 test("Lists shows total length and saves Up next with its generated name", async () => {
   await render(2);
   expect(screen.getByText("1 item · 45:00")).toBeInTheDocument();
-  await click(button("Save Up next as a list"));
+  await click(button("Save as list"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists", method: "POST", body: { name: expect.stringMatching(/^Up next, /), scope: "upNext" } });
   await click(button("Open Friday night"));
   await screen.findByRole("button", { name: "Delete" });
@@ -85,7 +85,7 @@ test("Update from Up next confirms before replacing the list", async () => {
 
 test("an empty Up next cannot be saved and says why", async () => {
   await render(0);
-  expect(button("Save Up next as a list")).toBeDisabled();
+  expect(button("Save as list")).toBeDisabled();
   expect(screen.getByText("Queue something first.")).toBeInTheDocument();
 });
 

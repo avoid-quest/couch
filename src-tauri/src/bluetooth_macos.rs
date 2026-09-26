@@ -17,7 +17,7 @@ use std::{
 const LIMIT: Duration = Duration::from_secs(60);
 const DISCONNECT_RETRY_AFTER: Duration = Duration::from_secs(1);
 const CLEANUP_LIMIT: Duration = Duration::from_secs(2);
-const SETTINGS: &str = "Check in System Settings on the playback host.";
+const SETTINGS: &str = "Check in System Settings on the computer running Couch.";
 
 fn canonical_address(address: &NSString) -> String {
     address.to_string().replace('-', ":").to_ascii_uppercase()
@@ -211,7 +211,7 @@ impl Bluetooth {
                 || authorization == CBManagerAuthorization::Restricted
             {
                 return Err(
-                    "Allow Couch to use Bluetooth in System Settings on the playback host.".into(),
+                    "Allow Couch to use Bluetooth in System Settings on the computer running Couch.".into(),
                 );
             }
             let operation = self.pending.lock().unwrap().operation.clone();
@@ -533,7 +533,7 @@ impl Bluetooth {
         }
         if action.op == "power" || action.op == "forget" {
             if self.state().await?["adapter"] == "absent" {
-                return Err("No Bluetooth adapter is attached to the playback computer.".into());
+                return Err("No Bluetooth adapter is attached to the computer running Couch.".into());
             }
             return Err(SETTINGS.into());
         }
@@ -559,10 +559,10 @@ impl Bluetooth {
             }
             let state = self.state().await?;
             if state["adapter"] == "absent" {
-                return Err("No Bluetooth adapter is attached to the playback computer.".into());
+                return Err("No Bluetooth adapter is attached to the computer running Couch.".into());
             }
             if state["adapter"] != "available" {
-                return Err("Bluetooth is off on the playback computer.".into());
+                return Err("Bluetooth is off on the computer running Couch.".into());
             }
             let mut pending = self.pending.lock().unwrap();
             if pending

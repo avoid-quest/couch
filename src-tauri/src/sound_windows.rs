@@ -123,8 +123,8 @@ pub fn request(value: Value) -> Result<Value, String> {
             Ok(json!({"outputs":outputs,"defaultOutput":default,"profiles":[]}))
         }
         "route" => Ok(json!({"output":route(&devices, value["pid"].as_u64().map(|pid| pid as u32).unwrap_or_else(|| unsafe { GetCurrentProcessId() }))?})),
-        "default" => Err("Windows does not expose a supported system default output setter. Couch selects its own playback output; use System Settings on the playback host for the system default.".into()),
-        "profile" => Err("Check in System Settings on the playback host for this output configuration.".into()),
+        "default" => Err("Windows does not expose a supported system default output setter. Couch selects its own playback output; use System Settings on the computer running Couch for the system default.".into()),
+        "profile" => Err("Check in System Settings on the computer running Couch for this output configuration.".into()),
         "volume" | "mute" => {
             let device = output(&devices, value["output"].as_str().ok_or("Choose an available output.")?)?;
             let control = volume(&device)?;

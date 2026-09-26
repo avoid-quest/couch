@@ -1,0 +1,226 @@
+[
+  {
+    "page": "home",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "positions": {
+      "home": 16
+    },
+    "root": "16px",
+    "tabs": []
+  },
+  {
+    "page": "find",
+    "width": 390,
+    "height": 844,
+    "overflow": false
+  },
+  {
+    "page": "saved",
+    "width": 390,
+    "height": 844,
+    "overflow": false
+  },
+  {
+    "page": "playback",
+    "width": 390,
+    "height": 844,
+    "overflow": false
+  },
+  {
+    "page": "advanced",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "positions": {
+      "settings": 16
+    },
+    "root": "16px",
+    "tabs": []
+  },
+  {
+    "page": "home",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "positions": {
+      "home": 288
+    },
+    "root": "16px",
+    "tabs": []
+  },
+  {
+    "page": "find",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "positions": {
+      "find": 288
+    },
+    "root": "16px",
+    "tabs": []
+  },
+  {
+    "page": "saved",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "positions": {
+      "saved": 288
+    },
+    "root": "16px",
+    "tabs": [
+      {
+        "scroll": 190,
+        "text": "For later0",
+        "width": 190
+      },
+      {
+        "scroll": 190,
+        "text": "Channels & stations0",
+        "width": 190
+      },
+      {
+        "scroll": 190,
+        "text": "Lists0",
+        "width": 190
+      }
+    ]
+  },
+  {
+    "page": "playback",
+    "width": 1280,
+    "height": 800,
+    "label": "Autoplay",
+    "overflow": false,
+    "positions": {
+      "settings": 288
+    },
+    "root": "16px",
+    "tabs": [],
+    "thumb": {
+      "bottom": 260,
+      "height": 14,
+      "left": 557,
+      "right": 571,
+      "top": 246,
+      "width": 14,
+      "x": 557,
+      "y": 246
+    },
+    "track": {
+      "bottom": 261,
+      "height": 16,
+      "left": 544,
+      "right": 572,
+      "top": 245,
+      "width": 28,
+      "x": 544,
+      "y": 245
+    }
+  },
+  {
+    "page": "advanced",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "positions": {
+      "settings": 288
+    },
+    "root": "16px",
+    "tabs": []
+  },
+  {
+    "page": "home",
+    "width": 1920,
+    "height": 1080,
+    "overflow": false,
+    "positions": {
+      "home": 432
+    },
+    "root": "24px",
+    "tabs": []
+  },
+  {
+    "page": "find",
+    "width": 1920,
+    "height": 1080,
+    "overflow": false,
+    "positions": {
+      "find": 432
+    },
+    "root": "24px",
+    "tabs": []
+  },
+  {
+    "page": "saved",
+    "width": 1920,
+    "height": 1080,
+    "overflow": false,
+    "positions": {
+      "saved": 432
+    },
+    "root": "24px",
+    "tabs": [
+      {
+        "scroll": 286,
+        "text": "For later0",
+        "width": 286
+      },
+      {
+        "scroll": 286,
+        "text": "Channels & stations0",
+        "width": 286
+      },
+      {
+        "scroll": 286,
+        "text": "Lists0",
+        "width": 286
+      }
+    ]
+  },
+  {
+    "page": "playback",
+    "width": 1920,
+    "height": 1080,
+    "label": "Autoplay",
+    "overflow": false,
+    "positions": {
+      "settings": 432
+    },
+    "root": "24px",
+    "tabs": [],
+    "thumb": {
+      "bottom": 389,
+      "height": 21,
+      "left": 836,
+      "right": 857,
+      "top": 368,
+      "width": 21,
+      "x": 836,
+      "y": 368
+    },
+    "track": {
+      "bottom": 390.5,
+      "height": 24,
+      "left": 816,
+      "right": 858,
+      "top": 366.5,
+      "width": 42,
+      "x": 816,
+      "y": 366.5
+    }
+  },
+  {
+    "page": "advanced",
+    "width": 1920,
+    "height": 1080,
+    "overflow": false,
+    "positions": {
+      "settings": 432
+    },
+    "root": "24px",
+    "tabs": []
+  }
+]

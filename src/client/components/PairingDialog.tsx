@@ -12,7 +12,7 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
       <DialogHeader><DialogTitle>Pair a remote</DialogTitle><DialogDescription>Scan with a phone on the same Wi-Fi, or open an address below.</DialogDescription></DialogHeader>
       {connected && urls[0] ? <SetupQr url={urls[0]} credentials={credentials} /> : <p role="status" className="text-sm text-muted-foreground">{connected ? `No network. Connect ${deviceName(name)} to Wi-Fi or Ethernet.` : offline(name)}</p>}
       {!!urls.length && <section className="grid min-w-0 gap-2" aria-label="Pairing addresses">
-        <h3 className="text-sm font-medium">Open on your phone</h3>
+        <h3 className="text-base font-medium">Open on your phone</h3>
         <ul className="grid gap-1">{urls.map(url => <li key={url}><a className="text-sm break-all underline underline-offset-4" href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
       </section>}
       <DialogFooter showCloseButton />
