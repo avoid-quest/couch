@@ -5,6 +5,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { fireEvent, screen } from "@/testing";
 import { rememberConnection } from "@/session/connection";
+import type { Action, SessionState } from "../../../shared/protocol";
 
 const origin = "http://living-room:4100";
 const token = "living-room-secret";
@@ -32,9 +33,9 @@ afterEach(async () => {
   originals.clear();
 });
 
-async function render() {
+async function render(state?: SessionState, run?: (action: Action) => Promise<boolean>) {
   const { PlaybackStatus } = await import("./PlaybackStatus");
-  const base = createRootRoute({ component: () => <PlaybackStatus credentials={{ origin, token, installationId: "living-room-installation" }} connected status="Connected" installationName="Living room" /> });
+  const base = createRootRoute({ component: () => <PlaybackStatus credentials={{ origin, token, installationId: "living-room-installation" }} connected status="Connected" installationName="Living room" state={state} run={run} /> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => null });
   const sound = createRoute({ getParentRoute: () => base, path: "/settings/sound", component: () => null });
   const router = createRouter({ routeTree: base.addChildren([find, sound]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
@@ -80,4 +81,16 @@ test("addresses with pairing details or paths cannot become destinations", async
     expect(screen.queryByRole("button", { name: "Switch" })).toBeNull();
   }
   expect(window.location.origin).toBe(origin);
+});
+
+test("Playing on exposes the same mute and volume commands as the player", async () => {
+  const actions: Action[] = [];
+  await render({
+    queue: [], currentEntryId: null, installationName: "Living room", activeProfile: { id: "household", name: "Household" },
+    player: { status: "idle", playbackId: null, position: 0, duration: null, seekable: false, volume: 40, error: null },
+    systemAudio: { selectedOutput: "speakers", observedOutput: "speakers", volume: 40, muted: false, error: null },
+  }, async action => { actions.push(action); return true; });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Mute Living room" })));
+  await act(async () => fireEvent.keyDown(screen.getByRole("slider", { name: "Volume" }), { key: "End" }));
+  expect(actions).toEqual([{ type: "mute", muted: true }, { type: "volume", volume: 100 }]);
 });

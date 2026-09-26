@@ -51,12 +51,17 @@ export function HomePage() {
   const { identity, state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const now = useDurationClock();
-  const history = useQuery({ ...historyQuery(credentials), enabled: connected });
-  const later = useQuery({ ...forLaterQuery(credentials), enabled: connected });
-  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const [queueOpen, setQueueOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const layout = useHomeRows();
+  // Keep a waiting queue reachable whenever the mini player is absent.
+  const playerBand = !!current && (shell.active || state?.player.status === "error");
+  const onHome = layout.rows.filter(row => row.shown || row.id === "upNext" && !playerBand);
+  const hasRow = (id: HomeRowId) => onHome.some(row => row.id === id);
+  const historyShown = hasRow("continue") || hasRow("recent");
+  const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
+  const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
+  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && hasRow("radio") });
 
   const player = state?.player;
   const queue = state?.queue ?? [];
@@ -78,13 +83,15 @@ export function HomePage() {
   const recent = (history.data?.items ?? []).filter(item => !(item.position > 0 && !item.watched)).slice(0, shown.recent);
   const savedMedia = later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [];
   const stations = [...shell.recentRadio, ...favorites.data?.favorites ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index).slice(0, shown.radio);
-  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
+  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && hasRow("radio") && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
   const onAir = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
-  const settled = !history.isPending && !later.isPending && !favorites.isPending;
+  const queries = [
+    ...(historyShown ? [history] : []),
+    ...(hasRow("later") ? [later] : []),
+    ...(hasRow("radio") ? [favorites] : []),
+  ];
   const filled: Record<HomeRowId, boolean> = { now: !!current, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
-  // With nothing playing, a waiting queue has no player band to reach it from, so Home always shows it.
-  const onHome = layout.rows.filter(row => row.shown || row.id === "upNext" && !current);
-  const empty = settled && !history.error && !later.error && !favorites.error && !onHome.some(row => filled[row.id]);
+  const empty = queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
   const featureContinue = !(current && layout.rows.find(row => row.id === "now")?.shown);
   const canManage = identity?.authority === "host" || identity?.authority === "administrator";
 
@@ -152,8 +159,9 @@ export function HomePage() {
 
   return <section data-page="Home" aria-label="Home" className="pt-2">
     <h1 className="sr-only">Home</h1>
-    {later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
-    {favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {hasRow("recent") && !hasRow("continue") && history.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load Played recently.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {hasRow("later") && later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {hasRow("radio") && favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
 
     {onHome.map(row => <Fragment key={row.id}>{rows[row.id]}</Fragment>)}
 

@@ -49,7 +49,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const status = !connected ? `Reconnecting to ${deviceName(state.installationName)}…` : player.status === "error" ? `Can't play ${current.title}` : current.live ? "Live" : length ? `${formatDuration(playbackClock.position)} / ${formatDuration(length)} · ends ${formatEndTime(remaining)}` : "Loading…";
   const programme = connected && state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} className="text-xs" /> : current.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} className="text-xs" />;
-  return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 flex items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:gap-2 [view-transition-name:couch-player-band]">
+  return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 flex items-center gap-4 border-t bg-background px-(--gutter) py-2 max-sm:flex-wrap max-sm:gap-x-2 max-sm:gap-y-0 [view-transition-name:couch-player-band]">
     <Progress value={playbackClock.duration ? playbackClock.position / playbackClock.duration * 100 : 0} aria-label="Playback progress" className="absolute inset-x-0 -top-px h-px rounded-none bg-transparent" />
     <Button variant="ghost" className="-ml-2.5 h-auto min-w-0 flex-1 justify-start gap-3 py-1.5 text-left font-normal touch:h-auto" aria-label={`Open player: ${current.title}`} onClick={onOpen}>
       <span aria-hidden="true" className="aspect-video h-10 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full">{artwork}</span>
@@ -63,6 +63,6 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
       {pausable && <Button variant="ghost" size="icon-lg" aria-label={paused ? "Play" : "Pause"} title={paused ? "Play" : "Pause"} disabled={!transportReady} onClick={() => { if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>{paused ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}</Button>}
       {hasNext && <Button variant="ghost" size="icon-lg" aria-label="Next" title="Next" disabled={!transportReady} onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>}
     </div>
-    <PlaybackVolume state={state} connected={connected} run={run} className="w-48 flex-none max-sm:hidden" />
+    <PlaybackVolume state={state} connected={connected} run={run} className="w-48 flex-none max-sm:w-full" />
   </footer>;
 }

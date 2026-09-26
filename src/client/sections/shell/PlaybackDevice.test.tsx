@@ -231,6 +231,7 @@ test("the native Play on control and its portal stay local to this computer", as
 });
 
 test("Play on marks the current computer and switches directly to a remembered Couch", async () => {
+  localStorage.setItem("couch.target-names", JSON.stringify({ "http://192.168.1.20:4100": { invalid: "name" } }));
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100", "http://192.168.1.20:4100"], localSetupComplete: true };
   await render();
   await act(async () => fireEvent.click(button("Playing here"))); await flush();

@@ -16,7 +16,7 @@ import type { Action } from "../../../shared/protocol";
 import { knownConnection } from "@/session/connection";
 import { deviceName } from "@/copy";
 import { useOptionalSessionGate } from "@/session/session-context";
-import { RangeControl } from "@/components/RangeControl";
+import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { StatusDot } from "./StatusLine";
 
 function destinationOrigin(address: string): string | null {
@@ -53,15 +53,13 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
   const forbidden = soundRead.error instanceof ApiError && soundRead.error.status === 403;
   const unavailable = soundRead.error ? "Couldn't load outputs."
     : soundRead.isLoading ? "Checking outputs…" : "No outputs.";
-  const volume = state?.player.volume ?? sound?.routing?.volume ?? null;
-  const volumeReady = connected && !!run && volume !== null && state?.player.status !== "unavailable" && state?.systemAudio?.volumeWritable !== false && sound?.routing?.volumeWritable !== false;
   // Offline, the shell's status line already says so; there is nothing to adjust.
   if (!connected) return null;
   return <section aria-labelledby="sound-controls-title" className="grid gap-2 border-t pt-3">
     <h3 id="sound-controls-title" className="text-sm font-medium">Sound</h3>
     {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={output.isPending || !connected} onValueChange={value => { if (credentials) output.mutate(value); }} className="gap-0">{outputs.map((item, index) => <Field orientation="horizontal" className="items-center py-1.5" key={item.id}><RadioGroupItem id={`quick-output-${index}`} value={item.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{item.name || item.id}</FieldLabel></Field>)}</RadioGroup> : !forbidden && <p className="text-muted-foreground">{unavailable}</p>}
     {observed && observed.id !== selected && <p className="text-muted-foreground">Playing through {observed.name || observed.id}.</p>}
-    <div className="flex items-center gap-3"><span>Volume</span><RangeControl label="Volume" value={volume ?? 0} max={100} disabled={!volumeReady} onCommit={next => run ? run({ type: "volume", volume: next }) : Promise.resolve(false)} /><span className="w-8 shrink-0 text-right tabular-nums">{volume === null ? "—" : Math.round(volume)}</span></div>
+    {state && run && <PlaybackVolume state={state} connected={connected} run={run} />}
     {output.error && <Alert variant="destructive"><AlertDescription>{output.error.message || "Couldn't change the output."}</AlertDescription></Alert>}
     {credentials && admin && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
   </section>;

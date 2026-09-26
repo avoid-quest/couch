@@ -113,7 +113,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
 const hostOf = (address: string) => address.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 // Native choices remember only addresses, so each Couch's name is kept here once seen.
 const namesKey = "couch.target-names";
-const targetNames = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(namesKey) || "{}"); } catch { return {}; } };
+const targetNames = (): Record<string, string> => { try { return Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(namesKey) || "{}") ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string")); } catch { return {}; } };
 const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and its remotes disconnect." : reason === "playback" ? "Playback here stops." : "Remotes can't reach this computer until you switch back.";
 
 /** Recovery for an unreachable remote Couch, shown as the shell's status line. */
