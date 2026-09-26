@@ -10,7 +10,7 @@ setupUiTests();
 
 function HomeOpener() {
   const shell = useShell();
-  return <button aria-label="Details remembered show" onClick={() => shell.openProvider({ id: "show", title: "Remembered show", url: "https://streamingcommunityz.photos/it/titles/123-show", provider: "streamingcommunity", kind: "collection" }, "Details remembered show")}>Browse episodes</button>;
+  return <>{["first", "second"].map(id => <button key={id} id={id} aria-label="Details remembered show" onClick={() => shell.openProvider({ id: "show", title: "Remembered show", url: "https://streamingcommunityz.photos/it/titles/123-show", provider: "streamingcommunity", kind: "collection" }, `#${id}`)}>Browse episodes</button>)}</>;
 }
 
 for (const [origin, path] of [["Home", "/"], ["Saved", "/saved"]] as const) test(`provider browsing returns to its ${origin} origin and restores focus without playing`, async () => {
@@ -30,10 +30,10 @@ for (const [origin, path] of [["Home", "/"], ["Saved", "/saved"]] as const) test
   const router = createRouter({ routeTree: base.addChildren([home, saved, find]), history });
   const view = render(<></>);
   await act(async () => { await router.load(); view.rerender(<RouterProvider router={router} />); });
-  await userEvent.click(screen.getByRole("button", { name: "Details remembered show" }));
+  await userEvent.click(screen.getAllByRole("button", { name: "Details remembered show" })[1]!);
   expect(history.location.pathname).toBe("/find");
   await userEvent.click(await screen.findByRole("button", { name: origin }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Details remembered show" })).toHaveFocus());
+  await waitFor(() => expect(screen.getAllByRole("button", { name: "Details remembered show" })[1]!).toHaveFocus());
   expect(history.location.pathname).toBe(path);
   expect(commands).toEqual([]);
   history.destroy();

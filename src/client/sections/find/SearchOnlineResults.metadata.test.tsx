@@ -70,13 +70,15 @@ test("Save retains the selected repeated playlist occurrence without inventing c
   const url = "https://www.youtube.com/watch?v=abcdefghijk";
   const collection = { title: "Two viewings", url: "https://www.youtube.com/playlist?list=PL1234567890" };
   const saved: unknown[] = [];
+  let catalogueReads = 0;
   spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     const request = new URL(String(input));
     if (request.pathname === "/api/providers/favorites") return Response.json({ favorites: [] });
     if (request.pathname === "/api/for-later") {
-      if (init?.method === "POST") saved.push(JSON.parse(String(init.body)).reference);
+      if (init?.method === "POST") { expect(catalogueReads).toBe(2); saved.push(JSON.parse(String(init.body)).reference); }
       return Response.json({ items: [] });
     }
+    catalogueReads++;
     const video = { id: "video", provider: "youtube", kind: "media", url, title: "Repeated video", description: "Server-owned description" };
     return Response.json({ items: [
       ...[0, 1].map(index => ({ ...video, collection: { ...collection, index } })),

@@ -82,8 +82,9 @@ export function HomePage() {
   });
   const doneBy = clock;
 
-  const unfinished = (history.data?.items ?? []).filter(item => item.position > 0 && !item.watched && !(hasRow("now") && current && item.queueEntryId === current.id));
-  const recent = (history.data?.items ?? []).filter(item => !(item.position > 0 && !item.watched)).slice(0, shown.recent);
+  const past = (history.data?.items ?? []).filter(item => !(hasRow("now") && current && item.queueEntryId === current.id));
+  const unfinished = past.filter(item => item.position > 0 && !item.watched);
+  const recent = past.filter(item => !(item.position > 0 && !item.watched)).slice(0, shown.recent);
   const savedMedia = later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [];
   const stations = [...shell.recentRadio, ...favorites.data?.favorites ?? [], ...builtIn.data?.stations ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index).slice(0, shown.radio + 1);
   const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && hasRow("radio") && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
@@ -230,7 +231,7 @@ function RecentRail({ items, credentials, disabled, onPlay, onBrowse }: { items:
     {items.map(item => {
       const target = collectionTarget(item.collection);
       const play = <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.libraryItemId || item.queueEntryId)} onClick={() => onPlay(item)}>Play</Button>;
-      return <li key={item.mediaId} className="min-w-0"><MediaDetails title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{play}{target && <Button variant="ghost" onClick={() => onBrowse(target, `Details ${item.title}`)}>Browse</Button>}</>}>
+      return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><MediaDetails title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{play}{target && <Button variant="ghost" onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>}</>}>
         {inspect => <><Button variant="ghost" aria-label={`Details ${item.title}`} onClick={inspect}
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork credentials={credentials} item={item} /></span>
@@ -309,12 +310,14 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
         }, result.expiresAt - Date.now());
         return;
       }
+      if (action !== "queue") removed.current = { id: item.mediaId, index: unfinished.findIndex(entry => entry.mediaId === item.mediaId) };
       const ok = action === "queue" ? await onAdd(item) : await onPlay(item, { fromStart: action === "start" });
+      if (!ok) removed.current = null;
       if (action === "queue") {
         if (ok) toast(playNotice(item.title, "queue"));
         else toast.error(`Couldn't queue ${item.title}.`);
       }
-    } catch (reason) { toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
+    } catch (reason) { removed.current = null; toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
     finally { setPending(false); }
   }
   const secondary = (item: HistoryItem) => <>
@@ -328,14 +331,14 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
   const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={`Resume ${item.title}`} onClick={() => void act(item, "resume")}>Resume</Button>;
   const preview = (item: HistoryItem, featured: boolean) => {
     const target = collectionTarget(item.collection);
-    const browse = target && onBrowse && <Button variant="ghost" disabled={!connected} onClick={() => onBrowse(target, `Details ${item.title}`)}>{target.provider === "streamingcommunity" ? "Browse episodes" : target.provider === "bandcamp" ? "Browse album" : "Browse collection"}</Button>;
+    const browse = target && onBrowse && <Button variant="ghost" disabled={!connected} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>{target.provider === "streamingcommunity" ? "Browse episodes" : target.provider === "bandcamp" ? "Browse album" : "Browse collection"}</Button>;
     return <MediaDetails key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{resume(item)}{secondary(item)}{browse}</>}>
-      {inspect => featured ? <div data-history-details tabIndex={-1}><Feature art={<Artwork credentials={credentials} item={item} intrinsic />} artFit={item.thumbnail || item.artworkId ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
+      {inspect => featured ? <div data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork credentials={credentials} item={item} intrinsic />} artFit={item.thumbnail || item.artworkId ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
       </>}>{resume(item)}{secondary(item)}</Feature></div> : <MediaRow title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
         art={<Button variant="ghost" className="size-full rounded-none p-0" aria-label={`View artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
-        primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details tabIndex={-1}>
+        primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>}
     </MediaDetails>;

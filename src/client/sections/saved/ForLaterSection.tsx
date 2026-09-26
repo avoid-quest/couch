@@ -117,8 +117,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, onO
             return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaDetails title={item.title} meta={meta} description={item.description} art={art} actions={<>
               {action.error && action.variables?.item.id === item.id && <SavedError message={action.error.message || "Couldn't use this item."} />}
               {play}
-              {collection && onOpenProvider && <Button variant="ghost" aria-label={`Browse ${collection.title}`} onClick={() => onOpenProvider(collection, `Details ${item.title}`)}>Browse</Button>}
-            </>}>{inspect => <MediaRow ref={drag.setNodeRef} style={drag.style}
+              {collection && onOpenProvider && <Button variant="ghost" aria-label={`Browse ${collection.title}`} onClick={() => onOpenProvider(collection, `[data-saved-details="${CSS.escape(item.id)}"] [data-play]`)}>Browse</Button>}
+            </>}>{inspect => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
               art={<Button variant="ghost" className="h-auto p-0 touch:h-auto" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
               artFit="contain"
               title={item.title}

@@ -174,7 +174,7 @@ test("details offers explicit playback and browsing the saved item's parent with
   await click("Details Track");
   const dialog = await screen.findByRole("dialog", { name: "Track" });
   await userEvent.click(within(dialog).getByRole("button", { name: `Browse ${collection.title}` }));
-  expect(opened).toEqual([[expect.objectContaining({ provider: "bandcamp", kind: "collection", title: collection.title, url: collection.url }), "Details Track"]]);
+  expect(opened).toEqual([[expect.objectContaining({ provider: "bandcamp", kind: "collection", title: collection.title, url: collection.url }), '[data-saved-details="track"] [data-play]']]);
   expect(calls.filter(call => call.method !== "GET")).toHaveLength(0);
   await userEvent.click(within(dialog).getByRole("button", { name: "Play Track" }));
   expect(calls.at(-1)).toEqual({ path: "/api/for-later/track/load", method: "POST", body: { mode: "play" } });

@@ -70,7 +70,7 @@ function useShellValue() {
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingRequested, setPairingOpen] = useState(false);
   const pairingOpen = pairingRequested && remoteControlEnabled;
-  const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number; returnPath: string; returnLabel: string; focusLabel?: string } | null>(null);
+  const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number; returnPath: string; returnLabel: string; focusSelector?: string } | null>(null);
   useEffect(() => { if (section !== "Find") setOnlineRequest(null); }, [section]);
   useEffect(() => { setOnlineRequest(null); setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
@@ -149,13 +149,13 @@ function useShellValue() {
     const request = onlineRequest;
     setOnlineRequest(null);
     if (!request || !returnToOrigin) return;
-    void router.navigate({ href: request.returnPath }).then(() => requestAnimationFrame(() => {
-      const target = request.focusLabel ? document.querySelector<HTMLElement>(`[aria-label="${CSS.escape(request.focusLabel)}"]`) : null;
+    void router.navigate({ href: request.returnPath, replace: true }).then(() => requestAnimationFrame(() => {
+      const target = request.focusSelector ? document.querySelector<HTMLElement>(request.focusSelector) : null;
       (target ?? document.querySelector<HTMLElement>("[data-page-first]:not(:disabled)"))?.focus({ preventScroll: true });
     }));
   };
-  const openProvider = (item: ProviderItem, focusLabel?: string) => {
-    setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1, returnPath: at, returnLabel: section, focusLabel }));
+  const openProvider = (item: ProviderItem, focusSelector?: string) => {
+    setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1, returnPath: at, returnLabel: section, focusSelector }));
     browseSection("Online");
   };
   const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean; placement?: "next" }) =>
