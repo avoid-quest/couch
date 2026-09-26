@@ -4,6 +4,8 @@ The desktop window title is `Couch · instance · current item` with an active i
 
 The macOS title toolbar hides in fullscreen and returns on exit. It follows AppKit's [fullscreen notifications](https://developer.apple.com/documentation/appkit/nswindow/didenterfullscreennotification), preserving Tauri's window delegate so native controls and keyboard shortcuts use the same behavior. Run `scripts/test-native-window-title-macos.sh` in a macOS desktop session when changing this lifecycle; it exercises real fullscreen transitions, title updates, window isolation, and toolbar installation while already fullscreen.
 
+The player cursor follows its controls. On macOS, AppKit's [setHiddenUntilMouseMoves](https://developer.apple.com/documentation/appkit/nscursor/sethiddenuntilmousemoves(_:)) hides a stationary cursor that WKWebView can retain despite CSS and Tauri's parent-view cursor rectangles. Restoring controls or leaving the player explicitly restores the cursor; background windows cannot hide it. Other desktops retain Tauri's cursor API. Run `scripts/test-native-cursor-macos.sh` in a macOS desktop session when changing this behavior; it checks native visibility over WKWebView and needs foreground focus, so run it separately from other GUI tests.
+
 | Platform | Integration |
 | --- | --- |
 | macOS | Apple's `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` |

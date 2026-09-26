@@ -1,4 +1,4 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,9 +77,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   }, [autoHide, panel, queueOpen]);
   useEffect(() => {
     if (!nativeHost || !current || shown) return;
-    const playerWindow = getCurrentWindow();
-    void playerWindow.setCursorVisible(false).catch(() => {});
-    return () => { void playerWindow.setCursorVisible(true).catch(() => {}); };
+    void invoke("set_native_cursor_visible", { visible: false }).catch(() => {});
+    return () => { void invoke("set_native_cursor_visible", { visible: true }).catch(() => {}); };
   }, [nativeHost, !!current, shown]);
   useEffect(() => {
     if (!retry) return;
@@ -142,7 +141,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />;
 
-  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
+  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {!elsewhere && <VideoStage active={active} audioOnly={audioOnly} />}
     </div>

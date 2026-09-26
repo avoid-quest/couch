@@ -20,6 +20,7 @@
     "allow-desktop-interface-size",
     "allow-set-now-playing",
     "allow-set-native-window-title",
+    "allow-set-native-cursor-visible",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-cursor-visible"
