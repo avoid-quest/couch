@@ -8,10 +8,6 @@ publish = false
 name = "couch"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[features]
-default = ["desktop-playback"]
-desktop-playback = ["dep:tauri-plugin-video"]
-
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
 cc = "1"
@@ -47,7 +43,7 @@ libc = "0.2"
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
 window-vibrancy = "0.8"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSView", "NSGlassEffectView"] }
-tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
 objc2 = "=0.6.4"
 objc2-core-bluetooth = { version = "=0.3.2", default-features = false, features = ["CBManager"] }
 objc2-foundation = { version = "=0.3.2", features = ["NSArray", "NSDate", "NSRunLoop", "NSString"] }
@@ -55,7 +51,7 @@ objc2-io-bluetooth = { version = "=0.3.2", features = ["Bluetooth", "IOBluetooth
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
-tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
 windows = { version = "=0.61.3", features = ["Win32_Devices_Bluetooth", "Win32_Devices_FunctionDiscovery", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem", "Devices_Bluetooth", "Devices_Enumeration", "Devices_Radios", "Foundation"] }
 windows-collections = "=0.2.0"
 
@@ -66,7 +62,7 @@ libloading = "=0.7.4"
 bluer = { version = "=0.17.4", features = ["bluetoothd"] }
 futures-util = "0.3"
 squashfs_reader = { version = "=0.1.1", default-features = false, features = ["only_rust"] }
-tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 dbus = "0.9"

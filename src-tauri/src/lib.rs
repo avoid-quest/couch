@@ -243,9 +243,6 @@ async fn choose_folder(window: tauri::WebviewWindow, app: tauri::AppHandle) -> R
 }
 
 fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
-    if operating_mode::local_playback_unavailable() {
-        return Err("Local playback is unavailable in this Client-only build. Connect to another Couch.".into());
-    }
     start_coordinator(app, true)
 }
 
@@ -621,7 +618,7 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         );
-    #[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     let builder = builder.plugin(tauri_plugin_video::init());
 
     builder
@@ -793,7 +790,7 @@ pub fn run() {
                             let _ = tauri::async_runtime::spawn_blocking(move || worker.join()).await;
                         }
                     }
-                    #[cfg(all(any(target_os = "macos", windows), feature = "desktop-playback"))]
+                    #[cfg(any(target_os = "macos", windows))]
                     {
                         use tauri_plugin_video::VideoExt;
                         handle.video().desktop().shutdown_native();
@@ -825,7 +822,7 @@ mod quit_tests {
             tokio::time::timeout(Duration::from_millis(50), stop_player_before_quit(&player, &workers))
                 .await
                 .is_ok(),
-            "Client-only Quit must not wait for a player worker that never started"
+            "Another Couch Quit must not wait for a player worker that never started"
         );
         assert!(matches!(
             workers.lock().unwrap().as_mut().unwrap().0.try_recv(),

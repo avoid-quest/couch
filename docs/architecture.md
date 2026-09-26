@@ -6,6 +6,16 @@ persistent state. Tauri owns the native window and libmpv transport; native
 observations return to the coordinator. A remote never resolves private playback
 URLs or becomes another playback authority.
 
+All supported native desktop builds include playback. **This computer** runs
+the local host/player; **Another Couch** controls a selected host in the same
+bundled app window while the local player stays stopped. This installation
+retains its own private maintenance coordinator and updater, independent of the
+selected host's availability and authority. Browser remotes remain controllers;
+Desktop/TV presentation and Controller/Administrator roles are separate choices.
+The serialized `clientOnly` build/artifact field remains fixed to `false` for
+verification compatibility. Retained selections, exact-origin pairings, data,
+legacy desktop protocol markers and historical update journals keep their meaning.
+
 ## Frontend delivery
 
 ```
@@ -33,7 +43,7 @@ is still checked before opening the control WebSocket.
 `bun run desktop` uses Tauri's `beforeDevCommand`, `devUrl`, and source watcher
 for native development. `bun run dev` is the separate browser-only loop: it
 starts the source-mode Bun coordinator and Vite together. Vite runs on port
-1420 with an API proxy to the coordinator on port 4100; Client-only remotes use
+1420 with an API proxy to the coordinator on port 4100; Browser remotes use
 Bun's hosted UI. Neither development loop proves that the production remote works.
 
 After committing and building, run `bun tests/linux/built-remote.ts` inside the

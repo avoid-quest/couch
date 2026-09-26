@@ -265,15 +265,15 @@ try {
     await until("local to remote stops this computer", async () => !await health(), 30_000);
     await until("local to remote restores the paired shell", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
     assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "Switching keeps one OS window");
-    await until("client-only coordinator starts beside selected host", async () => (await processIds("couch-server")).length === 2, 30_000);
+    await until("remote-mode coordinator starts beside selected host", async () => (await processIds("couch-server")).length === 2, 30_000);
     const appPid = await processIds("couch"), hostPid = await processIds("couch-server");
     assert.equal(appPid.length, 1);
-    assert.equal(hostPid.length, 2, "selected host and client-only coordinator each have one process");
+    assert.equal(hostPid.length, 2, "selected host and remote-mode coordinator each have one process");
     assert.ok(hostPid.includes(String(remoteHost.pid)));
     const mainWindow = await windowId();
     await closeWindow(mainWindow);
     await until("selected remote Close minimizes the sole window", async () => (await command("xprop", "-id", mainWindow, "WM_STATE").catch(() => "")).includes("Iconic"));
-    assert.equal(await hostHealth(), true, "client-only Close keeps selected host running");
+    assert.equal(await hostHealth(), true, "remote-mode Close keeps selected host running");
     const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: selected, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
     assert.equal(await second.exited, 0);
     await until("launcher restores the same selected remote window", async () => (await command("xwininfo", "-id", mainWindow)).includes("IsViewable"));
@@ -281,7 +281,7 @@ try {
     assert.deepEqual(await processIds("couch"), appPid);
     assert.deepEqual(await processIds("couch-server"), hostPid);
     await quitShortcut(mainWindow);
-    await until("client-only Quit closes app but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
+    await until("remote-mode Quit closes app but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
     await closeDriver(native);
     native = await open("0", selected);
     await until("full relaunch retains the selected playback address", () => role(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]'), 30_000);

@@ -265,7 +265,7 @@ Open `http://localhost:1420` for the browser UI. Vite hot reloads frontend edits
 and proxies the API to the Bun server on port 4100, which prints the pairing code
 in the terminal. Queue and pairing work; playback is explicitly unavailable.
 Run either this command or the desktop app on port 4100. `COUCH_PORT` can select
-another API port, but keep it stable so remotes retain their address. Client-only
+another API port, but keep it stable so remotes retain their address. Browser
 remotes continue to load the Bun-hosted UI on the server's advertised URLs.
 
 macOS can build and run the desktop UI, server and local player from source.
@@ -673,8 +673,9 @@ for evidence and the remaining display, sound, sizing, real-folder, first-run an
 YouTube rendering checks. Existing software evidence does not finish those gates.
 
 Growing timeshift is deferred in [#67](https://github.com/avoid-quest/couch/issues/67).
-CEC is not planned. Native Mac/Windows playback and a full Rust port are not
-delivered. Jellyfin remuxing/transcoding, DRM/account-login video, crossfade and
+CEC is not planned. All supported native desktop builds include local playback;
+see the [current architecture](architecture.md). A full Rust port,
+Jellyfin remuxing/transcoding, DRM/account-login video, crossfade and
 speaker multiroom remain outside the delivered scope. Live TMDB qualification
 requires authorized access. HDR and refresh switching are unqualified.
 

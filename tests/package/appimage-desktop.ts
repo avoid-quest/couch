@@ -1,5 +1,5 @@
 // Exercise the signed AppImage in a disposable runtime container, including its
-// independent Client-only maintenance coordinator and one bundled Couch window.
+// independent remote-mode maintenance coordinator and one bundled Couch window.
 import { strict as assert } from "node:assert";
 import { resolve } from "node:path";
 

@@ -141,8 +141,8 @@ test("32-bit NSIS stub is distinct from the required x64 application", async () 
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-test("Client-only payload records the coordinator without claiming local media helpers", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "couch-client-payload-"));
+test("Legacy coordinator-only payloads remain verifiable without claiming local media helpers", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-legacy-payload-"));
   const target = "aarch64-apple-darwin", format = "dmg";
   try {
     const resources = join(directory, "staged"), installed = join(directory, "installed");

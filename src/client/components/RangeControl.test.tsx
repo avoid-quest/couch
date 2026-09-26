@@ -1,29 +1,23 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { Window } from "happy-dom";
+import { setupUiTests, render as renderUI, screen } from "../testing/react";
+import { beforeEach, expect, spyOn, test } from "bun:test";
 import { act } from "react";
-import type { Root } from "react-dom/client";
+
+setupUiTests();
 let RangeControl: typeof import("./RangeControl")["RangeControl"];
-let root: Root, window: Window;
-const originals = new Map<string, PropertyDescriptor | undefined>();
+let view: ReturnType<typeof renderUI>;
 const requests: { value: number; resolve: (accepted?: boolean) => void; reject: (error: Error) => void }[] = [];
 const commit = (value: number) => new Promise<boolean>((resolve, reject) => requests.push({ value, resolve: (accepted = true) => resolve(accepted), reject }));
-const render = async (value = 12.38, { disabled = false, playbackId = "first", volume = false } = {}) => act(async () => root.render(<RangeControl key={playbackId} label={volume ? "Volume" : "Playback position"} value={value} max={volume ? 100 : 60} disabled={disabled} onCommit={commit} showValue={volume} keyboardStep={volume ? 1 : 10} />));
-const slider = () => document.querySelector<HTMLElement>('[role="slider"]')!;
+const render = async (value = 12.38, { disabled = false, playbackId = "first", volume = false } = {}) => act(async () => view.rerender(<RangeControl key={playbackId} label={volume ? "Volume" : "Playback position"} value={value} max={volume ? 100 : 60} disabled={disabled} onCommit={commit} showValue={volume} keyboardStep={volume ? 1 : 10} />));
+const slider = () => screen.getByRole("slider");
 const key = async (key: string) => act(async () => { slider().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); slider().dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true })); });
 beforeEach(async () => {
-  requests.length = 0; window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLFormElement", "Element", "Node", "MutationObserver", "ResizeObserver", "Event", "KeyboardEvent", "PointerEvent", "MouseEvent", "CustomEvent", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
-  }
-  const { createRoot } = await import("react-dom/client");
+  requests.length = 0;
+  spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, width: 100 } as DOMRect);
+  spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(() => {});
+  spyOn(HTMLElement.prototype, "hasPointerCapture").mockReturnValue(true);
+  spyOn(HTMLElement.prototype, "releasePointerCapture").mockImplementation(() => {});
   ({ RangeControl } = await import("./RangeControl"));
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-});
-afterEach(async () => {
-  await act(async () => root.unmount()); window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  view = renderUI(null);
 });
 test("Home followed by four arrows seeks forty seconds while player observations lag acknowledgements", async () => {
   await render();
@@ -53,12 +47,9 @@ test("authoritative observations continue after leaving the keyboard edit", asyn
 });
 
 const pointer = async (type: string, clientX: number) => act(async () => {
-  const element = document.querySelector<HTMLElement>('[data-slot="slider"]')!;
-  element.getBoundingClientRect = () => ({ left: 0, width: 100 }) as DOMRect;
-  element.setPointerCapture = () => {};
-  element.hasPointerCapture = () => true;
-  element.releasePointerCapture = () => {};
+  const element = slider();
   element.dispatchEvent(new PointerEvent(type, { clientX, pointerId: 1, bubbles: true }));
+  if (type === "pointerdown") element.dispatchEvent(new PointerEvent("pointermove", { clientX, pointerId: 1, bubbles: true }));
 });
 
 test("pointer volume commits on release and returns to the observed level after acknowledgement", async () => {

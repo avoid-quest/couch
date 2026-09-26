@@ -38,7 +38,19 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
     }).catch(() => {});
   }, [credentials]);
 
-  const change: Change = action => { if (connected && !pending) mutation.mutate(action); };
+  const support = state?.support;
+  const unavailableReason = (op: BluetoothAction["op"]) => {
+    switch (op) {
+      case "power": return support?.powerUnavailableReason;
+      case "connect": return support?.connectUnavailableReason;
+      case "disconnect": return support?.disconnectUnavailableReason;
+      case "forget": return support?.forgetUnavailableReason;
+    }
+  };
+  const change: Change = action => { if (connected && !pending && !unavailableReason(action.op)) mutation.mutate(action); };
+  useEffect(() => {
+    if (confirm && unavailableReason(confirm.op)) setConfirm(null);
+  }, [confirm, support]);
   const current = state?.operation;
   const active = current?.status === "running";
   const own = current?.id === operation.current;
@@ -51,10 +63,10 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
 
   return <>
     <SettingsSection>
-      {state?.adapter === "off" && <SettingsRow label="Bluetooth" description="Off">
-        <Button disabled={!connected || pending || active} onClick={() => change({ op: "power" })}>Turn on</Button>
+      {state?.adapter === "off" && <SettingsRow label="Bluetooth" description={<>Off{support?.powerUnavailableReason && <><br />{support.powerUnavailableReason}</>}</>}>
+        <Button disabled={!connected || pending || active || !!support?.powerUnavailableReason} onClick={() => change({ op: "power" })}>Turn on</Button>
       </SettingsRow>}
-      {state?.adapter === "available" && <SettingsRow label="Add a device" description="Put your device in pairing mode, then Search.">
+      {state?.adapter === "available" && <SettingsRow label="Add a device" description={<>Put your device in pairing mode, then Search.{support?.pairingNotice && <><br />{support.pairingNotice}</>}</>}>
         <Button variant="outline" disabled={!connected || pending || active && !(own && searching)} onClick={() => change(own && searching ? { op: "cancel", token: current.id } : { op: "scan" })}>{searching && own ? "Stop" : "Search"}</Button>
       </SettingsRow>}
       {state?.adapter === "absent" && <Alert><AlertDescription>No Bluetooth adapter found.</AlertDescription></Alert>}
@@ -73,9 +85,11 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
         const outputs = sound.data?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
         const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);
         const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(" · ");
-        return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}</>}>
-          <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
-          {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}
+        const op = device.connected ? "disconnect" : device.paired ? "connect" : "pair";
+        const guidance = unavailableReason(op);
+        return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}{guidance && <><br />{guidance}</>}{device.paired && support?.forgetUnavailableReason && <><br />{support.forgetUnavailableReason}</>}</>}>
+          <Button variant="outline" disabled={deviceDisabled || !device.available || !!guidance} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
+          {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available || !!support?.forgetUnavailableReason} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}
         </SettingsRow>;
       })}
     </SettingsSection>}

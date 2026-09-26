@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
-#[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
 use tauri_plugin_video::{NativeSessionRequest, VideoExt};
 
 // The private pipe carries only these facts. No media paths, process environment,
@@ -16,7 +16,7 @@ pub fn collect(app: &AppHandle, _playback_id: Option<String>) -> Value {
     facts.push(json!({"name":"Display pixels", "value":monitor.map(|monitor| format!("{} × {}", monitor.size().width, monitor.size().height)), "source":"Native window monitor"}));
     facts.push(json!({"name":"Data directory override", "value":std::env::var_os("COUCH_DATA_DIR").is_some().to_string(), "source":"COUCH_DATA_DIR environment when set, otherwise application data directory; path omitted"}));
     facts.push(json!({"name":"GPU compatibility requested", "value":matches!(std::env::var("COUCH_BASIC_RENDERING").as_deref(), Ok("1")).to_string(), "source":"COUCH_BASIC_RENDERING environment; this is configuration, not observed renderer state"}));
-    #[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
     {
         let properties = _playback_id
             .and_then(|session_key| {

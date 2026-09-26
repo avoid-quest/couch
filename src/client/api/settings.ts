@@ -47,6 +47,7 @@ export function bluetoothView(previous: ListedBluetoothState | null | undefined,
   const devices = new Map((previous?.devices ?? []).filter(device => !reset || device.paired).map(device => [device.address, { ...device, available: false, connected: false }]));
   for (const device of next.devices) devices.set(device.address, { ...device, available: true });
   if (next.operation?.kind === "forget" && next.operation.status === "finished" && next.operation.device && (previous?.operation?.id !== next.operation.id || previous.operation.status !== "finished")) devices.delete(next.operation.device);
+  // Support belongs to this host/read; omission must not retain a previous host's limits.
   return { ...next, devices: [...devices.values()] };
 }
 

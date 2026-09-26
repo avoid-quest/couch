@@ -2,7 +2,7 @@
 
 The shared coordinator, helper and resource inventory for desktop targets is
 described in [desktop payload inventory](desktop-payload.md).
-The [Mac Client-only package](packaging-macos.md) has its own target build and
+The [Mac desktop package](packaging-macos.md) has its own target build and
 artifact verifier.
 
 Hosted Actions builds both Linux formats in the pinned Debian 13 amd64 container
@@ -52,7 +52,7 @@ AppImage's static PIE runtime.
 For AppImage it starts the signed file through `APPIMAGE_EXTRACT_AND_RUN=1` in a
 fresh runtime container, because Docker provides no FUSE mount. That fixture
 checks the rendered first view before installing WebDriver, then selects
-Another Couch in the bundled app window and checks remote Client-only
+Another Couch in the bundled app window and checks remote
 mode, its private maintenance coordinator, a separate selected host and pairing.
 The same AppImage retains local playback. Installed FUSE, upgrade and Wayland
 acceptance remain open.

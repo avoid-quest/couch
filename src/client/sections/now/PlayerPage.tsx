@@ -147,8 +147,8 @@ export function PlayerPage() {
         </Button>
         <div data-player-tools className="ml-auto flex min-w-0 flex-wrap items-center gap-1 max-sm:w-full">
           {state && <PlaybackVolume state={state} connected={connected} run={run} className="max-w-64" />}
-          {!audioOnly && <Button data-panel="tracks" variant="ghost" aria-pressed={panel === "tracks"} title="Audio & subtitles" onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
-          <Button data-panel="settings" variant="ghost" aria-pressed={panel === "settings"} title="Playback" onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Playback</span></Button>
+          {!audioOnly && <Button data-panel="tracks" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "tracks"} title="Audio & subtitles" onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
+          <Button data-panel="settings" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "settings"} title="Playback" onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Playback</span></Button>
         </div>
       </div>
     </div>

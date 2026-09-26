@@ -28,8 +28,10 @@ execution without Homebrew in `PATH`, notices and signatures, then compares
 every app byte with the updater archive. Its receipt is
 `.artifacts/mac-inventory.json`.
 
-The default `desktop-playback` Cargo feature stays enabled. The same app can
-host local playback or switch to Client-only mode. The bundled coordinator
+Native playback is always included. The same app can host local playback with
+**This computer** or control a selected host with **Another Couch**. In Another
+Couch, the local player stays stopped and this installation retains its own
+maintenance coordinator and updater. The bundled coordinator
 retains Couch's `quest.avoid.couch` identity and app data location.
 
 For local headless qualification, use a disposable Tauri updater key pair. The

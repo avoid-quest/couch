@@ -58,6 +58,7 @@ export function HomePage() {
   const playerBand = !!current && (shell.active || state?.player.status === "error");
   const onHome = layout.rows.filter(row => row.shown || row.id === "upNext" && !playerBand);
   const hasRow = (id: HomeRowId) => onHome.some(row => row.id === id);
+  const playerFallback = !!current && !playerBand && !hasRow("now");
   const historyShown = hasRow("continue") || hasRow("recent");
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
@@ -91,7 +92,7 @@ export function HomePage() {
     ...(hasRow("radio") ? [favorites] : []),
   ];
   const filled: Record<HomeRowId, boolean> = { now: !!current, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
-  const empty = queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
+  const empty = !playerFallback && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
   const featureContinue = !(current && layout.rows.find(row => row.id === "now")?.shown);
   const canManage = identity?.authority === "host" || identity?.authority === "administrator";
 
@@ -163,6 +164,7 @@ export function HomePage() {
     {hasRow("later") && later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("radio") && favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
 
+    {playerFallback && <Button data-page-first className="mb-6" onClick={() => shell.changeSection("Now")}>Open player</Button>}
     {onHome.map(row => <Fragment key={row.id}>{rows[row.id]}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">

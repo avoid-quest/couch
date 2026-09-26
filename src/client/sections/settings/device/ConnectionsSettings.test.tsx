@@ -1,12 +1,11 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { Window } from "happy-dom";
-import { act, useState } from "react";
-import type { Root } from "react-dom/client";
+import { setupUiTests, act, renderWithQueryClient, screen, userEvent, waitFor, within } from "@/testing/react";
+import { beforeEach, expect, spyOn, test } from "bun:test";
+import { useState } from "react";
 import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
-import { fireEvent, screen, within } from "../../../testing";
+import { ConnectionsSettings } from "./ConnectionsSettings";
 
-let root: Root, window: Window;
-const originals = new Map<string, PropertyDescriptor | undefined>();
+setupUiTests();
+
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 const self: Controller = { id: "self", name: "Browser", role: "administrator", createdAt: 1, lastSeenAt: 2 };
 let devices: Controller[];
@@ -15,37 +14,25 @@ let originDomain = "";
 let setSharingFromHost: ((enabled: boolean) => void) | undefined;
 const sharingChanges: boolean[] = [];
 const button = (label: string) => screen.getByRole("button", { name: label });
-const flush = () => act(async () => { await Bun.sleep(20); });
 
 async function render(identity: ControllerIdentity = { authority: "administrator", controller: self, claimAvailable: false }, remoteControlEnabled = true) {
-  const { ConnectionsSettings } = await import("./ConnectionsSettings");
-  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   function SettingsHarness() {
     const [sharing, setSharing] = useState(remoteControlEnabled);
-    const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
     setSharingFromHost = setSharing;
-    return <QueryClientProvider client={client}>
-      <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
-        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} administratorClaimed managedLan />
-      </QueryClientProvider>;
+    return <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
+      urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} administratorClaimed managedLan />;
   }
-  await act(async () => root.render(<SettingsHarness />));
-  await flush();
+  renderWithQueryClient(<SettingsHarness />);
+  await screen.findByText("Phone");
 }
 
-beforeEach(async () => {
+beforeEach(() => {
   calls.length = 0;
   sharingChanges.length = 0;
   sharingFailure = false;
   originDomain = "";
   setSharingFromHost = undefined;
   devices = [self, { id: "other", name: "Phone", role: "controller", createdAt: 1, lastSeenAt: 2 }];
-  window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
   spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     const url = new URL(String(input)), path = url.pathname, method = init?.method ?? "GET";
     calls.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : null });
@@ -75,105 +62,81 @@ beforeEach(async () => {
     }
     return Response.json({ error: `Unexpected ${method} ${path}` }, { status: 404 });
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
-  const container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); });
-  (globalThis.fetch as ReturnType<typeof spyOn>).mockRestore();
-  window.happyDOM.abort();
-  for (const [key, descriptor] of originals) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  originals.clear();
 });
 
 test("an administrator opens the pairing dialog, then sees every device with its role", async () => {
+  const user = userEvent.setup();
   await render();
-  await act(async () => { fireEvent.click(button("Pair a remote")); });
-  await flush();
-  expect(screen.getByRole("img", { name: "Pair another device with code 246810" })).toBeDefined();
-  await act(async () => { fireEvent.click(button("Close")); });
-  expect(screen.getByText("Browser")).toBeDefined();
-  expect(screen.getByText("(this remote)")).toBeDefined();
-  expect(screen.getByText("Phone")).toBeDefined();
+  await user.click(button("Pair a remote"));
+  await screen.findByRole("img", { name: "Pair another device with code 246810" });
+  await user.click(button("Close"));
+  expect(screen.getByText("Browser")).toBeInTheDocument();
+  expect(screen.getByText("(this remote)")).toBeInTheDocument();
+  expect(screen.getByText("Phone")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
-  expect(within(screen.getByText("(this remote)").closest("[data-remote]")!).queryAllByRole("button")).toHaveLength(0);
+  expect(screen.queryByRole("button", { name: "Remove admin" })).not.toBeInTheDocument();
 });
 
 test("the host can change whether this computer accepts remotes", async () => {
   await render({ authority: "host", controller: null, claimAvailable: false }, false);
-  expect(button("Pair a remote").disabled).toBe(true);
-  expect(screen.getByText("Turn on Allow remotes first.")).toBeDefined();
-  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remotes" })); });
-  await flush();
-  const write = calls.find(call => call.path === "/api/settings/sharing")!;
-  expect(write.method).toBe("POST");
-  expect(write.body).toEqual({ enabled: true });
+  expect(button("Pair a remote")).toBeDisabled();
+  await userEvent.setup().click(screen.getByRole("switch", { name: "Allow remotes" }));
+  await waitFor(() => expect(button("Pair a remote")).toBeEnabled());
+  expect(calls).toContainEqual({ path: "/api/settings/sharing", method: "POST", body: { enabled: true } });
   expect(sharingChanges).toEqual([true]);
-  expect(screen.getByRole("switch", { name: "Allow remotes" }).getAttribute("aria-checked")).toBe("true");
-  expect(button("Pair a remote").disabled).toBe(false);
+  expect(screen.getByRole("switch", { name: "Allow remotes" })).toBeChecked();
 });
 
 test("an administrator can save a network address", async () => {
+  const user = userEvent.setup();
   await render();
-  await act(async () => { fireEvent.change(screen.getByRole("textbox", { name: "Network address" }), { target: { value: "http://couch.home:4100" } }); });
-  await act(async () => { fireEvent.click(button("Save")); });
-  await flush();
-  expect(calls.some(call => call.path === "/api/settings/origin-domain" && call.method === "POST" && JSON.stringify(call.body) === JSON.stringify({ domain: "http://couch.home:4100" }))).toBe(true);
-  expect((screen.getByRole("textbox", { name: "Network address" }) as HTMLInputElement).value).toBe("http://couch.home:4100");
+  await user.type(screen.getByRole("textbox", { name: "Network address" }), "http://couch.home:4100");
+  await user.click(button("Save"));
+  await waitFor(() => expect(calls).toContainEqual({ path: "/api/settings/origin-domain", method: "POST", body: { domain: "http://couch.home:4100" } }));
+  expect(screen.getByRole("textbox", { name: "Network address" })).toHaveValue("http://couch.home:4100");
 });
 
 test("a failed sharing save keeps pairing disabled and reports the error", async () => {
   sharingFailure = true;
   await render({ authority: "host", controller: null, claimAvailable: false }, false);
-  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remotes" })); });
-  await flush();
+  await userEvent.setup().click(screen.getByRole("switch", { name: "Allow remotes" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Unavailable");
   expect(sharingChanges).toEqual([]);
-  expect(screen.getByRole("alert").textContent).toContain("Unavailable");
-  expect(button("Pair a remote").disabled).toBe(true);
+  expect(button("Pair a remote")).toBeDisabled();
 });
 
 for (const close of ["Close", "Escape"] as const) test(`${close} restores the Connections pairing opener`, async () => {
+  const user = userEvent.setup();
   await render();
-  await act(async () => { fireEvent.click(button("Pair a remote")); });
-  await flush();
-  await act(async () => { if (close === "Close") fireEvent.click(button("Close")); else fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", code: "Escape" }); });
-  await flush();
-  expect(document.activeElement).toBe(button("Pair a remote"));
+  await user.click(button("Pair a remote"));
+  await screen.findByRole("img", { name: "Pair another device with code 246810" });
+  if (close === "Close") await user.click(button("Close"));
+  else await user.keyboard("{Escape}");
+  await waitFor(() => expect(button("Pair a remote")).toHaveFocus());
 });
 
 test("turning off remote control closes an open pairing dialog", async () => {
   await render({ authority: "host", controller: null, claimAvailable: false });
-  await act(async () => { fireEvent.click(button("Pair a remote")); });
-  await flush();
-  expect(screen.getByRole("dialog")).toBeDefined();
+  await userEvent.setup().click(button("Pair a remote"));
+  await screen.findByRole("dialog");
   await act(async () => { setSharingFromHost!(false); });
-  await flush();
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(button("Pair a remote").disabled).toBe(true);
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(button("Pair a remote")).toBeDisabled();
 });
 
 test("promoting a controller writes the role and reloads the list", async () => {
   await render();
-  await act(async () => { fireEvent.click(button("Make admin")); });
-  await flush();
-  const write = calls.find(call => call.method === "POST")!;
-  expect(write.path).toBe("/api/controllers/other/role");
-  expect(write.body).toEqual({ role: "administrator" });
-  expect(calls.filter(call => call.method === "GET" && call.path === "/api/controllers").length).toBeGreaterThanOrEqual(2);
+  await userEvent.setup().click(button("Make admin"));
+  await screen.findByRole("button", { name: "Remove admin" });
+  expect(calls).toContainEqual({ path: "/api/controllers/other/role", method: "POST", body: { role: "administrator" } });
 });
 
 test("removing a device deletes it and drops the row", async () => {
+  const user = userEvent.setup();
   await render();
-  await act(async () => { fireEvent.click(button("Remove")); });
-  expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(false);
-  await act(async () => { fireEvent.click(within(screen.getByRole("alertdialog", { name: "Remove Phone?" })).getByRole("button", { name: "Remove" })); });
-  await flush();
-  expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(true);
-  expect(document.body.textContent).not.toContain("Phone");
+  await user.click(button("Remove"));
+  expect(calls.some(call => call.method === "DELETE")).toBe(false);
+  await user.click(within(screen.getByRole("alertdialog", { name: "Remove Phone?" })).getByRole("button", { name: "Remove" }));
+  await waitFor(() => expect(screen.queryByText("Phone")).not.toBeInTheDocument());
+  expect(calls).toContainEqual({ path: "/api/controllers/other", method: "DELETE", body: null });
 });

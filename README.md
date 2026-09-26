@@ -30,10 +30,11 @@ Couch runs the player and its server on your TV computer. Browser remotes connec
 on your local network. `couch.avoid.quest` is the project identity; the commands
 below run a local app and do not deploy a hosted service.
 
-On Mac or Windows, [connect as a browser controller](docs/desktop-controllers.md)
-or save the TV's address as a Dock or taskbar app. The native Mac app can run
-from source with local playback or connect to another Couch. The Debian TV
-remains the published playback package.
+Every supported native desktop build includes local playback. Choose **This
+computer** to play here or **Another Couch** to control a paired host in the
+same app window. Another Couch keeps the local player stopped and this
+installation's own updater available, even when the selected host is offline.
+[Browser controllers](docs/desktop-controllers.md) remain remotes.
 
 ## Try it with Docker
 
@@ -136,18 +137,13 @@ development uses `.data/`.
 
 ## Where things stand
 
-The [public download page](https://couch.avoid.quest/download) currently offers
-a Debian 13 amd64 `.deb` for desktop or dedicated TV use. Merged source changes
-are not automatically in that download. The [release guide](docs/hosted-releases.md)
-records qualification and publication; earlier dated qualification records
-describe their tested builds.
-
-The [accepted desktop plan](https://github.com/avoid-quest/couch/issues/457#issuecomment-5782578695)
-targets one switchable local/remote app per OS, with broad Linux AppImage,
-macOS DMG and Windows NSIS delivery. Those installers and Desktop Full parity
-still need implementation and downloaded-artifact qualification. A limited
-Client-only release may come first, but it does not establish local playback.
-See the [accepted installation gates](https://github.com/avoid-quest/couch/issues/447#issuecomment-5781937883).
+Use the [public download page](https://couch.avoid.quest/download) for current
+platform downloads and channels. Supported package formats are Debian, Linux
+AppImage, macOS DMG and Windows NSIS. Merged source changes are not automatically
+published. The [release guide](docs/hosted-releases.md) describes qualification
+and publication; dated qualification records describe only their tested builds.
+See the [current architecture](docs/architecture.md) for the build and runtime
+contracts, and the linked issues for remaining installation and hardware work.
 
 Implemented software includes shared search and history, controller
 administration, phone source setup, watching progress, local/NAS and Jellyfin playback,
@@ -156,9 +152,8 @@ Provider and format limits still apply.
 Software captures do not qualify every physical display, speaker or media source.
 
 Growing timeshift is [deferred #67](https://github.com/avoid-quest/couch/issues/67).
-CEC was closed as not planned. Installed Mac playback, native Windows playback,
-a full Rust port, DRM/account-login video, Jellyfin transcoding, crossfade and
-multiroom are not delivered. Live TMDB matching needs authorized access; HDR
+CEC was closed as not planned. A full Rust port, DRM/account-login video,
+Jellyfin transcoding, crossfade and multiroom are not delivered. Live TMDB matching needs authorized access; HDR
 and refresh switching have no completed hardware qualification. The
 [appliance map](https://github.com/avoid-quest/couch/issues/1) and
 [media map](https://github.com/avoid-quest/couch/issues/25) retain the broader scope.
@@ -166,5 +161,5 @@ and refresh switching have no completed hardware qualification. The
 - [Usage and development details](docs/usage.md)
 - [Linux test guide](tests/linux/README.md)
 - [Feature matrix](docs/research/feature-parity.md)
-- [Architecture](docs/research/architecture.md)
+- [Current architecture](docs/architecture.md)
 - [Native dependency patches](src-tauri/vendor/README.md)

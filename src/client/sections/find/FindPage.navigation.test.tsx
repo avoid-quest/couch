@@ -1,39 +1,27 @@
+import { setupUiTests, render as renderUI, act, screen, userEvent, createTestQueryClient, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { ShellProviders } from "../shell/test-providers";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import { createBrowserHistory, createHashHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet, Link } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ShellValue } from "../shell/AppShell";
 import { FindPage } from "./FindPage";
-import { fireEvent, screen } from "../../testing";
 import { searchLocation } from "../../search";
 
-const originals = new Map<string, PropertyDescriptor | undefined>();
-let root: Root, window: Window, client: QueryClient;
+setupUiTests();
+
+let view: ReturnType<typeof renderUI>, client: QueryClient;
 let history: ReturnType<typeof createBrowserHistory>;
 let request: ReturnType<typeof spyOn> | undefined;
 beforeEach(async () => {
-  window = new Window({ url: "http://localhost" });
-  for (const key of ["scrollTo", "history", "location", "localStorage", "CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
-  client = new QueryClient();
-  const { createRoot } = await import("react-dom/client");
-  root = createRoot(document.body.appendChild(document.createElement("div")));
+  client = createTestQueryClient();
+  view = renderUI(<></>);
 });
 afterEach(async () => {
-  await act(async () => root.unmount());
-  request?.mockRestore(); request = undefined;
-  history?.destroy(); client.clear(); await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  request = undefined;
+  history?.destroy();
 });
 for (const hash of [false, true]) test(`${hash ? "native hash" : "browser"} navigation leaves a nonempty Find search`, async () => {
-  window.happyDOM.setURL(`http://localhost/${hash ? "#/" : ""}find?q=fixture`);
+  testWindow.happyDOM.setURL(`http://localhost/${hash ? "#/" : ""}find?q=fixture`);
   history = hash ? createHashHistory() : createBrowserHistory();
   const shell = {
     nativeHost: hash, credentials: { origin: "http://localhost", token: "paired" }, state: null,
@@ -45,17 +33,17 @@ for (const hash of [false, true]) test(`${hash ? "native hash" : "browser"} navi
   const home = createRoute({ getParentRoute: () => base, path: "/", component: () => <h1>Home page</h1> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
   const router = createRouter({ routeTree: base.addChildren([home, find]), history });
-  await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
-  expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("fixture");
-  await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Home", exact: true })); await Bun.sleep(30); });
+  await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
+  expect(await screen.findByRole("searchbox")).toHaveValue("fixture");
+  await userEvent.click(screen.getByRole("link", { name: "Home" }));
   expect(history.location.pathname).toBe("/");
-  expect(screen.getByRole("heading", { name: "Home page" })).toBeDefined();
-  await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Find", exact: true })); await Bun.sleep(30); });
-  expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("fixture");
+  expect(await screen.findByRole("heading", { name: "Home page" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("link", { name: "Find" }));
+  expect(await screen.findByRole("searchbox")).toHaveValue("fixture");
 });
 
 test("a list opened from Saved shows its items with Saved as the way back", async () => {
-  window.happyDOM.setURL("http://localhost/find");
+  testWindow.happyDOM.setURL("http://localhost/find");
   history = createBrowserHistory();
   const list = { id: "list", provider: "youtube", kind: "collection", title: "Evening list", url: "https://www.youtube.com/playlist?list=PLevening" } as const;
   request = spyOn(globalThis, "fetch").mockImplementation((async input => {
@@ -76,15 +64,13 @@ test("a list opened from Saved shows its items with Saved as the way back", asyn
   const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
   const router = createRouter({ routeTree: base.addChildren([find]), history });
-  await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
-  await act(async () => { await Bun.sleep(50); });
-  expect(screen.getByRole("heading", { name: "Evening list" })).toBeDefined();
-  expect(screen.getByRole("button", { name: "Play First episode" })).toBeDefined();
+  await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
+  expect(await screen.findByRole("heading", { name: "Evening list" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Play First episode" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Saved", pressed: true })).toBeDefined();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Play all" })));
+  await userEvent.click(screen.getByRole("button", { name: "Play all" }));
   expect(commands).toEqual([{ type: "enqueueProvider", provider: "youtube", url: list.url, shape: "playlist", playNow: true, quality: "auto" }]);
-  const back = document.querySelector<HTMLButtonElement>("[data-back]")!;
-  expect(back.textContent).toBe("Saved");
-  await act(async () => fireEvent.click(back));
+  const back = screen.getAllByRole("button", { name: "Saved" }).find(button => !button.hasAttribute("aria-pressed"))!;
+  await userEvent.click(back);
   expect([closed, sections]).toEqual([1, ["Saved"]]);
 });
