@@ -40,7 +40,8 @@ test("one shared request preserves track text, carries only provider cookie, and
   expect(playing.player.nowPlaying?.title).toBe("Observed track");
   expect(f.delay()).toBe(900000);
   f.advance(900000);
-  expect(f.publish).toHaveBeenCalledTimes(1);
+  expect(f.publish).toHaveBeenCalledTimes(2);
+  expect(f.publish.mock.calls.at(-1)).toEqual(["one", null]);
   await tick();
   expect(new Headers(calls[1]?.headers).get("cookie")).toBe("radio_session_id=opaque-session");
   expect(f.delay()).toBe(60000);

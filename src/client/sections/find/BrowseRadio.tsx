@@ -1,6 +1,4 @@
 import { useCallback, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { radioProgrammesQuery } from "@/api/radio";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { PageHeader } from "@/components/PageHeader";
 import { HitList, SourceProblems } from "./SearchPanel";
@@ -14,12 +12,7 @@ export function BrowseRadio({ onBack, ...props }: SearchPlaybackProps & { onBack
   const [reported, setReported] = useState<{ source: string; summary: SearchResultSummary } | null>(null);
   const report = useCallback((name: string, summary: SearchResultSummary) => setReported({ source: name, summary }), []);
   const summary = reported?.source === source ? reported.summary : null;
-  const programmes = useQuery({ ...radioProgrammesQuery(props), enabled: props.connected && props.active && source === "avoid radio", refetchInterval: 60_000 });
-  const hits = summary?.hits?.map(hit => {
-    const programme = source === "avoid radio" ? programmes.data?.[hit.id.slice(source.length + 1)] : undefined;
-    const meta = hit.meta.split(" · ").filter(part => part !== source).join(" · ");
-    return programme && programme.expiresAt > Date.now() ? { ...hit, meta: [programme.title, meta].filter(Boolean).join(" · "), description: programme.description, thumbnail: programme.artworkUrl ?? hit.thumbnail } : { ...hit, meta };
-  });
+  const hits = summary?.hits?.map(hit => ({ ...hit, meta: hit.meta.split(" · ").filter(part => part !== source).join(" · ") }));
   return <section className="min-w-0 space-y-6" aria-label="Browse radio">
     <PageHeader title="Radio" back={{ label: "Find", onClick: onBack }} />
     <ChoiceGroup label="Radio source" value={source} onValueChange={setSource} options={[{ value: "avoid radio", label: "avoid radio" }, { value: "Radio playlists", label: "Radio playlists" }]} />

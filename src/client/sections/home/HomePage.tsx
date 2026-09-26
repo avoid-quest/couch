@@ -141,7 +141,7 @@ export function HomePage() {
               <span className="size-12 shrink-0 overflow-hidden bg-muted"><MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="aspect-square size-full text-sm" /></span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-medium">{station.name}</span>
-                <span className="truncate text-sm text-muted-foreground group-focus-visible:text-inherit">{onNow?.title ?? station.groupTitle ?? station.countryCode}</span>
+                <span className="truncate text-sm text-muted-foreground group-focus-visible:text-inherit">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || station.groupTitle || station.countryCode}</span>
               </span>
             </Button>
           </li>;

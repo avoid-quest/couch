@@ -57,6 +57,7 @@ beforeEach(async () => {
     if (url.pathname.startsWith("/api/providers/")) return Response.json({ items: [] });
     if (url.pathname === "/api/radio/playlists") return Response.json({ playlists: integrated ? [{ id: "own", name: "My radio" }] : [] });
     if (url.pathname === "/api/radio/playlists/own/stations") return Response.json({ stations: integrated ? [station] : [] });
+    if (url.pathname === "/api/radio/avoid/programmes") return Response.json({ programmes: {} });
     if (url.pathname === "/api/radio/avoid") return Response.json({ stations: [] });
     if (url.pathname === "/api/radio/stations") return Response.json({ stations: integrated ? [{ ...station, sourceId: undefined, id: "directory-one", name: "Directory radio" }] : [] });
     if (url.pathname === "/api/jellyfin") return Response.json({ connected: true, serverName: "Home" });

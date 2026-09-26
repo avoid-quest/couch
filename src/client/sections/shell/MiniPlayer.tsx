@@ -55,7 +55,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
       <span aria-hidden="true" className="aspect-video h-10 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full">{artwork}</span>
       <span className="grid min-w-0">
         <span className="truncate text-base font-medium" title={current.title}>{current.title}</span>
-        <span role="status" className="truncate text-sm text-muted-foreground">{status}</span>
+        <span role="status" className="truncate text-sm text-muted-foreground">{programme ? `${programme.title} · ${status}` : status}</span>
       </span>
       <ChevronUp aria-hidden="true" className="shrink-0 text-muted-foreground" />
     </Button>
