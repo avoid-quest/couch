@@ -53,7 +53,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const elsewhere = !localHost && (active || ended);
   const artworkStage = audioOnly || elsewhere;
   const autoHide = playing && !artworkStage;
-  useBottomBar(band, !!current && shown && !artworkStage);
+  useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
   useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus(); }, [queueOpen]);
@@ -165,8 +165,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
       </div>}
-    {current && status && <div data-player-status className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-(--gutter) pb-48">
-      <div role="status" className="pointer-events-auto grid max-w-lg gap-2 bg-background p-6">
+    {current && status && <div data-player-status className={cn("pointer-events-none absolute inset-0 z-10 grid place-items-center px-(--gutter)", !artworkStage && "pb-48")}>
+      <div role="status" className="pointer-events-auto grid max-h-full max-w-lg gap-2 overflow-y-auto bg-background p-6">
         <h2 className="text-2xl font-semibold tracking-tight break-words">{status.title}</h2>
         <p className="flex items-center gap-2 text-sm text-muted-foreground">{status.busy && <Spinner role="presentation" aria-label={undefined} aria-hidden="true" />}{status.detail}</p>
         {(retry || player?.status === "error") && <div className="mt-4 flex flex-wrap gap-2">
@@ -176,23 +176,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         </div>}
       </div>
     </div>}
-    <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
-      <div className="mx-auto grid max-w-6xl gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto size-11 shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
-        {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
-        <div className="player-control-row">
-          {artworkStage && volume}
-          {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
-          {!artworkStage && volume}
-          <div data-player-tools className="ml-auto flex shrink-0 items-center">
-            {!audioOnly && <Button data-panel="tracks" variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>}
-            <Button ref={queueTrigger} data-panel="queue" variant="ghost" className="h-11" aria-label="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListVideo aria-hidden="true" />Up next</Button>
-            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /></Button>
-            {fullscreen.supported && <Button variant="ghost" size="icon" className="size-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
-          </div>
-        </div>
-      </div>
-    </div>
       </div>
       {(artworkStage || queueOpen) && <aside data-player-queue aria-label="Up next" className="player-queue bg-background">
         {queueOpen && current && <div className="flex shrink-0 justify-end pb-2"><Button ref={queueClose} variant="ghost" className="h-11" onClick={closeQueue}><ArrowLeft aria-hidden="true" />Back to player</Button></div>}
@@ -200,6 +183,22 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} />
         </div>
       </aside>}
+    </div>
+    <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
+      <div className="mx-auto grid max-w-6xl gap-1">
+        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto size-11 shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
+        {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
+        <div className="player-control-row">
+          {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
+          {volume}
+          <div data-player-tools className="ml-auto flex shrink-0 items-center">
+            <Button data-panel="tracks" disabled={audioOnly || !player?.playbackId} variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>
+            <Button ref={queueTrigger} data-panel="queue" variant="ghost" className="h-11" aria-label="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListVideo aria-hidden="true" />Up next</Button>
+            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /></Button>
+            {fullscreen.supported && <Button variant="ghost" size="icon" className="size-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+          </div>
+        </div>
+      </div>
     </div>
     <Sheet modal={false} open={panel !== null} onOpenChange={open => { if (!open) setPanelState(null); }}>
       <SheetContent side="right" data-player-sheet aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); panelClose.current?.focus(); }} onCloseAutoFocus={event => { event.preventDefault(); panelTrigger.current?.focus(); }}>
