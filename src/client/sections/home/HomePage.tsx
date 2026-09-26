@@ -148,7 +148,7 @@ export function HomePage() {
           const onNow = onAir(station.id);
           return <li key={station.id} className="border-b"><MediaDetails title={onNow?.title || station.name} meta={onNow ? station.name : station.groupTitle || station.countryCode} description={onNow?.description} art={<MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="max-h-64 object-contain" />} actions={<Button disabled={!available} onClick={() => void shell.enqueueRadio(station, true)}>Play {station.name}</Button>}>
             {inspect => <div className="flex items-center gap-2"><Button variant="ghost" aria-label={`Details ${station.name}`} onClick={inspect}
-              className="group h-auto touch:h-auto w-full justify-start gap-3 rounded-none px-0 py-2 text-left font-normal whitespace-normal disabled:opacity-100">
+              className="group h-auto touch:h-auto min-w-0 flex-1 shrink justify-start gap-3 rounded-none px-0 py-2 text-left font-normal whitespace-normal disabled:opacity-100">
               <span className="size-12 shrink-0 overflow-hidden bg-muted"><MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="aspect-square size-full text-sm" /></span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-medium">{station.name}</span>
@@ -259,7 +259,7 @@ function Feature({ art, artFit = "cover", title, meta, detail, children, onInspe
   return <div className={cn("grid items-center gap-x-8 gap-y-4", artFit === "contain" ? "md:grid-cols-[fit-content(24rem)_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
     <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`View artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0">{art}</Button> : art}</div>
     <div className="grid min-w-0 gap-2">
-      <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto touch:h-auto justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
+      <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto touch:h-auto min-h-11 justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
       {detail}
       <div className="mt-2 flex flex-wrap items-center gap-1">{children}</div>
