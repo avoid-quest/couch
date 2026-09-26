@@ -264,3 +264,18 @@ test("typing coalesces activity reports and unpairing cancels the trailing repor
   await act(async () => jest.advanceTimersByTime(1_000));
   expect(activity()).toHaveLength(2);
 });
+
+
+test("forgetting a browser pairing clears saved credentials and discovery does not remember it again", async () => {
+  await mount(); await connected();
+  localStorage.setItem("modern-kodi.remote-token", "legacy-secret");
+  expect(localStorage.getItem("couch.connection")).not.toBeNull();
+  const retired = sockets.at(-1)!;
+  await act(async () => gate.unpair());
+  expect(gate.credentials).toBeNull();
+  expect(retired.readyState).toBe(3);
+  for (const key of ["couch.remote-token", "couch.remote-installation-id", "modern-kodi.remote-token", "couch.connection"]) expect(localStorage.getItem(key)).toBeNull();
+  await act(async () => gate.reconnect());
+  expect(gate.details?.name).toBe("Couch");
+  expect(localStorage.getItem("couch.connection")).toBeNull();
+});

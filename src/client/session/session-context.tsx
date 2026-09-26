@@ -8,6 +8,7 @@ import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from
 import { acknowledgeFrontend, ApiError } from "../api/client";
 import { applyTvNavigation } from "../navigation";
 import { isNativeHost, isTvPresentation } from "./native-context";
+import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useIdleCursor } from "../useIdleCursor";
@@ -295,8 +296,9 @@ export function SessionGate({ children }: PropsWithChildren) {
   const unpair = useCallback(() => {
     try {
       if (selectedOrigin) localStorage.removeItem(pairingKey(selectedOrigin));
-      else { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); }
+      else { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token"); }
     } catch { /* Storage may be disabled. */ }
+    forgetConnection(selectedOrigin ?? location.origin);
     setCredentials(null);
     setError(null);
   }, [selectedOrigin]);

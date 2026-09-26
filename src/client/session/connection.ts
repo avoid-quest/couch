@@ -18,3 +18,7 @@ export function knownConnection(): KnownConnection | null {
 export function rememberConnection(origin: string, details: ConnectionDetails) {
   try { localStorage.setItem(key, JSON.stringify({ origin, details })); } catch { /* This tab retains its known TV while storage is unavailable. */ }
 }
+
+export function forgetConnection(origin: string) {
+  try { if (knownConnection()?.origin === origin) localStorage.removeItem(key); } catch { /* Storage may be unavailable. */ }
+}

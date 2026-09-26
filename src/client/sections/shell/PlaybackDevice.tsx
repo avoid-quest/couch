@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
 import { acknowledgeFrontend, apiSend } from "@/api/client";
+import { forgetConnection } from "@/session/connection";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
@@ -25,7 +26,7 @@ import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 
 export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
+type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -95,6 +96,23 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       } catch (reason) { const text = message(reason); setError(text); if (text.startsWith("confirmation-required:")) throw reason; return false; }
       finally { busy.current = false; setPending(false); }
     },
+    forget: async address => {
+      if (busy.current) return false;
+      busy.current = true; setPending(true); setError(null); sequence.current++;
+      try {
+        const next = await invoke<Choice>("forget_playback_device", { address });
+        try {
+          localStorage.removeItem(`couch.pairing:${address}`);
+          const names = targetNames();
+          delete names[address];
+          localStorage.setItem(namesKey, JSON.stringify(names));
+        } catch { /* Storage may be unavailable. The native target is still forgotten. */ }
+        forgetConnection(address);
+        setChoice(next);
+        return true;
+      } catch (reason) { setError(message(reason)); return false; }
+      finally { busy.current = false; setPending(false); }
+    },
     retry: () => setAttempt(value => value + 1),
     show: () => { setSelecting(true); setPending(false); },
     dismiss: () => setSelecting(false),
@@ -159,6 +177,7 @@ function DeviceForm() {
   const device = usePlaybackDevice()!;
   const [address, setAddress] = useState(device.address ?? "");
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [forgetting, setForgetting] = useState<string | null>(null);
   const selectRemote = async (confirmed = false) => {
     try { await device.choose("remote", address, confirmed); }
     catch (reason) { if (message(reason).startsWith("confirmation-required:")) setConfirm(message(reason).split(":")[1]!); }
@@ -170,6 +189,7 @@ function DeviceForm() {
         <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Play here. Phones can pair as remotes.</span></span>
         <ChevronRight aria-hidden="true" />
       </Button>
+      {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between rounded-none px-3 py-4 text-left font-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}><span>{hostOf(target)}</span><ChevronRight aria-hidden="true" /></Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
       <form className="grid gap-3 border-b px-3 py-4" onSubmit={submit}>
         <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Control a Couch on your network.</p></div>
         <div className="flex gap-2"><Input id="playback-address" aria-label="Couch address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
@@ -178,6 +198,13 @@ function DeviceForm() {
         {confirm && <div className="grid gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
       </form>
     </div>
+    <AlertDialog open={forgetting !== null} onOpenChange={open => { if (!open && !device.pending) setForgetting(null); }}>
+      <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.focus(); }}>
+        <AlertDialogHeader><AlertDialogTitle>Forget {forgetting && hostOf(forgetting)}?</AlertDialogTitle><AlertDialogDescription>That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
+        {device.error && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
+        <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction disabled={device.pending} onClick={event => { event.preventDefault(); if (forgetting) void device.forget(forgetting).then(done => { if (done) setForgetting(null); }); }}>Forget</AlertDialogAction></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     {device.error && !device.error.startsWith("confirmation-required:") && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
   </div>;
 }
@@ -193,7 +220,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
 }) {
   const device = usePlaybackDevice();
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<"address" | "confirmation" | "updates" | null>(null);
+  const [dialog, setDialog] = useState<"address" | "confirmation" | "forget" | "updates" | null>(null);
   const [address, setAddress] = useState("");
   const [warning, setWarning] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
@@ -230,7 +257,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
           <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>This computer</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>
           {targets.map((target, index) => {
             const named = device.mode === "remote" && device.address === target && installationName || names[target];
-            return <Field orientation="horizontal" className="items-center py-1.5" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{named || hostOf(target)}</span>{named && <span className="truncate text-muted-foreground">{hostOf(target)}</span>}</FieldLabel></Field>;
+            return <Field orientation="horizontal" className="items-center py-1.5" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{named || hostOf(target)}</span>{named && <span className="truncate text-muted-foreground">{hostOf(target)}</span>}</FieldLabel><Button variant="ghost" size="sm" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); openDialog("forget"); }}>Forget</Button></Field>;
           })}
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
@@ -243,6 +270,13 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
       <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onEscapeKeyDown={pendingGuard}>
         <AlertDialogHeader><AlertDialogTitle>Switch to {hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>{confirmationText(warning)}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter><Button variant="ghost" onClick={close} disabled={device.pending}>Cancel</Button><Button onClick={() => void select("remote", address, true)} disabled={device.pending}>Stop and switch</Button></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog open={dialog === "forget"} onOpenChange={value => { if (!value) close(); }}>
+      <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onEscapeKeyDown={pendingGuard}>
+        <AlertDialogHeader><AlertDialogTitle>Forget {names[address] || hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>This computer will forget its address and pairing. That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
+        {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
+        <AlertDialogFooter><Button variant="ghost" onClick={close} disabled={device.pending}>Cancel</Button><Button variant="destructive" onClick={async () => { if (await device.forget(address)) { setNames(targetNames()); setAddress(""); close(); } }} disabled={device.pending}>{device.pending ? "Forgetting…" : "Forget"}</Button></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
     <Dialog open={dialog === "address"} onOpenChange={value => { if (!value) close(); }}>

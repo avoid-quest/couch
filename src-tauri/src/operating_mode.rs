@@ -53,6 +53,17 @@ impl Modes {
     fn current(&self) -> Choice {
         self.choice.lock().expect("mode lock poisoned").clone()
     }
+    fn forget(&self, address: &str) -> Result<Choice, String> {
+        let mut choice = self.current();
+        choice.targets.retain(|target| target != address);
+        if choice.address.as_deref() == Some(address) {
+            choice.address = None;
+            if choice.mode == Some(Mode::Remote) {
+                choice.mode = None;
+            }
+        }
+        self.save(choice)
+    }
     fn save(&self, mut choice: Choice) -> Result<Choice, String> {
         if let Some(address) = &choice.address {
             if !choice.targets.contains(address) {
@@ -479,6 +490,18 @@ pub async fn select_playback_device(
 }
 
 #[tauri::command]
+pub async fn forget_playback_device(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    address: String,
+) -> Result<Choice, String> {
+    trusted(&window)?;
+    let modes = app.state::<Modes>();
+    let _guard = modes.operation.lock().await;
+    modes.forget(&address)
+}
+
+#[tauri::command]
 pub async fn retry_playback_device(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
@@ -743,6 +766,31 @@ mod tests {
             vec!["http://192.168.1.1:4100", "http://192.168.1.2:4100"]
         );
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn forgetting_a_target_preserves_other_targets_and_clears_only_its_selection() {
+        for mode in [Mode::Local, Mode::Remote] {
+            let path = std::env::temp_dir().join(format!("couch-forget-{}.json", uuid::Uuid::new_v4()));
+            let modes = Modes::load(path.clone()).unwrap();
+            modes.save(Choice {
+                mode: Some(mode),
+                address: Some("http://living-room:4100".into()),
+                targets: vec!["http://living-room:4100".into(), "http://kitchen:4100".into()],
+                local_setup_complete: true,
+            }).unwrap();
+            let choice = modes.forget("http://kitchen:4100").unwrap();
+            assert!(choice.mode == Some(mode));
+            assert_eq!(choice.address.as_deref(), Some("http://living-room:4100"));
+            assert_eq!(choice.targets, vec!["http://living-room:4100"]);
+            modes.forget("http://living-room:4100").unwrap();
+            let choice = Modes::load(path.clone()).unwrap().current();
+            assert!(choice.address.is_none());
+            assert!(choice.mode == if mode == Mode::Remote { None } else { Some(Mode::Local) });
+            assert!(choice.targets.is_empty());
+            assert!(choice.local_setup_complete);
+            std::fs::remove_file(path).unwrap();
+        }
     }
 
     #[test]

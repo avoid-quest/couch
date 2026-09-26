@@ -25,6 +25,7 @@ beforeEach(() => {
       if (options.mode === "remote" && interruption && !options.confirmInterrupt) throw `confirmation-required:${interruption}`;
       choice = { ...choice, mode: options.mode, address: options.address ?? choice.address, targets: [...new Set([...choice.targets, ...(options.address ? [options.address] : [])])] };
     }
+    if (command === "forget_playback_device") choice = { ...choice, targets: choice.targets.filter(target => target !== options.address), ...(choice.address === options.address ? { address: null, mode: choice.mode === "remote" ? null : choice.mode } : {}) };
     if (command === "connection_info") return { origin: "http://127.0.0.1:54321", token: "own-installation" } as T;
     if (command === "complete_local_setup") choice = { ...choice, targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
     if (command === "retry_playback_device" && connectionError) throw connectionError;
@@ -305,4 +306,89 @@ test("this app gives recovery guidance without Linux appliance instructions", as
   expect(screen.getAllByText(/Reinstall Couch from its installer/)).toHaveLength(1);
   expect(screen.getByText("Update with the Couch installer. Your data stays.")).toBeInTheDocument();
   expect(screen.queryByText(/SSH|AppImage|journal|Debian/)).toBeNull();
+});
+
+
+test("forgetting a saved Couch removes only its address and pairing after confirmation", async () => {
+  const forgotten = "http://192.168.1.10:4100", retained = "http://192.168.1.20:4100";
+  choice = { mode: "remote", address: retained, targets: [forgotten, retained], localSetupComplete: true };
+  localStorage.setItem(`couch.pairing:${forgotten}`, "old pairing");
+  localStorage.setItem(`couch.pairing:${retained}`, "current pairing");
+  localStorage.setItem("couch.target-names", JSON.stringify({ [forgotten]: "Living room", [retained]: "Kitchen" }));
+  await render();
+  await user.click(button("Playing on 192.168.1.20:4100"));
+  await user.click(button("Forget Living room"));
+  expect(invoke.mock.calls.some(([name]) => name === "forget_playback_device")).toBe(false);
+  await user.click(button("Cancel"));
+  expect(localStorage.getItem(`couch.pairing:${forgotten}`)).toBe("old pairing");
+  await user.click(button("Playing on 192.168.1.20:4100"));
+  await user.click(button("Forget Living room"));
+  await user.click(button("Forget"));
+  expect(choice).toMatchObject({ mode: "remote", address: retained, targets: [retained] });
+  expect(localStorage.getItem(`couch.pairing:${forgotten}`)).toBeNull();
+  expect(localStorage.getItem(`couch.pairing:${retained}`)).toBe("current pairing");
+  expect(JSON.parse(localStorage.getItem("couch.target-names")!)).toEqual({ [retained]: "Kitchen" });
+  await user.click(button("Playing on 192.168.1.20:4100"));
+  expect(screen.queryByRole("radio", { name: forgotten })).toBeNull();
+});
+
+test("forgetting the selected Couch persists a neutral choice without starting local playback", async () => {
+  const forgotten = "http://192.168.1.10:4100", retained = "http://192.168.1.20:4100";
+  choice = { mode: "remote", address: forgotten, targets: [forgotten, retained], localSetupComplete: true };
+  localStorage.setItem(`couch.pairing:${forgotten}`, "old pairing");
+  localStorage.setItem("couch.connection", JSON.stringify({ origin: forgotten, details: { name: "Living room", urls: [forgotten] } }));
+  await render();
+  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Forget 192.168.1.10:4100"));
+  await user.click(button("Forget"));
+  expect(choice).toMatchObject({ mode: null, address: null, targets: [retained], localSetupComplete: true });
+  expect(localStorage.getItem(`couch.pairing:${forgotten}`)).toBeNull();
+  expect(localStorage.getItem("couch.connection")).toBeNull();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(button("192.168.1.20:4100")).toBeInTheDocument();
+  expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
+  cleanup();
+  await render();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+});
+
+test("a native forget failure retains the target and pairing and displays the error", async () => {
+  const target = "http://192.168.1.10:4100";
+  choice = { mode: "remote", address: target, targets: [target], localSetupComplete: true };
+  localStorage.setItem(`couch.pairing:${target}`, "pairing");
+  await render();
+  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Forget 192.168.1.10:4100"));
+  invoke.mockRejectedValueOnce(new Error("Couldn't save playback devices."));
+  await user.click(button("Forget"));
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("Couldn't save playback devices.");
+  expect(choice.address).toBe(target);
+  expect(localStorage.getItem(`couch.pairing:${target}`)).toBe("pairing");
+});
+
+
+test("unavailable name storage cannot keep a forgotten native Couch selected", async () => {
+  const target = "http://192.168.1.10:4100";
+  choice = { mode: "remote", address: target, targets: [target], localSetupComplete: true };
+  localStorage.setItem(`couch.pairing:${target}`, "pairing");
+  await render();
+  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Forget 192.168.1.10:4100"));
+  spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
+  await user.click(button("Forget"));
+  expect(localStorage.getItem(`couch.pairing:${target}`)).toBeNull();
+  expect(choice.mode).toBeNull();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+});
+
+
+test("the neutral chooser forgets retained targets without connecting", async () => {
+  choice.targets = ["http://kitchen:4100", "http://bedroom:4100"];
+  await render();
+  await user.click(button("Forget kitchen:4100"));
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  await user.click(button("Forget"));
+  expect(choice.targets).toEqual(["http://bedroom:4100"]);
+  expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
+  expect(button("This computer")).toHaveFocus();
 });
