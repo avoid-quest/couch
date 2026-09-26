@@ -255,3 +255,21 @@ test("explicit resubmission refreshes cached local and radio results", async () 
   await until(() => paths.filter(path => path.startsWith("/api/library/items")).length > reads);
   expect(paths.filter(path => path === "/api/radio/avoid")).toHaveLength(radioReads + 1);
 });
+
+
+test("search waits for IME composition to finish before starting its debounce", async () => {
+  await render();
+  const input = document.querySelector<HTMLInputElement>("#media-search")!;
+  await act(async () => input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true })));
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "映画");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await act(async () => { await Bun.sleep(350); });
+  expect(paths).toEqual([]);
+  await act(async () => input.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "映画" })));
+  await act(async () => { await Bun.sleep(350); });
+  await until(() => paths.some(path => path.startsWith("/api/library/items")));
+  expect(paths.filter(path => path.startsWith("/api/library/items"))).toEqual(["/api/library/items?q=%E6%98%A0%E7%94%BB&offset=0&limit=30"]);
+});
