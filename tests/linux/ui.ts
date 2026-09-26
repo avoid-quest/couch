@@ -98,6 +98,7 @@ export class UiDriver {
     try { await this.waitFor("Click target is enabled and unobstructed", async () => {
       point = await this.execute(`
         const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
+        if (!element) return '';
         element.scrollIntoView({ block: 'center', inline: 'nearest' });
         const rect = element.getBoundingClientRect();
         const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
@@ -107,6 +108,7 @@ export class UiDriver {
     }); } catch (error) {
       const details = await this.execute(`
         const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
+        if (!element) return { missing: true };
         const rect = element.getBoundingClientRect();
         return { disabled: element.matches(':disabled'), rect: rect.toJSON(), hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.outerHTML.slice(0, 300) };
       `, [element, selector]);
