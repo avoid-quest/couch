@@ -1,3 +1,4 @@
+import type { RadioProgrammeDetails } from "./radio";
 import type { MediaShape } from "./media";
 import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./library";
@@ -13,7 +14,7 @@ export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLangua
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 export type NowPlaying = { title: string; artist?: string };
-export type RadioProgramme = { playbackId: string; stationId: string; provider: "radio.avoid.quest"; title: string; artworkUrl?: string; description?: string; programmeUrl?: string; sampledAt: number; expiresAt: number };
+export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
 export type Domain = "library" | "progress" | "radio" | "iptv" | "providers" | "jellyfin" | "playlists" | "for-later" | "controllers" | "settings" | "sound" | "bluetooth" | "display" | "updates" | "tools";
 export type NavigationKey ="up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";

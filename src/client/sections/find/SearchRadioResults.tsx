@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
-import { radioFavoritesListQuery, radioSearchQuery } from "@/api/radio";
+import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
+import { useDurationClock } from "@/components/DurationBar";
 import { createId } from "../../session/session";
 import { playNotice, savedNotice } from "@/copy";
 import { readSearch, searchError, type SearchPlaybackProps, type SearchHit } from "./SearchOnlineResults";
@@ -17,6 +18,8 @@ function RadioResults(props: Props) {
   const lifetime = useRef<AbortController | null>(null);
   const title = props.source;
   const directory = title === "Radio directory", avoid = title === "avoid radio";
+  const now = useDurationClock();
+  const programmes = useQuery({ ...radioProgrammesQuery(props), enabled: props.connected && props.active && avoid, refetchInterval: 60_000 });
   const options = radioSearchQuery(props, title, props.query);
   const search = useQuery({ ...options, enabled: props.connected, refetchOnMount: props.retry ? "always" : true });
   const kept = useQuery({ ...radioFavoritesListQuery(props), enabled: props.connected, retry: false });
@@ -53,7 +56,9 @@ function RadioResults(props: Props) {
   useEffect(() => {
     const hits: SearchHit[] | undefined = results.map(station => {
       const saved = !!favorites?.some(item => item.id === station.id);
-      return { id: `${title}:${station.id}`, source: title, title: station.name, meta: [station.groupTitle, title].filter(Boolean).join(" · "), kind: "Radio", live: true, thumbnail: station.logoUrl,
+      const value = programmes.data?.[station.id];
+      const programme = avoid && value && value.expiresAt > now ? value : undefined;
+      return { id: `${title}:${station.id}`, source: title, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
         primary: { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
@@ -62,6 +67,6 @@ function RadioResults(props: Props) {
       };
     });
     props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), warning: saveError || undefined, facets: results.map(() => ({ kind: "Radio" })), hits });
-  }, [title, stations, favorites, results.length, loading, error, saveError, busy, props.onResults, props.canPlay, props.onCommand]);
+  }, [title, stations, favorites, programmes.data, now, results.length, loading, error, saveError, busy, props.onResults, props.canPlay, props.onCommand]);
   return null;
 }

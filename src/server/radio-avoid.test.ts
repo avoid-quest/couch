@@ -128,3 +128,14 @@ test("unsafe programme links are dropped and provider rate limits apply across s
   expect((await limited.get("two", "https://stream.example/two")).programme).toBeNull();
   expect(request).toHaveBeenCalledTimes(1);
 });
+
+
+test("programme details retain provider genre, artist, album and bitrate with bounded optional fields", async () => {
+  const rich = { genre: "Detroit House", artist: "Allysha Joy", album: "Live session", bitrate: 320 };
+  const metadata = createRadioMetadata({ now: () => 1000, fetch: (async () => Response.json(payload(rich))) as unknown as typeof fetch });
+  expect((await metadata.get("one", "https://stream.example/one")).programme).toMatchObject(rich);
+  const invalid = createRadioMetadata({ now: () => 1000, fetch: (async () => Response.json(payload({ genre: ["House"], artist: "x".repeat(501), album: " ", bitrate: -1 }))) as unknown as typeof fetch });
+  const current = (await invalid.get("one", "https://stream.example/one")).programme!;
+  expect(current.title).toBe("Current programme");
+  for (const field of ["genre", "artist", "album", "bitrate"]) expect(current).not.toHaveProperty(field);
+});

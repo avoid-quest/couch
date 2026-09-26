@@ -20,17 +20,20 @@ export function createRadioProgramme({ station, publish, fetch: request = global
 
   async function refresh(current: NonNullable<typeof active>) {
     let delay = 60_000;
+    let resultExpiry = 0;
     const valid = () => !closed && active === current && !current.controller.signal.aborted;
     if (!valid()) return;
     try {
       const result = await metadata.get(current.stationId, current.streamUrl, current.controller.signal);
       if (!valid()) return;
       delay = result.retryAt - now();
+      resultExpiry = result.programme?.expiresAt ?? 0;
       if (result.programme) publish(current.playbackId, { ...result.programme, playbackId: current.playbackId });
     } catch { /* Programme metadata never interrupts native audio playback. */ }
     finally {
       if (valid()) timer = schedule(() => {
         timer = undefined;
+        if (resultExpiry && resultExpiry <= now()) publish(current.playbackId, null);
         void refresh(current);
       }, Math.max(1, delay));
     }

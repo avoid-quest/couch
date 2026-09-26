@@ -29,7 +29,9 @@ function programme(value: unknown, stationId: string, streamUrl: string, now: nu
   const artworkUrl = radioHttpUrl(data.artworkUrl);
   const programmeUrl = radioHttpUrl(data.itemUrl);
   const description = typeof data.stationDescription === "string" && data.stationDescription.length <= 10_000 ? data.stationDescription.trim() : "";
-  return { stationId, provider: "radio.avoid.quest", title: data.title.trim(), sampledAt: data.sampledAt, expiresAt: data.expiresAt,
+  const details = Object.fromEntries(["genre", "artist", "album"].flatMap(key => typeof data[key] === "string" && data[key].length <= 500 && data[key].trim() ? [[key, data[key].trim()]] : []));
+  const bitrate = typeof data.bitrate === "number" && Number.isFinite(data.bitrate) && data.bitrate > 0 && data.bitrate <= 10_000 ? data.bitrate : undefined;
+  return { ...details, ...(bitrate ? { bitrate } : {}), stationId, provider: "radio.avoid.quest", title: data.title.trim(), sampledAt: data.sampledAt, expiresAt: data.expiresAt,
     ...(artworkUrl ? { artworkUrl } : {}), ...(programmeUrl ? { programmeUrl } : {}), ...(description ? { description } : {}) };
 }
 

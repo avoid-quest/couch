@@ -32,6 +32,10 @@ export interface RadioProgrammeDetails {
   title: string;
   artworkUrl?: string;
   description?: string;
+  genre?: string;
+  artist?: string;
+  album?: string;
+  bitrate?: number;
   programmeUrl?: string;
   sampledAt: number;
   expiresAt: number;

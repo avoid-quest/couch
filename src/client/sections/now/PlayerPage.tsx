@@ -1,6 +1,7 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ListVideo, Music2, Settings2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -98,6 +99,12 @@ export function PlayerPage() {
   const source = sourceLabel(current.source);
   const heading = !connected ? `Reconnecting to ${name}…` : [player?.nowPlaying?.artist, source === "Media" ? null : source, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(" · ");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
+  const programmeDetails = currentProgramme && <>
+    {currentProgramme.genre && <Badge variant="secondary" className="h-auto max-w-full whitespace-normal break-all">{currentProgramme.genre}</Badge>}
+    {(currentProgramme.artist || currentProgramme.album || currentProgramme.bitrate) && <p className="text-sm text-muted-foreground">{[currentProgramme.artist, currentProgramme.album, currentProgramme.bitrate && `${currentProgramme.bitrate} kbps`].filter(Boolean).join(" · ")}</p>}
+    {currentProgramme.description && <p className="line-clamp-3 max-w-prose text-sm text-muted-foreground">{currentProgramme.description}</p>}
+    {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">About this show</a></Button>}
+  </>;
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current.kind === "radio" || current.source.startsWith("radio:") ? "The station stopped sending audio." : current.source.startsWith("file:") || current.source.startsWith("library:") ? "The file is missing from its folder." : current.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
@@ -109,14 +116,14 @@ export function PlayerPage() {
 
   return <section ref={root} className="player-page relative h-dvh min-h-112 overflow-hidden bg-background" data-page="Now" aria-label="Player" onMouseMove={playing ? wake : undefined}>
     <div className="absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
-      {elsewhere ? <div className="flex h-full flex-col justify-center gap-6 px-(--gutter) pb-48 lg:flex-row lg:items-center lg:justify-start lg:gap-12">
+      {elsewhere ? <div className="flex h-full flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] lg:flex-row lg:pt-0 lg:items-center lg:justify-start lg:gap-12">
         {artwork && <div className="aspect-video w-full max-w-sm shrink-0 overflow-hidden bg-muted lg:w-2/5 lg:max-w-xl [&_img]:size-full [&_img]:object-cover">{artwork}</div>}
-        {!status && <div className="grid min-w-0 gap-2"><p className="text-3xl font-semibold tracking-tight text-muted-foreground">Playing on {name}</p>{nowPlaying && <p className="text-base">{nowPlaying}</p>}</div>}
+        {!status && <div className="grid min-w-0 gap-2"><p className="text-3xl font-semibold tracking-tight text-muted-foreground">Playing on {name}</p>{currentProgramme && <h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme.title}</h2>}{nowPlaying && <p className="text-base">{nowPlaying}</p>}{programmeDetails}</div>}
       </div> : <>
         <VideoStage active={active} audioOnly={audioOnly} />
-        {active && audioOnly && <div className="pointer-events-none absolute inset-0 flex flex-col justify-center gap-6 px-(--gutter) pb-48 sm:flex-row sm:items-center sm:justify-start sm:gap-12">
+        {active && audioOnly && <div className="absolute inset-0 flex flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] sm:flex-row sm:pt-0 sm:items-center sm:justify-start sm:gap-12">
           <div data-player-art aria-hidden="true" className="grid aspect-square w-1/2 max-w-md shrink-0 place-items-center overflow-hidden bg-muted sm:w-auto sm:h-1/2 [&_img]:size-full [&_img]:object-cover">{artwork || <Music2 className="size-1/4 text-muted-foreground" />}</div>
-          <div data-player-audio-copy className="grid min-w-0 gap-2"><h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme?.title || current.title}</h2><p className="text-base text-muted-foreground">{currentProgramme ? current.title : source}</p>{nowPlaying && <p role="status" className="text-base">{nowPlaying}</p>}</div>
+          <div data-player-audio-copy className="grid min-w-0 gap-2"><h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme?.title || current.title}</h2><p className="text-base text-muted-foreground">{currentProgramme ? current.title : source}</p>{nowPlaying && <p role="status" className="text-base">{nowPlaying}</p>}{programmeDetails}</div>
         </div>}
       </>}
     </div>

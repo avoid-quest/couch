@@ -135,3 +135,22 @@ test("the player heading uses available artist, source, and starter metadata", a
   await act(async () => view.rerender(<ShellProviders value={unattributed}><PlayerPage /></ShellProviders>));
   expect(screen.queryByText(/played from Kitchen phone/)).not.toBeInTheDocument();
 });
+
+
+test.each([true, false])("radio shows provider details and keeps observed track text separate (local: %s)", async localHost => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const current = { id: "radio", title: "NTS Radio", source: "radio:nts", kind: "radio" as const };
+  const programme = { playbackId: "playback", stationId: "nts", provider: "radio.avoid.quest" as const, title: "Alexander Nut", genre: "Detroit House", artist: "Allysha Joy", album: "Live session", bitrate: 320, description: "Broken beat and soul.", programmeUrl: "https://www.nts.live/shows/alexander-nut", artworkUrl: "https://images.example/show.jpg", sampledAt: Date.now(), expiresAt: Date.now() + 60_000 };
+  const radio = { ...shell, localHost, current, programme, state: { ...state, currentEntryId: current.id, queue: [current], player: { ...state.player, nowPlaying: { artist: "Track artist", title: "Observed song" } } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={radio}><PlayerPage /></ShellProviders>));
+  expect(screen.getByRole("heading", { name: "Alexander Nut" })).toBeInTheDocument();
+  expect(screen.getByText("Detroit House")).toBeVisible();
+  expect(screen.getByText("Broken beat and soul.")).toBeVisible();
+  expect(screen.getByText("Allysha Joy · Live session · 320 kbps")).toBeVisible();
+  expect(screen.getAllByText("Track artist — Observed song").length).toBeGreaterThan(0);
+  expect(screen.getByRole("link", { name: "About this show" })).toHaveAttribute("href", programme.programmeUrl);
+  expect(document.querySelector(`img[src="${programme.artworkUrl}"]`)).not.toBeNull();
+  await act(async () => view.rerender(<ShellProviders value={{ ...radio, nativeHost: true }}><PlayerPage /></ShellProviders>));
+  expect(screen.queryByRole("link", { name: "About this show" })).toBeNull();
+  expect(screen.getByText("Broken beat and soul.")).toBeVisible();
+});

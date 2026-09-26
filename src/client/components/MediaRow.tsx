@@ -15,7 +15,7 @@ type Props = {
   meta?: ReactNode;
   /** Extra line under the meta, e.g. a DurationBar. */
   children?: ReactNode;
-  /** Shown only while the main button has keyboard focus. */
+  /** A short preview; keyboard focus reveals the full description. */
   description?: string;
   /** The row's one main verb: Play, Resume or Open. Omit for rows with no verb (a list's entries). */
   primary?: { label: string; onClick: () => void; disabled?: boolean };
@@ -33,7 +33,7 @@ export function MediaRow({ art, title, meta, children, description, primary, act
     <span className="w-full truncate text-base font-medium">{title}</span>
     {meta && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
     {children}
-    {description && <span className="hidden max-w-prose text-sm text-muted-foreground group-focus-visible/main:block">{description}</span>}
+    {description && <span className="line-clamp-2 max-w-prose text-sm text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
   </>;
   return (
     <Item asChild size="xs" className={cn("grid gap-x-4 gap-y-1 rounded-none border-0 border-b border-border px-0 py-2", art ? "grid-cols-[5rem_minmax(0,1fr)] @md:grid-cols-[7rem_minmax(0,1fr)] @3xl:grid-cols-[7rem_minmax(0,1fr)_auto]" : "grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_auto]", className)}>
