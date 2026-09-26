@@ -2,11 +2,11 @@ import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ChevronDown, ChevronUp, Pause, Play } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Pause, Play, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -19,7 +19,6 @@ import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/libr
 import { forLaterQuery } from "@/api/for-later";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { ForLaterSection } from "@/sections/saved/ForLaterSection";
-import { searchReach, useLibraryReach } from "@/sections/find/BrowseHome";
 import { QueuePanel } from "@/sections/now/QueuePanel";
 import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
@@ -48,7 +47,7 @@ export function HomePage() {
   const playbackClock = usePlaybackClock();
   const shell = useShell();
   const { credentials, available, current, programme } = shell;
-  const { identity, state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const now = useDurationClock();
   const [queueOpen, setQueueOpen] = useState(false);
@@ -65,7 +64,6 @@ export function HomePage() {
   const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && hasRow("radio") });
   // Built-in stations fill the row, so a fresh Couch opens on something playable.
   const builtIn = useQuery({ ...radioSearchQuery(credentials, "avoid radio", ""), enabled: connected && hasRow("radio") });
-  const library = useLibraryReach(credentials, connected);
 
   const player = state?.player;
   const queue = state?.queue ?? [];
@@ -97,7 +95,6 @@ export function HomePage() {
   const filled: Record<HomeRowId, boolean> = { now: !!current, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
   const empty = !playerFallback && !builtIn.isLoading && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
   const featureContinue = !(current && layout.rows.find(row => row.id === "now")?.shown);
-  const canManage = identity?.authority === "host" || identity?.authority === "administrator";
   // Nothing playing or to continue: the first station on air leads its row.
   const lead = !current && !unfinished.length ? stations.find(station => onAir(station.id)) : undefined;
   const leadShow = lead && onAir(lead.id);
@@ -169,7 +166,10 @@ export function HomePage() {
   };
 
   return <section data-page="Home" aria-label="Home" className="pt-2">
-    <h1 className="sr-only">Home</h1>
+    <header className="flex items-center justify-end pb-2">
+      <h1 className="sr-only">Home</h1>
+      <Button variant="ghost" className="text-muted-foreground" onClick={() => setCustomizing(true)}><SlidersHorizontal aria-hidden="true" />Customize Home</Button>
+    </header>
     {hasRow("recent") && !hasRow("continue") && history.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load Played recently.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("radio") && favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
@@ -178,14 +178,9 @@ export function HomePage() {
     {onHome.map(row => <Fragment key={row.id}>{rows[row.id]}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">
-      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle><EmptyDescription>Search {searchReach(library)} or paste a link. What you play, queue and save shows up here.</EmptyDescription></EmptyHeader>
+      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
       <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>
     </Empty>}
-
-    <footer className="flex flex-wrap gap-x-4 border-t py-6">
-      <Button variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={() => setCustomizing(true)}>Customize Home</Button>
-      {canManage && library.ready && !library.any && <Button variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={() => void navigate({ to: "/settings/sources" })}>Add folders, Jellyfin or Live TV</Button>}
-    </footer>
 
     <Sheet modal={false} open={customizing} onOpenChange={setCustomizing}>
       <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>

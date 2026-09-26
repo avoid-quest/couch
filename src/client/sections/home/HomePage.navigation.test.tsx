@@ -30,27 +30,25 @@ async function renderHome(overrides: { current?: QueueEntry; state?: SessionStat
     nativeHost: false, credentials: { origin: "http://localhost", token: "paired" }, identity: { authority: "host" }, state: null,
     connected: true, available: false, active: false, tv: { browsing: true },
     videoQualityPreference: { quality: "auto" }, recentRadio: [], section: "Home",
-    changeSection: (section: string) => { if (section === "Now") void router.navigate({ to: "/now" }); },
+    changeSection: (section: string) => { if (section === "Now" || section === "Find") void router.navigate({ to: section === "Now" ? "/now" : "/find" }); },
     ...overrides,
   } as unknown as ShellValue;
   const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
   const home = createRoute({ getParentRoute: () => base, path: "/", component: HomePage });
   const player = createRoute({ getParentRoute: () => base, path: "/now", component: () => <h1>Player</h1> });
-  const settings = createRoute({ getParentRoute: () => base, path: "/settings/sources", component: () => <h1>Source settings</h1> });
-  const router = createRouter({ routeTree: base.addChildren([home, player, settings]), history });
+  const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <h1>Find</h1> });
+  const router = createRouter({ routeTree: base.addChildren([home, player, find]), history });
   await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
 }
 
-test("Home waits for radio favorites, recovers from their failure, and offers source settings when nothing is set up", async () => {
+test("Home waits for radio favorites, recovers from their failure, and offers Find when empty", async () => {
   const favorites = Promise.withResolvers<Response>();
   let retryFavorites = false;
   request = spyOn(globalThis, "fetch").mockImplementation((async input => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/progress/history" || path === "/api/for-later") return Response.json({ items: [] });
     if (path === "/api/radio/favorites") return retryFavorites ? Response.json({ favorites: [] }) : favorites.promise;
-    if (path === "/api/jellyfin") return Response.json({ connected: false });
     if (path === "/api/radio/avoid") return Response.json({ stations: [] });
-    if (path === "/api/library/sources" || path === "/api/iptv/sources") return Response.json({ sources: [] });
     throw new Error(`Unexpected request: ${path}`);
   }) as typeof fetch);
   await renderHome();
@@ -61,9 +59,11 @@ test("Home waits for radio favorites, recovers from their failure, and offers so
   retryFavorites = true;
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(await screen.findByRole("heading", { name: "Find something to play" })).toBeInTheDocument();
-  await userEvent.click(await screen.findByRole("button", { name: "Add folders, Jellyfin or Live TV" }));
-  expect(history.location.pathname).toBe("/settings/sources");
-  expect(await screen.findByRole("heading", { name: "Source settings" })).toBeInTheDocument();
+  expect(screen.queryByText(/Search .*or paste a link/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "Add folders, Jellyfin or Live TV" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Find" }));
+  expect(history.location.pathname).toBe("/find");
+  expect(await screen.findByRole("heading", { name: "Find" })).toBeInTheDocument();
 });
 
 test("a fresh Home fills Radio with built-in stations and leads with the one on air", async () => {
@@ -73,8 +73,6 @@ test("a fresh Home fills Radio with built-in stations and leads with the one on 
     if (path === "/api/radio/avoid") return Response.json({ stations: [station("nts", "NTS Radio"), station("lyl", "Lyl Radio")] });
     if (path === "/api/radio/avoid/programmes") return Response.json({ programmes: { nts: { stationId: "nts", provider: "radio.avoid.quest", title: "Alexander Nut", sampledAt: Date.now(), expiresAt: Date.now() + 60_000 } } });
     if (path === "/api/radio/favorites") return Response.json({ favorites: [] });
-    if (path === "/api/jellyfin") return Response.json({ connected: false });
-    if (path.endsWith("/sources")) return Response.json({ sources: [] });
     return Response.json({ items: [] });
   }) as typeof fetch);
   await renderHome();
@@ -82,6 +80,12 @@ test("a fresh Home fills Radio with built-in stations and leads with the one on 
   expect(screen.getByRole("button", { name: "Play NTS Radio" })).toBeInTheDocument();
   expect(within(screen.getByRole("list", { name: "Radio stations" })).getByRole("button", { name: "Play Lyl Radio" })).toHaveTextContent("Live");
   expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
+  const home = screen.getByRole("region", { name: "Home" });
+  expect(within(home.querySelector("header")!).getByRole("button", { name: "Customize Home" })).toBeInTheDocument();
+  expect(home.querySelector("footer")).toBeNull();
+  expect(request.mock.calls.some(([input]: [unknown]) => /\/api\/(jellyfin|library\/sources|iptv\/sources)$/.test(String(input)))).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "Customize Home" }));
+  expect(screen.getByRole("dialog", { name: "Customize Home" })).toBeInTheDocument();
 });
 
 test("hiding failed Home rows restores the empty state and skips their reads on the next visit", async () => {
