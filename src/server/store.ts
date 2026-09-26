@@ -10,6 +10,7 @@ import { ControllerError, controllerName } from "./controllers";
 import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 import { CHANGED_ELSEWHERE } from "./messages";
+import type { PlaybackContinuation } from "./continuation";
 
 type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
 export type ProgressSnapshot = Array<ProgressRow & { profileId: string }>;
@@ -35,6 +36,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     INSERT OR IGNORE INTO session VALUES (1, '[]', 80);
     CREATE TABLE IF NOT EXISTS queue_position (id INTEGER PRIMARY KEY CHECK (id = 1), entryId TEXT);
     INSERT OR IGNORE INTO queue_position VALUES (1, NULL);
+    CREATE TABLE IF NOT EXISTS playback_continuation (id INTEGER PRIMARY KEY CHECK (id = 1), context TEXT);
+    INSERT OR IGNORE INTO playback_continuation VALUES (1, NULL);
     CREATE TABLE IF NOT EXISTS devices (token_hash TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE);
     INSERT OR IGNORE INTO watching_profiles (id, name) VALUES ('household', 'Household');
@@ -152,6 +155,13 @@ export function openStore(path: string, remoteControlEnabled = false) {
     },
     queue: JSON.parse(stored.queue) as QueueEntry[],
     queueCursorEntryId() { return db.query<{ entryId: string | null }, []>("SELECT entryId FROM queue_position WHERE id = 1").get()!.entryId; },
+    playbackContinuation(): PlaybackContinuation | null {
+      const value = db.query<{ context: string | null }, []>("SELECT context FROM playback_continuation WHERE id = 1").get()!.context;
+      return value ? JSON.parse(value) : null;
+    },
+    savePlaybackContinuation(context: PlaybackContinuation | null) {
+      db.query("UPDATE playback_continuation SET context = ? WHERE id = 1").run(context ? JSON.stringify(context) : null);
+    },
     saveQueueCursor(entryId: string, beforeCommit?: () => void) {
       db.transaction(() => {
         db.query("UPDATE queue_position SET entryId = ? WHERE id = 1").run(entryId);

@@ -11,6 +11,7 @@ import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { useOptionalShell } from "@/sections/shell/shell-context";
@@ -49,6 +50,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const [saveOpen, setSaveOpen] = useState(false);
   const [listName, setListName] = useState("");
   const keep = useMutation({ mutationFn: (name: string) => apiSend(credentials, "/api/playlists", { name, scope: "upNext" }, "POST", 20_000) });
+  const autoplaySave = useMutation({ mutationFn: async (autoplay: boolean) => { if (state) await run({ type: "preferences", profileId: state.activeProfile.id, preferences: { autoplay } }); } });
   const keeping = keep.isPending;
   const panelRef = useRef<HTMLElement>(null);
   const focusedEntry = useRef<{ element: HTMLElement; id: string; index: number; label: string | null } | null>(null);
@@ -119,7 +121,14 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         return <QueueRow key={entry.id} entry={entry} credentials={credentials} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           actions={<QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />;
       })}</ul>
-    </section> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
+    </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Your queue is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
+    {state?.autoplay && <section aria-label="Autoplay" className="grid gap-2">
+      <div className="flex items-center justify-between gap-4"><h3 className="text-base font-medium">Autoplay</h3><Switch aria-label="Autoplay" checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
+      {state.autoplay.enabled && state.autoplay.next ? <>
+        <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after your queue"}</p>
+        <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} credentials={credentials} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
+      </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after your queued items."}</p>}
+    </section>}
     {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="justify-between px-0 text-muted-foreground">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
       <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} credentials={credentials} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} actions={<QueueActions credentials={credentials} entry={entry} index={queue.indexOf(entry)} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />)}</ul>
     </CollapsibleContent></Collapsible>}

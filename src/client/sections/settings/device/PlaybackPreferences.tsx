@@ -3,6 +3,7 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import type { WatchingProfile } from "../../../../shared/library";
 import type { Action, PlaybackPreferences as Preferences, ProfilePlaybackPreferences } from "../../../../shared/protocol";
 import { playbackLanguages } from "../../../playback-languages";
@@ -39,6 +40,9 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
   );
   const speeds = [...new Set([1, 1.25, 1.5, values.speed])].sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value}×` }));
   return <>
+    <SettingsRow label="Autoplay" description="Continue the current series, album or playlist after your queued items.">
+      <Switch aria-label="Autoplay" checked={values.autoplay !== false} disabled={disabled} onCheckedChange={autoplay => apply({ autoplay })} />
+    </SettingsRow>
     {language("Audio language", "audioLanguage")}
     <SettingsRow label="Subtitles">
       <ChoiceGroup label="Subtitles" value={values.subtitles} options={[{ value: "auto", label: "Automatic" }, { value: "off", label: "Off" }]} disabled={disabled} onValueChange={value => apply({ subtitles: value })} />

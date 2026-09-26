@@ -62,5 +62,5 @@ test("repeated playlist occurrences remain separate playable rows", async () => 
   render(<QueryClientProvider client={createTestQueryClient()}><Browser /></QueryClientProvider>);
   await waitFor(() => expect(screen.getAllByRole("button", { name: "Play S01E01 · Arrival" })).toHaveLength(2));
   await userEvent.click(screen.getAllByRole("button", { name: "Play S01E01 · Arrival" })[1]!);
-  expect(commands).toContainEqual(expect.objectContaining({ type: "enqueueProvider", url: episode.url }));
+  expect(commands).toContainEqual(expect.objectContaining({ type: "enqueueProvider", url: episode.url, collection: { title: "Two viewings", url: showUrl, index: 1 } }));
 });

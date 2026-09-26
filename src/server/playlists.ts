@@ -12,7 +12,7 @@ type Options = {
   onChange: () => void;
   queue: () => QueueEntry[];
   upNext?: () => QueueEntry[];
-  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor) => void;
+  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void;
   resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
 type Row = Omit<SavedPlaylist, "entries" | "source"> & { entries: string; source: string | null };
@@ -98,6 +98,7 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
       ...(entry.kind === "radio" ? { kind: entry.kind } : {}),
       ...(entry.quality && ["auto", "best", "1080p", "720p", "480p"].includes(entry.quality) ? { quality: entry.quality } : {}),
       ...(typeof entry.automaticTitle === "boolean" ? { automaticTitle: entry.automaticTitle } : {}),
+      ...(entry.collection ? { collection: { title: entry.collection.title, url: entry.collection.url, ...(entry.collection.index === undefined ? {} : { index: entry.collection.index }) } } : {}),
     };
   });
 }
@@ -204,7 +205,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
           const entries = JSON.parse(row.entries) as QueueEntry[];
           if (!entries.length) throw new PlaylistError("This playlist is empty. Save a queue before loading it.");
           if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError(QUEUE_FULL);
-          loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy);
+          loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy, row.name);
           return Response.json({ ok: true });
         }
         if (request.method === "GET") return Response.json({ playlist: view(get(id)) });

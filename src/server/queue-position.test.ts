@@ -91,7 +91,7 @@ test("moving a stopped cursor preserves its identity while append, replace and p
   const replaced = f.session.loadQueue(entries, "replace");
   expect(f.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: null, queue: replaced });
   const played = f.session.loadQueue(entries, "play");
-  expect(f.session.state).toMatchObject({ currentEntryId: played[0]!.id, queueCursorEntryId: played[0]!.id, queue: played });
+  expect(f.session.state).toMatchObject({ currentEntryId: played[0]!.id, queueCursorEntryId: played[0]!.id, queue: [played[0]!, ...replaced], autoplay: { next: played[1]! } });
 });
 
 test("Play next inserts after the shared cursor and persists who added it", () => {

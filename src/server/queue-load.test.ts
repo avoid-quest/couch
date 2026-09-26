@@ -56,7 +56,7 @@ test("queue limits and storage failures leave the old queue and player intact", 
   session.loadQueue(entries, "play");
   const previous = session.state;
   const sent = commands.length;
-  expect(() => session.loadQueue(Array.from({ length: 499 }, () => entries[0]!), "append")).toThrow("500");
+  expect(() => session.loadQueue(Array.from({ length: 500 }, () => entries[0]!), "append")).toThrow("500");
   expect(() => session.loadQueue([], "play")).toThrow("empty");
   expect(session.state).toEqual(previous);
   store.close();
@@ -158,7 +158,8 @@ test("a completion-write failure rolls back playlist Play and keeps observing th
   session.observe({ ...before.player, status: "paused", position: 960 });
   expect(store.progress("household", "library:current")).toMatchObject({ position: 960, watched: false });
   const added = session.loadQueue(entries, "play");
-  expect(session.state.queue).toEqual(added);
+  expect(session.state.queue).toEqual([...before.queue, { ...added[0]!, addedBy: undefined }]);
+  expect(session.state.autoplay?.next).toEqual(added[1]!);
   expect(session.state.currentEntryId).toBe(added[0]!.id);
   expect(commands.at(-1)).toMatchObject({ type: "load", source: entries[0]!.source });
   expect(store.progress("household", "library:current")).toMatchObject({ position: 0, watched: true });

@@ -58,7 +58,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
-  const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] : undefined;
+  const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
   const live = !!(current?.live || current?.kind === "radio" || current?.source.startsWith("radio:"));
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;

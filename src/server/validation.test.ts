@@ -109,3 +109,12 @@ test("current video quality requires a playback ID and a known quality and strip
     expect(() => parse({ type: "videoQuality", playbackId: "current", quality: "720p", ...change })).toThrow();
   }
 });
+
+test("Autoplay preferences and provider context accept only bounded public references", () => {
+  for (const autoplay of [true, false]) expect(parse({ type: "preferences", profileId: "household", preferences: { autoplay, injected: true } }).action).toEqual({ type: "preferences", profileId: "household", preferences: { autoplay } });
+  expect(() => parse({ type: "preferences", profileId: "household", preferences: { autoplay: "yes" } })).toThrow();
+  const collection = { title: "Playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", index: 2 };
+  const action = { type: "enqueueProvider", provider: "youtube", shape: "atom", url: "https://www.youtube.com/watch?v=abcdefghijk", collection } as const;
+  expect(parse({ ...action, collection: { ...collection, entries: ["injected"], headers: { secret: "private" } } }).action).toEqual(action);
+  for (const change of [{ url: "file:///private" }, { url: "https://artist.bandcamp.com/album/album" }, { index: -1 }, { index: 500 }, { index: 1.5 }, { title: "\ninvalid" }]) expect(() => parse({ ...action, collection: { ...collection, ...change } })).toThrow();
+});

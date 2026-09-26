@@ -23,6 +23,7 @@ import { parseCommand } from "./validation";
 import { createMediaFolders } from "./media-folders";
 import { createFolderSettings } from "./folder-settings";
 import { createLibrary } from "./library";
+import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
 import { createRadioProgramme } from "./radio-programme";
 import { createRadioSettings } from "./radio-settings";
@@ -157,6 +158,7 @@ export function createHub(options: HubOptions) {
     }
   }, {
     admitted, systemAudio,
+    resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
@@ -186,14 +188,15 @@ export function createHub(options: HubOptions) {
       const cursor = current >= 0 ? current : session.state.queue.findIndex(entry => entry.id === session.state.queueCursorEntryId);
       return session.state.queue.slice(cursor + 1);
     },
-    loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); },
+    loadQueue: (entries, mode, authorize, playedBy, title) => { session.loadQueue(entries, mode, authorize, playedBy, undefined, title); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
       return { name: page.title ?? "Playlist", entries: providerListEntries(page) };
     } });
   const folders = createMediaFolders();
   const library = createLibrary({ folders, ffprobePath: buildInfo.packaged ? process.env.COUCH_FFPROBE ?? null : undefined, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
-  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); } });
+  const continuation = createContinuationResolver({ library, jellyfin });
+  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy, title) => { session.loadQueue(entries, mode, authorize, playedBy, undefined, title); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   radioProgramme = createRadioProgramme({ station: radio.programmeStation, metadata: radio.metadata, publish: (playbackId, programme) => session.updateRadioProgramme(playbackId, programme) });
   const folderSettings = createFolderSettings(library, folders);
@@ -323,7 +326,7 @@ export function createHub(options: HubOptions) {
   // or apply play intent; Session alone owns queue order and playback. Already
   // normalized enqueue/transport commands still go directly to Session.
   const enqueueMedia = (action: Action, authorize: () => void, playedBy?: PlaybackActor): Promise<void> | undefined => {
-    type Intake = { entry: QueueEntry; fromStart?: boolean; inspectUrl?: string } | { entries: QueueEntry[] };
+    type Intake = { entry: QueueEntry; fromStart?: boolean; inspectUrl?: string } | { entries: QueueEntry[]; title: string };
     const authorized = () => { if (closed) return false; authorize(); return true; };
     const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
       const title = item.title?.trim();
@@ -331,7 +334,7 @@ export function createHub(options: HubOptions) {
     };
     const list = async (provider: ProviderId, url: string, quality?: VideoQuality): Promise<Intake> => {
       const page = await loadProviderList(provider, url, shutdown.signal);
-      return { entries: providerListEntries(page, quality) };
+      return { entries: providerListEntries(page, quality), title: page.title || "Playlist" };
     };
     let prepare: () => Intake | null | Promise<Intake | null>;
     switch (action.type) {
@@ -350,9 +353,9 @@ export function createHub(options: HubOptions) {
         break;
       case "enqueueAlbum":
         prepare = () => {
-          const { items } = library.albumTracks(action.albumId);
+          const { album, items } = library.albumTracks(action.albumId);
           if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
-          return { entries: items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })) };
+          return { title: album.title, entries: items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })) };
         };
         break;
       case "enqueueRadio":
@@ -374,6 +377,7 @@ export function createHub(options: HubOptions) {
       if (!prepared || !authorized()) return;
       if ("entry" in prepared) {
         const { entry, inspectUrl } = prepared;
+        if (action.type === "enqueueProvider" && action.collection) entry.collection = action.collection;
         if (intent !== undefined) session.playNewEntries([entry], { intent, fromStart: prepared.fromStart, authorize, playedBy });
         else session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
         if (inspectUrl) {
@@ -386,7 +390,10 @@ export function createHub(options: HubOptions) {
           });
         }
       } else {
-        if (intent !== undefined) session.playNewEntries(prepared.entries.map(entry => ({ ...entry, id: crypto.randomUUID() })), { intent, fromStart: true, authorize, playedBy });
+        if (intent !== undefined) {
+          const entries = prepared.entries.map(entry => ({ ...entry, id: crypto.randomUUID() }));
+          session.playNewEntries(entries.slice(0, 1), { intent, fromStart: true, authorize, playedBy, continuation: { title: prepared.title, entries: entries.slice(1) } });
+        }
         else session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
       }
     })();

@@ -26,7 +26,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     transportReady: available && !!player?.playbackId && ["playing", "paused"].includes(player.status),
     seekable: !!player?.seekable,
     pausable: !live || !!player?.seekable,
-    hasNext: currentIndex >= 0 && currentIndex < (state?.queue.length ?? 0) - 1,
+    hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.next || !!state.autoplay.pending)),
   };
 }
 
