@@ -1,5 +1,6 @@
 import { setupUiTests, render as renderUI, act, screen, userEvent, testWindow } from "@/testing/react";
-import { beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, jest, spyOn, test } from "bun:test";
+import * as core from "@tauri-apps/api/core";
 import { ShellProviders } from "../shell/test-providers";
 import type { SessionState } from "../../../shared/protocol";
 import type { ShellValue } from "../shell/AppShell";
@@ -153,4 +154,45 @@ test.each([true, false])("radio shows provider details and keeps observed track 
   await act(async () => view.rerender(<ShellProviders value={{ ...radio, nativeHost: true }}><PlayerPage /></ShellProviders>));
   expect(screen.queryByRole("link", { name: "About this show" })).toBeNull();
   expect(screen.getByText("Broken beat and soul.")).toBeVisible();
+});
+
+
+test("idle player hides its cursor and pointer movement restores controls", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  jest.useFakeTimers();
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
+  const player = screen.getByRole("region", { name: "Player" });
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(player).toHaveClass("cursor-none");
+  expect(player.querySelector("[data-player-band]")).toHaveAttribute("inert");
+  await act(async () => player.dispatchEvent(new Event("pointermove", { bubbles: true })));
+  expect(player).not.toHaveClass("cursor-none");
+  expect(player.querySelector("[data-player-band]")).not.toHaveAttribute("inert");
+});
+
+test("keyboard-focused player controls stay visible until focus leaves", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  jest.useFakeTimers();
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
+  const player = screen.getByRole("region", { name: "Player" });
+  const control = screen.getByRole("button", { name: "Playback" });
+  await act(async () => control.focus());
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(player.querySelector("[data-player-band]")).not.toHaveAttribute("inert");
+  expect(document.activeElement).toBe(control);
+  await act(async () => control.blur());
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(player).toHaveClass("cursor-none");
+});
+
+test("native cursor follows player controls and is restored when leaving", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const invoke = spyOn(core, "invoke").mockResolvedValue(undefined);
+  Object.assign(window, { __TAURI_INTERNALS__: { metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } } } });
+  jest.useFakeTimers();
+  await act(async () => view.rerender(<ShellProviders value={{ ...shell, nativeHost: true }}><PlayerPage /></ShellProviders>));
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(invoke).toHaveBeenLastCalledWith("plugin:window|set_cursor_visible", { label: "main", value: false });
+  await act(async () => view.unmount());
+  expect(invoke).toHaveBeenLastCalledWith("plugin:window|set_cursor_visible", { label: "main", value: true });
 });

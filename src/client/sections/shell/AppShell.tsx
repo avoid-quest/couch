@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiSend } from "@/api/client";
+import { useIdleCursor } from "@/useIdleCursor";
 import { useNavigation } from "@/navigation";
 import { cn } from "cn";
 import { toast } from "sonner";
@@ -272,6 +273,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
   const onPlayer = paired && section === "Now" && !!current;
+  useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
 
   if (setupPending) return <div className="app-shell glass-shell flex min-h-dvh flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
