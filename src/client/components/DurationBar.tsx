@@ -34,7 +34,8 @@ export function DurationRuler({ className }: { className?: string }) {
 }
 
 export function DurationBar({ duration, position = 0, live = false, collection = false }: { duration?: number | null; position?: number; live?: boolean; collection?: boolean }) {
-  if (collection || live || duration == null) return <span className="block text-sm">{collection ? "Channel" : "Live"}</span>;
+  if (collection || live) return <span className="block text-sm">{collection ? "Channel" : "Live"}</span>;
+  if (duration == null) return null;
   return <TimedDurationBar duration={duration} position={position} />;
 }
 
