@@ -104,19 +104,33 @@ html { view-transition-name: none; }
 
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
-.player-summary { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: center; gap: 2rem; padding: 1rem var(--gutter); overflow: hidden; transition: bottom .3s; }
-@media (prefers-reduced-motion: reduce) { .player-summary { transition: none; } }
-.player-art { height: 100%; }
-.player-art > :not(svg), .player-art img { width: 100%; height: 100%; min-height: 0; min-width: 0; object-fit: contain; }
-@media (max-aspect-ratio: 1/1) {
-  .player-summary { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 1rem; }
+.player-summary { position: absolute; inset: 4rem 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; padding: 1rem var(--gutter) 2rem; overflow: hidden; }
+.player-art { width: min(26rem, 100%); aspect-ratio: 1; min-height: 0; max-height: 26rem; flex: 0 1 auto; }
+.player-art > :not(svg), .player-art img { width: 100%; height: 100%; min-height: 0; min-width: 0; object-fit: contain; background: transparent; }
+[data-player-audio-copy] { flex: 0 0 auto; }
+.player-timeline:has([role="slider"]) { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
+.player-timeline:has([role="slider"]) > .relative { grid-column: 2; grid-row: 1; }
+.player-timeline:has([role="slider"]) [data-time-labels] { display: contents; }
+.player-timeline:has([role="slider"]) [data-time-labels] > span:first-child { grid-column: 1; grid-row: 1; max-width: 9rem; }
+.player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
+.player-control-row { display: flex; align-items: center; gap: 1.5rem; }
+.player-volume { min-width: 0; width: 10rem; flex: 0 1 10rem; }
+@media (max-width: 599px) {
+  .player-summary { gap: 1rem; }
+  [data-player-audio-copy] h1 { font-size: 1.25rem; }
+  .player-control-row { flex-wrap: wrap; gap: .5rem; }
+  .player-page:has([role="slider"][aria-label="Playback position"]) .player-seek { display: none; }
+  .player-timeline [data-current-chapter], .player-timeline [data-end-time] { display: none; }
+  .player-volume { gap: .25rem; width: 5.5rem; flex-basis: 5.5rem; }
+  .player-volume [data-slot="slider"] { min-width: 2rem; }
 }
 @media (max-height: 500px) {
-  [data-player-band] { gap: .25rem; padding-block: .25rem; }
-  [data-player-heading] h1 { font-size: 1.125rem; }
-  [data-player-heading] > span { display: none; }
+  .player-summary { inset-block-start: 3.5rem; gap: .5rem; padding-block: .5rem; }
+  .player-header { padding-block: .25rem; }
+  [data-player-band] { padding-block: .25rem; }
+  .player-control-row { gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
-  [data-player-audio-copy] h2 { font-size: 1.125rem; }
+  [data-player-audio-copy] h1 { font-size: 1.125rem; -webkit-line-clamp: 1; }
 }
 
 /* One dark glass surface on Mac avoids a seam between chrome and page. */

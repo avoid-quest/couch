@@ -1,4 +1,4 @@
-import { setupUiTests, render as renderUI, act, screen, userEvent, testWindow } from "@/testing/react";
+import { setupUiTests, render as renderUI, act, screen, userEvent, testWindow, within } from "@/testing/react";
 import { beforeEach, expect, jest, spyOn, test } from "bun:test";
 import * as core from "@tauri-apps/api/core";
 import { ShellProviders } from "../shell/test-providers";
@@ -44,7 +44,7 @@ test("player keys leave focused buttons outside the player available", async () 
   expect(document.activeElement).toBe(outside);
   expect(actions).toEqual([]);
   expect(screen.getByRole("slider", { name: "Volume" })).toBeInTheDocument();
-  expect(screen.getByRole("group", { name: "Couch volume" }).textContent).toContain("40%");
+  expect(screen.getByRole("slider", { name: "Volume" })).toHaveAttribute("aria-valuenow", "40");
 });
 
 test("Escape leaves an open overlay to close itself before leaving the player", async () => {
@@ -105,7 +105,7 @@ test("loading and buffering report playback progress", async () => {
   const buffering = { ...loading, state: { ...(loading as unknown as { state: SessionState }).state, player: { ...(loading as unknown as { state: SessionState }).state.player, buffering: true } } } as unknown as ShellValue;
   await act(async () => view.rerender(<ShellProviders value={buffering}><PlayerPage /></ShellProviders>));
   expect(screen.queryByRole("heading", { name: "Loading Evening movie" })).not.toBeInTheDocument();
-  expect(screen.getByRole("status")).toHaveTextContent("Buffering…");
+  expect(within(document.querySelector<HTMLElement>("[data-player-header]")!).getByRole("status")).toHaveTextContent("Buffering…");
 });
 
 test("an idle player renders nothing; the shell returns to Home, which shows Up next", async () => {
@@ -127,13 +127,11 @@ test("a sheet does not reopen when playback ends and a new item starts", async (
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-test("the player heading uses available artist, source, and starter metadata", async () => {
+test("the compact player keeps the current title without repeating playback attribution", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const attributed = { ...shell, state: { ...state, playedBy: { deviceId: "phone", name: "Kitchen phone" }, player: { ...state.player, nowPlaying: { title: "Evening movie", artist: "Known artist" } } } } as ShellValue;
   await act(async () => view.rerender(<ShellProviders value={attributed}><PlayerPage /></ShellProviders>));
-  expect(screen.getByText(/^Known artist · .+ · played from Kitchen phone$/)).toBeInTheDocument();
-  const unattributed = { ...shell, state: { ...state, playedBy: undefined, player: { ...state.player, nowPlaying: null } } } as ShellValue;
-  await act(async () => view.rerender(<ShellProviders value={unattributed}><PlayerPage /></ShellProviders>));
+  expect(screen.getByRole("heading", { name: "Evening movie" })).toBeInTheDocument();
   expect(screen.queryByText(/played from Kitchen phone/)).not.toBeInTheDocument();
 });
 
@@ -222,4 +220,90 @@ test("fullscreen control labels follow the browser and Escape exits before leavi
     for (const key of ["fullscreenEnabled", "fullscreenElement", "exitFullscreen"]) Reflect.deleteProperty(document, key);
     Reflect.deleteProperty(document.documentElement, "requestFullscreen");
   }
+});
+
+test("live radio keeps its controls visible and gives Stop the primary action", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  jest.useFakeTimers();
+  const current = { id: "radio", title: "NTS Radio", source: "radio:nts", kind: "radio" as const };
+  const radio = { ...shell, current, state: { ...state, currentEntryId: current.id, queue: [current], player: { ...state.player, seekable: false } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={radio}><PlayerPage /></ShellProviders>));
+  await act(async () => jest.advanceTimersByTime(8000));
+  const player = screen.getByRole("region", { name: "Player" });
+  expect(player).not.toHaveClass("cursor-none");
+  expect(player.querySelector("[data-player-band]")).not.toHaveAttribute("inert");
+  expect(player.querySelector("[data-player-header]")).not.toHaveAttribute("inert");
+  expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+  const stop = screen.getByRole("button", { name: "Stop" });
+  expect(stop).toHaveAttribute("data-play-button");
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+  expect(actions).toEqual([]);
+  await act(async () => stop.click());
+  expect(actions).toEqual([{ type: "stop" }]);
+});
+
+test("Playback groups secondary controls and returns focus after browsing audio settings", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
+  expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Audio & subtitles" })).toBeNull();
+  const trigger = screen.getByRole("button", { name: "Playback" });
+  await userEvent.click(trigger);
+  await userEvent.click(screen.getByRole("button", { name: "Audio & subtitles" }));
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Audio & subtitles");
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
+  await userEvent.click(screen.getAllByRole("button", { name: "Playback" }).at(-1)!);
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Playback");
+  await userEvent.click(screen.getByRole("button", { name: "Close" }));
+  expect(document.activeElement).toBe(trigger);
+  await userEvent.click(trigger);
+  await userEvent.click(screen.getByRole("button", { name: "Stop playback" }));
+  expect(actions).toEqual([{ type: "stop" }]);
+});
+
+
+test.each([false, true])("transport Tab order follows its visual sequence (live: %s)", async live => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const current = { ...state.queue[0]!, live };
+  const withNext = { ...shell, current, state: { ...state, queue: [current, { id: "next", title: "Next", source: "library:next" }], player: { ...state.player, seekable: !live } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={withNext}><PlayerPage /></ShellProviders>));
+  const labels = live ? ["Stop", "Next"] : ["Back 10 seconds", "Pause", "Forward 10 seconds", "Next"];
+  const controls = within(screen.getByRole("group", { name: "Playback controls" }));
+  expect(controls.getAllByRole("button").map(button => button.getAttribute("aria-label"))).toEqual(labels);
+  await act(async () => controls.getByRole("button", { name: labels[0] }).focus());
+  for (const label of labels.slice(1)) {
+    await userEvent.tab();
+    expect(document.activeElement).toBe(controls.getByRole("button", { name: label }));
+  }
+});
+
+test.each([
+  { seekable: true, live: false, focus: "Playback position" },
+  { seekable: false, live: false, focus: "Pause" },
+  { seekable: false, live: true, focus: "Stop" },
+])("waking video controls focuses $focus instead of Volume", async ({ seekable, live, focus }) => {
+  const { PlayerPage } = await import("./PlayerPage");
+  jest.useFakeTimers();
+  const frames: FrameRequestCallback[] = [];
+  spyOn(globalThis, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+  const current = { ...state.queue[0]!, live };
+  const video = { ...shell, current, state: { ...state, queue: [current], player: { ...state.player, seekable } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={video}><PlayerPage /></ShellProviders>));
+  await act(async () => jest.advanceTimersByTime(4000));
+  expect(document.querySelector("[data-player-band]")).toHaveAttribute("inert");
+  await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  await act(async () => { for (const callback of frames.splice(0)) callback(performance.now()); });
+  expect(document.activeElement).toBe(screen.getByRole(focus === "Playback position" ? "slider" : "button", { name: focus }));
+  expect(actions).toEqual([]);
+});
+
+test.each([100, undefined])("seekable live playback retains seeking with duration %s", async duration => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const current = { ...state.queue[0]!, live: true, duration };
+  const live = { ...shell, current, state: { ...state, queue: [current], player: { ...state.player, duration, seekable: true } } } as ShellValue;
+  await act(async () => view.rerender(<ShellProviders value={live}><PlayerPage /></ShellProviders>));
+  expect(screen.getByRole("button", { name: "Back 10 seconds" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Forward 10 seconds" })).toBeEnabled();
+  if (duration) expect(screen.getByRole("slider", { name: "Playback position" })).toBeInTheDocument();
+  else expect(screen.queryByRole("slider", { name: "Playback position" })).toBeNull();
 });

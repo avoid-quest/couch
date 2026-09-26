@@ -16,12 +16,22 @@ catalog provides interface icons, not brand identities.
 ## Principles
 
 - **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
-  full-bleed player with one solid control band, and "Playing on" one step away.
-- **The player is one tap away.** While something plays, every browse page ends
-  in the mini player: its artwork and title open the player, beside Play/Pause,
-  Next and the volume slider. Volume is always a mute button and a slider.
-  The player fits the viewport at every interface size, with contained artwork
-  and no page scrolling. Long show details open in its existing side sheet.
+  full-bleed player with a compact bottom control band, and "Playing on" one
+  step away.
+- **The player is one tap away.** The mini player is one quiet row: thumbnail
+  and title open the player, followed by plain Play/Pause or live-radio Stop,
+  Next and volume. Seekable media adds a slim scrub bar. On phones, volume
+  opens a Popover with mute and a slider so the row stays compact.
+  The full player centres contained artwork above a modest title and station
+  line. Back sits above; transport, volume, Up next, Playback and fullscreen
+  share one bottom row. Plain playback glyphs keep the picture prominent.
+  The player fits the viewport at every interface size without page scrolling.
+  Audio keeps controls visible; video hides them when idle. Playback groups
+  secondary options in a Sheet; the info icon beside a show title opens its
+  details. On narrow screens, a visible timeline supplies seeking while
+  redundant ten-second buttons yield space to the core controls.
+  Custom stage CSS fits native video and artwork to the viewport; controls
+  reuse shadcn Button, Slider, Popover and Sheet.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
   on the right. Rows appear only when they have something in them: Now,
@@ -70,7 +80,8 @@ the TV and a desktop window show the same layout. Use Tailwind's rem sizes only.
 
 | Role | Classes |
 | --- | --- |
-| Display (search field, player title) | `text-3xl font-semibold tracking-tight` |
+| Display (search field) | `text-3xl font-semibold tracking-tight` |
+| Player artwork title | `text-2xl font-medium tracking-tight` |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
 | Section title | `text-base font-medium` |
 | Row title, settings label | `text-base` |
