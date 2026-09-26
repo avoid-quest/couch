@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
@@ -177,6 +177,7 @@ function DeviceForm() {
   const device = usePlaybackDevice()!;
   const [address, setAddress] = useState(device.address ?? "");
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [forgetting, setForgetting] = useState<string | null>(null);
   const selectRemote = async (confirmed = false) => {
     try { await device.choose("remote", address, confirmed); }
     catch (reason) { if (message(reason).startsWith("confirmation-required:")) setConfirm(message(reason).split(":")[1]!); }
@@ -188,7 +189,7 @@ function DeviceForm() {
         <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Play here. Phones can pair as remotes.</span></span>
         <ChevronRight aria-hidden="true" />
       </Button>
-      {device.targets.map(target => <Button key={target} variant="ghost" className="h-auto w-full justify-between rounded-none border-b px-3 py-4 text-left font-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}><span>{hostOf(target)}</span><ChevronRight aria-hidden="true" /></Button>)}
+      {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between rounded-none px-3 py-4 text-left font-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}><span>{hostOf(target)}</span><ChevronRight aria-hidden="true" /></Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
       <form className="grid gap-3 border-b px-3 py-4" onSubmit={submit}>
         <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Control a Couch on your network.</p></div>
         <div className="flex gap-2"><Input id="playback-address" aria-label="Couch address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
@@ -197,6 +198,13 @@ function DeviceForm() {
         {confirm && <div className="grid gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
       </form>
     </div>
+    <AlertDialog open={forgetting !== null} onOpenChange={open => { if (!open && !device.pending) setForgetting(null); }}>
+      <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.focus(); }}>
+        <AlertDialogHeader><AlertDialogTitle>Forget {forgetting && hostOf(forgetting)}?</AlertDialogTitle><AlertDialogDescription>That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
+        {device.error && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
+        <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction disabled={device.pending} onClick={event => { event.preventDefault(); if (forgetting) void device.forget(forgetting).then(done => { if (done) setForgetting(null); }); }}>Forget</AlertDialogAction></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     {device.error && !device.error.startsWith("confirmation-required:") && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
   </div>;
 }

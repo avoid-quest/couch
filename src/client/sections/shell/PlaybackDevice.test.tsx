@@ -380,3 +380,15 @@ test("unavailable name storage cannot keep a forgotten native Couch selected", a
   expect(choice.mode).toBeNull();
   expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
 });
+
+
+test("the neutral chooser forgets retained targets without connecting", async () => {
+  choice.targets = ["http://kitchen:4100", "http://bedroom:4100"];
+  await render();
+  await user.click(button("Forget kitchen:4100"));
+  expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  await user.click(button("Forget"));
+  expect(choice.targets).toEqual(["http://bedroom:4100"]);
+  expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
+  expect(button("This computer")).toHaveFocus();
+});

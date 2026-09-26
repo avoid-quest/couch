@@ -87,6 +87,8 @@ test("a remembered browser Couch can be forgotten without changing the current p
   localStorage.setItem("couch.remote-token", token);
   await render();
   await user.click(screen.getByRole("button", { name: "Forget Kitchen" }));
+  expect(screen.getByRole("alertdialog", { name: "Forget Kitchen?" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "Forget" }));
   expect(localStorage.getItem("couch.connection")).toBeNull();
   expect(localStorage.getItem("couch.remote-token")).toBe(token);

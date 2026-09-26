@@ -1,11 +1,12 @@
 import type { ClientSessionState } from "@/session/session";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SoundState } from "../../../shared/sound";
@@ -39,6 +40,7 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
 }) {
   const queryClient = useQueryClient();
   const gate = useOptionalSessionGate();
+  const trigger = useRef<HTMLButtonElement>(null);
   const admin = !!gate?.localHost || gate?.identity?.authority === "host" || gate?.identity?.authority === "administrator";
   const enabled = open && !!credentials && connected;
   const soundRead = useQuery({ ...soundQuery(credentials ?? noCredentials), enabled });
@@ -77,6 +79,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   run?: (action: Action) => Promise<boolean>;
 }) {
   const gate = useOptionalSessionGate();
+  const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [forgetting, setForgetting] = useState<{ origin: string; name: string } | null>(null);
   const [address, setAddress] = useState("");
@@ -93,31 +96,32 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     setAddressError("");
     if (next !== origin) setTarget(next);
   };
-  return <Popover open={open} onOpenChange={setOpen}>
+  return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
       <Button variant="ghost" className="min-w-0 gap-2" aria-label={`${label}: ${status}`}>
         <StatusDot connected={connected} />
         <span className="max-w-48 truncate max-sm:max-w-32">{localHost ? label : <><span className="max-sm:sr-only">Playing on </span>{name}</>}</span>
       </Button>
     </PopoverTrigger>
-    <PopoverContent align="end" className="w-96 gap-4">
+    <PopoverContent align="end" className="w-96 gap-4" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>
       <PopoverHeader><PopoverTitle>Play on</PopoverTitle><PopoverDescription role="status">{status}</PopoverDescription></PopoverHeader>
-      {forgetting ? <div className="grid gap-3">
-        <p>Forget {forgetting.name}?</p>
-        <p className="text-muted-foreground">That Couch keeps playing. You'll need to pair again to reconnect.</p>
-        <div className="flex flex-wrap gap-2"><Button variant="destructive" onClick={() => { forgetConnection(forgetting.origin); if (forgetting.origin === origin) gate?.unpair(); setForgetting(null); setOpen(false); }}>Forget</Button><Button variant="ghost" onClick={() => setForgetting(null)}>Cancel</Button></div>
-      </div> : target ? <div className="grid gap-3">
+      {target ? <div className="grid gap-3">
         <p>Switch this browser to {new URL(target).host}?</p>
         <p className="text-muted-foreground">{name} keeps playing. You may need to pair.</p>
         <div className="flex flex-wrap gap-2"><Button onClick={() => location.assign(target)}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button></div>
       </div> : <>
         <RadioGroup aria-label="Play on" value={origin} onValueChange={choose} className="gap-0">
-          {[{ origin, name }, ...(other ? [{ origin: other.origin, name: other.details.name }] : [])].map((item, index) => <Field key={item.origin} orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id={`play-on-${index}`} value={item.origin} aria-label={item.name} /><FieldLabel htmlFor={`play-on-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{item.name}</span><span className="truncate text-muted-foreground">{new URL(item.origin).host}</span></FieldLabel>{(item.origin !== origin || !localHost && credentials && gate) && <Button variant="ghost" size="sm" aria-label={`Forget ${item.name}`} onClick={() => setForgetting(item)}>Forget</Button>}</Field>)}
+          {[{ origin, name }, ...(other ? [{ origin: other.origin, name: other.details.name }] : [])].map((item, index) => <Field key={item.origin} orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id={`play-on-${index}`} value={item.origin} aria-label={item.name} /><FieldLabel htmlFor={`play-on-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{item.name}</span><span className="truncate text-muted-foreground">{new URL(item.origin).host}</span></FieldLabel>{(item.origin !== origin || !localHost && credentials && gate) && <Button variant="ghost" size="sm" aria-label={`Forget ${item.name}`} onClick={() => { setForgetting(item); setOpen(false); }}>Forget</Button>}</Field>)}
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); choose(address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={!address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {addressError && <Alert variant="destructive"><AlertDescription>{addressError}</AlertDescription></Alert>}
       </>}
       <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={() => setOpen(false)} />
     </PopoverContent>
-  </Popover>;
+  </Popover><AlertDialog open={forgetting !== null} onOpenChange={value => { if (!value) setForgetting(null); }}>
+    <AlertDialogContent onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }}>
+      <AlertDialogHeader><AlertDialogTitle>Forget {forgetting?.name}?</AlertDialogTitle><AlertDialogDescription>That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
+      <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (forgetting) { forgetConnection(forgetting.origin); if (forgetting.origin === origin) gate?.unpair(); } setForgetting(null); }}>Forget</AlertDialogAction></AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog></>;
 }
