@@ -1,4 +1,4 @@
-import { setupUiTests, render as renderUI, act, screen, waitFor, userEvent, createTestQueryClient } from "@/testing/react";
+import { setupUiTests, render as renderUI, act, screen, waitFor, userEvent, within, createTestQueryClient } from "@/testing/react";
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { HistoryItem } from "../../../shared/library";
@@ -15,8 +15,8 @@ let historyItems: HistoryItem[], historyError: boolean;
 const played: unknown[] = [], queued: HistoryItem[] = [], requests: string[] = [];
 
 const button = (name: string) => screen.getByRole("button", { name });
-async function renderContinue({ connected = true, canPlay = true, feature = false }: { connected?: boolean; canPlay?: boolean; feature?: boolean } = {}) {
-  await act(async () => view.rerender(<QueryClientProvider client={client}><ContinueSection credentials={credentials} connected={connected} canPlay={canPlay} feature={feature} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
+async function renderContinue({ connected = true, canPlay = true, feature = false, currentEntryId }: { connected?: boolean; canPlay?: boolean; feature?: boolean; currentEntryId?: string } = {}) {
+  await act(async () => view.rerender(<QueryClientProvider client={client}><ContinueSection credentials={credentials} connected={connected} canPlay={canPlay} feature={feature} currentEntryId={currentEntryId} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
   if (connected) await screen.findByRole(historyError ? "alert" : "region", historyError ? {} : { name: "Continue" });
 }
 
@@ -115,3 +115,41 @@ for (const feature of [true, false]) {
     expect(queued).toEqual([episode]);
   });
 }
+
+for (const trigger of ["Details Album track", "View artwork details for Album track"]) {
+  test(`Continue ${trigger} opens a nonplaying preview and restores focus`, async () => {
+    historyItems = [{ ...online, description: "The complete episode description remains available without starting playback." }];
+    await renderContinue({ feature: true });
+    const opener = button(trigger);
+    await userEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Album track" });
+    expect(within(dialog).getByText(historyItems[0]!.description!)).toBeInTheDocument();
+    expect(played).toEqual([]);
+    expect(queued).toEqual([]);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+}
+
+test("Continue omits the item already visible in Now", async () => {
+  historyItems = [{ ...online, queueEntryId: "playing" }, unfinished];
+  await renderContinue({ currentEntryId: "playing" });
+  expect(screen.queryByRole("button", { name: "Details Album track" })).toBeNull();
+  expect(button("Details Halfway home")).toBeInTheDocument();
+});
+
+test("removing Continue keeps focus on the next item's nonplaying details", async () => {
+  await renderContinue();
+  await userEvent.click(button("Remove Halfway home from Continue"));
+  await waitFor(() => expect(button("Details Album track")).toHaveFocus());
+  expect(played).toEqual([]);
+});
+
+test("removing from the preview closes it and focuses the next item's details", async () => {
+  await renderContinue();
+  await userEvent.click(button("Details Halfway home"));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove Halfway home from Continue" }));
+  await waitFor(() => expect(button("Details Album track")).toHaveFocus());
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(played).toEqual([]);
+});

@@ -27,7 +27,7 @@ export function FindPage() {
   const openSources = () => void navigate({ to: "/settings/sources" });
   const opened = shell.onlineRequest;
   return <section data-page="Find">
-    {opened ? <OpenedCollection key={opened.revision} item={opened.item} onBack={() => { shell.closeOnlineRequest(); shell.changeSection("Saved"); }} />
+    {opened ? <OpenedCollection key={opened.revision} item={opened.item} backLabel={opened.returnLabel} onBack={() => shell.closeOnlineRequest(true)} />
     : browse === "music" ? <BrowseMusic credentials={credentials} connected={connected} canPlay={available} active={onStage} onBack={() => void navigate({ href: "/find" })}
       onAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })}
       onTrack={(id, playNow) => enqueueCatalog("enqueueLibrary", id, { playNow })} />
@@ -41,7 +41,7 @@ export function FindPage() {
 }
 
 /** A channel, list or show opened from Saved, shown like one opened from results. */
-function OpenedCollection({ item, onBack }: { item: ProviderItem; onBack: () => void }) {
+function OpenedCollection({ item, backLabel, onBack }: { item: ProviderItem; backLabel: string; onBack: () => void }) {
   const { credentials, available } = useShell();
   const { connected, run, videoQualityPreference } = useSessionGate();
   const [summary, setSummary] = useState<SearchResultSummary | null>(null);
@@ -52,7 +52,7 @@ function OpenedCollection({ item, onBack }: { item: ProviderItem; onBack: () => 
   const source = collection.source || item.provider;
   return <div ref={page} className="min-w-0 space-y-6">
     <SearchOnlineResults provider={item.provider} query="" opened={item} onClose={onBack} onResults={report} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
-    <CollectionHeader collection={collection} back={collection.root ? "Saved" : "Back"} onBack={collection.back} canPlay={available} />
+    <CollectionHeader collection={collection} back={collection.root ? backLabel : "Back"} onBack={collection.back} canPlay={available} />
     <HitList hits={summary?.hits ?? []} label={`${collection.title} items`} origin={credentials.origin} token={credentials.token} />
     {summary && <><MoreResults summaries={[[source, summary]]} /><SourceProblems summaries={[[source, summary]]} /></>}
   </div>;

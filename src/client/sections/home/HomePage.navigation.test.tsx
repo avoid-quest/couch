@@ -25,7 +25,7 @@ afterEach(async () => {
   request = undefined;
   history?.destroy();
 });
-async function renderHome(overrides: { current?: QueueEntry; state?: SessionState; active?: boolean } = {}) {
+async function renderHome(overrides: { current?: QueueEntry; state?: SessionState; active?: boolean; run?: (action: unknown) => Promise<boolean>; playHistory?: ShellValue["playHistory"] } = {}) {
   testWindow.happyDOM.setURL("http://localhost/");
   history?.destroy();
   history = createBrowserHistory();
@@ -83,7 +83,7 @@ test("a fresh Home fills Radio with built-in stations and leads with the one on 
   await renderHome();
   expect(await screen.findByRole("heading", { name: "Alexander Nut" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Play NTS Radio" })).toBeInTheDocument();
-  expect(within(screen.getByRole("list", { name: "Radio stations" })).getByRole("button", { name: "Play Lyl Radio" })).toHaveTextContent("Live");
+  expect(within(screen.getByRole("list", { name: "Radio stations" })).getByRole("button", { name: "Details Lyl Radio" })).toHaveTextContent("Live");
   expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Customize Home" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => /\/api\/(jellyfin|library\/sources|iptv\/sources)$/.test(String(input)))).toBe(false);
@@ -182,4 +182,29 @@ test("Settings Home applies row visibility and order and retains them after relo
   await act(async () => router.navigate({ href: "/" }));
   expect(await screen.findByRole("heading", { name: "Radio" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Up next" })).toBeNull();
+});
+
+test("Home live controls stop an unpausable stream instead of sending Pause", async () => {
+  localStorage.setItem("couch.home-rows", JSON.stringify(defaultHomeRows.map(row => ({ ...row, shown: row.id === "now" }))));
+  const current: QueueEntry = { id: "live", title: "Live station", source: "radio:station", kind: "radio" };
+  const state = { queue: [current], currentEntryId: current.id, player: { status: "playing", playbackId: "live-playback", position: 0, duration: null, volume: 40, seekable: false }, activeProfile: { id: "household", name: "Household" } } as SessionState;
+  const commands: unknown[] = [];
+  await renderHome({ state, current, active: true, run: async action => { commands.push(action); return true; } });
+  expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+  expect(commands).toEqual([{ type: "stop" }]);
+});
+
+test("Recent artwork and title open details without replaying", async () => {
+  localStorage.setItem("couch.home-rows", JSON.stringify(defaultHomeRows.map(row => ({ ...row, shown: row.id === "recent" }))));
+  request = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ items: [{ mediaId: "movie", libraryItemId: null, title: "Remembered episode", thumbnail: "https://example.com/still.jpg", description: "The full remembered episode description.", position: 120, duration: 120, watched: true, playable: true }] }));
+  const played: unknown[] = [];
+  await renderHome({ playHistory: async (...args) => { played.push(args); return true; } });
+  const opener = await screen.findByRole("button", { name: "Details Remembered episode" });
+  await userEvent.click(opener);
+  const dialog = screen.getByRole("dialog", { name: "Remembered episode" });
+  expect(within(dialog).getByText("The full remembered episode description.")).toBeInTheDocument();
+  expect(played).toEqual([]);
+  await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(opener).toHaveFocus());
 });

@@ -68,7 +68,7 @@ test("the local host's update page offers its controls", async () => {
   expect(screen.getByLabelText("Install updates")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable" | "idle", remoteOffline = false, emptyQueue = false) {
+async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
   if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
@@ -76,13 +76,13 @@ async function render(status: "playing" | "unavailable" | "idle", remoteOffline 
     installationName: "Desk Couch",
     activeProfile: { id: "household", name: "Household" },
     queue: status === "unavailable" || emptyQueue ? [] : [{ id: "movie", title: "Movie", source: "library:movie" }],
-    currentEntryId: status === "playing" ? "movie" : null,
+    currentEntryId: status === "playing" || status === "ended" ? "movie" : null,
     player: { playbackId: status === "playing" ? "movie" : null, status, position: 0, duration: null, volume: 50, seekable: false, error: status === "unavailable" ? "Video backend missing" : null },
   };
   const shell = {
     nativeHost: true, localHost: !remoteOffline, tvPresentation: false, credentials: { origin: remoteOffline ? "http://192.168.1.10:4100" : "http://localhost", token: "host" },
     state, status: remoteOffline ? "server-unavailable" : "connected", statusLabel: remoteOffline ? "Server unavailable" : "Connected", details: { tvPresentation: false },
-    connected: !remoteOffline, active: status === "playing", current: status === "playing" ? state.queue[0] : null,
+    connected: !remoteOffline, active: status === "playing", current: status === "playing" || status === "ended" ? state.queue[0] : null,
     available: status !== "unavailable", section: "Find", tv: { browsing: true, controlsVisible: false },
     run: async () => true, reconnect: () => {}, host: null, remoteControlEnabled: false, pairingRequired: false,
     sourcesOpen: false, onlineRequest: null, remoteOpen: false, setRemoteOpen: () => {},
@@ -147,4 +147,9 @@ test("a desktop app keeps offline recovery on the selected remote and offers an 
   expect(screen.getByText("Offline. Reconnecting to Desk Couch…")).toBeDefined();
   expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Use this computer" })).toBeDefined();
+});
+
+test("an ended item keeps Replay accessible in the dock while browsing", async () => {
+  await render("ended");
+  expect(screen.getByRole("button", { name: "Replay" })).toBeEnabled();
 });
