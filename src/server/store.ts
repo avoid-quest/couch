@@ -213,6 +213,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return db.transaction(() => {
         unchangedProfile(id, expectedName);
         if (id === "household") throw new ViewingError("The shared default watching profile cannot be removed.", 409);
+        if (activeProfile().id === id) db.run("UPDATE playback_continuation SET context = NULL WHERE id = 1");
         db.query("UPDATE watching_state SET profileId = 'household' WHERE profileId = ?").run(id);
         db.query("DELETE FROM viewing_progress WHERE profileId = ?").run(id);
         db.query("DELETE FROM watching_preferences WHERE profileId = ?").run(id);
@@ -223,7 +224,10 @@ export function openStore(path: string, remoteControlEnabled = false) {
     selectProfile(id: string) {
       const profile = db.query<WatchingProfile & { confirmedName: number }, [string]>("SELECT id, name, confirmedName FROM watching_profiles WHERE id = ?").get(id);
       if (!profile) throw new ViewingError("Watching profile not found.", 404);
-      db.query("UPDATE watching_state SET profileId = ? WHERE id = 1").run(id);
+      db.transaction(() => {
+        db.run("UPDATE playback_continuation SET context = NULL WHERE id = 1");
+        db.query("UPDATE watching_state SET profileId = ? WHERE id = 1").run(id);
+      }).immediate();
       return profileView(profile);
     },
     progress(profileId: string, mediaId: string) {

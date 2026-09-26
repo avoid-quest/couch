@@ -96,7 +96,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   return url.origin;
 };
 type SocketData = { playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
-const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
+const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");

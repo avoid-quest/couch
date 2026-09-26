@@ -173,7 +173,15 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         if (!advanceNext(advance.authorize, advance.playedBy)) stop();
       }
     }).catch(() => {
-      if (continuationResolution === controller) { continuationResolution = null; awaitingContinuation = false; if (admitted()) broadcast(); }
+      if (continuationResolution !== controller) return;
+      const advance = awaitingContinuation;
+      continuationResolution = null;
+      awaitingContinuation = false;
+      if (!admitted()) return;
+      if (advance && typeof advance === "object" && !["error", "unavailable"].includes(state.player.status)) {
+        try { advance.authorize(); stop(); } catch { /* A revoked controller cannot stop playback. */ }
+      }
+      broadcast();
       // Missing sequence metadata never interrupts the item the user chose.
     });
   };
@@ -481,12 +489,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (state.player.status !== "unavailable") send({ type: "stop" });
     broadcast();
   };
+  const automaticQueue = (entry: QueueEntry) => [...state.queue.slice(-499), entry];
   const advanceNext = (authorize = () => {}, playedBy?: PlaybackActor) => {
     const following = nextCandidate();
     if (!following) return false;
     const manual = state.queue.some(entry => entry.id === following.id);
     if (manual) play(following.id, false, false, authorize, false, playedBy, [], state.queue, afterManualEntry(following), true);
-    else playNewEntries([following], { authorize, playedBy, continuation: remainingContinuation() });
+    else play(following.id, false, false, authorize, false, playedBy, [], automaticQueue(following), remainingContinuation());
     return true;
   };
   const next = (authorize = () => {}, playedBy?: PlaybackActor) => {
@@ -599,7 +608,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     playNewEntries,
     reservePlay() {
       available();
-      cancelContinuation();
       qualityResolution?.abort();
       cancelPreparation();
       if (state.webRetry) { cancelWebRecovery(); broadcast(); }
@@ -657,6 +665,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (state.activeProfile.id === id) {
         playIntent++;
         cancelContinuation();
+        continuation = null;
         state.activeProfile = profile;
         state.preferences = preferences;
         state.progressError = null;
@@ -673,6 +682,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       const profile = store.selectProfile(id);
       playIntent++;
       cancelContinuation();
+      continuation = null;
       state.activeProfile = profile;
       state.preferences = preferences;
       cancelRadioRetry();
@@ -836,7 +846,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const next = nextCandidate();
         if (!next || next.id !== prepared.entryId) return;
         const manual = state.queue.some(entry => entry.id === next.id);
-        saveQueueCursor(next.id, false, undefined, manual ? state.queue : [...state.queue, next], manual ? afterManualEntry(next) : remainingContinuation());
+        saveQueueCursor(next.id, false, undefined, manual ? state.queue : automaticQueue(next), manual ? afterManualEntry(next) : remainingContinuation());
         awaitingContinuation = false;
         if (manual && continuationResolution) continuationManualSources.push(next.source);
         const previous: PlayerState = { ...state.player, status: "ended", position: state.player.duration ?? state.player.position };

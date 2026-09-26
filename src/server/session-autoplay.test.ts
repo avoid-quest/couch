@@ -243,3 +243,55 @@ test("Stop silences playback and clears automatic continuation even when its sto
     expect(f.session.state.queueError).toContain("Couldn't save Autoplay");
   } finally { failure.mockRestore(); }
 });
+
+
+test.each(["select", "remove"])("%s profile clears known and saved continuation", action => {
+  const f = fixture();
+  const profile = f.session.createProfile("Other");
+  f.session.selectProfile(profile.id);
+  f.session.playNewEntries([entry("A")], { continuation: { title: "Album", entries: [entry("B")] } });
+  f.session.command({ type: "preferences", profileId: profile.id, preferences: { autoplay: false } });
+  f.observe("ended");
+  if (action === "select") f.session.selectProfile("household");
+  else f.session.removeProfile(profile.id, profile.name);
+  expect(f.session.state.autoplay?.next).toBeNull();
+  expect(f.store.playbackContinuation()).toBeNull();
+});
+
+test.each([false, true])("failed pending Next stops only while still authorized (revoked: %s)", async revoked => {
+  const pending = Promise.withResolvers<null>();
+  const f = fixture({ resolveContinuation: () => pending.promise });
+  f.session.playNewEntries([entry("A")]);
+  f.observe("playing");
+  await Bun.sleep(0);
+  let allowed = true;
+  f.session.command({ type: "next", playbackId: f.session.state.player.playbackId! }, () => { if (!allowed) throw new Error("Revoked"); });
+  allowed = !revoked;
+  pending.reject(new Error("Provider unavailable"));
+  await Bun.sleep(0);
+  expect(f.session.state.currentEntryId).toBe(revoked ? "A" : null);
+  expect(f.session.state.autoplay?.pending).not.toBe(true);
+});
+
+test("Autoplay prunes old played entries at queue capacity", () => {
+  const f = fixture();
+  f.session.playNewEntries(Array.from({ length: 500 }, (_, index) => entry(String(index))), { continuation: { title: "Album", entries: [entry("B")] } });
+  for (let index = 0; index < 500; index++) f.next();
+  expect(f.session.state.currentEntryId).toBe("B");
+  expect(f.session.state.queue).toHaveLength(500);
+  expect(f.session.state.queue[0]?.id).toBe("1");
+});
+
+test("a reserved replacement that never commits preserves pending continuation", async () => {
+  const pending = Promise.withResolvers<{ title: string; entries: QueueEntry[] }>();
+  const f = fixture({ resolveContinuation: () => pending.promise });
+  f.session.playNewEntries([entry("A")]);
+  f.observe("paused", 50);
+  f.session.reservePlay();
+  pending.resolve({ title: "Album", entries: [entry("B")] });
+  await Bun.sleep(0);
+  expect(f.session.state.autoplay?.pending).not.toBe(true);
+  expect(f.session.state.autoplay?.next?.id).toBe("B");
+  f.next();
+  expect(f.session.state.currentEntryId).toBe("B");
+});
