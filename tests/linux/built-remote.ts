@@ -133,6 +133,7 @@ try {
   await ui.button(`Play ${entry.title}`);
   await until("browser Play reaches the coordinator and its native pipe", () => latest?.currentEntryId === entry.id && latest.player.status === "playing" && commands.some(command => command.type === "load" && command.source === entry.source));
   assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host", "Playback is attributed to the paired browser");
+  await ui.section("Now");
   await ui.button("Stop");
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Find");
