@@ -4,6 +4,15 @@ Couch is one app on three kinds of screen: the TV (driven by a remote), a
 desktop window (mouse and keyboard) and phones (touch). The look is **Clock**:
 black ground, white ink, hairlines. The picture brings the colour.
 
+## Brand mark
+
+Shift carries the avoid.quest disc and horizontal cuts, with its lower half moved
+right. Desktop icons use the black tile in `src-tauri/icons/icon.svg`. The macOS
+tray uses a transparent template silhouette so the system can tint it. The PWA
+maskable icon uses a full black background and keeps the mark inside the safe
+circle. The website uses a custom SVG for this product mark because the shadcn
+catalog provides interface icons, not brand identities.
+
 ## Principles
 
 - **Conventional structure, quiet style.** Find, Saved and Settings, a

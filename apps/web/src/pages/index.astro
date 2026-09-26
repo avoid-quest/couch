@@ -13,14 +13,17 @@ import "../styles.css";
     <meta name="description" content="Your files, streams and radio on one screen. Every phone is a remote." />
     <link rel="canonical" href={Astro.site} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <main>
       <Image src={couch} alt="An empty couch in the light of a television." widths={[640, 1024, 1536]} sizes="100vw" format="webp" loading="eager" />
-      <hgroup>
-        <h1><a href="/download">couch.avoid.quest</a></h1>
-        <p>Your files, streams and radio on one screen. Every phone is a remote.</p>
-      </hgroup>
+      <div class="brand-lockup">
+        <hgroup>
+          <h1><img src="/mark.svg" width="48" height="48" alt="" aria-hidden="true" /><a href="/download">couch.avoid.quest</a></h1>
+          <p>Your files, streams and radio on one screen. Every phone is a remote.</p>
+        </hgroup>
+      </div>
     </main>
   </body>
 </html>

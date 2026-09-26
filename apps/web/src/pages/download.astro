@@ -22,10 +22,11 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
     <meta name="description" content="Download Couch Preview for Mac, Windows and Linux." />
     <link rel="canonical" href={new URL("/download", Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <main class="downloads">
-      <nav aria-label="Home"><a href="/">couch.avoid.quest</a></nav>
+      <nav aria-label="Home"><a href="/"><img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" />couch.avoid.quest</a></nav>
       <header>
         <h1>Download Couch</h1>
         <p class="intro">One app for local playback and remote control where each mode is supported. Choose <strong>This computer</strong> or connect to another Couch when you open it.</p>
@@ -102,6 +103,8 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
   [hidden] { display: none !important; }
   nav, .target, .version, .muted, footer { color: var(--muted-foreground); }
   nav { font-size: .85rem; }
+  nav a { display: inline-flex; align-items: center; gap: .5rem; }
+  nav img { width: 1.5rem; height: 1.5rem; }
   header { margin: 4rem 0 3rem; }
   h1 { position: static; font-size: clamp(2rem, 6vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -.05em; margin: 0 0 1rem; }
   .intro { font-size: 1.1rem; }

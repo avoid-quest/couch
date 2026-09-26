@@ -274,6 +274,11 @@ pub(crate) fn install_desktop_menu(app: &tauri::AppHandle) -> tauri::Result<()> 
     let quit_item = MenuItem::with_id(app, "quit-couch", "Quit Couch", true, None::<&str>)?;
     let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
     let mut tray = TrayIconBuilder::new().tooltip("Couch").menu(&tray_menu);
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray.icon(tauri::include_image!("./icons/tray-template.png")).icon_as_template(true);
+    }
+    #[cfg(target_os = "windows")]
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
