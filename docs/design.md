@@ -95,8 +95,10 @@ Shared building blocks in `src/client/components`:
 
 Messages:
 
-- **Toast** (`sonner`) for results of an action, other people's activity and
-  Undo. One line, at most one action.
+- **Toast** (`sonner`) for errors, Undo, other people's activity and outcomes
+  that are otherwise offscreen (queueing, diagnostic tests, next steps). Let
+  visible player, saved-toggle and settings updates confirm their own success.
+  One line, at most one action.
 - **Alert** for a persistent problem on the page. `variant="destructive"` for
   errors; put Try again in `AlertAction`.
 - **Empty** for empty states. Say what goes here and offer the next step.

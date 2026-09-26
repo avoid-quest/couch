@@ -79,6 +79,22 @@ test("Find merges local, Jellyfin, provider and radio results with direct action
   await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", url: video.url, playNow: true });
 });
 
+test("playback and save toggles stay quiet while queue actions give one confirmation", async () => {
+  integrated = true; await render(); await search("Evening");
+  await screen.findByRole("button", { name: "Play Evening video" });
+  await click("Resume Evening movie");
+  await click("Play Evening video");
+  await click("Play Evening radio");
+  await click("Save Evening radio");
+  await click("Saved Evening radio");
+  await click("Save Evening collection");
+  await click("Saved Evening collection");
+  expect(toast.getToasts()).toHaveLength(0);
+  await click("Queue Evening radio");
+  await click("Play next Evening video");
+  expect(toast.getToasts().map(item => "title" in item ? item.title : "")).toEqual(["Queued Evening radio.", "Evening video plays next."]);
+});
+
 test("opening and leaving a collection restores focus to its result", async () => {
   integrated = true; await render(); await search("Evening");
   await screen.findByRole("button", { name: "Open Evening collection" });

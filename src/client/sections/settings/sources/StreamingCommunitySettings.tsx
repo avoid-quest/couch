@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -21,7 +20,7 @@ export function StreamingCommunitySettings({ credentials, connected, canManage }
   const site = draft ?? page.data?.origin ?? "";
   const saving = useMutation({
     mutationFn: (origin: string) => apiSend<{ origin: string }>(credentials!, "/api/settings/streamingcommunity", { origin }),
-    onSuccess: value => { queryClient.setQueryData(streamingCommunityQuery(credentials!).queryKey, value); setDraft(null); toast("Address saved."); },
+    onSuccess: value => { queryClient.setQueryData(streamingCommunityQuery(credentials!).queryKey, value); setDraft(null); },
   });
   const pending = saving.isPending;
   const value = site.trim().replace(/\/$/, "");

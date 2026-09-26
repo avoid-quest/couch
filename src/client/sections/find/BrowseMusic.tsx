@@ -33,7 +33,7 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
   async function queue(title: string, playNow: boolean, work: () => Promise<boolean>) {
     if (busy) return;
     setBusy(true);
-    try { if (await work()) toast(playNotice(title, playNow ? "play" : "queue")); }
+    try { if (await work() && !playNow) toast(playNotice(title, "queue")); }
     catch (error) { toast.error(error instanceof Error ? error.message : `Couldn't queue ${title}.`); }
     finally { setBusy(false); }
   }

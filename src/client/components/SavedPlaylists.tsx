@@ -154,7 +154,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
       </DndContext>}
       {playlist && <form className="mt-8 flex max-w-md flex-wrap items-end gap-2" data-nav-row onSubmit={event => {
         event.preventDefault();
-        void write(listPath(playlist.id), { revision: playlist.revision, operation: "rename", name: (rename ?? playlist.name).trim() }).then(ok => { if (ok) { setRename(null); toast("Renamed."); } });
+        void write(listPath(playlist.id), { revision: playlist.revision, operation: "rename", name: (rename ?? playlist.name).trim() }).then(ok => { if (ok) setRename(null); });
       }}>
         <div className="grid min-w-0 flex-1 gap-2">
           <Label htmlFor="rename-playlist">Name</Label>

@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { Settings2 } from "lucide-react";
-import { toast } from "sonner";
 import { useSessionGate } from "@/session/session-context";
 import type { GuideSource } from "../../shared/iptv";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
@@ -31,7 +30,6 @@ export function GuideSources({ inline = false, request, sources, host, connected
     setBusy(true); setError(null);
     try {
       await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
-      toast(method === "DELETE" ? "Removed." : "Saved.");
       return true;
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Couldn't update this source."); return false; }
     finally { setBusy(false); }
