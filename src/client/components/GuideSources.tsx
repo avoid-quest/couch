@@ -49,7 +49,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
         {source.channelCount} channels · {source.programCount} programs · {updated(source.updatedAt)}
         {source.error && <span className="block text-destructive">{source.error}</span>}
       </>}>
-        <Button variant="outline" disabled={disabled} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}>Try again</Button>
+        <Button variant="outline" disabled={disabled} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}>{source.error ? "Try again" : "Refresh"}</Button>
         <Button variant="ghost" disabled={disabled} onClick={() => edit(source)}>Edit</Button>
         <Button variant="ghost" aria-label={`Remove ${source.name}`} disabled={disabled} onClick={() => setRemoving(source)}>Remove</Button>
       </SettingsRow>)}

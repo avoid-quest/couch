@@ -139,7 +139,7 @@ static NSDictionary *request(NSDictionary *input) {
     if (!device) return @{@"error": @"That audio output is unavailable."};
     if ([op isEqualToString:@"default"]) {
         AudioObjectPropertyAddress property = address(kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, 0);
-        if (!writable(kAudioObjectSystemObject, property)) return @{@"error": @"Check in System Settings on this computer."};
+        if (!writable(kAudioObjectSystemObject, property)) return @{@"error": @"Check in System Settings on the computer running Couch."};
         return AudioObjectSetPropertyData(kAudioObjectSystemObject, &property, 0, NULL, sizeof(device), &device) == noErr ? @{@"ok": @YES} : @{@"error": @"Couldn't select the Mac system output."};
     }
     if ([op isEqualToString:@"profile"]) {
@@ -149,7 +149,7 @@ static NSDictionary *request(NSDictionary *input) {
         char *end = NULL;
         unsigned long long parsed = strtoull(digits, &end, 10);
         AudioObjectPropertyAddress property = address(kAudioDevicePropertyDataSource, kAudioDevicePropertyScopeOutput, 0);
-        if (!writable(device, property) || end == digits || *end || parsed > UINT32_MAX) return @{@"error": @"Check in System Settings on this computer."};
+        if (!writable(device, property) || end == digits || *end || parsed > UINT32_MAX) return @{@"error": @"Check in System Settings on the computer running Couch."};
         UInt32 source = parsed;
         if (![objects(device, address(kAudioDevicePropertyDataSources, kAudioDevicePropertyScopeOutput, 0)) containsObject:@(source)]) return @{@"error": @"That output configuration is unavailable."};
         return AudioObjectSetPropertyData(device, &property, 0, NULL, sizeof(source), &source) == noErr ? @{@"ok": @YES} : @{@"error": @"Couldn't select the output configuration."};
@@ -161,7 +161,7 @@ static NSDictionary *request(NSDictionary *input) {
     NSMutableArray *targets = [NSMutableArray array];
     for (NSDictionary *item in available) if ([item[@"writable"] boolValue] && [item[@"channel"] unsignedIntValue] == 0) [targets addObject:item];
     if (!targets.count) for (NSDictionary *item in available) if ([item[@"writable"] boolValue]) [targets addObject:item];
-    if (!targets.count) return @{@"error": @"Check in System Settings on this computer."};
+    if (!targets.count) return @{@"error": @"Check in System Settings on the computer running Couch."};
     for (NSDictionary *item in targets) {
         AudioObjectPropertyAddress property = address(selector, kAudioDevicePropertyScopeOutput, [item[@"channel"] unsignedIntValue]);
         Float32 scalar = value.floatValue;
