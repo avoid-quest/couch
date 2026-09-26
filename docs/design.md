@@ -18,13 +18,19 @@ catalog provides interface icons, not brand identities.
 - **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
   full-bleed player with a compact bottom control band, and "Playing on" one
   step away.
-- **The player is one tap away.** The mini player is one quiet row: thumbnail
-  and title open the player, followed by plain Play/Pause or live-radio Stop,
-  Next and volume. Seekable media adds a slim scrub bar. On phones, volume
-  opens a Popover with mute and a slider so the row stays compact.
+- **The player is one tap away.** The mini player is a quiet dock: thumbnail
+  and title open the player, plain Play/Pause or live-radio Stop and Next sit
+  in the centre, and volume sits on the right. Wide windows place the slim
+  scrub bar below transport; compact windows keep them inline. On phones and
+  compact windows, volume opens a Popover with mute and a slider so the row
+  stays compact.
   The full player centres contained artwork above a modest title and station
-  line. Back sits above; transport, volume, Up next, Playback and fullscreen
-  share one bottom row. Plain playback glyphs keep the picture prominent.
+  line, with transport centred beneath it and volume and tools to either side.
+  Phones keep transport centred above the secondary controls. Video keeps
+  transport on the left and exposes Audio & subtitles directly on desktop;
+  the same option remains in Playback on phones. Back sits above; Up next,
+  Playback and fullscreen stay in the bottom band. Plain playback glyphs
+  keep the picture prominent.
   The player fits the viewport at every interface size without page scrolling.
   Audio keeps controls visible; video hides them when idle. Playback groups
   secondary options in a Sheet; the info icon beside a show title opens its

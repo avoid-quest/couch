@@ -246,10 +246,9 @@ test("Playback groups secondary controls and returns focus after browsing audio 
   const { PlayerPage } = await import("./PlayerPage");
   await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
   expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Audio & subtitles" })).toBeNull();
   const trigger = screen.getByRole("button", { name: "Playback" });
   await userEvent.click(trigger);
-  await userEvent.click(screen.getByRole("button", { name: "Audio & subtitles" }));
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Audio & subtitles" }));
   expect(screen.getByRole("dialog")).toHaveAccessibleName("Audio & subtitles");
   expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
   await userEvent.click(screen.getAllByRole("button", { name: "Playback" }).at(-1)!);
@@ -306,4 +305,15 @@ test.each([100, undefined])("seekable live playback retains seeking with duratio
   expect(screen.getByRole("button", { name: "Forward 10 seconds" })).toBeEnabled();
   if (duration) expect(screen.getByRole("slider", { name: "Playback position" })).toBeInTheDocument();
   else expect(screen.queryByRole("slider", { name: "Playback position" })).toBeNull();
+});
+
+
+test("video opens Audio & subtitles directly and restores the initiating control", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
+  const trigger = screen.getByRole("button", { name: "Audio & subtitles" });
+  await userEvent.click(trigger);
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Audio & subtitles");
+  await userEvent.click(screen.getByRole("button", { name: "Close" }));
+  expect(document.activeElement).toBe(trigger);
 });

@@ -115,8 +115,14 @@ html { view-transition-name: none; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
 .player-control-row { display: flex; align-items: center; gap: 1.5rem; }
 .player-volume { min-width: 0; width: 10rem; flex: 0 1 10rem; }
+[data-artwork-stage] .player-control-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+[data-artwork-stage] .player-transport { justify-self: center; }
+[data-artwork-stage] [data-player-tools] { justify-self: end; }
 @media (max-width: 599px) {
   .player-summary { gap: 1rem; }
+  [data-artwork-stage] .player-control-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  [data-artwork-stage] .player-transport { grid-column: 1 / -1; grid-row: 1; }
+  [data-artwork-stage] .player-volume, [data-artwork-stage] [data-player-tools] { grid-row: 2; }
   [data-player-audio-copy] h1 { font-size: 1.25rem; }
   .player-control-row { flex-wrap: wrap; gap: .5rem; }
   .player-page:has([role="slider"][aria-label="Playback position"]) .player-seek { display: none; }

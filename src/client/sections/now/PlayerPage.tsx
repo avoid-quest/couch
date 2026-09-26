@@ -124,6 +124,8 @@ export function PlayerPage() {
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
     : null;
 
+  const volume = state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />;
+
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
     <div className="absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {!elsewhere && <VideoStage active={active} audioOnly={audioOnly} />}
@@ -131,7 +133,7 @@ export function PlayerPage() {
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 place-items-center overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         <div data-player-audio-copy className="grid min-w-0 max-w-xl gap-2 text-center">
           <div className="flex min-w-0 items-center justify-center gap-1">
-          <h1 className="min-w-0 line-clamp-2 text-2xl font-medium tracking-tight break-words" title={currentProgramme?.title || current.title}>{currentProgramme?.title || current.title}</h1>
+            <h1 className="min-w-0 line-clamp-2 text-2xl font-medium tracking-tight break-words" title={currentProgramme?.title || current.title}>{currentProgramme?.title || current.title}</h1>
             {currentProgramme && <Button data-panel="info" variant="ghost" size="icon" className="player-info size-11" aria-label="About this show" title="About this show" aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}
           </div>
           <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{live && <span>Live</span>}{(elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${name}` : current.title}</span>}</p>
@@ -160,9 +162,11 @@ export function PlayerPage() {
         {!artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">Reconnecting to {name}…</span>}</div>}
         {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-control-row">
+          {artworkStage && volume}
           {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
-          {state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />}
+          {!artworkStage && volume}
           <div data-player-tools className="ml-auto flex shrink-0 items-center">
+            {!audioOnly && <Button data-panel="tracks" variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>}
             <Button data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-pressed={panel === "queue"} onClick={event => openPanel("queue", event.currentTarget)}><ListVideo aria-hidden="true" /></Button>
             <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /></Button>
             {fullscreen.supported && <Button variant="ghost" size="icon" className="size-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
