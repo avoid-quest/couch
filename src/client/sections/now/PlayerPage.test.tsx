@@ -274,7 +274,7 @@ test.each([false, true])("transport Tab order follows its visual sequence (live:
   await act(async () => view.rerender(<ShellProviders value={withNext}><PlayerPage /></ShellProviders>));
   const labels = live ? ["Stop", "Next"] : ["Back 10 seconds", "Pause", "Forward 10 seconds", "Next"];
   const controls = within(screen.getByRole("group", { name: "Playback controls" }));
-  expect(controls.getAllByRole("button").map(button => button.getAttribute("aria-label"))).toEqual(labels);
+  expect(controls.getAllByRole("button").filter(button => !button.hasAttribute("disabled")).map(button => button.getAttribute("aria-label"))).toEqual(labels);
   await act(async () => controls.getByRole("button", { name: labels[0] }).focus());
   for (const label of labels.slice(1)) {
     await userEvent.tab();
@@ -440,4 +440,38 @@ test("video details show the episode synopsis and open all seasons through app n
   const showUrl = "https://streamingcommunityz.photos/it/titles/1955-masterchef-italia";
   expect(opened).toEqual([{ id: showUrl, url: showUrl, title: collection.title, provider: "streamingcommunity", kind: "collection" }]);
   expect(actions).toEqual([]);
+});
+
+
+test("player controls retain their slots across loading, media modes and queue changes", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
+  const controls = screen.getByRole("group", { name: "Playback controls" });
+  const buttons = within(controls).getAllByRole("button");
+  const primary = screen.getByRole("button", { name: "Pause" });
+  const volume = screen.getByRole("slider", { name: "Volume" });
+  const tools = document.querySelector("[data-player-tools]");
+  const band = document.querySelector("[data-player-band]");
+  expect(buttons.map(button => button.getAttribute("aria-label"))).toEqual(["Back 10 seconds", "Pause", "Forward 10 seconds", "Next"]);
+  expect(buttons[3]).toBeDisabled();
+  expect(band?.parentElement).toBe(screen.getByRole("region", { name: "Player" }));
+  for (const mode of ["loading", "video", "audio", "radio", "remote", "ended"] as const) {
+    const current = { ...state.queue[0]!, source: mode === "radio" ? "radio:station" : "library:movie" };
+    const player = { ...state.player, status: mode === "loading" ? "loading" as const : mode === "ended" ? "ended" as const : "playing" as const, seekable: !["loading", "radio"].includes(mode), tracks: mode === "audio" ? [{ id: "audio", index: 0, kind: "audio" as const, label: "Audio", language: "", selected: true }] : [] };
+    const changed = { ...shell, current, localHost: mode !== "remote", active: mode !== "ended", state: { ...state, queue: [current, { id: "next", title: "Next", source: "library:next" }], player } } as ShellValue;
+    await act(async () => view.rerender(<ShellProviders value={changed}><PlayerPage /></ShellProviders>));
+    expect(within(controls).getAllByRole("button")).toEqual(buttons);
+    expect(document.querySelector("[data-play-button]")).toBe(primary);
+    expect(screen.getByRole("slider", { name: "Volume" })).toBe(volume);
+    expect(document.querySelector("[data-player-tools]")).toBe(tools);
+    expect([...controls.parentElement!.children]).toEqual([controls, volume.closest('[role="group"]')!, tools!]);
+    expect(primary).toHaveAccessibleName(mode === "radio" ? "Stop" : mode === "ended" ? "Replay" : mode === "loading" ? "Play" : "Pause");
+    if (["loading", "radio", "ended"].includes(mode)) expect(buttons[0]).toBeDisabled();
+    else expect(buttons[0]).toBeEnabled();
+    if (mode === "loading") expect(buttons[3]).toBeDisabled();
+    else expect(buttons[3]).toBeEnabled();
+    const captions = screen.getByRole("button", { name: "Audio & subtitles" });
+    if (["audio", "radio"].includes(mode)) expect(captions).toBeDisabled();
+    else expect(captions).toBeEnabled();
+  }
 });

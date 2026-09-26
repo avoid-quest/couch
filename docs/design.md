@@ -25,6 +25,9 @@ catalog provides interface icons, not brand identities.
   desktop queue. On phones, Up next replaces the artwork while transport stays
   available. Video uses the full viewport until Up next opens beside it.
   Queue navigation survives playback changes; track-specific settings reset.
+  Transport, volume and tools share one bottom dock across media modes. Keep
+  unavailable controls in their slots so loading and queue changes preserve
+  muscle memory; adapt the rows to screen width, with content above the dock.
   Audio keeps its solid controls visible. Video controls fade over a transparent
   black scrim, preserving the picture bounds; the gradient exists only to keep
   overlaid text readable without an abrupt edge that resembles cropping. Hidden
