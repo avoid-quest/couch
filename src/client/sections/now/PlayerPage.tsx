@@ -116,12 +116,12 @@ export function PlayerPage() {
 
   return <section ref={root} className="player-page relative h-dvh min-h-112 overflow-hidden bg-background" data-page="Now" aria-label="Player" onMouseMove={playing ? wake : undefined}>
     <div className="absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
-      {elsewhere ? <div className="flex h-full flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-48 lg:flex-row lg:pt-0 lg:items-center lg:justify-start lg:gap-12">
+      {elsewhere ? <div className="flex h-full flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] lg:flex-row lg:pt-0 lg:items-center lg:justify-start lg:gap-12">
         {artwork && <div className="aspect-video w-full max-w-sm shrink-0 overflow-hidden bg-muted lg:w-2/5 lg:max-w-xl [&_img]:size-full [&_img]:object-cover">{artwork}</div>}
         {!status && <div className="grid min-w-0 gap-2"><p className="text-3xl font-semibold tracking-tight text-muted-foreground">Playing on {name}</p>{currentProgramme && <h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme.title}</h2>}{nowPlaying && <p className="text-base">{nowPlaying}</p>}{programmeDetails}</div>}
       </div> : <>
         <VideoStage active={active} audioOnly={audioOnly} />
-        {active && audioOnly && <div className="absolute inset-0 flex flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-48 sm:flex-row sm:pt-0 sm:items-center sm:justify-start sm:gap-12">
+        {active && audioOnly && <div className="absolute inset-0 flex flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] sm:flex-row sm:pt-0 sm:items-center sm:justify-start sm:gap-12">
           <div data-player-art aria-hidden="true" className="grid aspect-square w-1/2 max-w-md shrink-0 place-items-center overflow-hidden bg-muted sm:w-auto sm:h-1/2 [&_img]:size-full [&_img]:object-cover">{artwork || <Music2 className="size-1/4 text-muted-foreground" />}</div>
           <div data-player-audio-copy className="grid min-w-0 gap-2"><h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme?.title || current.title}</h2><p className="text-base text-muted-foreground">{currentProgramme ? current.title : source}</p>{nowPlaying && <p role="status" className="text-base">{nowPlaying}</p>}{programmeDetails}</div>
         </div>}
