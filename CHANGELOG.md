@@ -1,5 +1,25 @@
 # couch
 
+## 0.2.0-preview.15
+
+### Patch Changes
+
+- Make Home's saved-radio loading and recovery reliable and keep the player's back label aligned with Find. Improve search responsiveness, defer authenticated artwork until it approaches the viewport, split route loading, and reduce redundant queries and remote activity traffic.
+
+## 0.2.0-preview.14
+
+### Minor Changes
+
+- [#544](https://github.com/avoid-quest/couch/pull/544) [`2e74148`](https://github.com/avoid-quest/couch/commit/2e741481eafb5a7012ec467889ce4ebd10b9ae16) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Refresh Couch's brand and interface: the Shift icon and updated description, one Clock design system on shadcn components across Find, Saved, Settings, the player and the desktop app, shorter copy, and real-time updates for every settings and library change.
+
+- [#548](https://github.com/avoid-quest/couch/pull/548) [`b71116c`](https://github.com/avoid-quest/couch/commit/b71116ce0074e5b065198016569adb86b5a036a3) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Add Home: what's playing, Up next laid out against the clock, what to continue, your radio stations and what you saved for later, each shown only when it has something in it. The player moves to its own page, and Find goes back to search and browsing.
+
+### Patch Changes
+
+- [#545](https://github.com/avoid-quest/couch/pull/545) Integrate native dark window chrome and Mac Liquid Glass, and improve pairing and browser navigation reliability.
+
+- [#547](https://github.com/avoid-quest/couch/pull/547) Adopt the Shift icon across the desktop app, tray, web app and website.
+
 ## 0.2.0-preview.13
 
 ### Patch Changes
