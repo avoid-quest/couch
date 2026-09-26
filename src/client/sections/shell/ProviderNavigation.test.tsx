@@ -13,7 +13,7 @@ function HomeOpener() {
   return <button aria-label="Details remembered show" onClick={() => shell.openProvider({ id: "show", title: "Remembered show", url: "https://streamingcommunityz.photos/it/titles/123-show", provider: "streamingcommunity", kind: "collection" }, "Details remembered show")}>Browse episodes</button>;
 }
 
-test("provider browsing returns to its Home origin and restores focus without playing", async () => {
+for (const [origin, path] of [["Home", "/"], ["Saved", "/saved"]] as const) test(`provider browsing returns to its ${origin} origin and restores focus without playing`, async () => {
   const commands: unknown[] = [];
   spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ items: [], favorites: [], title: "Remembered show" })) as unknown as typeof fetch);
   const gate = {
@@ -24,16 +24,17 @@ test("provider browsing returns to its Home origin and restores focus without pl
   };
   const base = createRootRoute({ component: () => <NativeModeGate><ShellProviders value={gate}><AppShell /></ShellProviders></NativeModeGate> });
   const home = createRoute({ getParentRoute: () => base, path: "/", component: HomeOpener });
+  const saved = createRoute({ getParentRoute: () => base, path: "/saved", component: HomeOpener });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
-  const history = createMemoryHistory({ initialEntries: ["/"] });
-  const router = createRouter({ routeTree: base.addChildren([home, find]), history });
+  const history = createMemoryHistory({ initialEntries: [path] });
+  const router = createRouter({ routeTree: base.addChildren([home, saved, find]), history });
   const view = render(<></>);
   await act(async () => { await router.load(); view.rerender(<RouterProvider router={router} />); });
   await userEvent.click(screen.getByRole("button", { name: "Details remembered show" }));
   expect(history.location.pathname).toBe("/find");
-  await userEvent.click(await screen.findByRole("button", { name: "Home" }));
+  await userEvent.click(await screen.findByRole("button", { name: origin }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Details remembered show" })).toHaveFocus());
-  expect(history.location.pathname).toBe("/");
+  expect(history.location.pathname).toBe(path);
   expect(commands).toEqual([]);
   history.destroy();
 });
