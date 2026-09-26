@@ -9,7 +9,7 @@ export function supportsWebVideoQuality(source: string) {
   } catch { return true; }
 }
 
-export function supportsCurrentVideoQuality(entry: QueueEntry | undefined, player: PlayerState) {
+export function supportsCurrentVideoQuality(entry: QueueEntry | undefined, player: Pick<PlayerState, "playbackId" | "status" | "seekable" | "tracks">) {
   return !!entry && entry.source.startsWith("web:") && entry.kind !== "radio"
     && supportsWebVideoQuality(entry.source.slice(4)) && !!player.playbackId
     && ["playing", "paused"].includes(player.status) && (entry.live === true || player.seekable)

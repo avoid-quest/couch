@@ -2,7 +2,11 @@ import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../../shared/protocol";
 import type { ConnectionDetails, ControllerIdentity } from "../../shared/controllers";
+import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
+
+export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
+export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
@@ -22,7 +26,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   currentCredentials.current = credentials;
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [credentialRejected, setCredentialRejected] = useState(false);
-  const [state, setState] = useState<SessionState | null>(null);
+  const [state, setState] = useState<ClientSessionState | null>(null);
+  const observation = useRef<SessionState | null>(null);
+  const [clock, setClock] = useState<PlaybackClock>(emptyPlaybackClock);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const socket = useRef<WebSocket | null>(null);
   const socketCredentials = useRef<Credentials | null>(null);
@@ -32,6 +38,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   useEffect(() => {
     setState(null);
+    observation.current = null;
+    setClock(emptyPlaybackClock);
     // Rechecking the same connection does not discard its browsing cache.
     // Replacement credentials must not expose the old identity while effects run.
     if (!sameCredentials(owner, credentials)) setIdentity(null);
@@ -54,19 +62,21 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
 
     const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
+    const pairingRequired = () => { authenticate = false; ready.current = false; observation.current = null; setClock(emptyPlaybackClock); setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
       if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
+      let playbackClock = false;
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal });
         if (!response.ok) throw new Error("Server unavailable");
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
+        playbackClock = next.playbackClock === 1;
         setConnectionDetails({ origin, details: next });
         if (desktopProtocol && next.desktopClientProtocol !== desktopProtocol) { setStatus("protocol-mismatch"); setState(null); setIdentity(null); return; }
         if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
@@ -114,7 +124,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const asset = buildKey(loadedBuild);
       if (asset && !desktopProtocol) url.searchParams.set("build", asset);
       if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
+      if (playbackClock) url.searchParams.set("playbackClock", "1");
       const connection = new WebSocket(url);
+      let baseline = false;
       socket.current = connection;
       socketCredentials.current = credentials;
       const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
@@ -133,11 +145,27 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           return;
         }
         if (message.type === "state") {
+          baseline = true;
           clearTimeout(handshake);
           attempt = 0;
           ready.current = true;
-          setState(message.state);
+          observation.current = message.state;
+          const { position, duration, ...player } = message.state.player;
+          setState({ ...message.state, player });
+          setClock({ playbackId: player.playbackId, position, duration });
           setStatus("connected");
+        } else if (message.type === "clock") {
+          if (!playbackClock || !(message.playbackId === null || typeof message.playbackId === "string")
+            || typeof message.position !== "number" || !Number.isFinite(message.position)
+            || !(message.duration === null || typeof message.duration === "number" && Number.isFinite(message.duration))) {
+            connection.close(4002, "Invalid response");
+            return;
+          }
+          if (!baseline) return;
+          const previous = observation.current;
+          if (previous?.player.playbackId !== message.playbackId) return;
+          observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
+          setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {
@@ -158,6 +186,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         socketCredentials.current = null;
         clearTimeout(handshake);
         ready.current = false;
+        observation.current = null;
+        setClock(emptyPlaybackClock);
         rejectPending();
         if (event.code === 4001) { pairingRequired(); return; }
         setStatus("reconnecting");
@@ -215,6 +245,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     return () => controller.abort();
   }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.controllers]);
 
+  // Command/Undo readers see observations synchronously, before React commits a tick.
+  const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId]);
+
   const reconnect = useCallback(() => {
     ready.current = false;
     setStatus("reconnecting");
@@ -244,5 +277,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
-  return { state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }

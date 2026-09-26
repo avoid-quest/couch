@@ -92,7 +92,9 @@ export type Action =
   | { type: "stop" };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
+export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
+  | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
   | { type: "result"; requestId: string; ok: boolean; error?: string };

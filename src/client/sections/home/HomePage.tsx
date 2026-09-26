@@ -1,3 +1,4 @@
+import { usePlaybackClock } from "@/session/playback-clock";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -41,6 +42,7 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
  * clock time it matters at, and only rows with something in them appear.
  */
 export function HomePage() {
+  const playbackClock = usePlaybackClock();
   const shell = useShell();
   const { credentials, available, current, programme } = shell;
   const { identity, state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
@@ -56,8 +58,8 @@ export function HomePage() {
   const currentIndex = queue.findIndex(entry => entry.id === state?.currentEntryId);
   const cursor = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
   const upcoming = queue.slice(cursor + 1);
-  const length = current ? current.live ? null : player?.duration ?? knownLength(current) : 0;
-  const remaining = length == null ? null : Math.max(0, length - (player?.position ?? 0)) / (player?.speed || 1);
+  const length = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
+  const remaining = length == null ? null : Math.max(0, length - (playbackClock.position ?? 0)) / (player?.speed || 1);
   // Up next as a timetable: each entry starts when the one before it ends.
   let clock = remaining;
   const plan = upcoming.map(entry => {
@@ -98,7 +100,7 @@ export function HomePage() {
 
     {current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}
-        detail={!live && length ? <span className="flex items-center gap-3 text-sm tabular-nums text-muted-foreground"><Progress value={(player?.position ?? 0) / length * 100} aria-label="Playback progress" className="h-1 max-w-xs flex-1 rounded-none bg-muted [&_[data-slot=progress-indicator]]:bg-foreground" />{formatDuration(player?.position ?? 0)} / {formatDuration(length)}</span> : undefined}>
+        detail={!live && length ? <span className="flex items-center gap-3 text-sm tabular-nums text-muted-foreground"><Progress value={(playbackClock.position ?? 0) / length * 100} aria-label="Playback progress" className="h-1 max-w-xs flex-1 rounded-none bg-muted [&_[data-slot=progress-indicator]]:bg-foreground" />{formatDuration(playbackClock.position ?? 0)} / {formatDuration(length)}</span> : undefined}>
         <Button data-page-first onClick={() => shell.changeSection("Now")}>Open player</Button>
         <Button variant="ghost" disabled={!connected || !player?.playbackId || !["playing", "paused"].includes(player.status)} onClick={() => { if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>
           {paused ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}{paused ? "Play" : "Pause"}

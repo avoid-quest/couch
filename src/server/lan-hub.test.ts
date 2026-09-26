@@ -230,3 +230,38 @@ test.skipIf(!available || !port80)("a port 80 admin can change to Couch's port w
   } finally { await hub.close(); lookup.mockRestore(); }
   await expect(fetch(`http://${network.address}/api/connection`, { headers: { Host: "couch.home" } })).rejects.toThrow();
 });
+
+test.skipIf(!available)("clock negotiation publishes across separate local and LAN listeners", async () => {
+  const hostToken = "local-host-token-with-at-least-32-characters";
+  const addresses = Promise.withResolvers<string[]>();
+  const hub = createHub({ managedLan: true, port: 0, databasePath: ":memory:", hostToken, sendPlayer: () => {}, onAddresses: urls => { if (urls.length) addresses.resolve(urls); } });
+  const peers: WebSocket[] = [];
+  try {
+    const [lan] = await addresses.promise;
+    const response = await fetch(`${lan}/api/pair`, { method: "POST", headers: { Origin: lan!, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode, name: "Clock remote" }) });
+    const { token } = await response.json() as { token: string };
+    const idle = { playbackId: null, status: "idle" as const, position: 0, duration: null, volume: 80, seekable: false, error: null };
+    hub.session.observe(idle);
+    hub.session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "https://media.example/one" }, playNow: true });
+    const player = { ...idle, status: "playing" as const, playbackId: hub.session.state.player.playbackId, duration: 100, seekable: true };
+    hub.session.observe(player);
+    const connect = async (origin: string, clock: boolean) => {
+      const peer = new BunWebSocket(`${origin.replace("http:", "ws:")}/api/ws?token=${token}${clock ? "&playbackClock=1" : ""}`, { headers: { Origin: origin } });
+      peers.push(peer);
+      const first = await new Promise<unknown>((resolve, reject) => { peer.onmessage = event => resolve(JSON.parse(String(event.data))); peer.onerror = reject; });
+      expect(first).toMatchObject({ type: "state", state: { player: { playbackId: player.playbackId } } });
+      return peer;
+    };
+    for (const [localClock, lanClock] of [[false, true], [true, false], [true, true]]) {
+      const local = await connect(hub.origin, localClock!), remote = await connect(lan!, lanClock!);
+      const messages = [local, remote].map(peer => new Promise<unknown>(resolve => { peer.onmessage = event => resolve(JSON.parse(String(event.data))); }));
+      const position = hub.session.state.player.position + 1;
+      hub.session.observe({ ...player, position });
+      const values = await Promise.all(messages);
+      for (const [index, clock] of [localClock, lanClock].entries()) expect(values[index]).toMatchObject(clock
+        ? { type: "clock", playbackId: player.playbackId, position, duration: 100 }
+        : { type: "state", state: { player: { position }, queue: [{ id: "one" }] } });
+      await Promise.all([local, remote].map(peer => new Promise<void>(resolve => { peer.onclose = () => resolve(); peer.close(); })));
+    }
+  } finally { for (const peer of peers) peer.close(); await hub.close(); }
+});

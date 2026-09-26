@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { PlaybackClockContext } from "@/session/playback-clock";
 import { PlaybackTimeline, playbackCapabilities } from "./PlaybackTransport";
 import type { SessionState } from "../../shared/protocol";
 
@@ -16,7 +17,7 @@ test("nonlive playback retains elapsed and remaining time when seeking is unavai
   const state = { queue: [{ id: "video", title: "Video", source: "https://media.example/video", duration: 300 }], currentEntryId: "video", player: {
     playbackId: "playback", status: "playing", position: 60, duration: 300, speed: 1, seekable: false,
   } } as unknown as SessionState;
-  const markup = renderToStaticMarkup(createElement(PlaybackTimeline, { state, connected: true, run: async () => true }));
+  const markup = renderToStaticMarkup(createElement(PlaybackClockContext.Provider, { value: state.player }, createElement(PlaybackTimeline, { state, connected: true, run: async () => true })));
   expect(markup).toContain("1:00");
   expect(markup).toContain("−4:00 ends ");
   expect(markup).not.toContain('role="slider"');

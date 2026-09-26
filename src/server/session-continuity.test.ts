@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
-import type { PlaybackCommand, PlayerState } from "../shared/protocol";
+import type { PlaybackCommand, PlaybackClock, PlayerState, SessionState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -9,7 +9,8 @@ function fixture(resolve?: (id: string, signal: AbortSignal, preparing: boolean)
   const store = openStore(":memory:");
   const commands: PlaybackCommand[] = [];
   const transitions: string[] = [];
-  const session = createSession(store, command => commands.push(command), () => {}, {
+  const publications: Array<{ state: SessionState; clock?: PlaybackClock }> = [];
+  const session = createSession(store, command => commands.push(command), (state, clock) => publications.push({ state: structuredClone(state), clock }), {
     resolveSource: (entry, _id, signal, _fromStart, _goLive, preparing) => resolve?.(entry.id, signal, !!preparing) ?? { source: entry.source, audioOnly: true, headers: { Authorization: "private-token" } },
     activatePrepared: id => transitions.push(id),
   });
@@ -18,7 +19,7 @@ function fixture(resolve?: (id: string, signal: AbortSignal, preparing: boolean)
   session.command({ type: "play", entryId: "first", fromStart: true });
   const firstId = session.state.player.playbackId!;
   session.observe({ ...idle, playbackId: firstId, status: "playing", position: 2, duration: 3 });
-  return { store, session, commands, firstId, transitions, close() { session.close(); store.close(); } };
+  return { store, session, commands, firstId, transitions, publications, close() { session.close(); store.close(); } };
 }
 
 test("one host-only successor advances identity and checkpoints the previous track once", async () => {
@@ -32,8 +33,10 @@ test("one host-only successor advances identity and checkpoints the previous tra
     expect(command.next.headers).toEqual({ Authorization: "private-token" });
     expect(JSON.stringify(f.session.state)).not.toContain("private-token");
     const next = { ...idle, playbackId: command.next.playbackId, status: "playing" as const, position: 0.1, duration: 3 };
+    f.publications.length = 0;
     f.session.observe(next);
     f.session.observe(next);
+    expect(f.publications.some(({ state, clock }) => !clock && state.currentEntryId === "second" && state.player.playbackId === next.playbackId)).toBe(true);
     expect(f.session.state.currentEntryId).toBe("second");
     expect(f.session.state.queueCursorEntryId).toBe("second");
     expect(f.transitions).toEqual([command.next.playbackId]);

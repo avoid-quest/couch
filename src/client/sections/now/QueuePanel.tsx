@@ -1,3 +1,5 @@
+import { usePlaybackClock } from "@/session/playback-clock";
+import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
@@ -8,13 +10,13 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { useOptionalShell } from "@/sections/shell/shell-context";
 import { cn } from "@/lib/utils";
-import type { Action, QueueEntry, SessionState, VideoQuality } from "../../../shared/protocol";
+import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { formatEndTime } from "@/time-format";
 import { QueueActions } from "./QueueActions";
 
 type Props = {
-  state: SessionState | null;
+  state: ClientSessionState | null;
   credentials: Credentials;
   connected: boolean;
   available: boolean;
@@ -37,6 +39,7 @@ function knownLength(entry: QueueEntry): number | null {
 }
 
 export function QueuePanel({ state, credentials, connected, available, run, titled = true }: Props) {
+  const playbackClock = usePlaybackClock();
   const shell = useOptionalShell();
   const [keptQueue, setKeptQueue] = useState("");
   const keep = useMutation({ mutationFn: (name: string) => apiSend(credentials, "/api/playlists", { name, scope: "upNext" }, "POST", 20_000) });
@@ -51,8 +54,8 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const upNextKey = upNext.map(entry => entry.id).join(",");
   const isKept = !!upNext.length && keptQueue === upNextKey;
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
-  const currentLength = current ? current.live ? null : state?.player.duration ?? knownLength(current) : 0;
-  let startsIn = currentLength == null ? null : Math.max(0, currentLength - (state?.player.position ?? 0)) / (state?.player.speed || 1);
+  const currentLength = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
+  let startsIn = currentLength == null ? null : Math.max(0, currentLength - (playbackClock.position ?? 0)) / (state?.player.speed || 1);
   const doneIn = upNext.reduce<number | null>((seconds, entry) => {
     const length = knownLength(entry);
     return seconds == null || length == null ? null : seconds + length;

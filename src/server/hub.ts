@@ -94,7 +94,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
   return url.origin;
 };
-type SocketData = { trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type SocketData = { playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
@@ -139,15 +139,21 @@ export function createHub(options: HubOptions) {
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const session = createSession(store, options.sendPlayer, state => {
+  const session = createSession(store, options.sendPlayer, (state, clock) => {
     idle.playback(state.player.status, !!state.radioRetry);
     radioProgramme?.observe(state);
     sound?.interrupt();
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) {
-      const message = JSON.stringify({ type: "state", state } satisfies ServerMessage);
-      server.publish("session", message);
-      for (const listener of lan?.servers ?? []) listener.publish("session", message);
+      const listeners = [server, ...lan?.servers ?? []];
+      const legacy = listeners.some(listener => listener.subscriberCount("session"));
+      const modern = listeners.some(listener => listener.subscriberCount("session-clock"));
+      const full = legacy || modern && !clock ? JSON.stringify({ type: "state", state } satisfies ServerMessage) : null;
+      const compact = modern && clock ? JSON.stringify({ type: "clock", ...clock } satisfies ServerMessage) : null;
+      for (const listener of listeners) {
+        if (legacy) listener.publish("session", full!);
+        if (modern) listener.publish("session-clock", compact ?? full!);
+      }
     }
   }, {
     admitted, systemAudio,
@@ -239,7 +245,7 @@ export function createHub(options: HubOptions) {
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
-      socket.unsubscribe("session");
+      socket.unsubscribe(socket.data.playbackClock ? "session-clock" : "session");
       socket.close(4001, "This remote's access was revoked. Pair again.");
     }
   } });
@@ -420,7 +426,7 @@ export function createHub(options: HubOptions) {
       ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
@@ -475,7 +481,7 @@ export function createHub(options: HubOptions) {
           await lan?.setEnabled(enabled);
           store.saveRemoteControlEnabled(enabled);
           if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
-            socket.unsubscribe("session");
+            socket.unsubscribe(socket.data.playbackClock ? "session-clock" : "session");
             socket.close(4003, "Remotes are off. Your pairing is remembered.");
           }
           session.invalidate("controllers");
@@ -572,7 +578,7 @@ export function createHub(options: HubOptions) {
         if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
         if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
         if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize, playedBy) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-        return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+        return server.upgrade(request, { data: { playbackClock: url.searchParams.get("playbackClock") === "1", trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
     }),
     websocket: {
@@ -585,7 +591,7 @@ export function createHub(options: HubOptions) {
       open(socket) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         sockets.add(socket);
-        socket.subscribe("session");
+        socket.subscribe(socket.data.playbackClock ? "session-clock" : "session");
         if (socket.data.trusted) socket.subscribe("navigation");
         socket.send(JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
       },

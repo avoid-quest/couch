@@ -1,4 +1,4 @@
-import type { Action, Domain, PlaybackActor,ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
+import type { Action, Domain, PlaybackActor,ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
 import type { Store } from "./store";
 import { createProgress, playbackMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
@@ -22,7 +22,7 @@ type SessionOptions = {
   prepareAudio?: () => string;
 };
 
-export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState) => void, options: SessionOptions = {}) {
+export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState, clock?: PlaybackClock) => void, options: SessionOptions = {}) {
   const removedEntries = new Map<string, { entry: QueueEntry; index: number; queueIds: string[]; currentEntryId: string | null; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   let desiredVolume = store.volume;
   let audioInterrupted = false;
@@ -56,9 +56,25 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     preferences: store.playbackPreferences(activeProfile.id),
     player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The Couch app isn't connected." },
   };
-  const broadcast = () => {
+  let published: Omit<SessionState, "player"> | undefined;
+  let publishedPlayer: string | undefined;
+  let publishedClock: PlaybackClock | undefined;
+  const publishState = (observation = false, suppressClock = false) => {
+    const { player, ...rest } = state;
+    const { position, duration, ...details } = player;
+    const playerDetails = JSON.stringify(details);
+    // Session fields are replaced by their owners; native track arrays can be
+    // freshly allocated but equal. Never walk or serialize the household queue.
+    const clockOnly = observation && published && playerDetails === publishedPlayer
+      && Object.keys({ ...published, ...rest }).every(key => Reflect.get(published!, key) === Reflect.get(rest, key));
+    const clock = { playbackId: player.playbackId, position, duration };
+    if (clockOnly && (suppressClock || position === publishedClock?.position && duration === publishedClock?.duration)) return;
+    published = rest; publishedPlayer = playerDetails; publishedClock = clock;
+    publish(state, clockOnly ? clock : undefined);
+  };
+  const broadcast = (observation = false, suppressClock = false) => {
     if (state.radioProgramme && (state.radioProgramme.playbackId !== state.player.playbackId || !["playing", "paused"].includes(state.player.status))) state.radioProgramme = null;
-    refreshPreparation(); publish(state);
+    refreshPreparation(); publishState(observation, suppressClock);
   };
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
@@ -748,7 +764,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         if (player.playbackId === state.player.playbackId && player.status === "paused") {
           const paused = { ...player, volume: state.player.volume };
           state.player = { ...paused, error: state.player.error };
-          publish(state);
+          publishState(true);
           persistProgress(() => progress.observe(paused));
           options.observe?.(paused);
         }
@@ -781,20 +797,15 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       radioRetry.observe(player);
       if (player.status === "playing") state.radioRetry = null;
       const current = state.queue.find(entry => entry.id === state.currentEntryId);
-      // Live streams keep growing mpv's demuxer-cache duration, so every observation
-      // would push the full state and re-render the whole TV UI several times a
-      // second. Absorb radio/iptv ticks that only advance duration/position.
-      const tickMask = (value: PlayerState) => JSON.stringify({ ...value, duration: 0, position: 0, ...(options.systemAudio ? { volume: 0 } : {}) });
-      const liveTick = (isRadio(current) || current?.live === true)
-        && ["playing", "paused"].includes(player.status)
-        && player.playbackId === state.player.playbackId && player.status === state.player.status
-        && tickMask(player) === tickMask(state.player);
+      // Live streams keep growing mpv's demuxer-cache duration. Suppress their
+      // clock publications, but still publish any other Session change.
+      const suppressClock = (isRadio(current) || current?.live === true) && ["playing", "paused"].includes(player.status);
       state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
       try { progress.observe(player); }
       catch { state.progressError = STORAGE_ERROR("your progress"); }
       options.observe?.(state.player);
       if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
-      if (!liveTick) broadcast();
+      broadcast(true, suppressClock);
       if (ended) {
         const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
         const following = state.queue[index + 1];

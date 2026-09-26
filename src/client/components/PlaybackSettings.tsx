@@ -1,3 +1,4 @@
+import { usePlaybackClock } from "@/session/playback-clock";
 import { Minus, Plus, Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,8 +13,8 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { SettingsSection } from "@/components/SettingsRow";
 import { DelayControl } from "@/components/DelayControl";
 import type { WatchingProfile } from "../../shared/library";
-import type { Action, PlaybackPreferences as Preferences, PlayerState, QueueEntry, ReplayGainMode } from "../../shared/protocol";
-import type { Credentials } from "@/session/session";
+import type { Action, PlaybackPreferences as Preferences, QueueEntry, ReplayGainMode } from "../../shared/protocol";
+import type { ClientPlayerState, Credentials } from "@/session/session";
 import { apiJson } from "@/api/client";
 import { playbackDefault, type PlaybackDefaultSetting } from "../../shared/playback-default";
 import { QualitySelect } from "@/components/QualitySelect";
@@ -22,7 +23,7 @@ import { videoQualityLabels } from "@/video-quality";
 
 export type PlaybackSettingsProps = {
   entry?: QueueEntry;
-  player: PlayerState;
+  player: ClientPlayerState;
   ready: boolean;
   connected: boolean;
   credentials: Credentials;
@@ -114,6 +115,7 @@ const trackLabel = (track: { label?: string | null; language?: string | null; in
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 export function PlaybackSettingsPanel({ entry, player, ready, connected, credentials, preferences, profile, onCommand, panel }: PlaybackSettingsProps & { panel: "tracks" | "settings" | "all" }) {
+  const playbackClock = usePlaybackClock();
   const [pending, setPending] = useState(false);
   const [defaultError, setDefaultError] = useState<string | null>(null);
   const commandPending = useRef(false);
@@ -144,7 +146,7 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
   // Native status, seekability and tracks arrive separately during a reload.
   const showQuality = qualityAvailable || !!qualitySource && previousQuality.current === qualitySource;
   const video = showQuality || tracks.some(track => track.kind === "video");
-  const chapterIndex = chapters.findLastIndex((chapter) => chapter.position <= player.position);
+  const chapterIndex = chapters.findLastIndex((chapter) => chapter.position <= playbackClock.position);
   const disabled = !ready || pending;
   const run = async (action: Action, focusId?: string) => {
     if (commandPending.current) return false;
