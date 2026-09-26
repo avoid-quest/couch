@@ -32,3 +32,10 @@ test("Next remains available for Autoplay without adding its candidate to the qu
   expect(playbackCapabilities({ ...state, autoplay: { enabled: true, contextTitle: null, next: null, pending: true } }, true).hasNext).toBe(true);
   expect(playbackCapabilities({ ...state, currentEntryId: null }, true).hasNext).toBe(false);
 });
+
+test("ended playback can advance while pause and seek remain unavailable", () => {
+  const state = { queue: [{ id: "current", title: "Current", source: "library:current" }], currentEntryId: "current", player: { playbackId: "playback", status: "ended", seekable: true } } as unknown as SessionState;
+  expect(playbackCapabilities(state, true)).toMatchObject({ nextReady: true, transportReady: false });
+  expect(playbackCapabilities(state, false).nextReady).toBe(false);
+  expect(playbackCapabilities({ ...state, player: { ...state.player, playbackId: null } }, true).nextReady).toBe(false);
+});

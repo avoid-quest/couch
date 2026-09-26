@@ -408,3 +408,29 @@ test.each([false, true])("ended video explains completion or a pending next item
   expect(screen.getByRole("button", { name: "Replay" })).toBeEnabled();
   expect(screen.queryByRole("region", { name: "Playing" })).toBeNull();
 });
+
+test("ended video can advance to its known Autoplay item without enabling seeking", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const finished = { ...shell, active: false, state: { ...state, player: { ...state.player, status: "ended" }, autoplay: { enabled: true, contextTitle: "Series", next: { id: "next", title: "Episode 8", source: "library:next" } } } };
+  await act(async () => view.rerender(<ShellProviders value={finished as unknown as ShellValue}><PlayerPage /></ShellProviders>));
+  expect(screen.getByRole("slider", { name: "Playback position" })).toHaveAttribute("data-disabled");
+  await userEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(actions).toEqual([{ type: "next", playbackId: "playback" }]);
+});
+
+test("video details show the episode synopsis and open its collection through app navigation", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const opened: unknown[] = [];
+  const collection = { title: "MasterChef Italia - Season 11", url: "https://streamingcommunityz.photos/it/titles/1955-masterchef-italia/season-11" };
+  const current = { ...state.queue[0]!, subtitle: "MasterChef Italia", description: "The cooks prepare their first mystery box.", collection };
+  const detailed = { ...shell, current, openProvider: (item: unknown) => opened.push(item), state: { ...state, queue: [current] } };
+  await act(async () => view.rerender(<ShellProviders value={detailed as unknown as ShellValue}><PlayerPage /></ShellProviders>));
+  expect(screen.getByText("MasterChef Italia")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Details" }));
+  const details = screen.getByRole("dialog", { name: "Details" });
+  expect(details).toHaveTextContent(current.description);
+  expect(details).toHaveTextContent(current.subtitle);
+  await userEvent.click(within(details).getByRole("button", { name: "Browse collection" }));
+  expect(opened).toEqual([{ id: collection.url, url: collection.url, title: collection.title, provider: "streamingcommunity", kind: "collection" }]);
+  expect(actions).toEqual([]);
+});

@@ -62,6 +62,18 @@ test("loading live media reports loading instead of claiming it is live", () => 
   expect(screen.getByRole("status")).toHaveTextContent("Loading…");
 });
 
+test("finished media keeps its show context and can advance or replay without seeking", () => {
+  const run = mock(async (_action: Action) => true);
+  render({ ...state, queue: [{ ...state.queue[0]!, subtitle: "MasterChef Italia" }], player: { ...state.player, status: "ended" }, autoplay: { enabled: true, contextTitle: "MasterChef Italia", next: { id: "next", title: "Episode 8", source: "library:next" } } }, true, run);
+  expect(screen.getByRole("status")).toHaveTextContent("MasterChef Italia · Playback ended");
+  expect(screen.getByRole("slider", { name: "Playback position" })).toHaveAttribute("data-disabled");
+  expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(run).toHaveBeenCalledWith({ type: "next", playbackId: "playback" });
+  fireEvent.click(screen.getByRole("button", { name: "Replay" }));
+  expect(run).toHaveBeenCalledWith({ type: "play", entryId: "one", fromStart: true });
+});
+
 test("Up next opens the queue directly without changing playback", () => {
   const onOpen = mock((_panel?: "queue") => {});
   const run = mock(async (_action: Action) => true);
