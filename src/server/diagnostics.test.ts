@@ -105,14 +105,19 @@ test("native bridge correlates replies and bounds malformed facts", async () => 
   await expect(createNativeDiagnostics(() => { throw new Error("secret"); }).collect()).rejects.toThrow("Couldn't reach the app");
 });
 
-test("native timeout is bounded and late replies are ignored", async () => {
+test("native timeouts release the bridge and late replies cannot satisfy a retry", async () => {
   jest.useFakeTimers();
-  const bridge = createNativeDiagnostics(() => {});
+  let id = "";
+  const bridge = createNativeDiagnostics(value => { id = value; });
   try {
     const pending = bridge.collect();
+    const expired = id;
     jest.advanceTimersByTime(2_000);
     await expect(pending).rejects.toThrow("didn't respond");
-    bridge.receive("late", { facts: [] });
+    const retry = bridge.collect();
+    bridge.receive(expired, { facts: [{ name: "Expired reply", value: "stale", source: "native" }] });
+    bridge.receive(id, { facts: [] });
+    expect((await retry)!.facts).toEqual([]);
   } finally { bridge.close(); jest.useRealTimers(); }
 });
 
