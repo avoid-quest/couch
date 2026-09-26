@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import { setupUiTests, render, screen, userEvent, waitFor, createTestQueryClient } from "@/testing/react";
 import { SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
+import type { ProviderId } from "../../../shared/providers";
 import { CollectionHeader, HitList } from "./SearchPanel";
 
 setupUiTests();
@@ -28,11 +29,11 @@ beforeEach(() => {
 });
 
 const command = async (action: unknown) => { commands.push(action); return true; };
-function Browser() {
+function Browser({ provider = "streamingcommunity" }: { provider?: ProviderId } = {}) {
   const [summary, setSummary] = useState<SearchResultSummary>();
   const receive = useCallback((_: string, next: SearchResultSummary) => setSummary(next), []);
   return <>
-    <SearchOnlineResults provider="streamingcommunity" query="show" origin="http://localhost" token="paired" connected canPlay active quality="auto" onEnqueued={() => {}} onCommand={command} onResults={receive} />
+    <SearchOnlineResults provider={provider} query="show" origin="http://localhost" token="paired" connected canPlay active quality="auto" onEnqueued={() => {}} onCommand={command} onResults={receive} />
     {summary?.collection && <CollectionHeader collection={summary.collection} back="Back" onBack={summary.collection.back} canPlay />}
     <HitList hits={summary?.hits ?? []} label="Results" origin="http://localhost" token="paired" />
   </>;
@@ -63,4 +64,31 @@ test("repeated playlist occurrences remain separate playable rows", async () => 
   await waitFor(() => expect(screen.getAllByRole("button", { name: "Play S01E01 · Arrival" })).toHaveLength(2));
   await userEvent.click(screen.getAllByRole("button", { name: "Play S01E01 · Arrival" })[1]!);
   expect(commands).toContainEqual(expect.objectContaining({ type: "enqueueProvider", url: episode.url, collection: { title: "Two viewings", url: showUrl, index: 1 } }));
+});
+
+test("Save retains the selected repeated playlist occurrence without inventing context for a standalone result", async () => {
+  const url = "https://www.youtube.com/watch?v=abcdefghijk";
+  const collection = { title: "Two viewings", url: "https://www.youtube.com/playlist?list=PL1234567890" };
+  const saved: unknown[] = [];
+  spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+    const request = new URL(String(input));
+    if (request.pathname === "/api/providers/favorites") return Response.json({ favorites: [] });
+    if (request.pathname === "/api/for-later") {
+      if (init?.method === "POST") saved.push(JSON.parse(String(init.body)).reference);
+      return Response.json({ items: [] });
+    }
+    const video = { id: "video", provider: "youtube", kind: "media", url, title: "Repeated video", description: "Server-owned description" };
+    return Response.json({ items: [
+      ...[0, 1].map(index => ({ ...video, collection: { ...collection, index } })),
+      { ...video, title: "Standalone video" },
+    ] });
+  }) as typeof fetch);
+  render(<QueryClientProvider client={createTestQueryClient()}><Browser provider="youtube" /></QueryClientProvider>);
+  await waitFor(() => expect(screen.getAllByRole("button", { name: "Save Repeated video" })).toHaveLength(2));
+  await userEvent.click(screen.getAllByRole("button", { name: "Save Repeated video" })[1]!);
+  await userEvent.click(await screen.findByRole("button", { name: "Save Standalone video" }));
+  expect(saved).toEqual([
+    { kind: "web", url, title: "Repeated video", collection: { url: collection.url, index: 1 } },
+    { kind: "web", url, title: "Standalone video" },
+  ]);
 });
