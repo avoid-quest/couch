@@ -385,3 +385,26 @@ test("stopping preserves the open queue and its management context", async () =>
   expect(queue.isConnected).toBe(true);
   expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
 });
+
+test("finished audio keeps artwork and title and offers Replay without enabling seek", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const current = { ...state.queue[0]!, title: "Final track", thumbnail: "https://images.example/album.jpg" };
+  const finished = { ...shell, active: false, current, state: { ...state, queue: [current], player: { ...state.player, status: "ended", position: 100, tracks: [{ id: "audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }] } } };
+  await act(async () => view.rerender(<ShellProviders value={finished}><PlayerPage /></ShellProviders>));
+  expect(screen.getByRole("heading", { name: "Final track", level: 1 })).toBeInTheDocument();
+  expect(document.querySelector('[data-player-art] img[src="https://images.example/album.jpg"]')).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Finished" })).toBeInTheDocument();
+  expect(screen.getByRole("slider", { name: "Playback position" })).toHaveAttribute("data-disabled");
+  expect(screen.getByRole("button", { name: "Back 10 seconds" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Replay" }));
+  expect(actions).toEqual([{ type: "play", entryId: current.id, fromStart: true }]);
+});
+
+test.each([false, true])("ended video explains completion or a pending next item (pending: %s)", async pending => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const finished = { ...shell, active: false, state: { ...state, player: { ...state.player, status: "ended" }, autoplay: { enabled: true, contextTitle: "Series", next: null, pending } } };
+  await act(async () => view.rerender(<ShellProviders value={finished}><PlayerPage queueOpen /></ShellProviders>));
+  expect(screen.getByRole("heading", { name: pending ? "Finding the next item…" : "Finished Evening movie", level: 2 })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Replay" })).toBeEnabled();
+  expect(screen.queryByRole("region", { name: "Playing" })).toBeNull();
+});

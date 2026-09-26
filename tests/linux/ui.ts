@@ -315,7 +315,7 @@ export async function assertResponsive(ui: UiDriver, description: string) {
     return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
       overflowing: [...document.querySelectorAll('body *')].filter(visible).filter(element => element.getBoundingClientRect().right > innerWidth + 1 || element.scrollWidth > element.clientWidth + 2 && !element.closest('[hidden]')).slice(0, 20).map(describe),
       clipped: [...document.querySelectorAll('button')].filter(visible).filter(element =>
-        element.scrollWidth > element.clientWidth + 2 && !element.matches('[role=combobox]') && !element.querySelector('.truncate')
+        element.textContent.trim() && element.scrollWidth > element.clientWidth + 2 && !element.matches('[role=combobox]') && !element.querySelector('.truncate')
       ).map(element => element.getAttribute('aria-label') || element.textContent.trim()),
       // Checkboxes, switches and radios are hit through their label.
       small: [...document.querySelectorAll('button:not(:disabled), input:not(:disabled), [data-slot=slider]')].filter(visible)

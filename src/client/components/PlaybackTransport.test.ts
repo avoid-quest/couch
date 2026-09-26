@@ -24,3 +24,11 @@ test("nonlive playback retains elapsed and remaining time when seeking is unavai
   expect(screen.getByText(/−4:00/)).toHaveTextContent(/−4:00 ends /);
   expect(screen.queryByRole("slider")).not.toBeInTheDocument();
 });
+
+test("Next remains available for Autoplay without adding its candidate to the queue", () => {
+  const state = { queue: [{ id: "current", title: "Current", source: "library:current" }], currentEntryId: "current", player: { playbackId: "playback", status: "playing", seekable: true }, autoplay: { enabled: true, contextTitle: "Album", next: { id: "next", title: "Next", source: "library:next" } } } as unknown as SessionState;
+  expect(playbackCapabilities(state, true).hasNext).toBe(true);
+  expect(playbackCapabilities({ ...state, autoplay: { ...state.autoplay!, enabled: false } }, true).hasNext).toBe(false);
+  expect(playbackCapabilities({ ...state, autoplay: { enabled: true, contextTitle: null, next: null, pending: true } }, true).hasNext).toBe(true);
+  expect(playbackCapabilities({ ...state, currentEntryId: null }, true).hasNext).toBe(false);
+});

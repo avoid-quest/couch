@@ -12,7 +12,7 @@ type Options = {
   library: Pick<ReturnType<typeof createLibrary>, "getItem" | "collectionItems">;
   onChange: () => void;
   queue: () => QueueEntry[];
-  loadQueue: (entries: QueueEntry[], mode: "append" | "play", authorize: () => void, playedBy?: PlaybackActor) => void;
+  loadQueue: (entries: QueueEntry[], mode: "append" | "play", authorize: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void;
 };
 type Row = { id: string; revision: number; updatedAt: number; definition: string };
 class CollectionError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
@@ -153,7 +153,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
           const available = current.items.filter(item => item.available);
           if (!available.length) throw new CollectionError("No available items in this preview.");
           if (input.mode === "append" && queue().length + available.length > 500) throw new CollectionError(QUEUE_FULL);
-          loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration !== null ? { duration: item.duration } : {}) })), input.mode, authorize, playedBy);
+          loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration !== null ? { duration: item.duration } : {}) })), input.mode, authorize, playedBy, collection.name);
           return Response.json({ ok: true, loaded: available.length, missing: current.items.length - available.length });
         }
         if (request.method === "GET") return Response.json(preview(get(id)));

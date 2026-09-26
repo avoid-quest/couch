@@ -10,9 +10,11 @@ import { getPlaystateApi } from "@jellyfin/sdk/lib/utils/api/playstate-api";
 import { getSessionApi } from "@jellyfin/sdk/lib/utils/api/session-api";
 import { getSystemApi } from "@jellyfin/sdk/lib/utils/api/system-api";
 import { getUserLibraryApi } from "@jellyfin/sdk/lib/utils/api/user-library-api";
+import { getTvShowsApi } from "@jellyfin/sdk/lib/utils/api/tv-shows-api";
 import axios from "axios";
 import type { JellyfinConnection, JellyfinItem, JellyfinItems, JellyfinStatus } from "../shared/jellyfin";
 import type { PlayerState, QueueEntry } from "../shared/protocol";
+import type { PlaybackContinuation } from "./continuation";
 
 const ticksPerSecond = 10_000_000;
 const idPattern = /^[a-f\d]{32}$|^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i;
@@ -125,16 +127,17 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       PositionTicks: Math.round((previous.last?.position ?? 0) * ticksPerSecond), Failed: previous.last?.status === "error",
     } }));
   };
-  const fetchItem = async (itemId: string, signal?: AbortSignal) => {
+  const fetchItemData = async (itemId: string, signal?: AbortSignal) => {
     const current = connection();
     try {
       const result = await getUserLibraryApi(current.api).getItem({ userId: current.configuration.userId, itemId: checkedId(itemId) }, { signal });
       if (current.api !== api) throw new Error();
       const item = itemView(result.data);
       if (!item || item.id !== itemId) throw new Error();
-      return item;
+      return result.data;
     } catch { signal?.throwIfAborted(); throw new Error("This Jellyfin item is unavailable. Refresh the library and try again."); }
   };
+  const fetchItem = async (itemId: string, signal?: AbortSignal) => itemView(await fetchItemData(itemId, signal))!;
   const externalSubtitles = (current: Api, itemId: string, media: MediaSourceInfo) => {
     const subtitles: { source: string; title: string; language?: string }[] = [];
     const warnings = new Set<string>();
@@ -253,6 +256,48 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       const item = await fetchItem(itemId);
       if (current.api !== api) throw new Error("The Jellyfin connection changed. Refresh the library.");
       return { id: entryId, source: `jellyfin:${current.configuration.scope}:${item.id}`, title: item.detail && item.kind !== "Movie" ? `${item.detail} · ${item.title}`.slice(0, 300) : item.title };
+    },
+    async continuation(reference: string, signal: AbortSignal): Promise<PlaybackContinuation | null> {
+      signal.throwIfAborted();
+      const current = connection();
+      const [scope, itemId, extra] = reference.split(":");
+      if (scope !== current.configuration.scope || !itemId || extra !== undefined) return null;
+      const item = await fetchItemData(itemId, signal);
+      const episode = item.Type === "Episode";
+      const parentId = episode ? item.SeriesId : item.Type === "Audio" ? item.AlbumId : null;
+      const numbered = (value: number | null | undefined): value is number => Number.isSafeInteger(value) && value! >= 0;
+      if (!parentId || !idPattern.test(parentId) || !numbered(item.IndexNumber) || episode && !numbered(item.ParentIndexNumber)) return null;
+      const items: BaseItemDto[] = [];
+      const ids = new Set<string>();
+      while (true) {
+        signal.throwIfAborted();
+        const parameters = { userId: current.configuration.userId, startIndex: items.length, limit: 100, enableImages: false, enableUserData: false };
+        // The Shows endpoint owns series membership; albumIds scopes music to its actual album.
+        const { data } = episode
+          ? await getTvShowsApi(current.api).getEpisodes({ ...parameters, seriesId: parentId, isMissing: false }, { signal })
+          : await getItemsApi(current.api).getItems({ ...parameters, albumIds: [parentId], includeItemTypes: ["Audio"], recursive: true, sortBy: ["ParentIndexNumber", "IndexNumber"], sortOrder: ["Ascending"], enableTotalRecordCount: true }, { signal });
+        signal.throwIfAborted();
+        if (api !== current.api) return null;
+        const page = data.Items ?? [];
+        if (page.some(row => !row.Id || ids.has(row.Id))) return null;
+        for (const row of page) ids.add(row.Id!);
+        items.push(...page);
+        if (data.TotalRecordCount != null ? items.length >= data.TotalRecordCount : page.length < 100) break;
+        if (!page.length) return null;
+      }
+      const order = (row: BaseItemDto) => row.ParentIndexNumber ?? 1;
+      const seen = new Set<string>();
+      const entries = items.sort((a, b) => order(a) - order(b) || (a.IndexNumber ?? Infinity) - (b.IndexNumber ?? Infinity)).flatMap(row => {
+        if (row.Type !== item.Type || (episode ? row.SeriesId : row.AlbumId) !== parentId || !numbered(row.IndexNumber)
+          || episode && !numbered(row.ParentIndexNumber) || row.IsPlaceHolder || row.LocationType === "Virtual"
+          || order(row) < order(item) || order(row) === order(item) && row.IndexNumber <= item.IndexNumber!) return [];
+        const key = `${order(row)}:${row.IndexNumber}`;
+        const view = itemView(row);
+        if (!view || seen.has(key)) return [];
+        seen.add(key);
+        return [{ id: crypto.randomUUID(), title: view.detail ? `${view.detail} · ${view.title}`.slice(0, 300) : view.title, source: `jellyfin:${scope}:${view.id}`, ...(view.duration == null ? {} : { duration: view.duration }) }];
+      });
+      return { title: (episode ? item.SeriesName : item.Album) || "Jellyfin", entries };
     },
     async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false, preparing = false) {
       signal?.throwIfAborted();

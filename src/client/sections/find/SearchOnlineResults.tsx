@@ -112,7 +112,7 @@ function OnlineResults(props: Props) {
   }
   function play(item: ProviderItem, playNow: boolean, placement?: "next") {
     void action(async signal => {
-      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}) });
+      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}) });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
     }, playNow ? undefined : playNotice(item.title, placement ?? "queue"));

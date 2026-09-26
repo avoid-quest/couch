@@ -76,7 +76,8 @@ for (const shape of ["atom", "playlist"] as const) test.each([false, true])(`gen
     const result = await first.command({ ...(shape === "atom" ? atom : list), playNow });
     expect(result).toMatchObject({ type: "result", ok: true });
     const added = hub.session.state.queue.filter(entry => entry.source.startsWith("web:"));
-    expect(added.map(entry => [entry.title, entry.source, entry.quality])).toEqual(page.items.slice(0, shape === "atom" ? 1 : 2).map(item => [item.title, `web:${item.url}`, "720p"]));
+    expect(added.map(entry => [entry.title, entry.source, entry.quality])).toEqual(page.items.slice(0, shape === "atom" || playNow ? 1 : 2).map(item => [item.title, `web:${item.url}`, "720p"]));
+    if (shape === "playlist" && playNow) expect(hub.session.state.autoplay?.next).toMatchObject({ title: page.items[1]!.title, source: `web:${page.items[1]!.url}`, quality: "720p" });
     expect(new Set(hub.session.state.queue.map(entry => entry.id)).size).toBe(added.length + 2);
     expect(added.every(entry => !page.items.some(item => item.id === entry.id))).toBe(true);
     expect(hub.session.state.currentEntryId).toBe(playNow ? added[0]!.id : "current");
@@ -222,7 +223,8 @@ test("a queue-only provider atom does not cancel another remote's pending list P
     output.resolve(page);
     expect(await pending).toMatchObject({ ok: true });
     await waitForLoad();
-    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Episode 1", "Episode 2", "Later"]);
+    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Episode 1", "Later"]);
+    expect(hub.session.state.autoplay?.next?.title).toBe("Episode 2");
     expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[0]!.id);
     expect(commands.filter(command => command.type === "load")).toHaveLength(1);
   } finally { output.resolve(page); expand.mockRestore(); resolve.mockRestore(); }

@@ -56,7 +56,7 @@ test("removing a focused queue entry keeps the remaining queue operable", async 
   await queueAction("two", "Remove");
   await queueAction("four", "Remove");
   expect(screen.getByText("Nothing queued")).toBeInTheDocument();
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
+  expect(document.activeElement).toBe(screen.getByRole("switch", { name: "Autoplay" }));
 });
 
 test("playing a later upcoming entry keeps the skipped entries upcoming", async () => {

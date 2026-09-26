@@ -34,7 +34,10 @@ catalog provides interface icons, not brand identities.
   and Remove. Removal leaves focus on an adjacent action menu. Save as list
   asks for a name and preserves errors there for retry. Queue-specific rows
   keep actions beside titles where MediaRow would stack them; shadcn/Radix
-  Dropdown Menu supplies keyboard navigation and typeahead.
+  Dropdown Menu supplies keyboard navigation and typeahead. Autoplay is a
+  separate preview with a profile switch, continuing only the current series,
+  album or playlist. Explicit queue entries play first. Stop clears the
+  sequence; its end never starts recommendations.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
   on the right. Rows appear only when they have something in them: Now,

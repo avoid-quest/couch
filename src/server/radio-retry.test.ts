@@ -175,7 +175,7 @@ test("playlist Play retains radio resolution retries after committing the new qu
   const test = setup(entry => { if (entry.source.startsWith("radio:")) { attempts++; throw new Error("Station unavailable"); } return { source: entry.source }; });
   test.session.command({ type: "play", entryId: following.id });
   expect(() => test.session.loadQueue([station], "play")).toThrow("Station unavailable");
-  expect(test.session.state.currentEntryId).toBe(test.session.state.queue[0]!.id);
+  expect(test.session.state.queue.find(entry => entry.id === test.session.state.currentEntryId)?.source).toBe(station.source);
   expect(test.session.state.radioRetry?.attempt).toBe(1);
   advance(1000);
   expect(attempts).toBe(2);

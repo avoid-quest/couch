@@ -128,7 +128,7 @@ function useShellValue() {
   });
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
-    run({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
+    run({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
   const enqueueRadio = (station: RadioStation, playNow: boolean) => {
     const owner = installationId;
     const result = run(station.sourceId

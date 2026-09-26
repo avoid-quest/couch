@@ -6,11 +6,12 @@ import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
-export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor };
+export type PlaybackCollection = { title: string; url: string; index?: number };
+export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
 export type ReplayGainMode = "off" | "track" | "album";
-export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; replayGain: ReplayGainMode };
+export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; replayGain: ReplayGainMode; autoplay?: boolean };
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 export type NowPlaying = { title: string; artist?: string };
@@ -40,6 +41,7 @@ export type PlayerState = {
 
 export type SessionState = {
   queue: QueueEntry[];
+  autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
   presentationId?: string | null;
@@ -68,7 +70,7 @@ export type Action =
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
   | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
   | { type: "enqueueAlbum"; albumId: string; playNow?: boolean; placement?: "next" }
-  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next" }
+  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection }
   | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next" }
   | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next" }

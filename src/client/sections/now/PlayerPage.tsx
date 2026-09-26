@@ -47,8 +47,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const player = state?.player;
   const panel = active && current && panelState?.playbackId === player?.playbackId ? panelState?.panel ?? null : null;
   const playing = player?.status === "playing";
+  const ended = player?.status === "ended";
+  const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
   const audioOnly = current?.kind === "radio" || !!current?.source.startsWith("radio:") || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
-  const elsewhere = !localHost && active;
+  const elsewhere = !localHost && (active || ended);
   const artworkStage = audioOnly || elsewhere;
   const autoHide = playing && !artworkStage;
   useBottomBar(band, !!current && shown && !artworkStage);
@@ -58,7 +60,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
-  const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] : undefined;
+  const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
   const live = !!(current?.live || current?.kind === "radio" || current?.source.startsWith("radio:"));
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;
@@ -133,6 +135,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     : player?.status === "error" ? { title: player.error || `Can't play ${current.title}`, detail: errorDetail }
     : retry ? { title: `Reconnecting to ${current.title}`, detail: `Retrying in ${retrySeconds} s (${retry.attempt} of ${retry.maximum})`, busy: true }
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
+    : ended && !artworkStage ? { title: findingNext ? "Finding the next item…" : `Finished ${current.title}`, detail: findingNext ? "" : "Replay to watch again.", busy: !!findingNext }
     : null;
 
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />;
@@ -147,14 +150,15 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     <div className="player-workspace">
       <div className="player-main">
-      {current && (elsewhere || active && audioOnly) && !status && <div data-player-summary className="player-summary">
+      {current && (elsewhere || (active || ended) && audioOnly) && !status && <div data-player-summary className="player-summary">
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 place-items-center overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         <div data-player-audio-copy className="grid min-w-0 max-w-xl gap-2 text-center">
           <div className="flex min-w-0 items-center justify-center gap-1">
             <h1 className="min-w-0 line-clamp-2 text-2xl font-medium tracking-tight break-words" title={currentProgramme?.title || current.title}>{currentProgramme?.title || current.title}</h1>
             {currentProgramme && <Button data-panel="info" variant="ghost" size="icon" className="player-info size-11" aria-label="About this show" title="About this show" aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}
           </div>
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{live && <span>Live</span>}{(elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${name}` : current.title}</span>}</p>
+          {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${name}` : current.title}</span>}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">Reconnecting to {name}…</p>}
         </div>

@@ -1,6 +1,6 @@
 import { setupUiTests, screen, within, renderWithQueryClient, userEvent } from "@/testing/react";
 import { expect, test } from "bun:test";
-import type { SessionState } from "../../../shared/protocol";
+import type { Action, SessionState } from "../../../shared/protocol";
 import { QueuePanel } from "./QueuePanel";
 
 setupUiTests();
@@ -37,4 +37,27 @@ test("a stopped queue honors its cursor and an exhausted queue offers an empty s
   view.rerender(panel({ ...state, currentEntryId: null, queueCursorEntryId: "Last" }));
   expect(screen.queryByRole("list", { name: "Up next" })).not.toBeInTheDocument();
   expect(screen.getByText("Nothing queued")).toBeInTheDocument();
+});
+
+test("Autoplay previews the next episode separately from the explicit queue and can be turned off", async () => {
+  const actions: Action[] = [];
+  const autoplay = { enabled: true, contextTitle: "Example series", next: { id: "episode-2", title: "Episode two", source: "https://media.example/episode-2" } };
+  const view = renderWithQueryClient(<QueuePanel state={{ ...state, autoplay }} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async action => { actions.push(action); return true; }} />);
+  expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
+  expect(screen.getByRole("list", { name: "Autoplay next" })).toHaveTextContent("Episode two");
+  expect(screen.getByText("Example series · after your queue")).toBeInTheDocument();
+  expect(screen.getByLabelText("Autoplay", { selector: "button" })).toHaveRole("switch");
+  await userEvent.click(screen.getByText("Autoplay"));
+  expect(actions).toEqual([{ type: "preferences", profileId: "household", preferences: { autoplay: false } }]);
+  view.rerender(panel({ ...state, autoplay: { ...autoplay, enabled: false } }));
+  expect(screen.queryByRole("list", { name: "Autoplay next" })).not.toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: "Autoplay" })).not.toBeChecked();
+  expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
+});
+
+test("Autoplay reports pending continuation without putting a placeholder in the queue", () => {
+  renderWithQueryClient(panel({ ...state, autoplay: { enabled: true, contextTitle: null, next: null, pending: true } }));
+  expect(screen.getByText("Finding the next item…")).toBeInTheDocument();
+  expect(screen.queryByRole("list", { name: "Autoplay next" })).not.toBeInTheDocument();
+  expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
 });

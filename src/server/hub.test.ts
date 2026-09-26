@@ -163,7 +163,7 @@ test.each(["ftp://couch.local", "https://user:secret@couch.local", "https://couc
   expect(() => fixture(undefined, [origin])).toThrow("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
 });
 
-test("Bandcamp albums append once in order, play through the host resolver and persist public metadata", async () => {
+test("Bandcamp album Play persists its separate continuation and resolves only the current track", async () => {
   const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(bandcampAlbum);
   const resolve = spyOn(webMediaModule, "resolveWebMedia").mockResolvedValue({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });
   try {
@@ -176,11 +176,13 @@ test("Bandcamp albums append once in order, play through the host resolver and p
     const load = await initial.waitForCommand(command => command.type === "load");
     expect(load).toMatchObject({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });
     await second.waitFor(message => message.type === "state" && message.state.currentEntryId === message.state.queue[0]?.id);
-    expect(second.state.queue.map(item => item.title)).toEqual(["first", "second"]);
-    expect(first.messages.filter(message => message.type === "state").every(message => message.type !== "state" || message.state.queue.length !== 1)).toBe(true);
+    expect(second.state.queue.map(item => item.title)).toEqual(["first"]);
+    expect(second.state.autoplay?.next?.title).toBe("second");
+    expect(first.messages.filter(message => message.type === "state").every(message => message.type !== "state" || message.state.queue.length <= 1)).toBe(true);
     expect(second.state.queue.every(item => item.source.startsWith("web:https://artist.bandcamp.com/track/") && !!item.thumbnail && !item.quality)).toBe(true);
     expect(JSON.stringify(second.messages)).not.toContain("private-stream");
     const queue = second.state.queue;
+    const autoplay = second.state.autoplay;
     await Promise.all([first.close(), second.close()]);
     await initial.hub.close();
     hubs.splice(hubs.indexOf(initial.hub), 1);
@@ -188,12 +190,13 @@ test("Bandcamp albums append once in order, play through the host resolver and p
     const remote = new Peer(restarted.hub, token);
     await remote.ready();
     expect(remote.state.queue).toEqual(queue);
+    expect(remote.state.autoplay).toEqual(autoplay);
     expect(remote.state.currentEntryId).toBeNull();
     expect(restarted.commands).toEqual([]);
   } finally { album.mockRestore(); resolve.mockRestore(); }
 });
 
-test.each(["album", "playlist"] as const)("provider %s Play now keeps its tracks together before the existing waiting queue", async kind => {
+test.each(["album", "playlist"] as const)("provider %s Play continues after the existing manual queue", async kind => {
   const page: ProviderPage = kind === "album" ? bandcampAlbum : { title: "Playlist", items: ["abcdefghijk", "zyxwvutsrqp"].map((id, index) => ({ id, title: `Episode ${index + 1}`, kind: "media", provider: "youtube", url: `https://www.youtube.com/watch?v=${id}` })) };
   const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(page);
   const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockResolvedValue(page);
@@ -206,12 +209,14 @@ test.each(["album", "playlist"] as const)("provider %s Play now keeps its tracks
     const action: Action = kind === "album" ? { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true }
       : { type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true };
     expect(await remote.command(action)).toMatchObject({ ok: true });
-    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Current", ...page.items.map(item => item.title), "Waiting"]);
+    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Current", page.items[0]!.title, "Waiting"]);
+    expect(hub.session.state.autoplay?.next?.title).toBe(page.items[1]!.title);
     expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[1]!.id);
     expect(await remote.command({ type: "next", playbackId: hub.session.state.player.playbackId! })).toMatchObject({ ok: true });
-    expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[2]!.id);
-    expect(await remote.command({ type: "next", playbackId: hub.session.state.player.playbackId! })).toMatchObject({ ok: true });
     expect(hub.session.state.currentEntryId).toBe("waiting");
+    expect(await remote.command({ type: "next", playbackId: hub.session.state.player.playbackId! })).toMatchObject({ ok: true });
+    expect(hub.session.state.queue.find(entry => entry.id === hub.session.state.currentEntryId)?.title).toBe(page.items[1]!.title);
+    expect(hub.session.state.autoplay?.next).toBeNull();
   } finally { album.mockRestore(); playlist.mockRestore(); resolve.mockRestore(); }
 });
 
