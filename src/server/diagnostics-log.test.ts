@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, setSystemTime, spyOn, test } from "bun:test";
+import { afterEach, expect, jest, setSystemTime, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,15 +60,18 @@ test("seven-day expiry uses the first observation, including after restart", () 
   expect(stored(path)).toBe("[]");
 });
 
-test("idle retention timer removes expired data without a diagnostics request", async () => {
-  const path = fixture();
-  const first = log(path); first.add("Command", "Expiring"); first.close();
-  const entries = JSON.parse(stored(path));
-  entries[0].at = entries[0].lastAt = new Date(Date.now() - 7 * 86_400_000 + 100).toISOString();
-  const db = new Database(path); db.query("UPDATE diagnostic_history SET entries = ?").run(JSON.stringify(entries)); db.close();
-  log(path);
-  await Bun.sleep(180);
-  expect(stored(path)).toBe("[]");
+test("idle retention timer removes expired data without a diagnostics request", () => {
+  jest.useFakeTimers();
+  try {
+    const path = fixture();
+    const first = log(path); first.add("Command", "Expiring"); first.close();
+    jest.advanceTimersByTime(7 * 86_400_000 - 1);
+    const restarted = log(path);
+    expect(JSON.parse(stored(path))).toHaveLength(1);
+    jest.advanceTimersByTime(1);
+    expect(stored(path)).toBe("[]");
+    restarted.close();
+  } finally { jest.useRealTimers(); }
 });
 
 test("credentials and media URLs never reach SQLite bytes", () => {

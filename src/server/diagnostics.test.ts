@@ -1,4 +1,4 @@
-import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { afterEach, expect, jest, test } from "bun:test";
 import type { ControllerIdentity } from "../shared/controllers";
 import { createDiagnostics } from "./diagnostics";
 import { createNativeDiagnostics } from "./diagnostics-native";
@@ -106,9 +106,14 @@ test("native bridge correlates replies and bounds malformed facts", async () => 
 });
 
 test("native timeout is bounded and late replies are ignored", async () => {
+  jest.useFakeTimers();
   const bridge = createNativeDiagnostics(() => {});
-  await expect(bridge.collect()).rejects.toThrow("didn't respond");
-  bridge.receive("late", { facts: [] }); bridge.close();
+  try {
+    const pending = bridge.collect();
+    jest.advanceTimersByTime(2_000);
+    await expect(pending).rejects.toThrow("didn't respond");
+    bridge.receive("late", { facts: [] });
+  } finally { bridge.close(); jest.useRealTimers(); }
 });
 
 test("helper commands are fixed and do not inherit credentials", async () => {
@@ -144,16 +149,22 @@ test("redacts unknown quoted header and URL credentials in source errors and log
 
 test("a stalled filesystem observation times out without accumulating unfinished probes", async () => {
   let calls = 0;
-  const gate = Promise.withResolvers<[]>();
-  const diagnostics = collector({ system: () => { calls++; return gate.promise; } });
+  const gate = Promise.withResolvers<[]>(), started = Promise.withResolvers<void>();
+  jest.useFakeTimers();
+  const diagnostics = collector({ system: () => { calls++; started.resolve(); return gate.promise; } });
   try {
-    const first = await diagnostics.handle(request(), () => administrator);
+    const pending = diagnostics.handle(request(), () => administrator);
+    await started.promise;
+    jest.advanceTimersByTime(1_500);
+    const first = await pending;
     expect(first.status).toBe(200);
     expect((await first.json()).system[0].value).toBeNull();
-    setSystemTime(new Date(Date.now() + 6_000));
-    const next = await diagnostics.handle(request("/export"), () => administrator);
+    jest.advanceTimersByTime(6_000);
+    const refreshed = diagnostics.handle(request("/export"), () => administrator);
+    jest.advanceTimersByTime(1_500);
+    const next = await refreshed;
     expect(next.status).toBe(200);
     expect((await next.json()).system[0].source).toContain("1.5 seconds");
     expect(calls).toBe(1);
-  } finally { setSystemTime(); gate.resolve([]); }
+  } finally { gate.resolve([]); diagnostics.close(); jest.useRealTimers(); }
 });

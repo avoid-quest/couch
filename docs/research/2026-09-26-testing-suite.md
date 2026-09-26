@@ -2,18 +2,18 @@
 
 Keep `bun test` for TypeScript and `cargo test` for Rust. Prioritize removing CSS selectors and DOM-structure assertions from tests, then replacing repeated React/DOM lifecycle code with the libraries Bun officially supports. Tests should exercise user actions and outcomes. Investigate a standard WebDriver client after the fast suite is consistent. No runner migration is justified by the evidence gathered here.
 
-This is research and an implementation plan, not a harness change. Documentation was checked on 26 September 2026. The repository and installed Bun both use **1.4.2**; Happy DOM is pinned to **20.14.0**, React to **19.2.8**, and Playwright is already a development dependency. Current documentation can change independently of these pins.
+This note records the research behind the testing changes. Implemented conventions are documented in [Development checks](../ci.md#writing-tests). Documentation was checked on 26 September 2026. The repository and installed Bun both use **1.4.2**; Happy DOM is pinned to **20.14.0**, React to **19.2.8**, and Playwright is already a development dependency. Current documentation can change independently of these pins.
 
-## Repository evidence
+## Repository evidence before implementation
 
 The audit found 156 TypeScript test files containing 23,201 lines, 42 files restoring global property descriptors, and 40 manually creating React roots. There are 150 `sleep`/`setTimeout` sites across 63 test files and 5,626 static `expect` call sites. These are textual counts, not executed assertion counts or proof that each delay is unnecessary.
 
 After `bun install --frozen-lockfile`, the existing `bun run test` passed on this Mac: **1,295 passed, 10 skipped, zero failures, 9,598 executed assertions, approximately 48 seconds**. Core took 41.44 seconds; the separately running clock suite took 47.87 seconds, including one 43.71-second real-media case. Seven skips were LAN environment checks and three were public-provider opt-ins. This is one local run, not a CI benchmark or proof of stability.
 
-In client tests, 67 `querySelector`/`querySelectorAll` sites remain across 17 files, alongside 201 role/label query sites across 23 files. Start selector removal with PlayerPage (15 sites), then SavedPlaylists, native-selection, QueuePanel, and SearchPanel (eight each). Reframe the remaining class/style tests around chosen settings and observable behavior; do not replace them with a screenshot suite.
+The audit found 67 `querySelector`/`querySelectorAll` sites in client tests across 17 files, alongside 201 role/label query sites across 23 files. PlayerPage had 15 selector sites; SavedPlaylists, native-selection, QueuePanel, and SearchPanel had eight each. The implementation below replaces these and reframes class/style tests around chosen settings and observable behavior.
 
 - [`package.json`](../../package.json) starts separate clock/core Bun processes; each requests `--isolate --parallel=4`. [`bunfig.toml`](../../bunfig.toml) currently has no test configuration.
-- [`src/client/testing.ts`](../../src/client/testing.ts) provides a lazy `screen` proxy because individual tests install their own document during `beforeEach`.
+- The former `src/client/testing.ts` provided a lazy `screen` proxy because individual tests installed their own document during `beforeEach`; the shared setup replaces it.
 - [`RangeControl.test.tsx`](../../src/client/components/RangeControl.test.tsx), [`BluetoothSettings.test.tsx`](../../src/client/sections/settings/device/BluetoothSettings.test.tsx), and [`MetadataEditor.test.tsx`](../../src/client/components/MetadataEditor.test.tsx) repeat DOM installation, React root management, mock restoration, and DOM teardown. Bluetooth and metadata tests also sleep to await UI changes.
 - [`ContinueSection.test.tsx`](../../src/client/sections/home/ContinueSection.test.tsx) contains `expect(document.querySelector(...)).toBeDefined()`. A missing element returns `null`, which passes that assertion. Simplification should improve this check, not merely delete assertions.
 - [`tests/linux/ui.ts`](../../tests/linux/ui.ts) is a 411-line mix of W3C transport, input/actionability handling, app navigation, historical Settings compatibility, screenshots, and native pixel capture. Some of that is replaceable library infrastructure; some is product-specific qualification.
@@ -30,7 +30,7 @@ Following the user's explicit preference, remove test-owned `querySelector`/`que
 | Inspect a dialog's internal classes to prove it closed | Close it, assert the dialog is absent, and assert focus returned to its trigger |
 | Sleep, inspect form DOM, and count internal callbacks | Fill labeled fields, click Save, await the saved status, and check the submitted domain change |
 
-These examples describe the future test style; no test was edited. Native decoded pixels and audio samples can still prove actual playback output. They are different evidence from CSS or synthetic layout assertions, and should not become broad visual-snapshot coverage.
+Native decoded pixels and audio samples can still prove actual playback output. They are different evidence from CSS or synthetic layout assertions, and should not become broad visual-snapshot coverage.
 
 ## 1. Standardize React setup first
 
@@ -103,3 +103,9 @@ Use accessibility/text selectors such as `aria/Save` rather than moving our CSS 
 | 5 | Optional WDIO/nextest experiments | Measured reduction in custom code, failures, or execution time before adoption |
 
 Do not add Vitest/Jest, MSW, broad snapshot suites, a coverage quota, or additional task orchestration without a concrete unmet need. Existing Bun spies, semantic queries, Cargo, and native qualification already cover the basic requirements. Any eventual workflow or packaging change must be proved with `act` using `catthehacker/ubuntu:full-latest`, as required by the repository instructions.
+
+## Implementation results
+
+The shared UI setup now uses the standard libraries above; the client suites use it instead of manual roots and global-property maps. All test-owned `querySelector` calls and CSS assertions were removed from client tests, and the lazy semantic-query proxy was deleted. The complete client suite passed randomized execution (`bun test --parallel=4 --randomize --seed=20260926 src/client`): 273 tests, zero failures, 2.68 seconds. Individual migration groups also passed three repeated isolated runs. Targeted probes verified that open-dialog unmount callbacks finish, an unhandled timer exception still fails Bun, and real Bun HTTP responses and cancellation still work with the shared DOM setup.
+
+Four server suites now use native Bun fake timers for timeout and retention behavior. The same 54 tests and 447 assertions took 9.65 seconds versus 26.80 seconds before the change in focused local runs; three repeated isolated runs passed all 162 cases. Real subprocess budgets and media freshness checks retain real time. These local measurements do not establish hosted CI timings. Cargo remains unchanged, and the WebdriverIO trial above did not justify adoption.
