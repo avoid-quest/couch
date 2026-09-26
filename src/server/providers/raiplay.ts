@@ -156,23 +156,26 @@ export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal
   source.pathname = home ? "/index.json" : /\.json$/.test(source.pathname) ? source.pathname : /\.html$/.test(source.pathname) ? source.pathname.replace(/\.html$/, ".json") : /^\/tipologia\//.test(source.pathname) ? `${source.pathname}/index.json` : `${source.pathname}.json`;
   const data = object(await json(source.href));
   const title = text(data.name || data.title || object(data.program_info).name) || "RaiPlay";
-  if (Array.isArray(data.items)) return page(cards(array(data.items)), offset, title);
+  const info = object(data.program_info);
+  const metadata = card({ ...data, ...info, name: title, weblink: url.href });
+  const catalogPage = (items: ProviderItem[], title: string) => ({ ...page(items, offset, title), ...(metadata?.thumbnail ? { thumbnail: metadata.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) });
+  if (Array.isArray(data.items)) return catalogPage(cards(array(data.items)), title);
   if (data.contents && typeof data.contents === "object" && !Array.isArray(data.contents)) {
     const letters = object(data.contents);
-    return page(cards(Object.keys(letters).sort().flatMap(letter => array(letters[letter]))), offset, title);
+    return catalogPage(cards(Object.keys(letters).sort().flatMap(letter => array(letters[letter]))), title);
   }
   if (Array.isArray(data.blocks)) {
     const info = object(data.program_info);
     const first = data.first_item_path ? cards([{ ...info, name: title, weblink: data.first_item_path, duration: data.first_item_duration }]) : [];
     const sets = array(data.blocks).flatMap(block => array(block.sets).map(set => ({ ...set, images: info.images, name: set.name === block.name ? set.name : `${text(block.name)} - ${text(set.name)}` })));
-    return page([...first, ...cards(sets)], offset, title);
+    return catalogPage([...first, ...cards(sets)], title);
   }
   if (Array.isArray(data.contents)) {
     const contents = array(data.contents);
     if (blockId) {
       const block = contents.find(row => row.id === blockId);
       if (!block) throw new ProviderError("This RaiPlay collection is no longer available.", 404);
-      return page(cards(array(block.contents)), offset, text(block.name) || title);
+      return catalogPage(cards(array(block.contents)), text(block.name) || title);
     }
     const items = contents.flatMap(row => {
       if (Array.isArray(row.contents)) {
@@ -183,9 +186,9 @@ export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal
       const item = card(row);
       return item ? [item] : [];
     });
-    return page(home ? [collection("Dirette TV", `${origin}/dirette`), collection("Replay - ultimi 7 giorni", `${origin}/guidatv`), ...items] : items, offset, title);
+    return catalogPage(home ? [collection("Dirette TV", `${origin}/dirette`), collection("Replay - ultimi 7 giorni", `${origin}/guidatv`), ...items] : items, title);
   }
-  if (data.video) return page(cards([{ ...data, path_id: url.href }]), offset, title);
+  if (data.video) return catalogPage(cards([{ ...data, path_id: url.href }]), title);
   throw new ProviderError("RaiPlay returned an unsupported catalog response.");
 }
 

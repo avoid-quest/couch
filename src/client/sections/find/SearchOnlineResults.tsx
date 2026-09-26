@@ -21,7 +21,7 @@ export type SearchHit = SearchFacet & {
   primary: { label: string; disabled?: boolean; run: () => void };
   actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode }>;
 };
-export type SearchCollection = { title: string; source: string; openerId?: string; back: () => void; /** The first level opened, not one opened from inside it. */ root?: boolean; playAll?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; disabled?: boolean };
+export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; openerId?: string; back: () => void; /** The first level opened, not one opened from inside it. */ root?: boolean; playAll?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection };
 export const lengthOf = (seconds: number): SearchLength => seconds < 600 ? "Under 10 min" : seconds <= 3600 ? "10–60 min" : "Over 1 hr";
 export function matchesFacet(item: SearchFacet, kind?: SearchKind, length?: SearchLength) {
@@ -67,7 +67,10 @@ function OnlineResults(props: Props) {
   const page = useMemo<ProviderSearchPage | null>(() => {
     if (!browse.data?.pages.length) return null;
     const pages = browse.data.pages, items: ProviderItem[] = [], ids = new Set<string>();
-    for (const part of pages) for (const item of part.items) if (!ids.has(item.id)) { ids.add(item.id); items.push(item); }
+    for (const part of pages) for (const item of part.items) {
+      const id = item.collection?.index == null ? item.id : `${item.id}:${item.collection.url}:${item.collection.index}`;
+      if (!ids.has(id)) { ids.add(id); items.push(item); }
+    }
     const warning = [...new Set(pages.flatMap(part => part.warning ? [part.warning] : []))].join(" ");
     return { ...pages[0]!, items, nextCursor: pages.at(-1)?.nextCursor, ...(warning ? { warning } : {}) };
   }, [browse.data]);
@@ -97,7 +100,7 @@ function OnlineResults(props: Props) {
     const result = await browse.fetchNextPage({ cancelRefetch: false });
     if (!signal?.aborted && currentView.current === key && !result.isError) setVisible(value => value + 6);
   }
-  function open(item: ProviderItem, opener = item.id) { views.current.set(key, visible); setTrail(current => [...current, { request: { url: item.url }, title: item.title, opener, item }]); }
+  function open(item: ProviderItem, opener = item.id) { views.current.set(key, visible); setTrail(current => [...current, { request: { url: item.url }, title: item.title, opener, item: { ...item, thumbnail: item.thumbnail ?? page?.thumbnail, description: item.description ?? page?.description } }]); }
   function back() { if (trail.length > 1) setTrail(current => current.slice(0, -1)); else props.onClose?.(); }
   async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done?: string) {
     if (busy || !props.connected || !lifetime.current) return;
@@ -131,7 +134,7 @@ function OnlineResults(props: Props) {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
-      return { id: `${provider}:${item.id}`, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : "List", thumbnail: item.thumbnail,
+      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : "List", thumbnail: item.thumbnail,
         primary: { label: item.kind === "media" ? "Play" : "Open", disabled: item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => item.kind === "media" ? play(item, true) : open(item) },
         actions: item.kind === "media" ? [
           { label: "Play next", disabled: busy || !props.onCommand, run: () => play(item, false, "next") },
@@ -141,14 +144,15 @@ function OnlineResults(props: Props) {
       };
     });
     const selected = location.item;
+    const parent = [...trail].reverse().find(entry => entry.item?.thumbnail || entry.item?.description)?.item;
     const selectedSaved = !!selected && !!favorites?.some(entry => entry.id === selected.id);
     const list = (playNow: boolean) => location.request.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: location.request.url!, shape: "playlist", playNow, quality: props.quality }) ?? Promise.resolve(false), playNow ? undefined : playNotice(page.title || location.title, "queue")) : undefined;
     props.onResults?.(providerNames[provider], { count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: visible < (page?.items.length ?? 0) || browse.hasNextPage ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
-      ...(inCollection ? { collection: { title: page?.title || location.title, source: providerNames[provider], openerId: `${provider}:${location.opener}`, back, root: trail.length === (opened ? 1 : 2), disabled: busy,
+      ...(inCollection ? { collection: { title: page?.title || location.title, thumbnail: page?.thumbnail ?? selected?.thumbnail ?? parent?.thumbnail, description: page?.description ?? selected?.description ?? parent?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], openerId: `${provider}:${location.opener}`, back, root: trail.length === (opened ? 1 : 2), disabled: busy,
         playAll: list(true), queueAll: list(false),
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved,
       } } : {}),
     });
-  }, [trail.length, page?.items, page?.title, page?.warning, location, visible, favorites, later.data, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality]);
+  }, [trail.length, page?.items, page?.title, page?.thumbnail, page?.description, page?.subtitle, page?.warning, location, visible, favorites, later.data, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality]);
   return null;
 }

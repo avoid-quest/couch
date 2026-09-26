@@ -32,6 +32,7 @@ import { Route as SettingsAppearanceRouteImport } from './routes/settings/appear
 import { Route as SettingsBluetoothRouteImport } from './routes/settings/bluetooth'
 import { Route as SettingsConnectionRouteImport } from './routes/settings/connection'
 import { Route as SettingsDisplayRouteImport } from './routes/settings/display'
+import { Route as SettingsHomeRouteImport } from './routes/settings/home'
 import { Route as SettingsPlaybackRouteImport } from './routes/settings/playback'
 import { Route as SettingsRemotesRouteImport } from './routes/settings/remotes'
 import { Route as SettingsSoundRouteImport } from './routes/settings/sound'
@@ -162,6 +163,11 @@ const SettingsDisplayRoute = SettingsDisplayRouteImport.update({
   path: '/display',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsHomeRoute = SettingsHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsPlaybackRoute = SettingsPlaybackRouteImport.update({
   id: '/playback',
   path: '/playback',
@@ -257,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/settings/bluetooth': typeof SettingsBluetoothRoute
   '/settings/connection': typeof SettingsConnectionRoute
   '/settings/display': typeof SettingsDisplayRoute
+  '/settings/home': typeof SettingsHomeRoute
   '/settings/playback': typeof SettingsPlaybackRoute
   '/settings/remotes': typeof SettingsRemotesRoute
   '/settings/sound': typeof SettingsSoundRoute
@@ -295,6 +302,7 @@ export interface FileRoutesByTo {
   '/settings/bluetooth': typeof SettingsBluetoothRoute
   '/settings/connection': typeof SettingsConnectionRoute
   '/settings/display': typeof SettingsDisplayRoute
+  '/settings/home': typeof SettingsHomeRoute
   '/settings/playback': typeof SettingsPlaybackRoute
   '/settings/remotes': typeof SettingsRemotesRoute
   '/settings/sound': typeof SettingsSoundRoute
@@ -334,6 +342,7 @@ export interface FileRoutesById {
   '/settings/bluetooth': typeof SettingsBluetoothRoute
   '/settings/connection': typeof SettingsConnectionRoute
   '/settings/display': typeof SettingsDisplayRoute
+  '/settings/home': typeof SettingsHomeRoute
   '/settings/playback': typeof SettingsPlaybackRoute
   '/settings/remotes': typeof SettingsRemotesRoute
   '/settings/sound': typeof SettingsSoundRoute
@@ -375,6 +384,7 @@ export interface FileRouteTypes {
     | '/settings/bluetooth'
     | '/settings/connection'
     | '/settings/display'
+    | '/settings/home'
     | '/settings/playback'
     | '/settings/remotes'
     | '/settings/sound'
@@ -413,6 +423,7 @@ export interface FileRouteTypes {
     | '/settings/bluetooth'
     | '/settings/connection'
     | '/settings/display'
+    | '/settings/home'
     | '/settings/playback'
     | '/settings/remotes'
     | '/settings/sound'
@@ -451,6 +462,7 @@ export interface FileRouteTypes {
     | '/settings/bluetooth'
     | '/settings/connection'
     | '/settings/display'
+    | '/settings/home'
     | '/settings/playback'
     | '/settings/remotes'
     | '/settings/sound'
@@ -645,6 +657,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsDisplayRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/home': {
+      id: '/settings/home'
+      path: '/home'
+      fullPath: '/settings/home'
+      preLoaderRoute: typeof SettingsHomeRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/playback': {
       id: '/settings/playback'
       path: '/playback'
@@ -798,6 +817,7 @@ interface SettingsRouteChildren {
   SettingsBluetoothRoute: typeof SettingsBluetoothRoute
   SettingsConnectionRoute: typeof SettingsConnectionRoute
   SettingsDisplayRoute: typeof SettingsDisplayRoute
+  SettingsHomeRoute: typeof SettingsHomeRoute
   SettingsPlaybackRoute: typeof SettingsPlaybackRoute
   SettingsRemotesRoute: typeof SettingsRemotesRoute
   SettingsSoundRoute: typeof SettingsSoundRoute
@@ -814,6 +834,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsBluetoothRoute: SettingsBluetoothRoute,
   SettingsConnectionRoute: SettingsConnectionRoute,
   SettingsDisplayRoute: SettingsDisplayRoute,
+  SettingsHomeRoute: SettingsHomeRoute,
   SettingsPlaybackRoute: SettingsPlaybackRoute,
   SettingsRemotesRoute: SettingsRemotesRoute,
   SettingsSoundRoute: SettingsSoundRoute,

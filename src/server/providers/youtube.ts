@@ -108,7 +108,11 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     const entries = Array.isArray(info.entries) ? info.entries : [info];
     return {
       title: label(info.title) ?? "YouTube",
-      items: entries.slice(0, pageSize).map(item).filter((entry): entry is ProviderItem => entry !== null),
+      ...(source.kind === "collection" ? { thumbnail: thumbnail(info, source), description: label(info.description, 2000), subtitle: label(info.channel) ?? label(info.uploader) } : {}),
+      items: entries.slice(0, pageSize).map((raw, index) => {
+        const entry = item(raw);
+        return entry?.kind === "media" && isYouTubePlaylistUrl(source.url) ? { ...entry, collection: { title: label(info.title) ?? "YouTube playlist", url: source.url, index: offset + index } } : entry;
+      }).filter((entry): entry is ProviderItem => entry !== null),
       ...(entries.length > pageSize && offset < maxOffset ? { nextCursor: String(offset + pageSize) } : {}),
     };
   };

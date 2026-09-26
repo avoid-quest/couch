@@ -134,7 +134,7 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
     const item = channel(data.user);
     if (!item || !object(data.user)) throw unavailable();
     const broadcasts = items(data.user.videos, video);
-    return { title: item.title, items: [item, ...broadcasts] };
+    return { title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, items: [item, ...broadcasts] };
   }
   if (target.kind === "categories") {
     const data = await query(`{ games(first:20) { edges { node { ${categoryFields} } } } }`, {}, signal);

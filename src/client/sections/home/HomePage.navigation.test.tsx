@@ -1,10 +1,12 @@
 import { setupUiTests, render as renderUI, act, screen, userEvent, waitFor, within, createTestQueryClient, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { ShellProviders } from "../shell/test-providers";
-import { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet } from "@tanstack/react-router";
+import { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet, type AnyRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ShellValue } from "../shell/AppShell";
 import { HomePage } from "./HomePage";
+import { SettingsHome } from "../settings/device/SettingsHome";
+import { SettingsLayout } from "../settings/SettingsLayout";
 import type { QueueEntry, SessionState } from "../../../shared/protocol";
 import { defaultHomeRows } from "./home-rows";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
@@ -13,6 +15,7 @@ setupUiTests();
 
 let view: ReturnType<typeof renderUI>, client: QueryClient;
 let history: ReturnType<typeof createBrowserHistory>;
+let router: AnyRouter;
 let request: ReturnType<typeof spyOn> | undefined;
 beforeEach(async () => {
   client = createTestQueryClient();
@@ -37,7 +40,9 @@ async function renderHome(overrides: { current?: QueueEntry; state?: SessionStat
   const home = createRoute({ getParentRoute: () => base, path: "/", component: HomePage });
   const player = createRoute({ getParentRoute: () => base, path: "/now", component: () => <h1>Player</h1> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <h1>Find</h1> });
-  const router = createRouter({ routeTree: base.addChildren([home, player, find]), history });
+  const settings = createRoute({ getParentRoute: () => base, path: "/settings", component: () => <SettingsLayout section="playback">{null}</SettingsLayout> });
+  const homeSettings = createRoute({ getParentRoute: () => base, path: "/settings/home", component: SettingsHome });
+  router = createRouter({ routeTree: base.addChildren([home, player, find, settings, homeSettings]), history });
   await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
 }
 
@@ -80,22 +85,19 @@ test("a fresh Home fills Radio with built-in stations and leads with the one on 
   expect(screen.getByRole("button", { name: "Play NTS Radio" })).toBeInTheDocument();
   expect(within(screen.getByRole("list", { name: "Radio stations" })).getByRole("button", { name: "Play Lyl Radio" })).toHaveTextContent("Live");
   expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
-  const home = screen.getByRole("region", { name: "Home" });
-  expect(within(home.querySelector("header")!).getByRole("button", { name: "Customize Home" })).toBeInTheDocument();
-  expect(home.querySelector("footer")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Customize Home" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => /\/api\/(jellyfin|library\/sources|iptv\/sources)$/.test(String(input)))).toBe(false);
-  await userEvent.click(screen.getByRole("button", { name: "Customize Home" }));
-  expect(screen.getByRole("dialog", { name: "Customize Home" })).toBeInTheDocument();
 });
 
 test("hiding failed Home rows restores the empty state and skips their reads on the next visit", async () => {
   request = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ error: "History unavailable" }, { status: 503 }));
   await renderHome();
   await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(3));
-  await userEvent.click(screen.getByRole("button", { name: "Customize Home" }));
+  await act(async () => router.navigate({ href: "/settings/home" }));
   for (const name of ["Continue", "For later", "Radio", "Played recently"]) {
     await userEvent.click(screen.getByRole("switch", { name }));
   }
+  await act(async () => router.navigate({ href: "/" }));
   expect(screen.getByRole("heading", { name: "Find something to play" })).toBeInTheDocument();
   expect(screen.queryByText("History unavailable")).toBeNull();
   expect(screen.queryByText("Couldn't load For later.")).toBeNull();
@@ -117,14 +119,12 @@ test("Played recently offers history retry when Continue is hidden", async () =>
   expect(await screen.findByRole("heading", { name: "Find something to play" })).toBeInTheDocument();
 });
 
-test("an unavailable player keeps playback and the queue reachable with Now and Up next hidden", async () => {
+test("an unavailable player keeps recovery reachable with Now and Up next hidden", async () => {
   localStorage.setItem("couch.home-rows", JSON.stringify(defaultHomeRows.map(row => ({ ...row, shown: false }))));
   const current: QueueEntry = { id: "current", source: "youtube", title: "Current", duration: 120 };
   const state = { queue: [current, { ...current, id: "next", title: "Waiting film" }], currentEntryId: current.id, player: { status: "unavailable", position: 0, duration: 120, volume: 40, playbackId: null }, activeProfile: { id: "household", name: "Household" } } as SessionState;
   await renderHome({ state, current, active: false });
-  expect(screen.getByRole("heading", { name: "Up next" })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Edit" }));
-  expect(screen.getByRole("dialog", { name: "Up next" })).toHaveTextContent("Waiting film");
+  expect(screen.queryByRole("heading", { name: "Up next" })).toBeNull();
   for (const { status, queue } of [
     { status: "unavailable" as const, queue: [current] },
     { status: "idle" as const, queue: [{ ...current, id: "previous" }, current] },
@@ -137,4 +137,49 @@ test("an unavailable player keeps playback and the queue reachable with Now and 
     expect(history.location.pathname).toBe("/now");
     expect(screen.getByRole("heading", { name: "Player" })).toBeInTheDocument();
   }
+});
+
+test("a hidden Up next row stays hidden when playback stops", async () => {
+  localStorage.setItem("couch.home-rows", JSON.stringify(defaultHomeRows.map(row => ({ ...row, shown: false }))));
+  const queued: QueueEntry = { id: "next", source: "https://media.example/next", title: "Waiting film", duration: 120 };
+  const state = { queue: [queued], currentEntryId: null, queueCursorEntryId: null, player: { status: "idle", position: 0, duration: null, volume: 40, playbackId: null }, activeProfile: { id: "household", name: "Household" } } as SessionState;
+  await renderHome({ state, active: false });
+  expect(screen.queryAllByRole("heading", { name: "Up next" })).toHaveLength(0);
+});
+
+test("Settings Home applies row visibility and order and retains them after reload", async () => {
+  request = spyOn(globalThis, "fetch").mockImplementation((async input => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/radio/avoid") return Response.json({ stations: [{ id: "station", name: "Test Radio", url: "https://radio.example/live" }] });
+    if (path === "/api/radio/favorites") return Response.json({ favorites: [] });
+    return Response.json({ items: [] });
+  }) as typeof fetch);
+  const queued: QueueEntry = { id: "next", source: "https://media.example/next", title: "Waiting film", duration: 120 };
+  const state = { queue: [queued], currentEntryId: null, queueCursorEntryId: null, player: { status: "idle", position: 0, duration: null, volume: 40, playbackId: null }, activeProfile: { id: "household", name: "Household" } } as SessionState;
+  await renderHome({ state });
+  expect(await screen.findByRole("heading", { name: "Radio" })).toBeInTheDocument();
+  await act(async () => router.navigate({ href: "/settings" }));
+  await userEvent.click(within(screen.getByRole("navigation", { name: "Settings pages" })).getByRole("link", { name: "Home" }));
+  expect(history.location.pathname).toBe("/settings/home");
+  await userEvent.click(screen.getByRole("switch", { name: "Up next" }));
+  for (let index = 0; index < 5; index++) await userEvent.click(screen.getByRole("button", { name: "Move Up next up" }));
+  expect(within(screen.getByRole("list", { name: "Home rows" })).getAllByRole("switch")[0]).toHaveAccessibleName("Up next");
+  await act(async () => router.navigate({ href: "/" }));
+  const rows = within(screen.getByRole("region", { name: "Home" })).getAllByRole("region");
+  expect(rows[0]).toHaveAccessibleName("Up next");
+  expect(rows[1]).toHaveAccessibleName("Radio");
+  await act(async () => router.navigate({ href: "/settings/home" }));
+  await userEvent.click(screen.getByRole("switch", { name: "Radio" }));
+  view.rerender(<></>);
+  await renderHome({ state });
+  expect(screen.getByRole("heading", { name: "Up next" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Radio" })).toBeNull();
+  await act(async () => router.navigate({ href: "/settings/home" }));
+  expect(screen.getByRole("switch", { name: "Radio" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Up next" })).toBeChecked();
+  expect(within(screen.getByRole("list", { name: "Home rows" })).getAllByRole("switch")[0]).toHaveAccessibleName("Up next");
+  await userEvent.click(screen.getByRole("button", { name: "Reset to default" }));
+  await act(async () => router.navigate({ href: "/" }));
+  expect(await screen.findByRole("heading", { name: "Radio" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Up next" })).toBeNull();
 });

@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Tv, X } from "lucide-react";
+import { ListMusic, Tv, X } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -279,20 +279,21 @@ export function ShellChrome({ children }: PropsWithChildren) {
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
 
-  if (setupPending) return <div className="app-shell glass-shell flex min-h-dvh flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
+  if (setupPending) return <div className="app-shell flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
   return (
-    <div className={cn("app-shell flex min-h-dvh flex-col bg-background", tvPresentation ? "tv-shell" : "glass-shell")}>
+    <div className={cn("app-shell flex flex-col bg-background", tvPresentation && "tv-shell")}>
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          <header className={cn("app-header relative z-30 flex h-14 min-h-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0", onPlayer && "hidden")}>
+          <header className={cn("app-header sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0", onPlayer && "hidden")}>
             <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
               {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground hover:bg-transparent aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-2 max-sm:text-sm">
                 <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined} onClick={() => { if (name === "Find") shell.closeOnlineRequest(); }}>{name}</Link>
               </Button>)}
             </nav>
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
+              {paired && !!state?.queue.length && <Button variant="ghost" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
               {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} updates={!localHost && !tvPresentation} />}
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}

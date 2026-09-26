@@ -104,8 +104,8 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
     checkTrack(detail, first);
     const image = thumbnail(info) ?? thumbnail(detail);
     const subtitle = artist(detail, true);
-    return { title, items: items.map((item, index) => ({
-      ...item, ...(image ? { thumbnail: image } : {}), ...(subtitle ? { subtitle } : {}),
+    return { title, thumbnail: image, subtitle, description: label(info.description, 2000), items: items.map((item, index) => ({
+      ...item, collection: { title, url: source.url, index }, ...(image ? { thumbnail: image } : {}), ...(subtitle ? { subtitle } : {}),
       ...(index === 0 && typeof detail.duration === "number" && Number.isFinite(detail.duration) && detail.duration >= 0 && detail.duration <= Number.MAX_SAFE_INTEGER ? { duration: detail.duration } : {}),
     })) };
   }

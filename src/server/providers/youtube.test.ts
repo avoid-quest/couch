@@ -220,3 +220,10 @@ test("playlist action eligibility accepts the same trailing slash forms as brows
   expect(calls[0]!.args.at(-1)).toBe(playlist);
   expect(isYouTubePlaylistUrl("https://www.youtube.com/@NASA/videos/")).toBe(false);
 });
+
+test("playlist previews retain collection metadata and distinct repeated occurrences", async () => {
+  const page = await fixture({ title: "Two viewings", description: "Watch once, then revisit.", thumbnail: "https://i.ytimg.com/vi/BaW_jenozKc/hqdefault.jpg", entries: [video, video] }).browse({ url: playlist, cursor: "24" });
+  expect(page).toMatchObject({ title: "Two viewings", description: "Watch once, then revisit.", thumbnail: "https://i.ytimg.com/vi/BaW_jenozKc/hqdefault.jpg" });
+  expect(page.items.map(item => item.collection)).toEqual([{ title: "Two viewings", url: playlist, index: 24 }, { title: "Two viewings", url: playlist, index: 25 }]);
+  expect((await fixture().browse({ query: "Public video" })).items[0]!.collection).toBeUndefined();
+});

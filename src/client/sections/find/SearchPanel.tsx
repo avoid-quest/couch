@@ -204,7 +204,7 @@ export const HitList = memo(function HitList({ hits, label, origin, token }: { h
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
     {hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
-    <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} description={hit.description}
+    <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} description={hit.description} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
       art={hit.artworkId ? <AuthArtwork origin={origin} token={token} id={hit.artworkId} video={hit.video} /> : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
       primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled }}
       actions={hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>)}>
@@ -215,11 +215,20 @@ export const HitList = memo(function HitList({ hits, label, origin, token }: { h
 
 /** An opened channel, list or show: back, title, and whole-list verbs. */
 export function CollectionHeader({ collection, back, onBack, canPlay }: { collection: SearchCollection; back: string; onBack: () => void; canPlay: boolean }) {
-  return <PageHeader back={{ label: back, onClick: onBack }} title={collection.title} actions={<>
+  return <div className="space-y-4">
+    <PageHeader back={{ label: back, onClick: onBack }} title={collection.title} className="mb-0 [&_h1]:whitespace-normal [&_h1]:break-words" actions={<>
     <Button disabled={!canPlay || collection.disabled || !collection.playAll} onClick={collection.playAll}>Play all</Button>
     <Button variant="ghost" disabled={collection.disabled || !collection.queueAll} onClick={collection.queueAll}>Queue all</Button>
     {collection.save && <Button variant="ghost" aria-pressed={collection.saved} disabled={collection.disabled} onClick={collection.save}>{collection.saved ? "Saved" : "Save"}</Button>}
-  </>} />;
+    </>} />
+    {(collection.thumbnail || collection.description || collection.subtitle) && <div data-collection-preview className="flex items-start gap-4 sm:gap-6">
+      {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="h-36 w-24 shrink-0 object-contain bg-transparent sm:h-48 sm:w-36" />}
+      <div className="min-w-0 space-y-2">
+        {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
+        {collection.description && <p className="line-clamp-4 max-w-prose text-sm leading-relaxed break-words">{collection.description}</p>}
+      </div>
+    </div>}
+  </div>;
 }
 
 export function MoreResults({ summaries }: { summaries: Entry[] }) {

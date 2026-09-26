@@ -1,5 +1,6 @@
 export const settingsPages = {
   playback: { label: "Playback", path: "/settings/playback", manage: "always" },
+  home: { label: "Home", path: "/settings/home", manage: "always" },
   appearance: { label: "Text size", path: "/settings/appearance", manage: "always" },
   connection: { label: "Remotes", path: "/settings/connection", manage: "administrator" },
   general: { label: "General", path: "/settings/tv", manage: "always" },

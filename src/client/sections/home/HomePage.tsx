@@ -2,13 +2,12 @@ import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ChevronDown, ChevronUp, Pause, Play, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
-import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -30,7 +29,7 @@ import { avoidRadioPlaylistId } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/library";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
-import { homeRowLabels, useHomeRows, type HomeRowId } from "./home-rows";
+import { useHomeRows, type HomeRowId } from "./home-rows";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
 
@@ -51,11 +50,9 @@ export function HomePage() {
   const navigate = useNavigate();
   const now = useDurationClock();
   const [queueOpen, setQueueOpen] = useState(false);
-  const [customizing, setCustomizing] = useState(false);
   const layout = useHomeRows();
-  // Keep a waiting queue reachable whenever the mini player is absent.
   const playerBand = !!current && (shell.active || state?.player.status === "error");
-  const onHome = layout.rows.filter(row => row.shown || row.id === "upNext" && !playerBand);
+  const onHome = layout.rows.filter(row => row.shown);
   const hasRow = (id: HomeRowId) => onHome.some(row => row.id === id);
   const playerFallback = !!current && !playerBand && !hasRow("now");
   const historyShown = hasRow("continue") || hasRow("recent");
@@ -166,10 +163,7 @@ export function HomePage() {
   };
 
   return <section data-page="Home" aria-label="Home" className="pt-2">
-    <header className="flex items-center justify-end pb-2">
-      <h1 className="sr-only">Home</h1>
-      <Button variant="ghost" className="text-muted-foreground" onClick={() => setCustomizing(true)}><SlidersHorizontal aria-hidden="true" />Customize Home</Button>
-    </header>
+    <h1 className="sr-only">Home</h1>
     {hasRow("recent") && !hasRow("continue") && history.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load Played recently.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("radio") && favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
@@ -181,24 +175,6 @@ export function HomePage() {
       <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
       <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>
     </Empty>}
-
-    <Sheet modal={false} open={customizing} onOpenChange={setCustomizing}>
-      <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>
-        <SheetHeader className="flex-row items-center gap-2 px-6 pt-6 pb-2"><SheetClose asChild><Button variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">Customize Home</SheetTitle></SheetHeader>
-        <div className="grid gap-4 px-6 pb-8">
-          <p className="text-sm text-muted-foreground">Choose the rows this device shows and their order. Empty rows stay hidden, and Up next appears whenever nothing is playing.</p>
-          <ol aria-label="Home rows" className="border-t">
-            {layout.rows.map((row, index) => <li key={row.id} className="flex items-center gap-3 border-b py-2">
-              <Switch id={`home-row-${row.id}`} checked={row.shown} onCheckedChange={checked => layout.toggle(row.id, checked)} />
-              <label htmlFor={`home-row-${row.id}`} className={cn("min-w-0 flex-1 cursor-pointer text-base", !row.shown && "text-muted-foreground")}>{homeRowLabels[row.id]}</label>
-              <Button variant="ghost" size="icon" aria-label={`Move ${homeRowLabels[row.id]} up`} disabled={index === 0} onClick={() => layout.move(row.id, -1)}><ChevronUp aria-hidden="true" /></Button>
-              <Button variant="ghost" size="icon" aria-label={`Move ${homeRowLabels[row.id]} down`} disabled={index === layout.rows.length - 1} onClick={() => layout.move(row.id, 1)}><ChevronDown aria-hidden="true" /></Button>
-            </li>)}
-          </ol>
-          <Button variant="ghost" className="-ml-2.5 justify-self-start" onClick={layout.reset}>Reset to default</Button>
-        </div>
-      </SheetContent>
-    </Sheet>
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
       <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>

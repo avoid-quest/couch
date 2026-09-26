@@ -13,11 +13,13 @@ export type ProviderItem = {
   thumbnail?: string;
   description?: string;
   subtitle?: string;
+  /** Canonical containing list, with its zero-based occurrence when known. */
+  collection?: { title: string; url: string; index?: number };
   duration?: number;
   live?: boolean;
 };
 
-export type ProviderPage = { items: ProviderItem[]; nextCursor?: string; title?: string };
+export type ProviderPage = { items: ProviderItem[]; nextCursor?: string; title?: string; thumbnail?: string; description?: string; subtitle?: string };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
 
 export const providerShape = (item: Pick<ProviderItem, "kind">): MediaShape =>

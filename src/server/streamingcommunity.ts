@@ -106,7 +106,7 @@ function listItem(row: Record<string, unknown>, cdn: string, origin: string): Pr
   if (!id || !slug || !name || !type) return;
   const url = titleUrl(id, slug, origin);
   const poster = posterUrl(row, cdn);
-  const plot = translated(row, "plot");
+  const plot = translated(row, "plot") || clean(row.plot, 2000);
   const year = clean(row.release_date ?? row.last_air_date, 10).slice(0, 4);
   return {
     id: providerItemId("streamingcommunity", url), provider: "streamingcommunity", kind: type === "tv" ? "collection" : "media", title: name, url,
@@ -115,7 +115,7 @@ function listItem(row: Record<string, unknown>, cdn: string, origin: string): Pr
   };
 }
 
-type TitleContext = { id: number; name: string; base: string; watch: string; poster?: string; plot?: string; seasons: number[]; quality?: string; year?: string; runtime?: number };
+type TitleContext = { cdn: string; id: number; name: string; base: string; watch: string; poster?: string; plot?: string; seasons: number[]; quality?: string; year?: string; runtime?: number };
 
 function titleContext(page: InertiaPage, origin: string): TitleContext {
   if (page.component !== "Titles/Title") throw changed();
@@ -129,7 +129,7 @@ function titleContext(page: InertiaPage, origin: string): TitleContext {
   const quality = clean(title.quality, 20);
   const year = clean(title.release_date, 10).slice(0, 4);
   const runtime = typeof title.runtime === "number" && title.runtime > 0 && title.runtime < 1440 ? title.runtime : undefined;
-  return { id, name, base: titleUrl(id, slug, origin), watch: `${origin}/${locale}/watch/${id}`, poster, ...(plot ? { plot } : {}), ...(quality ? { quality } : {}), ...(year ? { year } : {}), ...(runtime ? { runtime } : {}), seasons: array(title.seasons).map(row => integer(row.number)).filter((season): season is number => !!season) };
+  return { cdn: cdnUrl(page.props, origin), id, name, base: titleUrl(id, slug, origin), watch: `${origin}/${locale}/watch/${id}`, poster, ...(plot ? { plot } : {}), ...(quality ? { quality } : {}), ...(year ? { year } : {}), ...(runtime ? { runtime } : {}), seasons: array(title.seasons).map(row => integer(row.number)).filter((season): season is number => !!season).sort((a, b) => a - b) };
 }
 
 function subtitleFor(context: TitleContext, series = false) {
@@ -150,35 +150,44 @@ function episodeItem(context: TitleContext, seasonNumber: number, row: Record<st
   const number = integer(row.number);
   if (!episodeId || !number) return;
   const url = `${context.watch}?e=${episodeId}`;
-  const name = clean(row.name, 200);
+  const name = translated(row, "name", 200) || clean(row.name, 200);
+  const description = translated(row, "plot") || clean(row.plot, 2000);
+  const image = posterUrl(row, context.cdn) ?? context.poster;
   const minutes = integer(row.duration);
   return {
     id: providerItemId("streamingcommunity", url), provider: "streamingcommunity", kind: "media",
     title: `S${pad(seasonNumber)}E${pad(number)}${name ? ` · ${name}` : ""}`, url,
-    ...(context.poster ? { thumbnail: context.poster } : {}), ...(minutes && minutes < 1440 ? { duration: minutes * 60 } : {}),
+    subtitle: context.name,
+    collection: { title: `${context.name} - Season ${seasonNumber}`, url: `${context.base}/season-${seasonNumber}` },
+    ...(description ? { description } : {}), ...(image ? { thumbnail: image } : {}), ...(minutes && minutes < 1440 ? { duration: minutes * 60 } : {}),
   };
 }
 
-function seasonPageItems(page: InertiaPage, origin: string, season: number): { title?: string; items: ProviderItem[] } {
+function seasonPageItems(page: InertiaPage, origin: string, season: number): ProviderPage {
   const context = titleContext(page, origin);
   const loaded = object(page.props.loadedSeason) ? page.props.loadedSeason : undefined;
   const number = integer(loaded?.number) ?? season;
-  const items = array(loaded?.episodes).map(row => episodeItem(context, number, row)).filter((item): item is ProviderItem => !!item);
-  return { title: `${context.name} - Season ${number}`, items };
+  const items = array(loaded?.episodes).sort((a, b) => (integer(a.number) ?? 0) - (integer(b.number) ?? 0)).map(row => episodeItem(context, number, row)).filter((item): item is ProviderItem => !!item);
+  return { title: `${context.name} - Season ${number}`, thumbnail: posterUrl(loaded ?? {}, cdnUrl(page.props, origin)) ?? context.poster, description: translated(loaded ?? {}, "plot") || clean(loaded?.plot, 2000) || context.plot, subtitle: subtitleFor(context, true), items };
 }
 
-function titlePageItems(page: InertiaPage, origin: string): { title?: string; items: ProviderItem[] } {
+function titlePageItems(page: InertiaPage, origin: string): ProviderPage {
   const context = titleContext(page, origin);
   if (!context.seasons.length) return { title: context.name, items: [movieItem(context)] };
-  const items = context.seasons.map(season => {
+  const seasons = array((page.props.title as Record<string, unknown>).seasons);
+  const items = context.seasons.toSorted((a, b) => a - b).map(season => {
+    const detail = seasons.find(row => row.number === season) ?? {};
+    const description = translated(detail, "plot") || clean(detail.plot, 2000);
+    const thumbnail = posterUrl(detail, cdnUrl(page.props, origin)) ?? context.poster;
+    const episodes = integer(detail.episodes_count);
     const url = `${context.base}/season-${season}`;
     return {
       id: providerItemId("streamingcommunity", url), provider: "streamingcommunity" as const, kind: "collection" as const, title: `Season ${season}`, url,
-      ...(context.poster ? { thumbnail: context.poster } : {}), ...(context.plot ? { description: context.plot } : {}),
-      subtitle: subtitleFor(context, true),
+      ...(thumbnail ? { thumbnail } : {}), ...(description ? { description } : {}),
+      subtitle: [context.name, episodes && `${episodes} episodes`].filter(Boolean).join(" · "),
     };
   });
-  return { title: context.name, items };
+  return { title: context.name, thumbnail: context.poster, description: context.plot, subtitle: subtitleFor(context, true), items };
 }
 
 const cataloguePath = /^\/(?:[a-z]{2}\/)?(?:archive|search|browse\/genre|titles\/\d+(?:-[\w-]*)?(?:\/season-\d+)?)$/;

@@ -10,9 +10,11 @@ setupUiTests();
 let view: ReturnType<typeof renderUI>;
 let fetchSpy: ReturnType<typeof spyOn> | null = null;
 const videoRects: unknown[] = [];
+const playerPanels: ("queue" | undefined)[] = [];
 
 beforeEach(async () => {
   videoRects.length = 0;
+  playerPanels.length = 0;
   testWindow.happyDOM.setURL("tauri://localhost/find");
   Object.defineProperty(window, "__COUCH_NATIVE_HOST__", { configurable: true, value: true });
   Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string, args?: { rect?: unknown }) => {
@@ -85,6 +87,7 @@ async function render(status: "playing" | "unavailable" | "idle", remoteOffline 
     run: async () => true, reconnect: () => {}, host: null, remoteControlEnabled: false, pairingRequired: false,
     sourcesOpen: false, onlineRequest: null, remoteOpen: false, setRemoteOpen: () => {},
     sectionUrl: () => "/find", recentRadio: [],
+    openPlayer: (panel?: "queue") => { playerPanels.push(panel); },
     videoQualityPreference: { quality: "auto" },
   } as unknown as ShellValue;
   const base = createRootRoute({ component: () => <NativeModeGate><ShellProviders value={shell}><ShellChrome><Outlet /></ShellChrome></ShellProviders></NativeModeGate> });
@@ -106,12 +109,20 @@ test("the shared browsing shell leaves video to the player page", async () => {
 test("a stopped queue stays reachable on Home", async () => {
   await render("idle");
   await act(async () => fireEvent.click(screen.getByRole("link", { name: "Home" })));
-  expect(await screen.findByRole("button", { name: "Play Movie" })).toBeEnabled();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Up next" })));
+  expect(playerPanels).toEqual(["queue"]);
 });
 
-test("the header has no queue shortcut; Up next lives on Home", async () => {
+test("the header keeps a stopped queue reachable outside Home", async () => {
+  await render("idle");
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Up next" })));
+  expect(playerPanels).toEqual(["queue"]);
+  expect(within(screen.getByRole("navigation", { name: "Main navigation" })).getAllByRole("link")).toHaveLength(4);
+});
+
+test("the header omits Up next when the queue is empty", async () => {
   await render("idle", false, true);
-  expect(screen.queryByRole("link", { name: /^Up next/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Up next" })).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
 });
 
