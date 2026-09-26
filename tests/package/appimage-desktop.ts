@@ -130,8 +130,8 @@ try {
   await until("Selected PulseAudio monitor produces clocked samples", () => Bun.file(`${evidence}/playback-audio.pcm`).size > 4_800);
   await execute("const item=window.__proof.state.queue.find(item=>item.title==='sample.mp4'); window.__proof.socket.send(JSON.stringify({type:'command',requestId:crypto.randomUUID(),action:{type:'play',entryId:item.id,fromStart:true}})); return true");
   await until("Packaged libmpv reports video and audio playback", () => execute("const p=window.__proof.state?.player; return p?.status === 'playing' && p.position > 1 && p.tracks?.some(t=>t.kind === 'video') && p.tracks?.some(t=>t.kind === 'audio')"));
-  await until("Current playback offers the player view", () => element('//footer[@aria-label="Now playing"]//button[normalize-space(.)="Open"]'));
-  await click('//footer[@aria-label="Now playing"]//button[normalize-space(.)="Open"]');
+  await until("Current playback offers the player view", () => element('//footer[@aria-label="Now playing"]//button[@aria-label="Open player: sample.mp4"]'));
+  await click('//footer[@aria-label="Now playing"]//button[@aria-label="Open player: sample.mp4"]');
   await until("Native video stage is active", () => element('//div[contains(@class,"video-stage") and contains(@class,"has-video")]'));
   inside("sh", "-c", "ps -eo pid,comm,args > /evidence/processes.txt; grep -hE 'lib(mpv|avcodec|avformat|pulse|ass)' /proc/[0-9]*/maps 2>/dev/null > /evidence/media-maps.txt || true");
   inside("runuser", "-u", "qualifier", "--", "env", "DISPLAY=:99", "scrot", "-o", "/evidence/full-playing.png");
