@@ -1,38 +1,26 @@
+import { setupUiTests, render as renderUI, act, screen, userEvent, createTestQueryClient, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { ShellProviders } from "../shell/test-providers";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
 import { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ShellValue } from "../shell/AppShell";
 import { HomePage } from "./HomePage";
-import { fireEvent, screen } from "../../testing";
 
-const originals = new Map<string, PropertyDescriptor | undefined>();
-let root: Root, window: Window, client: QueryClient;
+setupUiTests();
+
+let view: ReturnType<typeof renderUI>, client: QueryClient;
 let history: ReturnType<typeof createBrowserHistory>;
 let request: ReturnType<typeof spyOn> | undefined;
 beforeEach(async () => {
-  window = new Window({ url: "http://localhost" });
-  for (const key of ["scrollTo", "history", "location", "localStorage", "CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const { createRoot } = await import("react-dom/client");
-  root = createRoot(document.body.appendChild(document.createElement("div")));
+  client = createTestQueryClient();
+  view = renderUI(<></>);
 });
 afterEach(async () => {
-  await act(async () => root.unmount());
-  request?.mockRestore(); request = undefined;
-  history?.destroy(); client.clear(); await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  request = undefined;
+  history?.destroy();
 });
 test("Home waits for radio favorites, recovers from their failure, and offers source settings when empty", async () => {
-  window.happyDOM.setURL("http://localhost/");
+  testWindow.happyDOM.setURL("http://localhost/");
   history = createBrowserHistory();
   const favorites = Promise.withResolvers<Response>();
   let retryFavorites = false;
@@ -53,16 +41,16 @@ test("Home waits for radio favorites, recovers from their failure, and offers so
   const home = createRoute({ getParentRoute: () => base, path: "/", component: HomePage });
   const settings = createRoute({ getParentRoute: () => base, path: "/settings/sources", component: () => <h1>Source settings</h1> });
   const router = createRouter({ routeTree: base.addChildren([home, settings]), history });
-  await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
-  await act(async () => { await Bun.sleep(30); });
+  await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
+  await act(async () => { });
   expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
-  await act(async () => { favorites.resolve(Response.json({ error: "Radio unavailable" }, { status: 503 })); await Bun.sleep(30); });
-  expect(screen.getByRole("alert").textContent).toContain("Couldn't load your radio stations.");
+  await act(async () => { favorites.resolve(Response.json({ error: "Radio unavailable" }, { status: 503 })); });
+  expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load your radio stations.");
   expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
   retryFavorites = true;
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try again" })); await Bun.sleep(30); });
-  expect(screen.getByRole("heading", { name: "Find something to play" })).toBeDefined();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Add a source" })));
+  await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(await screen.findByRole("heading", { name: "Find something to play" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Add a source" }));
   expect(history.location.pathname).toBe("/settings/sources");
-  expect(screen.getByRole("heading", { name: "Source settings" })).toBeDefined();
+  expect(await screen.findByRole("heading", { name: "Source settings" })).toBeInTheDocument();
 });

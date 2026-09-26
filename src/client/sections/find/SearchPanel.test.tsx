@@ -1,63 +1,43 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { setupUiTests, render as renderUI, act, screen, within, fireEvent, waitFor, userEvent, createTestQueryClient } from "@/testing/react";
+import { afterEach, beforeEach, expect, spyOn, test, jest } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Window } from "happy-dom";
-import { act, useState } from "react";
-import { Toaster } from "sonner";
-import type { Root } from "react-dom/client";
+import { useState } from "react";
+import { toast, Toaster } from "sonner";
 import type { Action } from "../../../shared/protocol";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
-let root: Root, window: Window, request: ReturnType<typeof spyOn>, queryClient: QueryClient;
-let revisions = { providers: 0, radio: 0 };
-const originals = new Map<string, PropertyDescriptor | undefined>();
-const paths: string[] = [], queued: unknown[] = [], browsed: string[] = [];
-let release: (() => void) | undefined, jellyfinError = false, delayedQuery = "", unavailable = false, connectedJellyfin = true, empty = false;
+
+setupUiTests();
+afterEach(() => toast.dismiss());
+let view: ReturnType<typeof renderUI>, queryClient: QueryClient;
+const paths: string[] = [], queued: unknown[] = [];
+let empty = false;
 const commands: Action[] = [];
-const setupSources: (string | undefined)[] = [];
-let integrated = false, youtubeError = false, administrator = false;
+let integrated = false, youtubeError = false;
 let onlineFavorites: ProviderItem[] = [], radioFavorites: RadioStation[] = [];
 const video: ProviderItem = { id: "yt-video", provider: "youtube", kind: "media", title: "Evening video", subtitle: "An artist", url: "https://www.youtube.com/watch?v=abcdefghijk" };
 const collection: ProviderItem = { id: "yt-list", provider: "youtube", kind: "collection", title: "Evening collection", url: "https://www.youtube.com/playlist?list=PLabc" };
 const station: RadioStation = { id: "station-one", sourceId: "own", name: "Evening radio", url: "https://radio.example/live", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
 const local = { id: "local", title: "Evening movie", kind: "video", artist: null, album: null, available: true, duration: 180, video: { type: "movie", plot: "An evening story" }, progress: { position: 12 } };
-const flush = () => act(async () => { await Bun.sleep(10); });
-const button = (label: string, scope: ParentNode = document) => [...scope.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
-const click = async (label: string, scope: ParentNode = document) => { await act(async () => button(label, scope).click()); await flush(); };
+const button = (name: string) => screen.queryByRole("button", { name });
+const click = async (name: string) => userEvent.click(await screen.findByRole("button", { name }));
 async function search(query: string) {
-  await act(async () => {
-    const input = document.querySelector<HTMLInputElement>("input")!;
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, query);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
-  await flush();
+  const user = userEvent.setup();
+  const input = screen.getByRole("searchbox");
+  await user.clear(input);
+  await user.type(input, `${query}{Enter}`);
 }
-async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost", defaultQuality: "auto" | "1080p" = "1080p") {
+async function render() {
   const { SearchPanel } = await import("./SearchPanel");
-  const invalidated: string[] = [];
-  if (providerVersion > revisions.providers) invalidated.push("providers");
-  if (providerVersion > revisions.radio) invalidated.push("radio");
-  revisions = { providers: providerVersion, radio: providerVersion };
-  await act(async () => {
-    for (const rootKey of invalidated) await queryClient.invalidateQueries({ queryKey: [rootKey] });
-    root.render(<QueryClientProvider client={queryClient}><Toaster /><SearchPanel onManageSources={administrator ? source => { browsed.push("Source settings"); setupSources.push(source); } : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
-  });
-  await flush();
+  view.rerender(<QueryClientProvider client={queryClient}><Toaster /><SearchPanel origin="http://localhost" token="paired" connected canPlay active defaultQuality="1080p" onCommand={async command => { commands.push(command); return true; }} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
 }
 beforeEach(async () => {
-  setupSources.length = 0; commands.length = 0; integrated = youtubeError = administrator = false; onlineFavorites = []; radioFavorites = [];
-  paths.length = 0; queued.length = 0; browsed.length = 0; release = undefined; jellyfinError = unavailable = empty = false; delayedQuery = ""; connectedJellyfin = true;
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }); revisions = { providers: 0, radio: 0 };
-  window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "CompositionEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
-  }
-  request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+  commands.length = 0; integrated = youtubeError = false; onlineFavorites = []; radioFavorites = [];
+  paths.length = 0; queued.length = 0; empty = false;
+  queryClient = createTestQueryClient();
+  spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); paths.push(url.pathname + url.search);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (delayedQuery && url.searchParams.get("q") === delayedQuery && url.pathname === "/api/library/items") await new Promise<void>(resolve => { release = resolve; });
     if (url.pathname === "/api/providers/favorites") {
       if (init?.method === "POST") onlineFavorites.push(JSON.parse(String(init.body)).item);
       return Response.json({ favorites: onlineFavorites });
@@ -79,96 +59,86 @@ beforeEach(async () => {
     if (url.pathname === "/api/radio/playlists/own/stations") return Response.json({ stations: integrated ? [station] : [] });
     if (url.pathname === "/api/radio/avoid") return Response.json({ stations: [] });
     if (url.pathname === "/api/radio/stations") return Response.json({ stations: integrated ? [{ ...station, sourceId: undefined, id: "directory-one", name: "Directory radio" }] : [] });
-    if (url.pathname === "/api/jellyfin") return Response.json({ connected: connectedJellyfin, serverName: "Home" });
-    if (url.pathname === "/api/jellyfin/items") return jellyfinError ? Response.json({ error: "Jellyfin server unavailable" }, { status: 502 }) : Response.json({ items: empty ? [] : [{ id: "remote", title: "Evening song", kind: "Audio", detail: "Artist", duration: 80, resumePosition: 0, played: false }], total: empty ? 0 : 55, startIndex: Number(url.searchParams.get("startIndex")) });
-    if (url.pathname.endsWith("/sources")) return Response.json({ sources: [{ name: "NAS", status: unavailable ? "unavailable" : "ready" }] });
-    return Response.json({ items: empty ? [] : [{ ...local, available: !unavailable, title: url.searchParams.get("q") === "new" ? "New movie" : local.title }], total: empty ? 0 : 40, offset: Number(url.searchParams.get("offset")), limit: 30 });
+    if (url.pathname === "/api/jellyfin") return Response.json({ connected: true, serverName: "Home" });
+    if (url.pathname === "/api/jellyfin/items") return Response.json({ items: empty ? [] : [{ id: url.searchParams.get("startIndex") === "50" ? "remote-next" : "remote", title: "Evening song", kind: "Audio", detail: "Artist", duration: 80, resumePosition: 0, played: false }], total: empty ? 0 : 55, startIndex: Number(url.searchParams.get("startIndex")) });
+    if (url.pathname.endsWith("/sources")) return Response.json({ sources: [{ name: "NAS", status: "ready" }] });
+    return Response.json({ items: empty ? [] : [{ ...local, id: url.searchParams.get("offset") === "30" ? "local-next" : local.id, available: true, title: url.searchParams.get("q") === "new" ? "New movie" : local.title }], total: empty ? 0 : 40, offset: Number(url.searchParams.get("offset")), limit: 30 });
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-});
-afterEach(async () => {
-  release?.(); await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  view = renderUI(<></>);
 });
 
-async function until(predicate: () => boolean) {
-  const deadline = Date.now() + 2_000;
-  while (!predicate()) { if (Date.now() > deadline) throw new Error("Search did not settle"); await flush(); }
-}
 
 test("Find merges local, Jellyfin, provider and radio results with direct actions", async () => {
   integrated = true; await render(); await search("Evening");
-  await until(() => !!button("Play Evening video"));
-  for (const label of ["Resume Evening movie", "Play Evening song", "Play Evening video", "Play Evening radio"]) expect(button(label)).toBeDefined();
+  await screen.findByRole("button", { name: "Play Evening video" });
+  for (const label of ["Resume Evening movie", "Play Evening song", "Play Evening video", "Play Evening radio"]) expect(button(label)).toBeInTheDocument();
   for (const path of ["/api/providers/youtube/items?q=Evening", "/api/radio/playlists/own/stations?q=Evening", "/api/library/items?q=Evening&offset=0&limit=30"]) expect(paths).toContain(path);
   await click("Queue Evening movie"); expect(queued.at(-1)).toEqual(["Library", "local", undefined]);
-  await until(() => document.body.textContent?.includes("Queued Evening movie.") ?? false);
+  await screen.findByText("Queued Evening movie.");
   await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", url: video.url, playNow: true });
 });
 
 test("opening and leaving a collection restores focus to its result", async () => {
   integrated = true; await render(); await search("Evening");
-  await until(() => !!button("Open Evening collection"));
+  await screen.findByRole("button", { name: "Open Evening collection" });
   await click("Open Evening collection");
-  await until(() => !!button("Play Collection episode"));
+  await screen.findByRole("button", { name: "Play Collection episode" });
   expect(document.activeElement).toBe(button("Results"));
   await click("Results");
-  await until(() => document.activeElement?.getAttribute("aria-label") === "Open Evening collection");
-  expect(button("Open Evening collection").isConnected).toBe(true);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Open Evening collection" })).toHaveFocus());
 });
 
 test("one failed provider stays visible as feedback while other results work, and retry is independent", async () => {
   integrated = true; youtubeError = true; await render(); await search("Evening");
-  await until(() => document.body.textContent?.includes("YouTube is temporarily unavailable") ?? false);
-  expect(button("Resume Evening movie")).toBeDefined();
-  expect(button("Play Evening radio")).toBeDefined();
+  await screen.findByText("YouTube is temporarily unavailable");
+  expect(button("Resume Evening movie")).toBeInTheDocument();
+  expect(button("Play Evening radio")).toBeInTheDocument();
   const raiCount = paths.filter(path => path.includes("raiplay/items")).length;
   youtubeError = false; await click("Try again");
-  await until(() => !!button("Play Evening video"));
+  await screen.findByRole("button", { name: "Play Evening video" });
   expect(paths.filter(path => path.includes("raiplay/items"))).toHaveLength(raiCount);
 });
 
 test("local and provider pagination controls are available in the merged Find view", async () => {
   integrated = true; await render(); await search("Evening");
-  await until(() => !!button("More from Folders"));
+  await screen.findByRole("button", { name: "More from Folders" });
   await click("More from Folders");
   expect(paths).toContain("/api/library/items?q=Evening&offset=30&limit=30");
   await click("More from YouTube");
-  await until(() => !!button("Play Another video"));
+  await screen.findByRole("button", { name: "Play Another video" });
   expect(paths).toContain("/api/providers/youtube/items?q=Evening&cursor=24");
 });
 
 test("empty results and filters give a way back", async () => {
-  empty = true; connectedJellyfin = false; await render(); await search("nothing");
-  await until(() => document.body.textContent?.includes("Nothing found for") ?? false);
-  expect(document.body.textContent).toContain("Nothing found for “nothing”");
+  empty = true; await render(); await search("nothing");
+  await screen.findByRole("heading", { name: "Nothing found for “nothing”" });
   empty = false; await search("Evening");
-  await until(() => !!button("Resume Evening movie"));
-  const what = document.querySelector<HTMLElement>('[aria-label="What filter"]')!;
-  await act(async () => [...what.querySelectorAll("button")].find(node => node.textContent?.startsWith("Video"))!.click());
-  await until(() => !button("Play Evening song"));
-  expect(button("Resume Evening movie")).toBeDefined();
-  await act(async () => [...what.querySelectorAll("button")].find(node => node.textContent?.startsWith("All"))!.click());
-  expect(button("Resume Evening movie")).toBeDefined();
+  await screen.findByRole("button", { name: "Resume Evening movie" });
+  await screen.findByRole("button", { name: "Play Evening song" });
+  const what = screen.getByRole("radiogroup", { name: "What filter" });
+  await userEvent.click(within(what).getByRole("radio", { name: /^Video/ }));
+  await waitFor(() => expect(screen.queryAllByRole("button", { name: "Play Evening song" })).toHaveLength(0));
+  expect(button("Resume Evening movie")).toBeInTheDocument();
+  await userEvent.click(within(what).getByRole("radio", { name: /^All/ }));
+  expect(screen.getByRole("button", { name: "Play Evening song" })).toBeInTheDocument();
 });
 
 test("focus moves to a real result when the focused result is filtered away", async () => {
   integrated = true; await render(); await search("Evening");
-  await until(() => !!button("Resume Evening movie") && !!button("Play Evening song"));
-  button("Resume Evening movie").focus();
-  const from = document.querySelector<HTMLElement>('[aria-label="From filter"]')!;
-  await act(async () => [...from.querySelectorAll("button")].find(node => node.textContent?.startsWith("Jellyfin"))!.click());
-  await until(() => !button("Resume Evening movie"));
-  expect(document.activeElement?.closest("[data-hit-id]")).toBeTruthy();
+  await screen.findByRole("button", { name: "Resume Evening movie" });
+  await screen.findByRole("button", { name: "Play Evening song" });
+  screen.getByRole("button", { name: "Resume Evening movie" }).focus();
+  const from = screen.getByRole("radiogroup", { name: "From filter" });
+  await act(async () => fireEvent.click(within(from).getByRole("radio", { name: /^Jellyfin/ })));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Resume Evening movie" })).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "Play Evening song" })).toHaveFocus();
 });
 
 test("a pasted direct-media link queues an entry with a server-safe title", async () => {
   await render();
   const url = `https://example.com/${"x".repeat(240)}`;
   await search(url);
-  await click("Direct media");
+  await userEvent.click(screen.getByRole("radio", { name: "Direct media" }));
   await click("Queue");
   expect(commands.at(-1)).toMatchObject({ type: "enqueue", playNow: false });
   const entry = (commands.at(-1) as Extract<Action, { type: "enqueue" }>).entry;
@@ -177,20 +147,20 @@ test("a pasted direct-media link queues an entry with a server-safe title", asyn
 test("an unfinished link stays editable without crashing Find", async () => {
   await render();
   await search("http://");
-  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("http://");
-  expect(document.querySelector('[aria-label="Pasted link"]')).toBeNull();
+  expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("http://");
+  expect(screen.queryByRole("region", { name: "Pasted link" })).toBeNull();
 });
 test("controlled search drafts change only through the owner and never report route updates as edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
-  const client = new QueryClient();
+  const client = createTestQueryClient();
   const edits: string[] = [];
-  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onEnqueue={async () => true} /></QueryClientProvider>));
-  await draw("Owner draft", "route"); await flush();
-  const input = document.querySelector<HTMLInputElement>("#media-search")!;
+  const draw = async (draftQuery: string, routeQuery: string) => act(async () => view.rerender(<QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onEnqueue={async () => true} /></QueryClientProvider>));
+  await draw("Owner draft", "route");
+  const input = screen.getByRole("searchbox") as HTMLInputElement;
   expect(input.value).toBe("Owner draft"); expect(edits).toEqual([]);
-  await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "Typed edit"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  await act(async () => { fireEvent.change(input, { target: { value: "Typed edit" } }); });
   expect(edits).toEqual(["Typed edit"]); expect(input.value).toBe("Owner draft");
-  await draw("Accepted edit", "new route"); await flush();
+  await draw("Accepted edit", "new route");
   expect(input.value).toBe("Accepted edit"); expect(edits).toEqual(["Typed edit"]);
   await click("Clear search");
   expect(edits).toEqual(["Typed edit", ""]); expect(input.value).toBe("Accepted edit");
@@ -198,17 +168,17 @@ test("controlled search drafts change only through the owner and never report ro
 
 test("standalone drafts follow route updates without reporting synthetic edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
-  const client = new QueryClient();
+  const client = createTestQueryClient();
   const edits: string[] = [];
-  const draw = async (query: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onEnqueue={async () => true} /></QueryClientProvider>));
-  await draw("first route"); await flush(); await draw("second route"); await flush();
-  expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("second route");
+  const draw = async (query: string) => act(async () => view.rerender(<QueryClientProvider client={client}><SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onEnqueue={async () => true} /></QueryClientProvider>));
+  await draw("first route"); await draw("second route");
+  expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("second route");
   expect(edits).toEqual([]);
 });
 
 test("debounced drafts survive frequent parent renders, use the latest callback and support explicit retry", async () => {
   const { SearchPanel } = await import("./SearchPanel");
-  const client = new QueryClient();
+  const client = createTestQueryClient();
   const oldRoutes: string[] = [], newRoutes: string[] = [];
   let setDraft!: (query: string) => void;
   function Controlled({ latest }: { latest: boolean }) {
@@ -216,30 +186,32 @@ test("debounced drafts survive frequent parent renders, use the latest callback 
     const [searchState, setRoute] = useState({ query: "", source: "All" });
     return <QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active onEnqueue={async () => true} /></QueryClientProvider>;
   }
-  await act(async () => root.render(<Controlled latest={false} />));
+  jest.useFakeTimers();
+  await act(async () => view.rerender(<Controlled latest={false} />));
   await act(async () => setDraft("Evening"));
   for (let tick = 0; tick < 5; tick++) {
-    await act(async () => root.render(<Controlled latest />));
-    await act(async () => { await Bun.sleep(75); });
+    await act(async () => view.rerender(<Controlled latest />));
+    await act(async () => { jest.advanceTimersByTime(75); });
   }
-  await flush();
+  jest.useRealTimers();
   expect(oldRoutes).toEqual([]); expect(newRoutes).toEqual(["Evening"]);
+  await screen.findByRole("button", { name: "Resume Evening movie" });
   const reads = paths.filter(path => path.includes("youtube/items")).length;
-  await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))); await flush();
-  expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(reads + 1);
+  await act(async () => fireEvent.submit(screen.getByRole("search")));
+  await waitFor(() => expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(reads + 1));
 });
-
 
 test("successive searches reuse supporting reads and revisiting a fresh query reuses its results", async () => {
   integrated = true;
   await render(); await search("Evening");
-  await until(() => !!button("Resume Evening movie") && !!button("Play Evening song"));
+  await screen.findByRole("button", { name: "Resume Evening movie" });
+  await screen.findByRole("button", { name: "Play Evening song" });
   await search("new");
-  await until(() => !!button("Resume New movie"));
+  await screen.findByRole("button", { name: "Resume New movie" });
   for (const path of ["/api/providers/favorites", "/api/radio/favorites", "/api/for-later", "/api/library/sources", "/api/jellyfin", "/api/radio/avoid"]) expect(paths.filter(value => value === path)).toHaveLength(1);
   const reads = paths.length;
   await search("Evening");
-  await until(() => !!button("Resume Evening movie"));
+  await screen.findByRole("button", { name: "Resume Evening movie" });
   expect(paths).toHaveLength(reads);
   await click("More from Jellyfin");
   expect(paths.filter(path => path === "/api/jellyfin")).toHaveLength(1);
@@ -248,28 +220,26 @@ test("successive searches reuse supporting reads and revisiting a fresh query re
 
 test("explicit resubmission refreshes cached local and radio results", async () => {
   await render(); await search("Evening");
-  await until(() => !!button("Resume Evening movie"));
+  await screen.findByRole("button", { name: "Resume Evening movie" });
   const reads = paths.filter(path => path.startsWith("/api/library/items")).length;
   const radioReads = paths.filter(path => path === "/api/radio/avoid").length;
   await search("Evening");
-  await until(() => paths.filter(path => path.startsWith("/api/library/items")).length > reads);
+  await waitFor(() => expect(paths.filter(path => path.startsWith("/api/library/items")).length).toBeGreaterThan(reads));
   expect(paths.filter(path => path === "/api/radio/avoid")).toHaveLength(radioReads + 1);
 });
 
-
 test("search waits for IME composition to finish before starting its debounce", async () => {
   await render();
-  const input = document.querySelector<HTMLInputElement>("#media-search")!;
-  await act(async () => input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
+  const input = screen.getByRole("searchbox") as HTMLInputElement;
+  jest.useFakeTimers();
+  fireEvent.compositionStart(input);
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "映画");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    fireEvent.change(input, { target: { value: "映画" } });
   });
-  await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
-  await act(async () => { await Bun.sleep(350); });
+  await act(async () => fireEvent.submit(screen.getByRole("search")));
+  await act(async () => { jest.advanceTimersByTime(350); });
   expect(paths).toEqual([]);
-  await act(async () => input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "映画" })));
-  await act(async () => { await Bun.sleep(350); });
-  await until(() => paths.some(path => path.startsWith("/api/library/items")));
-  expect(paths.filter(path => path.startsWith("/api/library/items"))).toEqual(["/api/library/items?q=%E6%98%A0%E7%94%BB&offset=0&limit=30"]);
+  jest.useRealTimers();
+  await act(async () => fireEvent.compositionEnd(input, { data: "映画" }));
+  await waitFor(() => expect(paths.filter(path => path.startsWith("/api/library/items"))).toEqual(["/api/library/items?q=%E6%98%A0%E7%94%BB&offset=0&limit=30"]));
 });
