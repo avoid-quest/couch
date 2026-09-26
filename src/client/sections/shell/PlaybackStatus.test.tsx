@@ -1,5 +1,5 @@
 import { renderWithQueryClient, screen, setupUiTests, testWindow, userEvent } from "@/testing/react";
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { beforeEach, expect, spyOn, test } from "bun:test";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { rememberConnection } from "@/session/connection";
 
@@ -15,8 +15,6 @@ beforeEach(() => {
   testWindow.happyDOM.setURL(`${origin}/find`);
   request = spyOn(globalThis, "fetch").mockImplementation((async input => Response.json(String(input).endsWith("/api/sound") ? { outputs: [], routing: null, defaultOutput: null } : { adapter: "off", devices: [] })) as typeof fetch);
 });
-
-afterEach(() => request.mockRestore());
 
 async function render() {
   const { PlaybackStatus } = await import("./PlaybackStatus");

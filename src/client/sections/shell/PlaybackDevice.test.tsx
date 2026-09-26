@@ -36,9 +36,7 @@ beforeEach(() => {
 afterEach(() => {
   buildInfo.clientOnly = false;
   Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
-  cleanup();
-  invoke.mockRestore(); request.mockRestore(); onlineManager.setOnline(true);
-  Reflect.deleteProperty(window, "__COUCH_NATIVE_HOST__");
+  onlineManager.setOnline(true);
   Reflect.deleteProperty(window, "isTauri");
 });
 async function render(sharing = false) {

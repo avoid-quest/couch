@@ -11,7 +11,7 @@ setupUiTests();
 afterEach(() => toast.dismiss());
 let view: ReturnType<typeof renderUI>, queryClient: QueryClient;
 const paths: string[] = [], queued: unknown[] = [];
-let connectedJellyfin = true, empty = false;
+let empty = false;
 const commands: Action[] = [];
 let integrated = false, youtubeError = false;
 let onlineFavorites: ProviderItem[] = [], radioFavorites: RadioStation[] = [];
@@ -33,7 +33,7 @@ async function render() {
 }
 beforeEach(async () => {
   commands.length = 0; integrated = youtubeError = false; onlineFavorites = []; radioFavorites = [];
-  paths.length = 0; queued.length = 0; empty = false; connectedJellyfin = true;
+  paths.length = 0; queued.length = 0; empty = false;
   queryClient = createTestQueryClient();
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); paths.push(url.pathname + url.search);
@@ -59,7 +59,7 @@ beforeEach(async () => {
     if (url.pathname === "/api/radio/playlists/own/stations") return Response.json({ stations: integrated ? [station] : [] });
     if (url.pathname === "/api/radio/avoid") return Response.json({ stations: [] });
     if (url.pathname === "/api/radio/stations") return Response.json({ stations: integrated ? [{ ...station, sourceId: undefined, id: "directory-one", name: "Directory radio" }] : [] });
-    if (url.pathname === "/api/jellyfin") return Response.json({ connected: connectedJellyfin, serverName: "Home" });
+    if (url.pathname === "/api/jellyfin") return Response.json({ connected: true, serverName: "Home" });
     if (url.pathname === "/api/jellyfin/items") return Response.json({ items: empty ? [] : [{ id: url.searchParams.get("startIndex") === "50" ? "remote-next" : "remote", title: "Evening song", kind: "Audio", detail: "Artist", duration: 80, resumePosition: 0, played: false }], total: empty ? 0 : 55, startIndex: Number(url.searchParams.get("startIndex")) });
     if (url.pathname.endsWith("/sources")) return Response.json({ sources: [{ name: "NAS", status: "ready" }] });
     return Response.json({ items: empty ? [] : [{ ...local, id: url.searchParams.get("offset") === "30" ? "local-next" : local.id, available: true, title: url.searchParams.get("q") === "new" ? "New movie" : local.title }], total: empty ? 0 : 40, offset: Number(url.searchParams.get("offset")), limit: 30 });
@@ -110,17 +110,17 @@ test("local and provider pagination controls are available in the merged Find vi
 });
 
 test("empty results and filters give a way back", async () => {
-  empty = true; connectedJellyfin = false; await render(); await search("nothing");
+  empty = true; await render(); await search("nothing");
   await screen.findByRole("heading", { name: "Nothing found for “nothing”" });
-  expect(document.body.textContent).toContain("Nothing found for “nothing”");
   empty = false; await search("Evening");
   await screen.findByRole("button", { name: "Resume Evening movie" });
+  await screen.findByRole("button", { name: "Play Evening song" });
   const what = screen.getByRole("radiogroup", { name: "What filter" });
   await userEvent.click(within(what).getByRole("radio", { name: /^Video/ }));
-  await waitFor(() => expect(screen.queryByRole("button", { name: "Play Evening song" })).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryAllByRole("button", { name: "Play Evening song" })).toHaveLength(0));
   expect(button("Resume Evening movie")).toBeInTheDocument();
   await userEvent.click(within(what).getByRole("radio", { name: /^All/ }));
-  expect(button("Resume Evening movie")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Play Evening song" })).toBeInTheDocument();
 });
 
 test("focus moves to a real result when the focused result is filtered away", async () => {
