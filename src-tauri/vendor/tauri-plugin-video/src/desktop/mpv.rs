@@ -6,7 +6,7 @@ use std::{
         mpsc::{self, SyncSender, TrySendError},
         Arc, Mutex, Weak,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use libmpv2::{
@@ -77,6 +77,14 @@ impl<R: Runtime> MpvVideo<R> {
         &self,
         operation: impl FnOnce(&mut Worker<R>) -> Result<T> + Send + 'static,
     ) -> Result<T> {
+        self.call_until(Instant::now() + Duration::from_secs(15), operation)
+    }
+
+    fn call_until<T: Send + 'static>(
+        &self,
+        deadline: Instant,
+        operation: impl FnOnce(&mut Worker<R>) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
         let (reply, receiver) = mpsc::sync_channel(1);
         let queued = super::QueuedCall::new();
         let started = queued.clone();
@@ -95,7 +103,7 @@ impl<R: Runtime> MpvVideo<R> {
                 }
             })?;
         receiver
-            .recv_timeout(Duration::from_secs(15))
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
             .map_err(|error| {
                 if queued.expire() {
                     Error::Pipeline(format!("Desktop playback command expired: {error}"))
@@ -122,6 +130,14 @@ impl<R: Runtime> MpvVideo<R> {
     }
     pub fn close(&self, request: NativeSessionRequest) -> Result<()> {
         self.call(move |worker| worker.close(request))
+    }
+    pub fn readiness(&self, deadline: Instant) -> Result<()> {
+        self.call_until(deadline, move |worker| {
+            if worker.player.is_some() {
+                return Err(Error::Pipeline("native readiness cannot interrupt a media session".into()));
+            }
+            with_readiness_watchdog(deadline, || probe_readiness(deadline))
+        })
     }
     pub fn shutdown(&self) {
         self.sender.lock().expect("mpv sender lock poisoned").take();
@@ -205,6 +221,77 @@ impl<R: Runtime> Drop for Player<R> {
 
 fn mpv_error(error: libmpv2::Error) -> Error {
     Error::Pipeline(error.to_string())
+}
+
+fn with_readiness_watchdog(deadline: Instant, probe: impl FnOnce() -> Result<()>) -> Result<()> {
+    let (completed, watchdog) = mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        // Allow the caller to report failure, then terminate if libmpv still
+        // owns the worker. Joining that stuck worker would prevent recovery.
+        if watchdog.recv_timeout((deadline + Duration::from_secs(1)).saturating_duration_since(Instant::now())).is_err() {
+            std::process::exit(1);
+        }
+    });
+    let result = probe();
+    let _ = completed.send(());
+    result
+}
+
+// Verify the bundled libmpv on its owning worker without opening media, an
+// output device, or a video surface. Playback initializes its own renderer.
+fn probe_readiness(deadline: Instant) -> Result<()> {
+    if Instant::now() >= deadline {
+        return Err(Error::Pipeline("native readiness timed out".into()));
+    }
+    #[cfg(target_os = "macos")]
+    if unsafe { libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr()) }.is_null() {
+        return Err(Error::Pipeline("mpv requires the C numeric locale".into()));
+    }
+    let mpv = Mpv::with_initializer(|init| {
+        init.set_option("config", "no")?;
+        init.set_option("vo", "null")?;
+        init.set_option("ao", "null")
+    }).map_err(mpv_error)?;
+    mpv.get_property::<String>("mpv-version").map_err(mpv_error)?;
+    if Instant::now() >= deadline {
+        return Err(Error::Pipeline("native readiness timed out".into()));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn desktop_update_readiness_initializes_libmpv_and_rejects_expired_requests() {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    assert!(with_readiness_watchdog(deadline, || probe_readiness(deadline)).is_ok());
+    assert!(probe_readiness(Instant::now()).is_err());
+}
+
+#[cfg(test)]
+#[test]
+fn desktop_update_readiness_watchdog_terminates_a_stuck_probe() {
+    const CHILD: &str = "COUCH_TEST_STUCK_READINESS";
+    if std::env::var_os(CHILD).is_some() {
+        let _ = with_readiness_watchdog(Instant::now(), || loop { std::thread::park(); });
+        unreachable!();
+    }
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "desktop::mpv::desktop_update_readiness_watchdog_terminates_a_stuck_probe"])
+        .env(CHILD, "1")
+        .spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert_eq!(status.code(), Some(1));
+            break;
+        }
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("readiness watchdog did not terminate the stuck process");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn playback_status(mpv: &Mpv, loaded: bool, has_error: bool) -> (bool, bool, bool) {

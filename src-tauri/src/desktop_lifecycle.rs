@@ -17,6 +17,11 @@ pub(crate) fn install_liquid_glass(window: &tauri::WebviewWindow) -> tauri::Resu
             if !matches!(error, window_vibrancy::Error::UnsupportedPlatformVersion(_)) {
                 log::warn!("Mac Liquid Glass unavailable: {error}");
             }
+        } else if let Some(glass) = unsafe { content.superview() }.and_then(|view| view.downcast::<objc2_app_kit::NSGlassEffectView>().ok()) {
+            // AppKit only guarantees the contentView stays above the glass.
+            // window-vibrancy 0.8 adds an arbitrary subview, which can disappear
+            // behind the effect after a relaunch or window restoration.
+            glass.setContentView(Some(content));
         }
     })
 }

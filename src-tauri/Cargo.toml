@@ -46,7 +46,7 @@ libc = "0.2"
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
 window-vibrancy = "0.8"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSView"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSView", "NSGlassEffectView"] }
 tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
 objc2 = "=0.6.4"
 objc2-core-bluetooth = { version = "=0.3.2", default-features = false, features = ["CBManager"] }

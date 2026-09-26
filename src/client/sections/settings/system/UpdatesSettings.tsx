@@ -80,7 +80,8 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
   const candidate = state?.candidate;
   const fresh = !!candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now());
-  const canStage = state?.currentCheck && fresh && state.status !== "ready";
+  const signingKeyMismatch = state?.error?.includes("The signature was created with a different key than the one provided");
+  const canStage = state?.currentCheck && fresh && state.status !== "ready" && !signingKeyMismatch;
   const canInstall = !busy && state?.installation?.enabled && state.currentCheck && state.status === "ready" && fresh;
   const phase = transaction?.phase;
   const phaseText = transaction && !installing ? null : phase === "accepted" ? "Starting…" : phase === "preflight" ? "Checking space…" : phase === "quiescing" ? "Waiting for playback to stop…" : phase === "installing" ? "Installing…" : phase === "trial" || phase === "committing" ? "Restarting. This page reconnects." : phase === "restoring" ? "Restoring the previous version…" : "Waiting…";
@@ -118,11 +119,13 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
         {!retry && !installing && state.status === "ready" && <Button disabled={!canInstall} onClick={() => setConfirming("install")}>Install</Button>}
       </SettingsRow>
       </>}
+      {state.error && <Alert variant={state.status === "unavailable" ? "default" : "destructive"}><AlertDescription>{signingKeyMismatch
+        ? `This installation cannot verify the update's signing key. Reinstall Couch${ownApp ? "" : ` on ${hostName}`} from the official installer. Your data stays.`
+        : ownApp && state.status === "unavailable" ? "Update with the Couch installer. Your data stays." : state.error}</AlertDescription></Alert>}
       {candidate && <SettingsRow label={state.currentCheck ? "New version" : "Last seen version"} description={<span className="whitespace-pre-wrap">{candidate.notes}</span>}><span className="break-all text-sm">{candidate.version}</span></SettingsRow>}
       {canRepair && <SettingsRow label="Repair" description={`Reinstall ${current.version}. Your data stays.`}>
         <Button variant="outline" disabled={busy} onClick={() => setConfirming("repair")}>Repair</Button>
       </SettingsRow>}
-      {state.error && <Alert variant={state.status === "unavailable" ? "default" : "destructive"}><AlertDescription>{ownApp && state.status === "unavailable" ? "Update with the Couch installer. Your data stays." : state.error}</AlertDescription></Alert>}
       {state.installationUnavailable && <Alert><AlertDescription>{state.installationUnavailable}</AlertDescription></Alert>}
       {!state.installationUnavailable && !state.installation?.enabled && state.status !== "unavailable" && <Alert><AlertDescription>{ownApp ? appRecovery : `In-app updates are off. Install the new package on ${hostName}.`}</AlertDescription></Alert>}
     </SettingsSection>}
