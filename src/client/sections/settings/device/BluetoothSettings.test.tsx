@@ -60,7 +60,7 @@ const platformState = (platform: keyof typeof inventories): BluetoothState => st
 test("Mac power guidance precedes any mutation while Bluetooth is off", async () => {
   const state = { ...platformState("macos"), adapter: "off" as const };
   const { actions, user } = await inventoryView(state);
-  expect(screen.getByText(/Couch can't yet turn on Bluetooth on macOS/)).toHaveTextContent("this computer");
+  expect(screen.getByText(/Couch can't yet turn on Bluetooth on macOS/)).toHaveTextContent("the computer running Couch");
   const power = screen.getByRole("button", { name: "Turn on" });
   expect(power).toBeDisabled();
   await user.click(power);
@@ -82,8 +82,8 @@ test("Mac Forget is guidance-only while Connect and Disconnect stay supported", 
 
 test("Windows connection guidance prevents mutations and destructive confirmations but preserves Forget", async () => {
   const { actions, user } = await inventoryView(platformState("windows"));
-  expect(screen.getByText(/Couch can't yet connect paired devices on Windows/)).toHaveTextContent("this computer");
-  expect(screen.getByText(/Couch can't yet disconnect devices on Windows/)).toHaveTextContent("this computer");
+  expect(screen.getByText(/Couch can't yet connect paired devices on Windows/)).toHaveTextContent("the computer running Couch");
+  expect(screen.getByText(/Couch can't yet disconnect devices on Windows/)).toHaveTextContent("the computer running Couch");
   for (const name of ["Connect Headphones", "Disconnect Speaker"]) {
     const button = screen.getByRole("button", { name });
     expect(button).toBeDisabled();
@@ -99,7 +99,7 @@ test("Windows connection guidance prevents mutations and destructive confirmatio
 
 test("Windows explains playback-desktop consent before starting supported pairing", async () => {
   const { actions, user } = await inventoryView(platformState("windows"));
-  expect(screen.getByText(/Pairing needs your confirmation/)).toHaveTextContent("this computer");
+  expect(screen.getByText(/Pairing needs your confirmation/)).toHaveTextContent("the computer running Couch");
   expect(screen.getByText(/Cancelling in Couch may not dismiss that prompt/)).toBeInTheDocument();
   expect(actions).toEqual([]);
   await user.click(screen.getByRole("button", { name: "Connect New speaker" }));
