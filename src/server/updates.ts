@@ -31,6 +31,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") { state.status = "failed"; state.error = "Couldn't read update settings. Pick your channel again."; }
   }
   let candidate: UpdateRelease | null = null;
+  let signingKeyMismatch: { candidateId: string; error: string } | null = null;
   let job: Promise<void> | undefined;
   let changing = false, closed = false;
   let saving: Promise<void> | undefined;
@@ -54,11 +55,13 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(kind === "checking" ? 120_000 : 30 * 60_000)]);
       if (kind === "checking") {
         candidate = await feed.check(state.channel, signal);
+        if (candidate?.summary.id !== signingKeyMismatch?.candidateId) signingKeyMismatch = null;
         state.candidate = candidate?.summary ?? null;
         state.lastSuccessfulCheck = Date.now();
         await persist();
         state.currentCheck = true;
         state.status = candidate ? (candidate.staged ?? (wasReady && previousId === candidate.summary.id)) ? "ready" : "available" : "idle";
+        if (signingKeyMismatch) { state.status = "failed"; state.error = signingKeyMismatch.error; }
       } else {
         await feed.stage(candidate!, signal, progress => { state.progress = progress; });
         state.candidate = candidate!.summary;
@@ -69,6 +72,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       if (!closed) {
         state.status = "failed";
         state.error = error instanceof UpdateError ? error.message : "Couldn't finish the update. Try again.";
+        if (kind === "downloading" && candidate && state.error.includes("The signature was created with a different key than the one provided")) signingKeyMismatch = { candidateId: candidate.summary.id, error: state.error };
       }
     }).finally(() => { job = undefined; });
   };
@@ -160,6 +164,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
           start("checking");
         } else {
           if (!candidate || !state.currentCheck || value !== candidate.summary.id || (candidate.summary.expiresAt !== undefined && candidate.summary.expiresAt <= Date.now())) throw new ControllerError("This candidate is no longer current. Use Check now before downloading.", 409);
+          if (signingKeyMismatch?.candidateId === candidate.summary.id) throw new ControllerError(signingKeyMismatch.error, 409);
           start("downloading");
         }
         return json(state, 202);

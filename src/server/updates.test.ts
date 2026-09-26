@@ -66,6 +66,35 @@ test("unpackaged installation reports unavailable and never accepts a fake downl
   expect((await updates.handle(request("/stage", { candidateId: candidate.summary.id }), admin)).status).toBe(409);
 });
 
+test("signing-key mismatch blocks the same candidate across rechecks until the feed changes", async () => {
+  const mismatch = "The signature was created with a different key than the one provided";
+  let release = candidate, offline = false, stages = 0;
+  const { updates } = await setup({
+    check: async () => { if (offline) throw new UpdateError("Feed offline"); return release; },
+    stage: async () => { stages++; if (release === candidate) throw new UpdateError(mismatch); },
+  });
+  await updates.handle(request("/check", { check: true }), admin); await settled(updates);
+  await updates.handle(request("/stage", { candidateId: candidate.summary.id }), admin);
+  expect(await settled(updates)).toMatchObject({ status: "failed", error: mismatch });
+  expect((await updates.handle(request("/stage", { candidateId: candidate.summary.id }), admin)).status).toBe(409);
+  offline = true;
+  await updates.handle(request("/check", { check: true }), admin);
+  expect(await settled(updates)).toMatchObject({ status: "failed", currentCheck: false, error: "Feed offline" });
+  offline = false;
+  for (let i = 0; i < 2; i++) {
+    await updates.handle(request("/check", { check: true }), admin);
+    expect(await settled(updates)).toMatchObject({ status: "failed", currentCheck: true, error: mismatch });
+    expect((await updates.handle(request("/stage", { candidateId: candidate.summary.id }), admin)).status).toBe(409);
+  }
+  expect(stages).toBe(1);
+  release = { ...candidate, summary: { ...candidate.summary, id: "c".repeat(64) } };
+  await updates.handle(request("/check", { check: true }), admin);
+  expect(await settled(updates)).toMatchObject({ status: "available", error: null });
+  expect((await updates.handle(request("/stage", { candidateId: release.summary.id }), admin)).status).toBe(202);
+  expect(await settled(updates)).toMatchObject({ status: "ready", error: null });
+  expect(stages).toBe(2);
+});
+
 
 test("trial startup does not run background update producers until admission opens", async () => {
   let open = false, checks = 0;
