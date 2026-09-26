@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { TRY_AGAIN } from "@/copy";
 import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "../../../update-request";
 import { verificationFailure, type UpdateState } from "../../../../shared/updates";
+import { ReleaseNotes } from "./ReleaseNotes";
 
 type Props = { credentials: ApiCredentials; connected: boolean; target?: "this app" | "selected host"; hostName?: string };
 type UpdateResult = Partial<UpdateState> & { accepted?: boolean; transaction?: NonNullable<UpdateState["installation"]>["transaction"] };
@@ -122,7 +123,9 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       {state.error && <Alert variant={state.status === "unavailable" ? "default" : "destructive"}><AlertDescription>{signingKeyMismatch
         ? `${ownApp ? "This computer" : hostName} can't verify the update's signing key. Reinstall Couch${ownApp ? "" : ` on ${hostName}`} from the official installer. Your data stays.`
         : ownApp && state.status === "unavailable" ? "Update with the Couch installer. Your data stays." : state.error}</AlertDescription></Alert>}
-      {candidate && <SettingsRow label={state.currentCheck ? "New version" : "Last seen version"} description={<span className="whitespace-pre-wrap">{candidate.notes}</span>}><span className="break-all text-sm">{candidate.version}</span></SettingsRow>}
+      {candidate && <SettingsRow label={state.currentCheck ? "New version" : "Last seen version"}>
+        <div className="grid min-w-0 w-full gap-3"><span className="break-all text-sm">{candidate.version}</span>{candidate.notes && <ReleaseNotes notes={candidate.notes} />}</div>
+      </SettingsRow>}
       {canRepair && <SettingsRow label="Repair" description={`Reinstall ${current.version}. Your data stays.`}>
         <Button variant="outline" disabled={busy} onClick={() => setConfirming("repair")}>Repair</Button>
       </SettingsRow>}
