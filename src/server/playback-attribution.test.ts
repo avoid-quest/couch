@@ -19,7 +19,7 @@ function fixture(options: Parameters<typeof createSession>[3] = {}) {
   cleanups.push(() => { session.close(); store.close(); });
   session.observe(idle);
   for (const id of ["one", "two"]) session.command({ type: "enqueue", entry: { id, title: id, source: `https://media.example/${id}` } });
-  const mediaId = (index = 0) => playbackMediaId(session.state.queue[index]!)!;
+  const mediaId = (index = 0) => playbackMediaId(session.state.queue.find(entry => entry.id === ["one", "two"][index])!)!;
   const observe = (status: PlayerState["status"] = "playing", position = 20) => session.observe({ ...idle, playbackId: session.state.player.playbackId, status, position, duration: 120, seekable: true });
   return { store, session, mediaId, observe };
 }
@@ -80,6 +80,7 @@ test("automatic advancement is unattributed, while a manually requested Next nam
   f.observe();
   expect(f.store.sharedProgress(f.mediaId(1))?.playedBy).toBeUndefined();
   f.session.command({ type: "play", entryId: "one" }, undefined, phone);
+  f.session.command({ type: "enqueue", entry: { ...f.session.state.queue.find(entry => entry.id === "two")!, id: "two-again" } });
   f.session.command({ type: "next", playbackId: f.session.state.player.playbackId! }, undefined, laptop);
   expect(f.session.state.playedBy).toEqual(laptop);
   f.observe();

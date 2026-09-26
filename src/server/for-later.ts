@@ -137,8 +137,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
         if (undoToken) onChange();
         return Response.json({ ok: true, ...(undoToken ? { undoToken } : {}) });
       } catch (error) {
-        // The session appended the item before a newer control canceled Play.
-        if (error instanceof Error && error.message === PLAY_CANCELED) return Response.json({ ok: true, notice: "Queued." });
+        if (error instanceof Error && error.message === PLAY_CANCELED) return Response.json({ error: error.message }, { status: 409 });
         return Response.json({ error: error instanceof ControllerError ? error.message : "Couldn't open this saved item. Its source may be gone." }, { status: error instanceof ControllerError ? error.status : 409 });
       }
     },

@@ -178,7 +178,7 @@ test("watching profile changes preserve For later, queue and playback, then expl
   close.push(() => { session.close(); store.close(); });
   session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
   session.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "https://media.example/current" }, playNow: true });
-  const f = fixture({ lookup: async () => ({ ...entry, source: "https://media.example/saved" }), reservePlay: () => session.reservePlay(), enqueue: (entry, intent, authorize) => { session.command({ type: "enqueue", entry }, authorize); if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize); } });
+  const f = fixture({ lookup: async () => ({ ...entry, source: "https://media.example/saved" }), reservePlay: () => session.reservePlay(), enqueue: (entry, intent, authorize) => { if (intent !== undefined) session.playNewEntries([entry], { intent, authorize }); else session.command({ type: "enqueue", entry }, authorize); } });
   const before = session.state;
   const saved = await save(f.service);
   const profile = store.createProfile("Guest");
@@ -200,7 +200,7 @@ test("watching profile changes preserve For later, queue and playback, then expl
   expect(await list(f.service)).toEqual([saved]);
 });
 
-test("a newer Stop cancels delayed saved-item Play and reports the successful append without inviting a retry", async () => {
+test("a newer Stop cancels delayed saved-item Play without appending an unrequested item", async () => {
   const store = openStore(":memory:");
   const sent: unknown[] = [];
   const session = createSession(store, command => sent.push(command), () => {});
@@ -211,7 +211,7 @@ test("a newer Stop cancels delayed saved-item Play and reports the successful ap
   const f = fixture({
     prepare: async () => { preparing.resolve(); await prepared.promise; },
     reservePlay: () => session.reservePlay(),
-    enqueue: (entry, intent, authorize) => { session.command({ type: "enqueue", entry }, authorize); if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize); },
+    enqueue: (entry, intent, authorize) => { if (intent !== undefined) session.playNewEntries([entry], { intent, authorize }); else session.command({ type: "enqueue", entry }, authorize); },
   });
   const saved = await save(f.service);
   const playing = request(f.service, "POST", `/${saved.id}/load`, { mode: "play" });
@@ -220,9 +220,9 @@ test("a newer Stop cancels delayed saved-item Play and reports the successful ap
   const afterStop = [...sent];
   prepared.resolve();
   const response = await playing;
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: true, notice: "Queued." });
-  expect(session.state.queue.map(item => item.title)).toEqual(["Current", "Evening movie"]);
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "Another action canceled playback." });
+  expect(session.state.queue.map(item => item.title)).toEqual(["Current"]);
   expect(session.state.currentEntryId).toBeNull();
   expect(sent).toEqual(afterStop);
   expect(await list(f.service)).toEqual([saved]);

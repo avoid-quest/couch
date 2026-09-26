@@ -232,7 +232,7 @@ test("Bandcamp album failure or insufficient capacity leaves the queue unchanged
   } finally { album.mockRestore(); }
 });
 
-for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement} cancels slow Bandcamp album play intent`, async () => {
+for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement} cancels slow Bandcamp album intake without adding its tracks`, async () => {
   const started = Promise.withResolvers<void>();
   const output = Promise.withResolvers<ProviderPage>();
   const album = spyOn(bandcampModule, "loadBandcampAlbum").mockImplementation(async () => { started.resolve(); return output.promise; });
@@ -247,7 +247,7 @@ for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement
     expect(await second.command(replacement === "stop" ? { type: "stop" } : { type: "play", entryId: "replacement" })).toMatchObject({ ok: true });
     output.resolve(bandcampAlbum);
     expect(await pending).toMatchObject({ ok: false, error: expect.stringContaining("Another action canceled playback") });
-    expect(hub.session.state.queue.map(item => item.title)).toEqual(["Replacement", "first", "second"]);
+    expect(hub.session.state.queue.map(item => item.title)).toEqual(["Replacement"]);
     expect(commands.filter(command => command.type === "load")).toHaveLength(replacement === "stop" ? 0 : 1);
     expect(hub.session.state.currentEntryId).toBe(replacement === "stop" ? null : "replacement");
   } finally { output.resolve(bandcampAlbum); album.mockRestore(); }
@@ -607,13 +607,13 @@ for (const kind of ["library", "jellyfin"] as const) {
     const currentEntryId = hub.session.state.currentEntryId;
     const playbackId = hub.session.state.player.playbackId;
     release();
-    expect(await pending).toMatchObject({ ok: false, error: "Queued. Another action canceled playback." });
-    await second.waitFor(message => message.type === "state" && message.state.queue.some(entry => entry.id === "delayed-catalog"));
+    expect(await pending).toMatchObject({ ok: false, error: "Another action canceled playback." });
+    await second.waitFor(message => message.type === "state" && message.state.currentEntryId === currentEntryId && message.state.player.playbackId === playbackId);
     expect(second.state.currentEntryId).toBe(currentEntryId);
     expect(second.state.player.playbackId).toBe(playbackId);
     if (interruption === "newer play-now") await waitForCommand(command => command.type === "load" && command.playbackId === playbackId);
     expect(commands.filter(command => command.type === "load").some(command => command.source.includes(kind === "library" ? "First.mp3" : "a".repeat(32)))).toBe(false);
-    expect(hub.session.state.queue.some(entry => entry.id === "delayed-catalog")).toBe(true);
+    expect(hub.session.state.queue.some(entry => entry.id === "delayed-catalog")).toBe(false);
   });
 
   test(`queue-only additions preserve a pending ${kind} play-now intent`, async () => {
@@ -1557,7 +1557,7 @@ test("saved provider references queue atoms and expand lists without exposing th
   } finally { list.mockRestore(); }
 });
 
-test("a later Stop cancels playlist play intent without losing resolved queue entries", async () => {
+test("a later Stop cancels pending playlist Play without adding resolved entries", async () => {
   const loading = Promise.withResolvers<ProviderPage>();
   const started = Promise.withResolvers<void>();
   const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockImplementation(async () => { started.resolve(); return loading.promise; });
@@ -1568,8 +1568,8 @@ test("a later Stop cancels playlist play intent without losing resolved queue en
     await started.promise;
     expect(await remote.command({ type: "stop" })).toMatchObject({ ok: true });
     loading.resolve({ items: [{ id: "first", title: "First", provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" }] });
-    expect(await pending).toMatchObject({ ok: false, error: "Queued. Another action canceled playback." });
-    expect(hub.session.state.queue).toHaveLength(1);
+    expect(await pending).toMatchObject({ ok: false, error: "Another action canceled playback." });
+    expect(hub.session.state.queue).toHaveLength(0);
     expect(hub.session.state.currentEntryId).toBeNull();
   } finally { loading.resolve({ items: [] }); playlist.mockRestore(); }
 });
