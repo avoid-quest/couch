@@ -116,7 +116,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
   }
 
   return (
-    <section aria-label="Video metadata corrections" className="min-w-0 space-y-3 border-t pt-3" data-metadata-editor data-tv-local-only>
+    <section aria-label="Video details" className="min-w-0 space-y-3 border-t pt-3" data-metadata-editor data-tv-local-only>
       <Button aria-expanded={open} disabled={!connected} onClick={() => setOpen(value => !value)} type="button" variant="outline">{open ? "Done" : "Edit details"}</Button>
       {open && <>
         <p className="text-sm text-muted-foreground">Edits survive rescans. Your files aren't changed.</p>
@@ -139,7 +139,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
           </form>
           <form className="space-y-3 border-t pt-3" onSubmit={event => { event.preventDefault(); void update("search", { query }); }}>
             <Label htmlFor={`${prefix}-search`}>{metadata.type === "episode" ? "Search TMDB shows" : "Search TMDB movies"}</Label><Input data-metadata-search disabled={busy} id={`${prefix}-search`} maxLength={200} onChange={event => setQuery(event.target.value)} required value={query} />
-            <p className="text-sm text-muted-foreground">Needs a TMDB token in Settings → Sources.</p>
+            <p className="text-sm text-muted-foreground">Needs a TMDB token in Settings → Sources → Movie &amp; show info.</p>
             <Button disabled={busy} type="submit" variant="secondary">Search TMDB</Button>
           </form>
           {results && <ul aria-label="TMDB search results" className="space-y-2">{results.map(result => <li key={result.id}><Button className="h-auto min-h-8 touch:min-h-11 w-full justify-start whitespace-normal text-left" disabled={busy} onClick={() => void update("preview", { revision: metadata.revision, id: result.id, season: draft.season === "" ? null : Number(draft.season), episode: draft.episode === "" ? null : Number(draft.episode) })} type="button" variant="outline">Preview {result.title} {result.year}</Button><p className="text-sm text-muted-foreground">{result.description}</p></li>)}{!results.length && <li><Empty className="py-0"><EmptyHeader><EmptyDescription>No matches. Try another title.</EmptyDescription></EmptyHeader></Empty></li>}</ul>}

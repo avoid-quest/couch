@@ -27,7 +27,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
 import { sourceLabel } from "@/source-label";
-import { deviceName, playNotice, TRY_AGAIN } from "@/copy";
+import { offline, playNotice, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/library";
@@ -113,7 +113,7 @@ export function HomePage() {
   const paused = player?.status === "paused";
   const live = !!(current?.live || current?.kind === "radio");
   const playingArt = programme?.playbackId === player?.playbackId && programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : current && art(current);
-  const playingStatus = !current ? "" : !connected ? `Reconnecting to ${deviceName(state?.installationName)}…`
+  const playingStatus = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
     : [sourceLabel(current.source), paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
 
@@ -231,7 +231,7 @@ function RecentRail({ items, credentials, disabled, onPlay, onBrowse }: { items:
     {items.map(item => {
       const target = collectionTarget(item.collection);
       const play = <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.libraryItemId || item.queueEntryId)} onClick={() => onPlay(item)}>Play</Button>;
-      return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><MediaDetails title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{play}{target && <Button variant="ghost" onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>}</>}>
+      return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><MediaDetails title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{play}{target && <Button variant="ghost" aria-label={`Browse ${target.title}`} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>}</>}>
         {inspect => <><Button variant="ghost" aria-label={`Details ${item.title}`} onClick={inspect}
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork credentials={credentials} item={item} /></span>
@@ -258,7 +258,7 @@ function HomeRow({ title, time, action, children }: { title: string; time?: stri
 /** The one large item on a row: artwork beside a display title and its verbs. */
 function Feature({ art, artFit = "cover", title, meta, detail, children, onInspect }: { art: ReactNode; artFit?: "cover" | "contain"; title: string; meta?: string; detail?: ReactNode; children: ReactNode; onInspect?: (event?: MouseEvent<HTMLElement>) => void }) {
   return <div className={cn("grid items-center gap-x-8 gap-y-4", artFit === "contain" ? "md:grid-cols-[fit-content(24rem)_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
-    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`View artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0">{art}</Button> : art}</div>
+    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`Artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0">{art}</Button> : art}</div>
     <div className="grid min-w-0 gap-2">
       <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto touch:h-auto min-h-11 justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
@@ -331,13 +331,13 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
   const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={`Resume ${item.title}`} onClick={() => void act(item, "resume")}>Resume</Button>;
   const preview = (item: HistoryItem, featured: boolean) => {
     const target = collectionTarget(item.collection);
-    const browse = target && onBrowse && <Button variant="ghost" disabled={!connected} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>{target.provider === "streamingcommunity" ? "Browse episodes" : target.provider === "bandcamp" ? "Browse album" : "Browse collection"}</Button>;
+    const browse = target && onBrowse && <Button variant="ghost" aria-label={`Browse ${target.title}`} disabled={!connected} onClick={() => onBrowse(target, `[data-history-details="${CSS.escape(item.mediaId)}"] [aria-label^="Details "]`)}>Browse</Button>;
     return <MediaDetails key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} art={<Artwork credentials={credentials} item={item} intrinsic />} actions={<>{resume(item)}{secondary(item)}{browse}</>}>
       {inspect => featured ? <div data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork credentials={credentials} item={item} intrinsic />} artFit={item.thumbnail || item.artworkId ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
       </>}>{resume(item)}{secondary(item)}</Feature></div> : <MediaRow title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
-        art={<Button variant="ghost" className="size-full rounded-none p-0" aria-label={`View artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
+        art={<Button variant="ghost" className="size-full rounded-none p-0" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
         primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>}

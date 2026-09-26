@@ -146,9 +146,8 @@ test.each([true, false])("radio shows provider details and keeps observed track 
   expect(screen.queryByText("Broken beat and soul.")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "About this show" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("Alexander Nut");
-  expect(screen.getByText("Detroit House")).toBeVisible();
   expect(screen.getByText("Broken beat and soul.")).toBeVisible();
-  expect(screen.getByText("Allysha Joy · Live session · 320 kbps")).toBeVisible();
+  expect(screen.getByText("Detroit House · Allysha Joy · Live session · 320 kbps")).toBeVisible();
   expect(screen.getAllByText("Track artist — Observed song").length).toBeGreaterThan(0);
   expect(screen.getByRole("link", { name: "Open show page" })).toHaveAttribute("href", programme.programmeUrl);
   expect(document.querySelector(`img[src="${programme.artworkUrl}"]`)).not.toBeNull();
@@ -430,7 +429,7 @@ test("video details show the episode synopsis and open all seasons through app n
   const details = screen.getByRole("dialog", { name: "Details" });
   expect(details).toHaveTextContent(current.description);
   expect(details).toHaveTextContent(current.subtitle);
-  await userEvent.click(within(details).getByRole("button", { name: "Browse collection" }));
+  await userEvent.click(within(details).getByRole("button", { name: `Browse ${collection.title}` }));
   const showUrl = "https://streamingcommunityz.photos/it/titles/1955-masterchef-italia";
   expect(opened).toEqual([{ id: showUrl, url: showUrl, title: collection.title, provider: "streamingcommunity", kind: "collection" }]);
   expect(actions).toEqual([]);

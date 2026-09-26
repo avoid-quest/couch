@@ -49,7 +49,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
         {source.channelCount} channels · {source.programCount} programs · {updated(source.updatedAt)}
         {source.error && <span className="block text-destructive">{source.error}</span>}
       </>}>
-        <Button variant="outline" disabled={disabled} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}>Refresh</Button>
+        <Button variant="outline" disabled={disabled} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}>Try again</Button>
         <Button variant="ghost" disabled={disabled} onClick={() => edit(source)}>Edit</Button>
         <Button variant="ghost" aria-label={`Remove ${source.name}`} disabled={disabled} onClick={() => setRemoving(source)}>Remove</Button>
       </SettingsRow>)}
@@ -81,7 +81,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
   </>;
   if (inline) return <div className="flex min-w-0 flex-col gap-8">{content}</div>;
   return <Dialog open={open} onOpenChange={value => { setOpen(value); if (!value) edit(null); }}>
-    <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Guide sources</Button></DialogTrigger>
+    <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Live TV sources</Button></DialogTrigger>
     <DialogContent className="guide-sources" data-tv-local-only={host || undefined}>
       <DialogHeader><DialogTitle>Live TV</DialogTitle><DialogDescription>An M3U channel list plus its XMLTV guide.</DialogDescription></DialogHeader>
       {content}

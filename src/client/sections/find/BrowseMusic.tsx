@@ -1,3 +1,5 @@
+import { offline } from "@/copy";
+import { useOptionalSessionGate } from "@/session/session-context";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
@@ -24,6 +26,7 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
   onAlbum: (id: string, playNow: boolean) => Promise<boolean>;
   onTrack: (id: string, playNow: boolean) => Promise<boolean>;
 }) {
+  const name = useOptionalSessionGate()?.state?.installationName;
   const navigate = useNavigate();
   const [view, setView] = useState<View>({ kind: "artists", offset: 0 });
   const [busy, setBusy] = useState(false);
@@ -44,7 +47,7 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
   return <section className="min-w-0 space-y-6" aria-label="Browse music">
     <PageHeader title={title} back={{ label: view.kind === "album" ? view.artist?.name ?? "Albums" : view.kind === "albums" && view.artist ? "Artists" : "Find", onClick: back }} />
     {(view.kind === "artists" || !view.artist && view.kind === "albums") && <ChoiceGroup label="Music view" value={view.kind} onValueChange={kind => setView({ kind, offset: 0 })} options={[{ value: "artists", label: "Artists" }, { value: "albums", label: "Albums" }]} />}
-    {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to browse music.</p>}
+    {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(name)}</p>}
     {query.isPending && connected && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Loading music…</p>}
     {query.error && <Alert variant="destructive"><AlertDescription>Couldn't load music.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>}
     {view.kind === "artists" && !!artists.data?.items.length && <MediaList aria-label="Artists">{artists.data.items.map(artist => <MediaRow key={artist.id} title={artist.name} meta={`${artist.albumCount} album${artist.albumCount === 1 ? "" : "s"} · ${artist.trackCount} tracks`}

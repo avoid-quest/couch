@@ -10,7 +10,7 @@ import { PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTrans
 import { useOptionalSessionGate } from "@/session/session-context";
 import { RangeControl } from "@/components/RangeControl";
 import type { Action } from "../../../shared/protocol";
-import { deviceName } from "@/copy";
+import { offline } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 
 // Bars at the bottom of the viewport (mini player, player band) can overlap
@@ -49,11 +49,11 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const live = current.live || current.kind === "radio" || current.source.startsWith("radio:");
   const length = playbackClock.duration ?? current.duration ?? 0;
   const remaining = Math.max(0, length - playbackClock.position) / (player.speed || 1);
-  const status = !connected ? `Reconnecting to ${deviceName(state.installationName)}…`
+  const status = !connected ? offline(state.installationName)
     : player.status === "error" ? `Can't play ${current.title}`
     : player.status === "loading" ? "Loading…"
     : player.status === "unavailable" ? "Player unavailable"
-    : player.status === "ended" ? "Playback ended"
+    : player.status === "ended" ? "Finished"
     : player.status === "idle" ? "Ready to play"
     : paused ? "Paused"
     : live ? "Live"
