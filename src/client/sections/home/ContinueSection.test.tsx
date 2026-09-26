@@ -97,3 +97,21 @@ test("with nothing playing, the latest unfinished item leads the row", async () 
   await userEvent.click(button("Resume Halfway home"));
   expect(played).toEqual([[unfinished, { fromStart: false }]]);
 });
+
+for (const feature of [true, false]) {
+  test(`Continue refreshes episode metadata in the ${feature ? "featured" : "compact"} row and preserves replay identity`, async () => {
+    const episode = { ...online, title: "MasterChef Italia S11E07", subtitle: "MasterChef Italia, Season 11, Episode 7", description: "Gli aspiranti chef affrontano una nuova prova in cucina.", sourceLabel: "StreamingCommunity" };
+    historyItems = [{ ...online, title: episode.title }];
+    await renderContinue({ feature });
+    expect(screen.getByText("Online")).toBeInTheDocument();
+    historyItems = [episode];
+    await act(async () => { await client.invalidateQueries({ queryKey: ["progress"] }); });
+    expect(await screen.findByText(`${episode.subtitle} · StreamingCommunity`)).toBeInTheDocument();
+    expect(screen.getByText(episode.description)).toBeInTheDocument();
+    expect(screen.queryByText("Online")).toBeNull();
+    await userEvent.click(button(`Resume ${episode.title}`));
+    await userEvent.click(button(`Queue ${episode.title}`));
+    expect(played).toEqual([[episode, { fromStart: false }]]);
+    expect(queued).toEqual([episode]);
+  });
+}
