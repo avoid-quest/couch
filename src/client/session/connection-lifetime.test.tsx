@@ -191,6 +191,18 @@ test("ordinary reconnect revalidates cached reads even when server version count
   expect(client).toBe(previous);
 });
 
+test("a pushed revision refreshes an in-flight first read without another user action", async () => {
+  const firstRead = delayedRead = Promise.withResolvers<Response>();
+  await mount(); await connected();
+  await waitFor(() => expect(readSignal).toBeDefined());
+  delayedRead = undefined;
+  title = "Updated household";
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { progress: 1 } } }));
+  await act(async () => firstRead.resolve(history("Old household")));
+  await waitFor(() => expect(screen.getByText("Updated household")).toBeVisible(), { timeout: 300 });
+  expect(screen.queryByText("Old household")).toBeNull();
+});
+
 test("unpair cancels a pending pairing response rather than silently pairing the tab again", async () => {
   window.history.replaceState(null, "", "/#pair=123456");
   await mount(); await connected();

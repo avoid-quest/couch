@@ -147,7 +147,12 @@ export function SessionGate({ children }: PropsWithChildren) {
     const previous = revisions.current;
     if (!previous || previous.client !== queryClient) void queryClient.invalidateQueries();
     else for (const domain of Object.keys({ ...previous.versions, ...versions }) as Domain[]) {
-      if (versions?.[domain] !== previous.versions?.[domain]) void queryClient.invalidateQueries({ queryKey: [domain] });
+      if (versions?.[domain] !== previous.versions?.[domain]) {
+        // invalidateQueries only cancels refetches that already have data. A
+        // first read begun before this revision is stale too.
+        void queryClient.cancelQueries({ queryKey: [domain] });
+        void queryClient.invalidateQueries({ queryKey: [domain] });
+      }
     }
     revisions.current = { client: queryClient, versions };
   }, [versions, connected, !!state, queryClient]);
