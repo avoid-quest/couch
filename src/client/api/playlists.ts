@@ -1,10 +1,15 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { SavedPlaylistSummary } from "../../shared/playlists";
-import type { Credentials } from "../session/session";
-import { apiFetch } from "./client";
+import type { SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
+import { apiJson, type ApiCredentials } from "./client";
 
-export const playlistsQuery = (credentials: Credentials) =>
+export const playlistsQuery = (credentials: ApiCredentials) =>
   queryOptions({
-    queryKey: ["playlists"],
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/playlists", { signal }).then(r => r.json() as Promise<SavedPlaylistSummary[]>),
+    queryKey: ["playlists", "list"],
+    queryFn: ({ signal }) => apiJson<{ playlists: SavedPlaylistSummary[] }>(credentials, "/api/playlists", { signal }, 10_000),
+  });
+
+export const playlistQuery = (credentials: ApiCredentials, id: string) =>
+  queryOptions({
+    queryKey: ["playlists", "detail", id] as const,
+    queryFn: ({ signal }) => apiJson<{ playlist: SavedPlaylist }>(credentials, `/api/playlists/${encodeURIComponent(id)}`, { signal }, 10_000),
   });

@@ -101,7 +101,7 @@ try {
   await until("official Tauri WebDriver ready", async () => { try { return (await fetch(`${driverOrigin}/status`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } });
   await launch();
   await ui.section("Find");
-  await until("TV starts on visible Find", () => ui.execute("return !!document.querySelector('[data-page=Find]') && document.querySelector('.section-nav a[href^=\"/find\"]')?.getAttribute('aria-current') === 'page'"));
+  await until("TV starts on visible Find", () => ui.execute("return !!document.querySelector('[data-page=Find]') && document.querySelector('[data-app-nav] a[href^=\"/find\"]')?.getAttribute('aria-current') === 'page'"));
   await ui.click(".pair-shortcut");
   const code = await ui.execute("return document.querySelector('[data-pairing-code]')?.textContent") as string;
   assert.match(code, /^\d{6}$/);
@@ -115,7 +115,7 @@ try {
   await until("two independently paired controllers receive the stopped session", () => all(state => state.player.status === "idle"));
   httpRemote = await startHttpRemote(origin, code, artifactDir, until, 4446, 1.5);
   await httpRemote.ui.section("Find");
-  await until("paired phone starts on visible Find", () => httpRemote!.ui.execute("return !!document.querySelector('[data-page=Find]') && document.querySelector('.section-nav a[href^=\"/find\"]')?.getAttribute('aria-current') === 'page'"));
+  await until("paired phone starts on visible Find", () => httpRemote!.ui.execute("return !!document.querySelector('[data-page=Find]') && document.querySelector('[data-app-nav] a[href^=\"/find\"]')?.getAttribute('aria-current') === 'page'"));
   await httpRemote.minimize();
   otherRemote = await startHttpRemote(origin, code, artifactDir, until, 4447);
   await otherRemote.minimize();
@@ -146,13 +146,13 @@ try {
     await Bun.write(artifactDir + "/backend-pause-request", "Pause only this run's disposable Jellyfin backend.");
     await until("actual Jellyfin backend is paused by its fixture owner", () => Bun.file(artifactDir + "/backend-paused.json").exists(), 30_000);
     await httpRemote.ui.button("Search", '[aria-label="Search media"] form');
-    await until("local Search results remain usable while actual Jellyfin search loads", () => httpRemote!.ui.execute("return document.querySelector('.find-searching')?.textContent.includes('Jellyfin') && !!document.querySelector('[aria-label=\"Search results\"] button[aria-label=\"Play Search local video\"]:enabled')"));
-    await until("actual Jellyfin timeout exposes a bounded retry while local results remain", () => httpRemote!.ui.execute("return [...document.querySelectorAll('.find-source-errors p')].some(line => line.textContent.includes('Jellyfin') && !!line.querySelector('button:not(:disabled)')) && !!document.querySelector('[aria-label=\"Search results\"] button[aria-label=\"Queue: Search local video\"]:enabled')"), 35_000);
+    await until("local Search results remain usable while actual Jellyfin search loads", () => httpRemote!.ui.execute("return [...document.querySelectorAll('[role=status]')].some(line => line.textContent.startsWith('Still asking') && line.textContent.includes('Jellyfin')) && !!document.querySelector('[aria-label=\"Search results\"] button[aria-label=\"Play Search local video\"]:enabled')"));
+    await until("actual Jellyfin timeout exposes a bounded retry while local results remain", () => httpRemote!.ui.execute("return [...document.querySelectorAll('[aria-label="Search media"] [role=alert]')].some(alert => alert.textContent.includes('Jellyfin') && !!alert.querySelector('button:not(:disabled)')) && !!document.querySelector('[aria-label=\"Search results\"] button[aria-label=\"Queue: Search local video\"]:enabled')"), 35_000);
     await httpRemote.screenshot("search-jellyfin-outage");
     await Bun.write(artifactDir + "/backend-resume-request", "Resume this run's disposable Jellyfin backend.");
     await until("actual Jellyfin backend resumes", () => Bun.file(artifactDir + "/backend-resumed.json").exists(), 30_000);
-    await httpRemote.ui.button("Try again", ".find-source-errors");
-    await until("actual Jellyfin Retry returns without losing the local query", () => httpRemote!.ui.execute("return ![...document.querySelectorAll('.find-source-errors p')].some(line => line.textContent.includes('Jellyfin')) && document.querySelector('#media-search').value === 'Search local video'"), 30_000);
+    await httpRemote.ui.button("Try again", '[aria-label="Search media"] [role=alert]');
+    await until("actual Jellyfin Retry returns without losing the local query", () => httpRemote!.ui.execute("return ![...document.querySelectorAll('[aria-label="Search media"] [role=alert]')].some(alert => alert.textContent.includes('Jellyfin')) && document.querySelector('#media-search').value === 'Search local video'"), 30_000);
     await httpRemote.screenshot("search-jellyfin-recovered");
     await httpRemote.minimize();
   }
@@ -163,7 +163,7 @@ try {
   await launch(); clients.forEach(client => client.connect());
   await until("Search pairings reconnect with unchanged queue and no autoplay", () => all(state => state.player.status === "idle" && state.player.playbackId === null && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueIds)));
   for (const [index, remote] of [httpRemote, otherRemote].entries()) {
-    await until(`Search HTTP browser ${index + 1} reconnects stopped`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.header-status button[aria-label^=Playback]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
+    await until(`Search HTTP browser ${index + 1} reconnects stopped`, () => remote!.ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected' && document.querySelector('[data-app-status] button[aria-label^=Playing]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
   }
   console.log("PASS focused Search native playback and restart qualification");
 } catch (error) {

@@ -61,9 +61,9 @@ const execute = ui.execute;
 async function card(pattern: string) {
   let id = "";
   await until(async () => {
-    const error = await execute("return document.querySelector('.find-source-errors')?.textContent");
+    const error = await execute("return document.querySelector('[aria-label="Search media"] [role=alert]')?.textContent");
     if (error) throw new Error(error);
-    id = await execute("return [...document.querySelectorAll('.find-result-row')].find(row => row.dataset.hitId?.startsWith(arguments[1] + ':') && new RegExp(arguments[0], 'i').test(row.querySelector('strong')?.textContent || ''))?.getAttribute('data-hit-id') || ''", [pattern, currentProvider]);
+    id = await execute("return [...document.querySelectorAll('[data-hit-id]')].find(row => row.dataset.hitId?.startsWith(arguments[1] + ':') && new RegExp(arguments[0], 'i').test(row.querySelector('[data-play] span')?.textContent || ''))?.getAttribute('data-hit-id') || ''", [pattern, currentProvider]);
     return !!id;
   }, 45_000);
   const selector = `[data-hit-id=${JSON.stringify(id)}]`;
@@ -142,9 +142,9 @@ try {
         if (provider.catalog.provider === "bandcamp") {
           phase = "paste the public Bandcamp track link";
           await ui.type("#media-search", provider.catalog.search!);
-          await until(async () => await execute("return !!document.querySelector('.find-link-card')"));
-          assert.equal(await execute("return [...document.querySelectorAll('.find-link-choice > span')].some(span => span.textContent === 'Quality')"), false, "Bandcamp has no video quality control");
-          await ui.button("Play", ".find-link-actions");
+          await until(async () => await execute("return !!document.querySelector('[aria-label=\"Pasted link\"]')"));
+          assert.equal(await execute("return !!document.querySelector('[aria-label="Pasted link"] [aria-label="Video quality"]')"), false, "Bandcamp has no video quality control");
+          await ui.button("Play", '[aria-label="Pasted link"]');
         } else {
           phase = "find the public provider result";
           currentProvider = provider.catalog.provider;
@@ -156,12 +156,12 @@ try {
           const thumbnail = await execute("return document.querySelector(arguments[0] + ' img')?.src", [selected]);
           assert.ok(thumbnail, "Public provider result includes artwork");
           await until(async () => await execute("return document.querySelector(arguments[0] + ' img')?.naturalWidth > 0", [selected]));
-          const before = remotes[0]!.state!.providerVersion ?? 0;
+          const before = remotes[0]!.state!.versions?.providers ?? 0;
           const collection = await execute("return document.querySelector(arguments[0] + ' [data-play]')?.getAttribute('aria-label')?.startsWith('Open ')", [selected]);
           await execute("document.querySelector(arguments[0] + ' [data-play]').focus()", [selected]);
           if (!await execute("return !!document.querySelector(arguments[0] + ' [aria-label^=\"Saved:\"]')", [selected])) {
             await ui.click(`${selected} [aria-label^="Save:"]`);
-            if (collection) await until(() => remotes.every(remote => (remote.state?.providerVersion ?? 0) > before));
+            if (collection) await until(() => remotes.every(remote => (remote.state?.versions?.providers ?? 0) > before));
           }
           if (collection) {
             const favorite = (await api("/api/providers/favorites", 1)).favorites.find((item: ProviderItem) => item.provider === provider.catalog!.provider && item.title === title) as ProviderItem | undefined;
@@ -173,7 +173,7 @@ try {
           }
           phase = "play the result from Find";
           await ui.click(`${selected} [data-play]`);
-          if (collection) await ui.button("Play all", ".find-collection-heading");
+          if (collection) await ui.button("Play all", '[aria-label="Search media"] header');
         }
         await until(() => remotes.every(remote => remote.state?.queue.some(item => !queued.has(item.id) && (provider.catalog!.provider === "bandcamp" || item.quality === "720p"))));
         entry = remotes[0]!.state!.queue.find(item => !queued.has(item.id))!;
@@ -186,9 +186,9 @@ try {
         const queued = new Set(remotes[0]!.state!.queue.map(item => item.id));
         await ui.section("Find");
         await ui.type("#media-search", provider.url!);
-        await until(async () => await execute("return !!document.querySelector('.find-link-card')"));
-        if (provider.kind === "direct") await ui.button("Direct media", ".find-link-choice");
-        await ui.button("Queue", ".find-link-actions");
+        await until(async () => await execute("return !!document.querySelector('[aria-label=\"Pasted link\"]')"));
+        if (provider.kind === "direct") await ui.button("Direct media", '[aria-label="Pasted link"]');
+        await ui.button("Queue", '[aria-label="Pasted link"]');
         await until(() => remotes.every(remote => remote.state?.queue.some(item => !queued.has(item.id))));
         entry = remotes[0]!.state!.queue.find(item => !queued.has(item.id))!;
         command(0, { type: "play", entryId: entry.id });
@@ -212,11 +212,11 @@ try {
       if (provider.catalog) {
         phase = "show current provider media on the native player";
         await ui.controls();
-        await until(async () => await execute("return document.querySelector('.player-band-heading h1')?.textContent === arguments[0]", [entry!.title]));
-        if (provider.catalog.provider === "bandcamp") await until(async () => await execute("return document.querySelector('.player-audio-art img')?.naturalWidth > 0"));
+        await until(async () => await execute("return document.querySelector('[data-player-heading] h1')?.textContent === arguments[0]", [entry!.title]));
+        if (provider.catalog.provider === "bandcamp") await until(async () => await execute("return document.querySelector('[data-player-art] img')?.naturalWidth > 0"));
         else {
-          await ui.button("Settings", ".player-band-right");
-          await until(async () => await execute("return [...document.querySelectorAll('.player-sheet button')].some(button => button.textContent.trim() === 'Up to 720p' && button.getAttribute('aria-pressed') === 'true')"));
+          await ui.button("Settings", "[data-player-tools]");
+          await until(async () => await execute("return [...document.querySelectorAll('[data-player-sheet] button')].some(button => button.textContent.trim() === '720p' && button.getAttribute('aria-pressed') === 'true')"));
           await ui.key(keys.escape);
         }
         if (provider.live) await until(() => remotes.every(remote => remote.state?.queue.some(item => item.id === entry!.id && item.live === true)));
@@ -230,7 +230,7 @@ try {
       console.log(`PASS native provider ${provider.name}`);
     } catch (error) {
       await screenshot(`${name}-failed`).catch(() => {});
-      const diagnostics = await execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(item => item.textContent), titles: [...document.querySelectorAll('.find-result-row strong')].map(item => item.textContent), input: document.querySelector('#media-search')?.outerHTML, body: getComputedStyle(document.body).pointerEvents, menus: [...document.querySelectorAll('[role=listbox]')].map(item => item.outerHTML), filters: [...document.querySelectorAll('[aria-label=\"From filter\"] button')].map(item => [item.textContent,item.getAttribute('aria-pressed')]) }").catch(() => null);
+      const diagnostics = await execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(item => item.textContent), titles: [...document.querySelectorAll('[data-hit-id] [data-play] span:first-child')].map(item => item.textContent), input: document.querySelector('#media-search')?.outerHTML, body: getComputedStyle(document.body).pointerEvents, menus: [...document.querySelectorAll('[role=listbox]')].map(item => item.outerHTML), filters: [...document.querySelectorAll('[aria-label=\"From filter\"] button')].map(item => [item.textContent,item.getAttribute('aria-pressed')]) }").catch(() => null);
       result = { ...provider, status: "failed", phase, error: String(error), diagnostics };
       console.log(`FAIL native provider ${provider.name} during ${phase}: ${String(error)}`);
     } finally {
@@ -267,7 +267,7 @@ try {
     await ui.click('[aria-label="Saved sections"] [role="tab"]:nth-child(2)');
     for (const item of favorites.values()) await until(async () => await execute("return [...document.querySelectorAll('[aria-label=\"Saved online items and stations\"] strong')].some(title => title.textContent === arguments[0])", [item.title]));
     await ui.click('[aria-label="Saved sections"] [role="tab"]:first-child');
-    for (const title of savedMedia.keys()) await until(async () => await execute("return [...document.querySelectorAll('[aria-label=\"Saved for later\"] strong')].some(element => element.textContent === arguments[0])", [title]));
+    for (const title of savedMedia.keys()) await until(async () => await execute("return [...document.querySelectorAll('[aria-label=\"For later\"] [data-play] > span:first-child')].some(element => element.textContent === arguments[0])", [title]));
     await screenshot("catalog-favorites-after-restart");
     if (httpRemote) await verifyBandcampRestart(httpRemote, queue, until);
     await Bun.write(`${artifacts}/catalog-persistence.json`, JSON.stringify({ ...provenance, status: "passed", queue, favorites: [...favorites.values()], observations: "Queue metadata and quality, ordered Bandcamp albums, paired remote credentials and all saved provider cards survived desktop restart without autoplay. The HTTP phone reconnected with the same complete queue." }, null, 2));

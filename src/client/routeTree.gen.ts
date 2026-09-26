@@ -41,6 +41,7 @@ import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
 import { Route as SettingsSourcesIndexRouteImport } from './routes/settings/sources/index'
 import { Route as SettingsSourcesFoldersRouteImport } from './routes/settings/sources/folders'
 import { Route as SettingsSourcesJellyfinRouteImport } from './routes/settings/sources/jellyfin'
+import { Route as SettingsSourcesLiveTvRouteImport } from './routes/settings/sources/live-tv'
 import { Route as SettingsSourcesMetadataRouteImport } from './routes/settings/sources/metadata'
 import { Route as SettingsSourcesRadioRouteImport } from './routes/settings/sources/radio'
 import { Route as SettingsSourcesStreamingCommunityRouteImport } from './routes/settings/sources/streaming-community'
@@ -205,6 +206,11 @@ const SettingsSourcesJellyfinRoute = SettingsSourcesJellyfinRouteImport.update({
   path: '/jellyfin',
   getParentRoute: () => SettingsSourcesRoute,
 } as any)
+const SettingsSourcesLiveTvRoute = SettingsSourcesLiveTvRouteImport.update({
+  id: '/live-tv',
+  path: '/live-tv',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
 const SettingsSourcesMetadataRoute = SettingsSourcesMetadataRouteImport.update({
   id: '/metadata',
   path: '/metadata',
@@ -254,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
   '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
   '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -327,6 +335,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
   '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -366,6 +375,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/settings/sources/folders'
     | '/settings/sources/jellyfin'
+    | '/settings/sources/live-tv'
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -401,6 +411,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/settings/sources/folders'
     | '/settings/sources/jellyfin'
+    | '/settings/sources/live-tv'
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -438,6 +449,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/settings/sources/folders'
     | '/settings/sources/jellyfin'
+    | '/settings/sources/live-tv'
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -683,6 +695,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsSourcesJellyfinRouteImport
       parentRoute: typeof SettingsSourcesRoute
     }
+    '/settings/sources/live-tv': {
+      id: '/settings/sources/live-tv'
+      path: '/live-tv'
+      fullPath: '/settings/sources/live-tv'
+      preLoaderRoute: typeof SettingsSourcesLiveTvRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
     '/settings/sources/metadata': {
       id: '/settings/sources/metadata'
       path: '/metadata'
@@ -731,6 +750,7 @@ const BrowseRouteWithChildren =
 interface SettingsSourcesRouteChildren {
   SettingsSourcesFoldersRoute: typeof SettingsSourcesFoldersRoute
   SettingsSourcesJellyfinRoute: typeof SettingsSourcesJellyfinRoute
+  SettingsSourcesLiveTvRoute: typeof SettingsSourcesLiveTvRoute
   SettingsSourcesMetadataRoute: typeof SettingsSourcesMetadataRoute
   SettingsSourcesRadioRoute: typeof SettingsSourcesRadioRoute
   SettingsSourcesStreamingCommunityRoute: typeof SettingsSourcesStreamingCommunityRoute
@@ -740,6 +760,7 @@ interface SettingsSourcesRouteChildren {
 const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
   SettingsSourcesFoldersRoute: SettingsSourcesFoldersRoute,
   SettingsSourcesJellyfinRoute: SettingsSourcesJellyfinRoute,
+  SettingsSourcesLiveTvRoute: SettingsSourcesLiveTvRoute,
   SettingsSourcesMetadataRoute: SettingsSourcesMetadataRoute,
   SettingsSourcesRadioRoute: SettingsSourcesRadioRoute,
   SettingsSourcesStreamingCommunityRoute:

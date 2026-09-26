@@ -2,7 +2,7 @@ import type { MaintenanceBuild } from "../shared/build";
 
 export function createNativeReadiness(send: (nonce: string) => void, timeout = 2_500) {
   let pending: { nonce: string; resolve: (build: MaintenanceBuild) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
-  const failure = () => new Error("The native player did not pass startup readiness.");
+  const failure = () => new Error("The Couch app didn't start correctly.");
   return {
     collect() {
       if (pending) return Promise.reject(failure());

@@ -15,7 +15,7 @@ export async function assertTvFullscreen(ui: UiDriver, until: Wait, description:
   await until(`TV ${description} fills the X11 display`, () => ui.execute(`
     const stage = document.querySelector('.video-stage'), rect = stage?.getBoundingClientRect();
     return !!document.querySelector('[data-tv-navigation-scope]') && innerWidth === 1600 && innerHeight === 1000
-      && (!document.querySelector('.player-page:not(.player-idle)') || document.querySelectorAll('.video-stage').length === 1 && rect
+      && (!document.querySelector('.player-page') || document.querySelectorAll('.video-stage').length === 1 && rect
         && Math.abs(rect.x) < 1 && Math.abs(rect.y) < 1
         && Math.abs(rect.width - innerWidth) < 1 && Math.abs(rect.height - innerHeight) < 1);
   `));
@@ -41,19 +41,19 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   const phone = httpRemote.ui;
   await phone.section("Find");
   await phone.click('[aria-label="Remote"]');
-  await until("HTTP phone remote dialog contains the D-pad", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
+  await until("HTTP phone remote dialog contains the D-pad", () => phone.execute("return !!document.querySelector('[role=dialog] [data-remote-pad]')"));
   await assertResponsive(phone, "Phone remote pad");
   await ui.execute("window.__dpadStage = document.querySelector('.video-stage')");
   await phone.button("TV back");
   await phone.button("TV info");
-  await until("phone Info reveals transport controls and focuses Resume", () => ui.execute("return !!document.querySelector('.player-band:not(.player-band-hidden)') && document.activeElement?.getAttribute('aria-label') === 'Resume'"));
+  await until("phone Info reveals transport controls and focuses Resume", () => ui.execute("return !!document.querySelector('[data-player-band=shown]') && document.activeElement?.getAttribute('aria-label') === 'Resume'"));
   await phone.button("TV select");
   await until("phone OK resumes the same native player for both controllers", () => all(state => state.player.playbackId === initial.playbackId && state.player.status === "playing" && state.player.position > initial.position));
   await phone.button("TV select");
   await until("phone OK pauses the same native player for both controllers", () => all(state => state.player.status === "paused"));
-  await until("phone D-pads retain the paused transport focus", () => ui.execute("return !!document.querySelector('.player-band:not(.player-band-hidden) [aria-label=Resume]')"));
+  await until("phone D-pads retain the paused transport focus", () => ui.execute("return !!document.querySelector('[data-player-band=shown] [aria-label=Resume]')"));
   await assertTvFullscreen(ui, until, "phone D-pad navigation");
-  await until("phone remote dialog remains available for the retained screenshot", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
+  await until("phone remote dialog remains available for the retained screenshot", () => phone.execute("return !!document.querySelector('[role=dialog] [data-remote-pad]')"));
   await httpRemote.screenshot("http-tv-remote");
   await phone.key(keys.escape);
   await until("phone Remote dialog closes before continuing", () => phone.execute("return !document.querySelector('[role=dialog]')"));

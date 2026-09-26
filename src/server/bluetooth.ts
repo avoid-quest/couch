@@ -1,13 +1,14 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { ControllerError, settingField } from "./controllers";
+import { ADMIN_ONLY } from "./messages";
 
 export async function bluetoothSettings(request: Request, identity: () => ControllerIdentity | null, invoke?: (action: BluetoothAction) => Promise<BluetoothState>) {
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
   const authorize = () => {
     const caller = identity();
-    if (!caller) throw new ControllerError("Pair this remote before connecting.", 401);
-    if (caller.authority === "controller" || caller.authority === "administrator" && !caller.controller) throw new ControllerError("An administrator is required.", 403);
+    if (!caller) throw new ControllerError("Pair this remote first.", 401);
+    if (caller.authority === "controller" || caller.authority === "administrator" && !caller.controller) throw new ControllerError(ADMIN_ONLY, 403);
     return caller.controller?.id ?? "host";
   };
   try {
@@ -30,7 +31,7 @@ export async function bluetoothSettings(request: Request, identity: () => Contro
       }
       if (["pair", "connect", "disconnect", "forget"].includes(action.op) && !/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(action.device ?? "")) throw new ControllerError("Choose a current Bluetooth device.", 400);
     } else return json({ error: "Not found." }, 404);
-    if (!invoke) return json({ error: "Bluetooth requires a native playback host." }, 503);
+    if (!invoke) return json({ error: "Bluetooth isn't available on this Couch." }, 503);
     const result = await invoke(action);
     // A revoked administrator cannot retain a pending agent or discovery lease.
     try { authorize(); } catch (error) { void invoke({ op: "cancel", owner }).catch(() => {}); throw error; }

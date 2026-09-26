@@ -5,6 +5,7 @@ import type { ControllerIdentity } from "../shared/controllers";
 import type { UpdateState, UpdateTransaction } from "../shared/updates";
 import { ControllerError, settingField } from "./controllers";
 import { UpdateError, type UpdateFeed, type UpdateRelease } from "./update-feed";
+import { ADMIN_ONLY, UPDATING_PAUSED, STORAGE_ERROR } from "./messages";
 
 type Automation = {
   busy: () => boolean;
@@ -27,7 +28,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     const c = saved.candidate;
     if (c && /^[a-f0-9]{64}$/.test(c.id) && typeof c.notes === "string" && typeof c.version === "string" && typeof c.revision === "string" && typeof c.releaseId === "string" && [c.bytes, c.publishedAt].every(Number.isSafeInteger) && (c.expiresAt === undefined || Number.isSafeInteger(c.expiresAt))) state.candidate = c;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") { state.status = "failed"; state.error = "Saved update settings could not be read. Select your channel again to save it."; }
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") { state.status = "failed"; state.error = "Couldn't read update settings. Pick your channel again."; }
   }
   let candidate: UpdateRelease | null = null;
   let job: Promise<void> | undefined;
@@ -67,7 +68,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     })().catch(error => {
       if (!closed) {
         state.status = "failed";
-        state.error = error instanceof UpdateError ? error.message : "Could not complete the update operation. Check this installation's storage and feed enrollment, then retry.";
+        state.error = error instanceof UpdateError ? error.message : "Couldn't finish the update. Try again.";
       }
     }).finally(() => { job = undefined; });
   };
@@ -105,8 +106,8 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       };
       guard();
       await automation.install(id, attempt!.requestId, guard);
-      state.waiting = "The native updater accepted the idle installation.";
-    } catch { if (!closed) state.waiting = "Automatic installation is waiting. Check the update result and this installation's connection."; }
+      state.waiting = "Installing the update.";
+    } catch { if (!closed) state.waiting = "Auto-install is waiting. Check the update result."; }
   })().finally(() => { polling = undefined; });
   const automaticTimer = automation ? setInterval(() => void automatic(), 30_000) : undefined;
   automaticTimer?.unref();
@@ -119,10 +120,10 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && (candidate.summary.expiresAt === undefined || candidate.summary.expiresAt > Date.now()),
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
-        if (!admitted()) throw new ControllerError("This installation is preparing an update. Controls are paused.", 503);
+        if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage updates.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
       };
       try {
         authorize();
@@ -163,7 +164,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         }
         return json(state, 202);
       } catch (error) {
-        return json({ error: error instanceof ControllerError ? error.message : "Could not save update settings. Check this installation's storage and retry." }, error instanceof ControllerError ? error.status : 500);
+        return json({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("update settings") }, error instanceof ControllerError ? error.status : 500);
       }
     },
     async close() { closed = true; clearTimeout(startup); clearInterval(timer); clearInterval(automaticTimer); shutdown.abort(); await Promise.allSettled([job, saving, polling]); },

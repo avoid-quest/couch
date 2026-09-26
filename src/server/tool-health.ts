@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { ManagedToolHealth, ToolHealth, ToolObservation, AptPackageStatus } from "../shared/tool-health";
 import { probeMediaHelper, runDiagnosticCommand } from "./diagnostics-system";
+import { ADMIN_ONLY, NO_LONGER_ADMIN } from "./messages";
 
 const cacheSeconds = 10;
 const checkMilliseconds = 10_000;
@@ -62,7 +63,7 @@ export function createToolHealth(options: Options) {
   const systemStatus = async () => {
     if (systemCached && Date.now() - Date.parse(systemCached.checkedAt) < 30_000) return systemCached;
     return systemPending ??= (async (): Promise<AptPackageStatus> => {
-      const value: AptPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "System package status is unavailable for this installation." };
+      const value: AptPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "System package status isn't available here." };
       if (!options.packaged) return value;
       return (options.packageStatus ?? readAptPackageStatus)();
     })().then(result => { systemCached = result; return result; }).finally(() => { systemPending = null; });
@@ -142,7 +143,7 @@ export function createToolHealth(options: Options) {
       const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
       const permitted = () => ["host", "administrator"].includes(identity()?.authority ?? "");
-      if (!permitted()) return json({ error: "An administrator is required to check media tools." }, 403);
+      if (!permitted()) return json({ error: ADMIN_ONLY }, 403);
       if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...headers, Allow: "GET" } });
       const url = new URL(request.url);
       if (!["/api/tools", "/api/tools/packages", "/api/tools/ubuntu"].includes(url.pathname)) return json({ error: "Not found." }, 404);
@@ -152,7 +153,7 @@ export function createToolHealth(options: Options) {
       if (url.pathname === "/api/tools/packages" || url.pathname === "/api/tools/ubuntu") {
         const result = await systemStatus();
         if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
-        return !permitted() ? json({ error: "Administrator access is no longer available." }, 403) : json(result);
+        return !permitted() ? json({ error: NO_LONGER_ADMIN }, 403) : json(result);
       }
       if (!cached || Date.now() - Date.parse(cached.checkedAt) >= cacheSeconds * 1000) {
         // A timed-out filesystem probe remains the single pending collection;
@@ -162,7 +163,7 @@ export function createToolHealth(options: Options) {
         try { cached = await Promise.race([pending, new Promise<ToolHealth>(resolve => { timer = setTimeout(() => resolve(timeoutReport()), checkMilliseconds); })]); }
         finally { clearTimeout(timer); }
       }
-      if (!permitted()) return json({ error: "Administrator access is no longer available." }, 403);
+      if (!permitted()) return json({ error: NO_LONGER_ADMIN }, 403);
       if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
       return json(cached);
     },

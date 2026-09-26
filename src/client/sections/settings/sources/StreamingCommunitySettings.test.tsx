@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import { toast } from "sonner";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -41,7 +42,7 @@ afterEach(async () => {
 test("StreamingCommunity origin loads through Query and saves the normalized origin", async () => {
   await render();
   expect(calls).toEqual([{ path: "/api/settings/streamingcommunity", method: "GET", body: null }]);
-  expect(document.body.textContent).toContain("Browse and search StreamingCommunity in Find");
+  expect(document.body.textContent).toContain("If the site moves, update its address here.");
   const input = document.getElementById("streamingcommunity-origin") as HTMLInputElement;
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "https://streamingcommunity.example/");
@@ -49,5 +50,5 @@ test("StreamingCommunity origin loads through Query and saves the normalized ori
   });
   await act(async () => { document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(calls[1]).toEqual({ path: "/api/settings/streamingcommunity", method: "POST", body: { origin: "https://streamingcommunity.example" } });
-  expect(document.body.textContent).toContain("Website origin saved");
+  expect(toast.getToasts().some(item => "title" in item && item.title === "Address saved.")).toBe(true);
 });

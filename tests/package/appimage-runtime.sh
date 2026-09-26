@@ -78,13 +78,13 @@ runuser -u qualifier -- env HOME=/home/qualifier TMPDIR=/home/qualifier/tmp \
         xdotool windowmove --sync "$(head -1 /evidence/pre-driver-window.txt)" 0 0
         scrot -o /evidence/pre-driver.png
         tesseract /evidence/pre-driver.png stdout > /evidence/pre-driver-ocr.txt 2>/dev/null
-        if grep -Eiq "Where do you want to play" /evidence/pre-driver-ocr.txt; then break; fi
+        if grep -Eiq "Where.*play" /evidence/pre-driver-ocr.txt; then break; fi
       fi
       kill -0 "$app_pid"
       sleep 0.2
     done
     test -s /evidence/pre-driver-window.txt
-    grep -Eiq "Where do you want to play" /evidence/pre-driver-ocr.txt
+    grep -Eiq "Where.*play" /evidence/pre-driver-ocr.txt
   '
 for attempt in $(seq 1 50); do [ "$(pgrep -x couch-server | wc -l)" = 1 ] && break; sleep 0.1; done
 test "$(pgrep -x couch-server | wc -l)" = 1

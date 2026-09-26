@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act, useState } from "react";
+import { Toaster } from "sonner";
 import type { Root } from "react-dom/client";
 import type { Action } from "../../../shared/protocol";
 import type { ProviderItem } from "../../../shared/providers";
@@ -39,7 +40,7 @@ async function render(active = true, connected = true, canPlay = true, libraryVe
   revisions = { providers: providerVersion, radio: providerVersion };
   await act(async () => {
     for (const rootKey of invalidated) await queryClient.invalidateQueries({ queryKey: [rootKey] });
-    root.render(<QueryClientProvider client={queryClient}><SearchPanel onManageSources={administrator ? source => { browsed.push("Source settings"); setupSources.push(source); } : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
+    root.render(<QueryClientProvider client={queryClient}><Toaster /><SearchPanel onManageSources={administrator ? source => { browsed.push("Source settings"); setupSources.push(source); } : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
   });
   await flush();
 }
@@ -102,8 +103,8 @@ test("Find merges local, Jellyfin, provider and radio results with direct action
   await until(() => !!button("Play Evening video"));
   for (const label of ["Resume Evening movie", "Play Evening song", "Play Evening video", "Play Evening radio"]) expect(button(label)).toBeDefined();
   for (const path of ["/api/providers/youtube/items?q=Evening", "/api/radio/playlists/own/stations?q=Evening", "/api/library/items?q=Evening&offset=0&limit=30"]) expect(paths).toContain(path);
-  await click("Queue: Evening movie"); expect(queued.at(-1)).toEqual(["Library", "local", undefined]);
-  expect(document.body.textContent).toContain("Added Evening movie to the end of Up next");
+  await click("Queue Evening movie"); expect(queued.at(-1)).toEqual(["Library", "local", undefined]);
+  await until(() => document.body.textContent?.includes("Queued Evening movie.") ?? false);
   await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", url: video.url, playNow: true });
 });
 
@@ -112,8 +113,8 @@ test("opening and leaving a collection restores focus to its result", async () =
   await until(() => !!button("Open Evening collection"));
   await click("Open Evening collection");
   await until(() => !!button("Play Collection episode"));
-  expect(document.activeElement).toBe(button("‹ Results"));
-  await click("‹ Results");
+  expect(document.activeElement).toBe(button("Results"));
+  await click("Results");
   await until(() => document.activeElement?.getAttribute("aria-label") === "Open Evening collection");
   expect(button("Open Evening collection").isConnected).toBe(true);
 });
@@ -131,11 +132,10 @@ test("one failed provider stays visible as feedback while other results work, an
 
 test("local and provider pagination controls are available in the merged Find view", async () => {
   integrated = true; await render(); await search("Evening");
-  await until(() => document.body.textContent?.includes("1–30 of 40") ?? false);
-  const library = document.querySelector<HTMLElement>('nav[aria-label="TV folders search pages"]')!;
-  await click("Next", library);
+  await until(() => !!button("More from Folders"));
+  await click("More from Folders");
   expect(paths).toContain("/api/library/items?q=Evening&offset=30&limit=30");
-  await click("More YouTube results");
+  await click("More from YouTube");
   await until(() => !!button("Play Another video"));
   expect(paths).toContain("/api/providers/youtube/items?q=Evening&cursor=24");
 });
@@ -150,7 +150,7 @@ test("empty results and filters give a way back", async () => {
   await act(async () => [...what.querySelectorAll("button")].find(node => node.textContent?.startsWith("Video"))!.click());
   await until(() => !button("Play Evening song"));
   expect(button("Resume Evening movie")).toBeDefined();
-  await act(async () => button("All", what).click());
+  await act(async () => [...what.querySelectorAll("button")].find(node => node.textContent?.startsWith("All"))!.click());
   expect(button("Resume Evening movie")).toBeDefined();
 });
 
@@ -174,11 +174,17 @@ test("a pasted direct-media link queues an entry with a server-safe title", asyn
   const entry = (commands.at(-1) as Extract<Action, { type: "enqueue" }>).entry;
   expect(entry.title.length).toBeLessThanOrEqual(200);
 });
+test("an unfinished link stays editable without crashing Find", async () => {
+  await render();
+  await search("http://");
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("http://");
+  expect(document.querySelector('[aria-label="Pasted link"]')).toBeNull();
+});
 test("controlled search drafts change only through the owner and never report route updates as edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
   const client = new QueryClient();
   const edits: string[] = [];
-  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>));
+  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onEnqueue={async () => true} /></QueryClientProvider>));
   await draw("Owner draft", "route"); await flush();
   const input = document.querySelector<HTMLInputElement>("#media-search")!;
   expect(input.value).toBe("Owner draft"); expect(edits).toEqual([]);
@@ -194,7 +200,7 @@ test("standalone drafts follow route updates without reporting synthetic edits",
   const { SearchPanel } = await import("./SearchPanel");
   const client = new QueryClient();
   const edits: string[] = [];
-  const draw = async (query: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>));
+  const draw = async (query: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onEnqueue={async () => true} /></QueryClientProvider>));
   await draw("first route"); await flush(); await draw("second route"); await flush();
   expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("second route");
   expect(edits).toEqual([]);
@@ -208,7 +214,7 @@ test("debounced drafts survive frequent parent renders, use the latest callback 
   function Controlled({ latest }: { latest: boolean }) {
     const [draftQuery, updateDraft] = useState(""); setDraft = updateDraft;
     const [searchState, setRoute] = useState({ query: "", source: "All" });
-    return <QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>;
+    return <QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active onEnqueue={async () => true} /></QueryClientProvider>;
   }
   await act(async () => root.render(<Controlled latest={false} />));
   await act(async () => setDraft("Evening"));

@@ -1,70 +1,85 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import type { SessionState } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { ForLaterSection } from "./ForLaterSection";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";
 import { SavedPlaylists } from "@/components/SavedPlaylists";
+import { PageHeader } from "@/components/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { forLaterQuery } from "@/api/for-later";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
-import { apiFetch } from "@/api/client";
+import { playlistsQuery } from "@/api/playlists";
+import { deviceName } from "@/copy";
 
-type SavedTab = "later" | "channels" | "lists";
-let lastSavedTab: SavedTab = "later";
-let lastSavedContext = "";
+export const savedTabs = ["later", "channels", "lists"] as const;
+export type SavedTab = typeof savedTabs[number];
 
-export function SavedSection({ state, credentials, connected, canPlay, active, onBrowse, ...favoriteActions }: SavedFavoriteActions & {
+// Tailwind's `md`, where Settings shows its rail: a rail beside the content,
+// or a tab strip above it on phones.
+const wideQuery = "(min-width: 48rem)";
+const subscribeWide = (onChange: () => void) => {
+  const media = window.matchMedia?.(wideQuery);
+  media?.addEventListener("change", onChange);
+  return () => media?.removeEventListener("change", onChange);
+};
+const isWide = () => window.matchMedia?.(wideQuery).matches ?? true;
+
+export function SavedSection({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
   canPlay: boolean;
-  active: boolean;
-  onBrowse: (section: string) => void;
+  tab: SavedTab;
+  onTabChange: (tab: SavedTab) => void;
+  onFind: () => void;
 }) {
-  const context = `${credentials.origin}\0${credentials.token}`;
   const page = useRef<HTMLElement>(null);
-  const [tab, setTab] = useState<SavedTab>(() => {
-    if (lastSavedContext !== context) { lastSavedContext = context; lastSavedTab = "later"; }
-    return lastSavedTab;
-  });
+  const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
+  // The TV starts on the current tab so the remote can move straight into it.
   useEffect(() => {
-    if (lastSavedContext !== context) { lastSavedContext = context; lastSavedTab = "later"; setTab("later"); }
-  }, [context]);
-  useEffect(() => {
-    if (!active || !page.current?.closest(".tv-shell")) return;
+    if (!page.current?.closest(".tv-shell")) return;
     const frame = requestAnimationFrame(() => page.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [active]);
-  const showCounts = active && connected;
-  const laterCount = useQuery({ ...forLaterQuery(credentials), enabled: showCounts });
-  const providerCount = useQuery({ ...providerFavoritesQuery(credentials), enabled: showCounts });
-  const radioCount = useQuery({ ...radioFavoritesListQuery(credentials), enabled: showCounts });
-  const listsCount = useQuery({ queryKey: ["saved", "list-count", credentials.origin, credentials.token, state?.playlistVersion], enabled: showCounts, queryFn: () => apiFetch(credentials, "/api/playlists").then(response => response.json() as Promise<{ playlists: unknown[] }>) });
+  }, []);
+  const later = useQuery({ ...forLaterQuery(credentials), enabled: connected });
+  const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
+  const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
+  const lists = useQuery({ ...playlistsQuery(credentials), enabled: connected });
   const tabs = [
-    ["later", "For later", laterCount.data?.items.length],
-    ["channels", "Channels and stations", (providerCount.data?.favorites.length ?? 0) + (radioCount.data?.favorites.length ?? 0)],
-    ["lists", "Lists", listsCount.data?.playlists?.length],
+    ["later", "For later", later.data?.items.length],
+    ["channels", "Channels & stations", online.data && radio.data && online.data.favorites.length + radio.data.favorites.length],
+    ["lists", "Lists", lists.data?.playlists.length],
   ] as const;
-  const later = <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} inspect onFind={() => onBrowse("Search")} showHeading={false} />;
-  const channels = <SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} showHeading={false} {...favoriteActions} />;
-  const lists = <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.playlistVersion ?? 0} queueCount={state?.queue.length ?? 0} inline />;
 
-  return <section ref={page} className="min-w-0 pb-8" aria-label="Saved media">
-    {active && <Tabs value={tab} onValueChange={value => { lastSavedTab = value as SavedTab; setTab(lastSavedTab); }} orientation="vertical" className="saved-page-layout -ml-[.8rem] grid grid-cols-[15rem_minmax(0,1fr)] gap-8 max-[700px]:ml-0 max-[700px]:grid-cols-1">
-      <TabsList variant="line" className="saved-page-nav w-full" aria-label="Saved sections">
-        {tabs.map(([value, label, count], index) => <TabsTrigger key={value} value={value} data-page-first={index === 0 || undefined} className="h-12 w-full justify-start gap-3 rounded-none px-3 text-left font-normal">
-          <span className="min-w-0 flex-1">{label}</span>
-          {connected && <span className="tabular-nums text-muted-foreground">{count ?? "…"}</span>}
-        </TabsTrigger>)}
-      </TabsList>
-      <div className="saved-page-content min-w-0">
-        <p className="mb-5 text-sm text-muted-foreground">Shared with everyone who uses {state?.installationName || "this Couch"}.</p>
-        <TabsContent value="later">{later}</TabsContent>
-        <TabsContent value="channels">{channels}</TabsContent>
-        <TabsContent value="lists"><div className="saved-lists-tab">{lists}</div></TabsContent>
+  return <section ref={page} className="min-w-0 pb-8" aria-label="Saved">
+    <Tabs value={tab} onValueChange={value => onTabChange(value as SavedTab)} orientation={wide ? "vertical" : "horizontal"} className="grid gap-6 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-8">
+      <div className="min-w-0">
+        <p className="mb-1 truncate text-xs text-muted-foreground md:px-2.5">Shared on {deviceName(state?.installationName)}</p>
+        <TabsList variant="line" aria-label="Saved sections" className="h-auto w-full items-stretch justify-start gap-0 p-0 group-data-horizontal/tabs:h-auto group-data-horizontal/tabs:overflow-x-auto group-data-horizontal/tabs:border-b">
+          {tabs.map(([value, label, count], index) => <TabsTrigger key={value} value={value} data-page-first={index === 0 || undefined}
+            className="h-8 flex-none justify-start gap-1.5 px-2.5 py-0 font-normal touch:h-11 group-data-horizontal/tabs:rounded-none group-data-horizontal/tabs:after:bottom-0 group-data-vertical/tabs:text-foreground group-data-vertical/tabs:after:hidden group-data-vertical/tabs:hover:bg-muted dark:group-data-vertical/tabs:text-foreground">
+            <Check aria-hidden="true" className={`hidden size-[1.15em] group-data-vertical/tabs:block ${tab === value ? "" : "invisible"}`} />
+            <span className="min-w-0 flex-1 text-left">{label}</span>
+            {count != null && <span className="tabular-nums text-muted-foreground">{count}</span>}
+          </TabsTrigger>)}
+        </TabsList>
       </div>
-    </Tabs>}
+      <div className="min-w-0">
+        <TabsContent value="later">
+          <PageHeader title="For later" />
+          <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} />
+        </TabsContent>
+        <TabsContent value="channels">
+          <PageHeader title="Channels & stations" />
+          <SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} />
+        </TabsContent>
+        <TabsContent value="lists">
+          <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} />
+        </TabsContent>
+      </div>
+    </Tabs>
   </section>;
 }

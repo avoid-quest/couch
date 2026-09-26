@@ -22,8 +22,8 @@ async function pairBrowser({ ui, httpRemote, until }: Context, name: string) {
   const code = await ui.execute("return document.querySelector('.pair-shortcut strong').textContent");
   await httpRemote.ui.type("#remote-name", name);
   await httpRemote.ui.type("#pairing-code", code);
-  await httpRemote.ui.button("Connect", ".pair-form");
-  await until("replacement browser connects as an ordinary controller", () => httpRemote.ui.execute("return !document.querySelector('#pairing-code') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await httpRemote.ui.button("Pair", ".pair-form");
+  await until("replacement browser connects as an ordinary controller", () => httpRemote.ui.execute("return !document.querySelector('#pairing-code') && document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   return browserToken(httpRemote.ui);
 }
 
@@ -68,9 +68,9 @@ export async function verifyConnection(context: Context) {
   assert.equal(await phone.execute("return !!document.querySelector('[role=tab][id$=\"-trigger-remotes\"], [aria-label=\"Paired remotes\"]')"), false, "An ordinary controller cannot reach paired-remote management in TV settings");
   await phone.settingsSection("connection");
   await phone.button("Reconnect", settings);
-  await until("Reconnect preserves the browser credential and obtains a fresh snapshot", async () => await browserToken(phone) === replacement && await phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("Reconnect preserves the browser credential and obtains a fresh snapshot", async () => await browserToken(phone) === replacement && await phone.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   assert.equal((await api(origin, helper.token, `/api/controllers/${replacementIdentity.controller!.id}`, undefined, "DELETE")).status, 200);
-  await until("revocation immediately exposes pairing-required Connection in the real HTTP browser", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Pairing required' && document.querySelector(arguments[0])?.textContent.includes('rejected this browser')", [settings]));
+  await until("revocation immediately exposes pairing-required Connection in the real HTTP browser", () => phone.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Pairing required' && document.querySelector(arguments[0])?.textContent.includes('rejected this browser')", [settings]));
   for (const path of ["/api/controllers/me", "/api/settings", "/api/radio/favorites", "/api/library/items"]) assert.equal((await api(origin, replacement, path)).status, 401, `Revoked credential cannot request ${path}`);
   await httpRemote.screenshot("http-revoked-connection");
   await phone.button("Pair again", settings);
@@ -118,7 +118,7 @@ export async function preparePublicConnection(context: Context, otherRemote: Con
   await otherRemote.restore();
   await connection(otherRemote.ui, until);
   assert.equal((await api(origin, administrator, `/api/controllers/${identity.controller!.id}`, undefined, "DELETE")).status, 200);
-  await until("the second HTTP browser enters pairing-required state", () => otherRemote.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Pairing required'"));
+  await until("the second HTTP browser enters pairing-required state", () => otherRemote.ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Pairing required'"));
   await otherRemote.minimize();
   await httpRemote.restore();
   await connection(httpRemote.ui, until);

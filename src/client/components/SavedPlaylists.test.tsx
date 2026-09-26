@@ -3,6 +3,10 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import { toast } from "sonner";
 import type { Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SessionGateContext } from "@/session/gate-context";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -11,6 +15,13 @@ const playlist = { id: "friday", name: "Friday night", revision: 3, updatedAt: 1
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const flush = () => act(async () => { await Bun.sleep(15); });
 const click = async (node: HTMLElement) => { await act(async () => node.click()); await flush(); };
+// The session's Undo toast, as SessionGate offers it.
+const session = { state: null, offerUndo: (text: string, undo: () => Promise<void>, duration = 6_000) => toast(text, { duration, action: { label: "Undo", onClick: () => void undo() } }) };
+const render = async (queueCount = 1) => {
+  const { SavedPlaylists } = await import("./SavedPlaylists");
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SessionGateContext.Provider value={session as never}><SavedPlaylists origin="http://localhost" token="paired" connected canPlay queueCount={queueCount} /></SessionGateContext.Provider></QueryClientProvider>));
+  await flush();
+};
 const undo = async () => {
   const latest = toast.getToasts().at(-1);
   const action = latest && "action" in latest ? latest.action : undefined;
@@ -37,43 +48,55 @@ beforeEach(async () => {
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => {
+afterEach(async () => { queryClient.clear();
   await act(async () => root.unmount()); toast.dismiss(); request.mockRestore(); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
 
-for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} loads lists and offers Undo after deletion`, async () => {
-  const { SavedPlaylists } = await import("./SavedPlaylists");
-  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} inline={inline} />));
-  await flush();
-  if (inline) expect(document.querySelector('[role="dialog"]')).toBeNull();
-  else { expect(request).not.toHaveBeenCalled(); await click(button("Saved lists")); }
-  expect(document.querySelector('[data-playlist-id="friday"]')?.closest("li")?.hasAttribute("data-nav-row")).toBe(true);
-  await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
-  expect(button("Add to Up next").closest("[data-nav-row]")?.getAttribute("aria-label")).toBe("Load list");
+test("Lists opens a list, queues it and offers Undo after deletion", async () => {
+  await render();
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector('[data-playlist-id="friday"]')?.hasAttribute("data-nav-row")).toBe(true);
+  await click(button("Open Friday night"));
+  expect(document.querySelector("h1")?.textContent).toBe("Friday night");
+  expect(document.activeElement?.hasAttribute("data-back")).toBe(true);
   expect(button("Remove Evening movie from list").closest("li")?.hasAttribute("data-nav-row")).toBe(true);
-  expect(document.querySelector('[data-slot="badge"]')).toBeNull();
   expect(writes).toEqual([]);
-  await click(button("Add to Up next"));
+  await click(button("Queue"));
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
+  expect(toast.getToasts().at(-1)).toMatchObject({ title: "Queued Friday night." });
   await click(button("Delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
+  expect(document.querySelector("h1")?.textContent).toBe("Lists");
   await undo();
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/restore", method: "POST", body: { token: "restore-token" } });
 });
 
-test("Lists shows total length and keeps Up next with its generated name", async () => {
-  const { SavedPlaylists } = await import("./SavedPlaylists");
-  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={2} inline />));
-  await flush();
-  expect(document.querySelector('[data-playlist-id="friday"]')?.textContent).toContain("1 item, 0:45");
-  await click(button("Keep Up next as a list"));
+test("Lists shows total length and saves Up next with its generated name", async () => {
+  await render(2);
+  expect(document.querySelector('[data-playlist-id="friday"]')?.textContent).toContain("1 item · 45:00");
+  await click(button("Save Up next as a list"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists", method: "POST", body: { name: expect.stringMatching(/^Up next, /), scope: "upNext" } });
-  await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
-  expect(button("All lists")).toBeTruthy();
-  await click(button("All lists"));
-  expect(document.activeElement?.getAttribute("data-playlist-id")).toBe("friday");
+  await click(button("Open Friday night"));
+  await click(button("Lists"));
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Open Friday night");
+});
+
+test("Update from Up next confirms before replacing the list", async () => {
+  await render(2);
+  await click(button("Open Friday night"));
+  await click(button("Update from Up next"));
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("Its items become the 2 in Up next.");
+  expect(writes).toEqual([]);
+  await click(button("Replace"));
+  expect(writes).toEqual([{ path: "/api/playlists/friday", method: "POST", body: { revision: 3, operation: "saveQueue" } }]);
+});
+
+test("an empty Up next cannot be saved and says why", async () => {
+  await render(0);
+  expect(button("Save Up next as a list").disabled).toBe(true);
+  expect(document.body.textContent).toContain("Queue something first.");
 });
 
 const sources = {
@@ -86,7 +109,7 @@ const sources = {
 } as const;
 const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
 
-for (const [provider, source] of Object.entries(sources)) test(`${provider} source-saved playlists show the provider badge and load and remove like queue saves`, async () => {
+for (const [provider, source] of Object.entries(sources)) test(`${provider} source-saved playlists show the provider and load and remove like queue saves`, async () => {
   const saved = { id: "source-list", name: "Evening list", revision: 2, updatedAt: 1, source, entries: [{ id: "ep-1", title: "Pilot", duration: 2700 }] };
   request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
@@ -94,13 +117,11 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
     if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true, ...(init.method === "DELETE" ? { undoToken: "restore-token" } : {}) }); }
     return Response.json(path === "/api/playlists" ? { playlists: [{ ...saved, entryCount: 1, totalDuration: 2700 }] } : { playlist: saved });
   }) as typeof fetch);
-  const { SavedPlaylists } = await import("./SavedPlaylists");
-  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} />));
-  await click(button("Saved lists"));
-  expect(document.querySelector('[data-slot="badge"]')?.textContent).toBe(providerLabels[provider as keyof typeof sources]);
-  await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="source-list"]')!);
+  await render();
+  expect(document.querySelector('[data-playlist-id="source-list"]')?.textContent).toContain(`${providerLabels[provider as keyof typeof sources]} · 1 item`);
+  await click(button("Open Evening list"));
   expect(writes).toEqual([]);
-  await click(button("Add to Up next"));
+  await click(button("Queue"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list/load", method: "POST", body: { revision: 2, mode: "append" } });
   await click(button("Delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list", method: "DELETE", body: { revision: 2 } });

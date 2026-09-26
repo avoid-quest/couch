@@ -32,11 +32,11 @@ test("healthy indexes with no upgrades report zero", async () => {
 test("failed dependency check never reports invented healthy or upgrade counts", async () => {
   const value = await readAptPackageStatus(async () => { throw new Error("broken dependencies"); });
   expect(value).toMatchObject({ available: null, security: null, broken: null });
-  expect(value.error).toContain("checks failed");
+  expect(value.error).toContain("Couldn't check system packages");
 });
 
 test("failed upgrade simulation preserves a successful dependency check", async () => {
   const value = await readAptPackageStatus(async args => { if (args[0] === "check") return ""; throw new Error("timeout"); });
   expect(value).toMatchObject({ available: null, security: null, broken: 0 });
-  expect(value.error).toContain("timed out");
+  expect(value.error).toContain("Couldn't check system packages");
 });

@@ -1,28 +1,18 @@
-import { useEffect, useRef, useState } from "react";
-import { BookmarkPlus } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { apiSend } from "@/api/client";
+import { savedNotice } from "@/copy";
 import type { ForLaterReference } from "../../shared/for-later";
 
+// The server bumps the for-later revision, so every Saved view refetches.
 export function SaveForLater({ origin, token, connected, reference, title }: {
   origin: string; token: string; connected: boolean; reference: ForLaterReference; title: string;
 }) {
-  const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState("");
-  const controller = useRef<AbortController | null>(null);
-  const referenceKey = reference.kind === "web" ? `web:${reference.url}` : reference.id;
-  useEffect(() => { setPending(false); setNotice(""); return () => controller.current?.abort(); }, [origin, token, connected, referenceKey]);
-  const save = async () => {
-    if (!connected || pending) return;
-    const request = new AbortController();
-    controller.current = request;
-    setPending(true); setNotice("");
-    try {
-      const response = await fetch(`${origin}/api/for-later`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ reference }), signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Could not save this item.");
-      if (!request.signal.aborted) setNotice("Saved for everyone on this TV.");
-    } catch (error) { if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "Could not save this item."); }
-    finally { if (!request.signal.aborted) setPending(false); }
-  };
-  return <div className="grid gap-1"><Button variant="outline" aria-label={`Save ${title} for later`} disabled={!connected || pending} onClick={() => void save()}><BookmarkPlus aria-hidden="true" />Save</Button>{notice && <p className="text-sm" role="status">{notice}</p>}</div>;
+  const save = useMutation({
+    mutationFn: () => apiSend({ origin, token }, "/api/for-later", { reference }, "POST", 20_000),
+    onSuccess: () => toast(savedNotice(title, true)),
+    onError: error => toast.error(error.message || `Couldn't save ${title}.`),
+  });
+  return <Button variant="ghost" aria-label={`Save ${title}`} disabled={!connected || save.isPending} onClick={() => save.mutate()}>Save</Button>;
 }

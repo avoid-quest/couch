@@ -1,24 +1,26 @@
-import { Children } from "react";
+import type { ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { PageHeader } from "@/components/PageHeader";
+import { ADMIN_ONLY } from "@/copy";
+import { useSessionGate } from "@/session/session-context";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { SettingsNav } from "./SettingsNav";
 
-type Props = { section: SettingsPage; children: React.ReactNode };
-
-export function SettingsLayout({ section, children }: Props) {
-  const sourcePage = section.startsWith("source-");
+/** Settings rail and page title. Admin pages show one read-only line to everyone else. */
+export function SettingsLayout({ section, children }: { section: SettingsPage; children: ReactNode }) {
+  const navigate = useNavigate();
+  const { identity } = useSessionGate();
+  const page = settingsPages[section];
+  const source = section.startsWith("source-");
+  const administrator = identity?.authority === "host" || identity?.authority === "administrator";
+  const locked = page.manage === "administrator" && !administrator && !(section === "connection" && identity?.claimAvailable);
   return (
-    <section aria-label="Settings" className="min-w-0" data-page="Settings">
-      <div className="settings-grid settings-page-layout isolate grid items-start gap-6">
-        <SettingsNav active={section} />
-        <div className="settings-page-content relative z-10 min-w-0">
-          <header className="mb-5">
-            <h1 className="text-[2rem] font-semibold tracking-tight" tabIndex={-1}>{settingsPages[section].label}</h1>
-          </header>
-          <div className="space-y-6" data-tv-local-only={sourcePage ? "" : undefined}>
-            {Children.toArray(children).map((child, index) => (
-              <div key={index} className="settings-flat-section">{child}</div>
-            ))}
-          </div>
+    <section aria-label="Settings" data-page="Settings" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
+      <SettingsNav active={section} />
+      <div className="min-w-0 max-w-3xl" data-tv-local-only={source ? "" : undefined}>
+        <PageHeader title={page.label} back={source ? { label: "Sources", onClick: () => void navigate({ to: settingsPages.sources.path }) } : undefined} />
+        <div className="flex min-w-0 flex-col gap-8">
+          {locked ? <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p> : children}
         </div>
       </div>
     </section>

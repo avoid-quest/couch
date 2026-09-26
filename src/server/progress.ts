@@ -20,11 +20,13 @@ export function playbackMediaId(entry: QueueEntry): string | null {
 type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem; entry: QueueEntry; observed: boolean; lastSaved: string; lastWrite: number; paused: boolean; seek: { target: number; from: number } | null };
 
 // Only native observations may change position. Commands merely request a checkpoint.
-export function createProgress(store: Store, committed: () => void, now = Date.now) {
+// committed(final) runs after each durable write; final marks the end of a
+// viewing (stop or EOF) rather than a periodic checkpoint during playback.
+export function createProgress(store: Store, committed: (final: boolean) => void, now = Date.now) {
   let active: ActiveProgress | null = null;
   let pending: ActiveProgress[] = [];
   const snapshot = (progress: ActiveProgress) => JSON.stringify([progress.item.position, progress.item.duration, progress.item.watched]);
-  const flush = (notify = true) => {
+  const flush = (notify = true, final = false) => {
     let saved = false;
     for (const progress of [...pending, active].filter((value): value is ActiveProgress => value !== null && value.observed)) {
       const value = snapshot(progress);
@@ -35,7 +37,7 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       saved = true;
     }
     pending = pending.filter(progress => snapshot(progress) !== progress.lastSaved);
-    if (saved && notify) committed();
+    if (saved && notify) committed(final);
     return saved;
   };
   return {
@@ -75,7 +77,7 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       const checkpoint = paused !== active.paused || seekAcknowledged || now() - active.lastWrite >= 10_000;
       active.paused = paused;
       if (seekAcknowledged) active.seek = null;
-      if (player.status === "ended") { active.item.watched = true; active.item.position = 0; flush(); active = null; }
+      if (player.status === "ended") { active.item.watched = true; active.item.position = 0; flush(true, true); active = null; }
       else if (checkpoint) flush();
     },
     finish(nearEnd = false, commit?: (save: () => void) => void) {
@@ -84,12 +86,12 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
           active.item.watched = true;
           active.item.position = 0;
         }
-        return flush(notify);
+        return flush(notify, true);
       };
       if (commit) {
         const previous = structuredClone({ active, pending });
         let saved = false;
-        try { commit(() => { saved = save(false); }); if (saved) committed(); }
+        try { commit(() => { saved = save(false); }); if (saved) committed(true); }
         catch (error) { ({ active, pending } = previous); throw error; }
       } else save();
       // Keep observing until all writes, including an enclosing transaction, commit.

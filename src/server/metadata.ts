@@ -7,6 +7,7 @@ import { ControllerError } from "./controllers";
 import { correctedNfo, correctedShowNfo, MetadataError, metadataChanges, metadataHash, metadataValues } from "./metadata-values";
 import { createTmdb } from "./tmdb";
 import { parseVideoNfo, videoArtwork, type OriginalVideoNfo, type VideoArtwork } from "./video-metadata";
+import { ADMIN_ONLY, CHANGED_ELSEWHERE } from "./messages";
 
 type Saved = { itemId: string; base: string; changes: string; origins: string; match: string | null; original: Uint8Array | null; originals: string };
 type Row = { rowid: number; id: string; title: string; video: string; artworkId: string | null; path: string; duration: number | null; sourceId: string };
@@ -54,7 +55,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     db.transaction(() => {
       authorize();
       const current = view(id);
-      if (current.revision !== revision) throw new MetadataError("This metadata changed on another device or during a scan. Reload before saving.", 409);
+      if (current.revision !== revision) throw new MetadataError(CHANGED_ELSEWHERE, 409);
       const state = saved(id);
       if (!state) throw new MetadataError("Rescan this item once before correcting metadata.", 409);
       if (image) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(image.id, image.data, image.mimeType);
@@ -109,8 +110,8 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before editing metadata.", 401);
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required to edit metadata.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
         if (request.signal.aborted) throw new MetadataError("Metadata request was cancelled.", 409);
       };
       try {
@@ -189,7 +190,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
         return Response.json(commit(id, value.revision, changes, "Manual", value.clearMatch ? null : undefined, image, authorize));
       } catch (error) {
         if (error instanceof MetadataError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
-        return Response.json({ error: "Could not update metadata. No correction was saved." }, { status: 500 });
+        return Response.json({ error: "Couldn't save the correction." }, { status: 500 });
       }
     },
     close() { tmdb.close(); previews.clear(); },

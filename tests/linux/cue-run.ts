@@ -148,20 +148,20 @@ try {
   await httpRemote.minimize();
   await otherRemote.restore();
   await otherRemote.ui.section("Queue");
-  await otherRemote.ui.button("Pause", ".player-band");
+  await otherRemote.ui.button("Pause", "[data-player-band]");
   await until("second actual browser pauses the cue on both controller snapshots", () => all(state => state.player.status === "paused"));
   await otherRemote.screenshot("cue-second-phone-paused");
   await otherRemote.minimize();
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
-  await httpRemote.ui.button("Resume", ".player-band");
+  await httpRemote.ui.button("Resume", "[data-player-band]");
   await until("first actual browser resumes the cue paused by the second browser", () => all(state => state.player.status === "playing"));
-  await httpRemote.ui.button("Pause", ".player-band");
+  await httpRemote.ui.button("Pause", "[data-player-band]");
   await until("first actual browser pauses before bounded stop evidence", () => all(state => state.player.status === "paused"));
   await httpRemote.screenshot("cue-first-phone-controls");
   await httpRemote.minimize();
   await otherRemote.restore();
-  await otherRemote.ui.button("Stop playback", ".player-band");
+  await otherRemote.ui.button("Stop", "[data-player-band]");
   await until("second actual browser stops the shared cue and retires its playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
   await otherRemote.minimize();
   }
@@ -176,7 +176,7 @@ try {
   clients.forEach(client => client.connect());
   await until("both persisted pairings reconnect with the same queue and no autoplay", () => all(state => state.player.status === "idle" && state.player.playbackId === null && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueIds)));
   for (const [index, remote] of [httpRemote, otherRemote].entries()) {
-    await until(`actual HTTP browser ${index + 1} reconnects stopped after desktop restart`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.header-status button[aria-label^=Playback]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
+    await until(`actual HTTP browser ${index + 1} reconnects stopped after desktop restart`, () => remote!.ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected' && document.querySelector('[data-app-status] button[aria-label^=Playing]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
     await remote!.restore();
     await remote!.ui.section("Queue");
     await remote!.screenshot(`cue-phone-${index + 1}-reconnected`);

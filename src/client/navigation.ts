@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
@@ -38,7 +38,7 @@ function moveFocus(key: string) {
     if (first) { focus(first); return; }
   }
   if (key === "ArrowDown" && active.closest(".player-page [role=slider]")) {
-    const play = scope.querySelector<HTMLElement>(".player-page .play-button");
+    const play = scope.querySelector<HTMLElement>(".player-page [data-play-button]");
     if (play && visible(play)) { focus(play); return; }
   }
   const from = active.getBoundingClientRect();
@@ -74,7 +74,7 @@ export function applyTvNavigation(key: NavigationKey) {
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
-    if (key !== "back" && scope.querySelector(".player-band-hidden")) {
+    if (key !== "back" && scope.querySelector("[data-player-band=hidden]")) {
       sendKey(document.body, key === "select" ? "Enter" : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key]);
       return true;
     }
@@ -120,8 +120,7 @@ export function applyTvNavigation(key: NavigationKey) {
 
 // Radix owns navigation within its controls; spatial movement connects the rest.
 export function useNavigation(onBack: () => void) {
-  const back = useRef(onBack);
-  back.current = onBack;
+  const back = useEffectEvent(onBack);
   useEffect(() => {
     const keyboard = () => document.documentElement.setAttribute("data-keyboard", "");
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
@@ -134,7 +133,7 @@ export function useNavigation(onBack: () => void) {
         const localBack = [...navigationScope().querySelectorAll<HTMLButtonElement>("[data-back]")].find(visible);
         // The component restores focus after its own navigation has committed.
         if (localBack) localBack.click();
-        else back.current();
+        else back();
         return;
       }
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;

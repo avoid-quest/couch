@@ -38,8 +38,9 @@ async function render() {
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => null });
   const sound = createRoute({ getParentRoute: () => base, path: "/settings/sound", component: () => null });
   const router = createRouter({ routeTree: base.addChildren([find, sound]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
-  await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Playback on Living room: Connected" })));
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  await act(async () => { await router.load(); root.render(<QueryClientProvider client={new QueryClient()}><RouterProvider router={router} /></QueryClientProvider>); });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Playing on Living room: Connected" })));
   await flush();
 }
 
@@ -50,12 +51,12 @@ test("a typed Couch requires explicit switching and uses only its origin", async
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Connect" })));
   expect(window.location.origin).toBe(origin);
   expect(screen.getByText("Switch this browser to kitchen:4100?")).toBeDefined();
-  expect(screen.getByText(/Playback on Living room continues/)).toBeDefined();
+  expect(screen.getByText(/Living room keeps playing/)).toBeDefined();
   expect(request.mock.calls.every(([input]: [unknown]) => String(input).startsWith(origin))).toBe(true);
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Keep Living room" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Cancel" })));
   expect(window.location.origin).toBe(origin);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Connect" })));
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Switch Couch" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Switch" })));
   expect(window.location.href).toBe("http://kitchen:4100/");
   expect(request.mock.calls.every(([input]: [unknown]) => String(input).startsWith(origin))).toBe(true);
   expect(window.localStorage.getItem("couch.remote-token")).toBe(token);
@@ -64,7 +65,7 @@ test("a typed Couch requires explicit switching and uses only its origin", async
 test("a remembered Couch is offered without reusing this Couch's pairing", async () => {
   rememberConnection("http://kitchen:4100", { name: "Kitchen", urls: ["http://kitchen:4100"], installationId: "kitchen-installation", player: "idle" });
   await render();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: /Play on Kitchen/ })));
+  await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Kitchen" })));
   expect(screen.getByText("Switch this browser to kitchen:4100?")).toBeDefined();
   expect(window.location.origin).toBe(origin);
   expect(request.mock.calls.every(([input]: [unknown]) => String(input).startsWith(origin))).toBe(true);
@@ -75,8 +76,8 @@ test("addresses with pairing details or paths cannot become destinations", async
   for (const address of ["http://secret@kitchen:4100", "http://kitchen:4100/#pair=123456", "http://kitchen:4100/api", "javascript:alert(1)"]) {
     await act(async () => fireEvent.change(screen.getByRole("textbox", { name: "Another Couch address" }), { target: { value: address } }));
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Connect" })));
-    expect(screen.getByRole("alert").textContent).toContain("without a path or pairing details");
-    expect(screen.queryByRole("button", { name: "Switch Couch" })).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Enter just the address");
+    expect(screen.queryByRole("button", { name: "Switch" })).toBeNull();
   }
   expect(window.location.origin).toBe(origin);
 });

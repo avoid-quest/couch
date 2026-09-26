@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import { fireEvent, screen } from "../../../testing";
+import { fireEvent, screen, within } from "../../../testing";
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -45,12 +45,12 @@ test("an initial Bluetooth permission error tells the administrator where to ena
   expect(screen.getByRole("alert").textContent).toContain("Allow Couch to use Bluetooth in System Settings");
 });
 
-test("disconnecting a paired speaker asks inline before changing sound", async () => {
+test("disconnecting a paired speaker asks for confirmation first", async () => {
   const actions: string[] = [];
   (globalThis.fetch as ReturnType<typeof spyOn>).mockImplementation((async (input, init) => {
     if (new URL(String(input)).pathname === "/api/bluetooth") {
       if (init?.method === "POST") actions.push(JSON.parse(String(init.body)).action.op);
-      return Response.json({ adapter: "available", operation: null, devices: [{ address: "AA:BB:CC:DD:EE:FF", name: "Speaker", paired: true, connected: true }] });
+      return Response.json({ adapter: "available", operation: null, devices: [{ address: "AA:BB:CC:DD:EE:FF", name: "Speaker", paired: true, connected: true, available: true }] });
     }
     return Response.json({ outputs: [], routing: {} });
   }) as typeof fetch);
@@ -62,7 +62,7 @@ test("disconnecting a paired speaker asks inline before changing sound", async (
   await act(async () => { await Bun.sleep(20); });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Disconnect Speaker" })));
   expect(actions).toEqual([]);
-  expect(screen.getByRole("group", { name: "Confirm disconnect Speaker" })).toBeDefined();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Disconnect device" })));
+  const dialog = screen.getByRole("alertdialog", { name: "Disconnect Speaker?" });
+  await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "Disconnect" })));
   expect(actions).toEqual(["disconnect"]);
 });

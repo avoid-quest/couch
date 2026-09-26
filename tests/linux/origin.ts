@@ -61,7 +61,7 @@ function launch(home: string) {
   return chromium.launch({ executablePath, headless: true, env: { ...process.env, HOME: home }, args: ["--no-sandbox", "--disable-dev-shm-usage", "--host-resolver-rules=MAP couch-origin.test 127.0.0.1", "--no-proxy-server"] });
 }
 async function connected(page: any) {
-  await page.waitForFunction(() => document.querySelector(".header-status [role=status]")?.textContent === "Player unavailable", undefined, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelector("[data-app-status] [role=status]")?.textContent === "Player unavailable", undefined, { timeout: 15000 });
 }
 async function pair(page: any, code: string) {
   const response = await page.goto(origin);
@@ -163,14 +163,14 @@ https://couch-origin.test:8443 {
   pass("Actual TLS proxy rejects wrong Origin, scheme and authentication; wrong Host does not return Couch connection details", { wrongHostStatus: wrongHost.status, wrongHostBody: wrongHost.body, directWrongHostStatus: directWrongHost.status });
 
   await stop(proxy); proxy = undefined;
-  await until("Browser observes stopped proxy", async () => (await first.locator(".header-status").textContent())?.includes("Player unavailable") === false);
+  await until("Browser observes stopped proxy", async () => (await first.locator("[data-app-status]").textContent())?.includes("Player unavailable") === false);
   await startProxy(); await connected(first); await connected(second);
   assert.equal(hash(await readFile(`${privateDir}/caddy-data/caddy/pki/authorities/local/root.crt`)), hash(rootCa));
   assert.deepEqual(await current(first, token), controller);
   pass("Caddy restart retains its CA and both browsers reconnect without pairing");
 
   await stop(server); server = undefined;
-  await until("Browser observes stopped Couch", async () => (await first.locator(".header-status").textContent())?.includes("Player unavailable") === false);
+  await until("Browser observes stopped Couch", async () => (await first.locator("[data-app-status]").textContent())?.includes("Player unavailable") === false);
   await startServer(); await connected(first); await connected(second);
   assert.deepEqual(await current(first, token), controller);
   assert.deepEqual(await current(second, token2), controller2);

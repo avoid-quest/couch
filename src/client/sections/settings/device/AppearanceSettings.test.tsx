@@ -3,6 +3,9 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { fireEvent, screen } from "@/testing";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let window: Window, root: Root, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -18,7 +21,7 @@ beforeEach(async () => {
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 
-afterEach(async () => {
+afterEach(async () => { queryClient.clear();
   await act(async () => root.unmount());
   request.mockRestore();
   await window.happyDOM.abort();
@@ -28,7 +31,7 @@ afterEach(async () => {
 
 test("desktop size changes this client without touching the selected host's TV size", async () => {
   const { AppearanceSettings } = await import("./AppearanceSettings");
-  await act(async () => root.render(<AppearanceSettings scope="device" tvPresentation={false} credentials={{ origin: "http://localhost", token: "admin" }} connected administrator />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><AppearanceSettings scope="device" tvPresentation={false} credentials={{ origin: "http://localhost", token: "admin" }} connected administrator /></QueryClientProvider>));
   expect(screen.queryByRole("group", { name: "TV interface size" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Larger" })));
   expect(screen.getByRole("radio", { name: "Larger" }).getAttribute("aria-checked")).toBe("true");
@@ -38,7 +41,7 @@ test("desktop size changes this client without touching the selected host's TV s
 
 test("TV presentation keeps its preview request separate from client storage", async () => {
   const { AppearanceSettings } = await import("./AppearanceSettings");
-  await act(async () => root.render(<AppearanceSettings scope="device" tvPresentation credentials={{ origin: "http://localhost", token: "admin" }} connected administrator />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><AppearanceSettings scope="device" tvPresentation credentials={{ origin: "http://localhost", token: "admin" }} connected administrator /></QueryClientProvider>));
   expect(screen.queryByRole("group", { name: "This client interface size" })).toBeNull();
   await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Larger" })));
   expect(request).toHaveBeenCalledTimes(1);

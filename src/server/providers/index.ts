@@ -155,7 +155,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         } finally { active--; }
       } catch (error) {
         if (error instanceof ProviderError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
-        return Response.json({ error: "The provider could not complete this request. Try again shortly." }, { status: 502 });
+        return Response.json({ error: "Couldn't complete this request. Try again." }, { status: 502 });
       }
     },
     close() { if (closed) return; closed = true; shutdown.abort(); cache.clear(); db.close(); },

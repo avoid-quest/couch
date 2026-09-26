@@ -91,7 +91,7 @@ test("write lock fails promptly, retains memory and recovers on the next write",
     const started = performance.now();
     history.add("Command", "Storage locked");
     expect(performance.now() - started).toBeLessThan(250);
-    expect(history.error()).toContain("could not be saved");
+    expect(history.error()).toContain("Couldn't save recent errors");
     expect(history.recent()[0]!.message).toBe("Storage locked");
     lock.run("ROLLBACK");
     history.add("Command", "Recovered");
@@ -106,7 +106,7 @@ test("unreadable history preserves data and recovers after repair and restart", 
   const first = log(path); first.close();
   const db = new Database(path); db.run("UPDATE diagnostic_history SET entries = 'not-json'");
   const failed = log(path);
-  expect(failed.error()).toContain("could not be read");
+  expect(failed.error()).toContain("Couldn't read saved errors");
   failed.add("Command", "Still usable");
   expect(failed.recent()[0]!.message).toBe("Still usable");
   expect(stored(path)).toBe("not-json");
@@ -118,7 +118,7 @@ test("unreadable history preserves data and recovers after repair and restart", 
 
 test("unavailable directory cannot prevent logging or shutdown", () => {
   const history = log(join(fixture(), "missing", "state.sqlite"));
-  expect(history.error()).toContain("could not be read");
+  expect(history.error()).toContain("Couldn't read saved errors");
   expect(() => history.add("Playback", "Still usable")).not.toThrow();
   expect(history.recent()).toHaveLength(1);
   expect(() => history.close()).not.toThrow();

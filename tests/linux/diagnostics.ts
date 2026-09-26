@@ -29,7 +29,7 @@ const media = Bun.serve({ hostname: "127.0.0.1", port: 4200, fetch: () => new Re
 try {
   await until("diagnostics native driver starts", async () => { try { return (await fetch("http://127.0.0.1:4444/status")).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')"));
+  await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('[data-app-nav] a[href^=\"/settings\"]')"));
   await tv.button("Settings"); await tv.settingsSection("connection");
   await tv.button("Pair a remote", 'section[aria-label="Settings"]');
   await until("pairing dialog loads its current code", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] [data-pairing-code]')?.textContent || '')"));
@@ -61,9 +61,9 @@ try {
   await until("ordinary remote receives player state", () => state !== null);
   await tv.section("Find");
   await tv.type("#media-search", "http://127.0.0.1:4200/fixture.mkv");
-  await until("Find offers the diagnostic fixture link", () => tv.execute("return !!document.querySelector('.find-link-card')"));
-  await tv.button("Direct media", ".find-link-choice");
-  await tv.button("Play", ".find-link-actions");
+  await until("Find offers the diagnostic fixture link", () => tv.execute("return !!document.querySelector('[aria-label=\"Pasted link\"]')"));
+  await tv.button("Direct media", '[aria-label="Pasted link"]');
+  await tv.button("Play", '[aria-label="Pasted link"]');
   await until("native queue contains the diagnostic fixture", () => state?.queue.some(entry => entry.source === "http://127.0.0.1:4200/fixture.mkv") === true);
   await until("diagnostic fixture plays through native mpv", () => state?.player.status === "playing" && state.player.position > 0.5);
   const before = state!.player;
@@ -84,8 +84,8 @@ try {
   await phone.restore(); await phone.ui.browse(); await phone.ui.button("Settings"); await phone.ui.settingsSection("advanced");
   await until("phone shows the observed software decoder", () => phone!.ui.execute("return [...document.querySelectorAll('[data-advanced-settings] dt')].some(term => term.textContent === 'Hardware decoder' && term.nextElementSibling?.textContent.startsWith('no'))"));
   await assertResponsive(phone.ui, "Advanced native playback details"); await phone.screenshot("diagnostics-phone-playing");
-  await phone.ui.button("Export diagnostics");
-  await until("phone starts its explicit diagnostic download", () => phone!.ui.execute("return document.querySelector('[data-advanced-settings]')?.textContent.includes('Diagnostic download started.')"));
+  await phone.ui.button("Export", "[data-advanced-settings]");
+  await until("phone starts its explicit diagnostic download", () => phone!.ui.execute("return document.body.textContent.includes('Downloaded.')"));
   await Bun.write(`${artifacts}/diagnostics-bundle.json`, body);
   await Bun.write(`${artifacts}/diagnostics-acceptance.json`, JSON.stringify({
     sourceRevision: process.env.COUCH_SOURCE_REVISION,

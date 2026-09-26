@@ -85,7 +85,7 @@ test.each(["replace", "play"] as const)("failed %s preserves progress observatio
   const before = session.state;
   const sent = commands.length;
   failProgress = true;
-  expect(() => session.loadQueue(entries, mode)).toThrow("Could not save viewing progress");
+  expect(() => session.loadQueue(entries, mode)).toThrow("Couldn't save your progress");
   expect(session.state.queue).toEqual(before.queue);
   expect(session.state.player).toEqual(before.player);
   expect(store.progress("household", "library:current")?.position).toBe(100);
@@ -140,7 +140,7 @@ test("a completion-write failure after queue commit stops the removed item and r
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "library:current" }, playNow: true });
   session.observe({ ...idle, playbackId: session.state.player.playbackId, status: "playing", position: 950, duration: 1000, seekable: true });
-  expect(() => session.loadQueue(entries, "play")).toThrow("Could not save viewing progress");
+  expect(() => session.loadQueue(entries, "play")).toThrow("Couldn't save your progress");
   expect(session.state.queue.map(entry => entry.title)).toEqual(entries.map(entry => entry.title));
   expect(session.state.currentEntryId).toBeNull();
   expect(commands.at(-1)).toEqual({ type: "stop" });

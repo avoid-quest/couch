@@ -1,6 +1,7 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import { ControllerError } from "./controllers";
 import type { JellyfinSource } from "./jellyfin";
+import { ADMIN_ONLY } from "./messages";
 
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "no-store" } });
@@ -33,8 +34,8 @@ export function createJellyfinSettings({ jellyfin, invalidate }: { jellyfin: Pic
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage Jellyfin.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
         if (request.signal.aborted) throw new ControllerError("The request was cancelled.", 409);
       };
       try {
@@ -49,7 +50,7 @@ export function createJellyfinSettings({ jellyfin, invalidate }: { jellyfin: Pic
           if (request.method !== "POST") return methods("POST");
           let status;
           try { status = await jellyfin.test(); }
-          catch (error) { authorize(); return json({ error: error instanceof Error ? error.message : "Could not test the Jellyfin connection." }, 502); }
+          catch (error) { authorize(); return json({ error: error instanceof Error ? error.message : "Couldn't test the Jellyfin connection." }, 502); }
           authorize();
           return json(status);
         }
@@ -64,7 +65,7 @@ export function createJellyfinSettings({ jellyfin, invalidate }: { jellyfin: Pic
         return json(jellyfin.status());
       } catch (error) {
         try { authorize(); } catch (reason) { error = reason; }
-        return json({ error: error instanceof ControllerError ? error.message : "Could not update Jellyfin. Check the server address, username, and password." }, error instanceof ControllerError ? error.status : 502);
+        return json({ error: error instanceof ControllerError ? error.message : "Couldn't update Jellyfin. Check the address, username and password." }, error instanceof ControllerError ? error.status : 502);
       }
     },
   };

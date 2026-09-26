@@ -120,7 +120,7 @@ export async function readCueAlbum(root: string, cuePath: string, sourceId: stri
   } finally { await audio.file.close(); }
   if (!metadata || !["FLAC", "WAVE"].includes(metadata.format.container ?? "") || metadata.format.lossless !== true) throw new Error("Cue audio must contain lossless FLAC or WAV data.");
   const music = normalizeMusicMetadata(metadata);
-  if (music.duration === null || !Number.isFinite(music.duration) || music.duration <= 0) throw new Error("Could not read the cue audio duration.");
+  if (music.duration === null || !Number.isFinite(music.duration) || music.duration <= 0) throw new Error("Couldn't read the cue audio duration.");
   const localPath = relative(root, path);
   const artist = sheet.artist ?? music.albumArtist ?? music.artist;
   return {

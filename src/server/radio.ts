@@ -145,7 +145,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
         authorize();
         if (closed) throw new RadioError("The radio catalog is closing.", 503);
         if (controller.signal.aborted) throw new RadioError("Radio playlist removed.", 404);
-        const message = signal.aborted ? "The playlist server took too long to respond." : error instanceof Error ? error.message.slice(0, 300) : "The radio playlist could not be loaded.";
+        const message = signal.aborted ? "The playlist server took too long to respond." : error instanceof Error ? error.message.slice(0, 300) : "Couldn't load the radio playlist.";
         db.query("UPDATE radio_playlists SET error = ? WHERE id = ?").run(message, id);
         onChange();
         throw new RadioError(message, 502);

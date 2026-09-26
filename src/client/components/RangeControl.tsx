@@ -44,7 +44,7 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
         setDraft(next); commit(next);
       }
       if (label === "Playback position" && event.key === "ArrowDown") {
-        const play = event.currentTarget.closest(".player-page")?.querySelector<HTMLElement>(".play-button:not(:disabled)");
+        const play = event.currentTarget.closest(".player-page")?.querySelector<HTMLElement>("[data-play-button]:not(:disabled)");
         if (play) { event.preventDefault(); event.stopPropagation(); play.focus(); }
       }
     }}

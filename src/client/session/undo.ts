@@ -20,12 +20,12 @@ function resume(state: SessionState): Resume {
 
 export function undoPlan(action: Action, before: SessionState, after: SessionState): UndoPlan | null {
   const expectedQueueIds = after.queue.map(entry => entry.id);
-  if (action.type === "stop" && resume(before) && !after.currentEntryId) return { text: "Playback stopped", expectedCurrent: null, expectedQueueIds, resume: resume(before) };
+  if (action.type === "stop" && resume(before) && !after.currentEntryId) return { text: "Stopped.", expectedCurrent: null, expectedQueueIds, resume: resume(before) };
   if (action.type === "remove") {
     const index = before.queue.findIndex(entry => entry.id === action.entryId);
     if (index < 0 || after.queue.some(entry => entry.id === action.entryId) || after.queueRemoval?.entryId !== action.entryId) return null;
     return {
-      text: `Removed ${before.queue[index]!.title}`,
+      text: `Removed ${before.queue[index]!.title}.`,
       expectedCurrent: before.currentEntryId === action.entryId ? null : before.currentEntryId,
       expectedQueueIds,
       resume: before.currentEntryId === action.entryId ? resume(before) : null,
@@ -35,7 +35,7 @@ export function undoPlan(action: Action, before: SessionState, after: SessionSta
   if (action.type === "play" && action.entryId !== before.currentEntryId && after.currentEntryId === action.entryId && resume(before)) {
     const index = before.queue.findIndex(entry => entry.id === action.entryId);
     return {
-      text: `Playing ${before.queue[index]?.title ?? "item"}`,
+      text: `Playing ${before.queue[index]?.title ?? "item"}.`,
       expectedCurrent: action.entryId,
       expectedQueueIds,
       resume: resume(before),
@@ -46,14 +46,14 @@ export function undoPlan(action: Action, before: SessionState, after: SessionSta
     const existing = new Set(before.queue.map(entry => entry.id));
     const addedIds = after.queue.filter(entry => !existing.has(entry.id)).map(entry => entry.id);
     if (!after.currentEntryId || !addedIds.includes(after.currentEntryId)) return null;
-    return { text: "Playback replaced", expectedCurrent: after.currentEntryId, expectedQueueIds, resume: resume(before), addedIds };
+    return { text: "Replaced what was playing.", expectedCurrent: after.currentEntryId, expectedQueueIds, resume: resume(before), addedIds };
   }
   return null;
 }
 
 const ids = (state: SessionState) => state.queue.map(entry => entry.id);
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index]);
-const changed = () => new Error("The shared queue or playback changed. Check its current state before trying again.");
+const changed = () => new Error("Up next changed. Can't undo.");
 function assertCurrent(current: () => SessionState | null, expected: SessionState) {
   const state = current();
   if (!state || state.currentEntryId !== expected.currentEntryId || !same(ids(state), ids(expected))) throw changed();
@@ -68,7 +68,7 @@ async function observe(current: () => SessionState | null, beforeQueue: string[]
     if (!same(ids(state), beforeQueue) || state.currentEntryId !== beforeCurrent) throw changed();
     await new Promise(resolve => setTimeout(resolve, 25));
   }
-  throw new Error("The player did not confirm the restored queue. Check its current state.");
+  throw new Error("Couldn't fully undo.");
 }
 
 function reorderedForPlay(state: SessionState, entryId: string) {
@@ -126,11 +126,11 @@ export async function applyUndo(plan: UndoPlan, command: (action: Action) => Pro
       if (player?.playbackId && player.playbackId !== plan.resume.playbackId && ["playing", "paused"].includes(player.status)) {
         assertCurrent(current, state);
         if (plan.resume.seekable && plan.resume.position > 1) {
-          if (!player.seekable) throw new Error("Playback resumed, but its position is no longer seekable.");
+          if (!player.seekable) throw new Error("Couldn't fully undo.");
           await command({ type: "seek", playbackId: player.playbackId, position: plan.resume.position });
         }
         if (plan.resume.paused && player.status !== "paused") await command({ type: "pause", playbackId: player.playbackId, paused: true });
-      } else throw new Error("Playback resumed, but its position could not be restored.");
+      } else throw new Error("Couldn't fully undo.");
     }
   }
   if (plan.moved) {

@@ -35,7 +35,7 @@ test("the data-page parser decodes captured pages and fails clearly when the lay
   const page = parseInertiaPage(await fixture("archive.html"));
   expect(page.component).toBe("Titles/Browse");
   expect(Array.isArray(page.props.titles)).toBe(true);
-  expect((await fail(new Promise(resolve => resolve(parseInertiaPage("<html><body>blocked</body></html>"))))).message).toContain("StreamingCommunity changed its website.");
+  expect((await fail(new Promise(resolve => resolve(parseInertiaPage("<html><body>blocked</body></html>"))))).message).toContain("StreamingCommunity moved.");
 });
 
 test("archive rows normalize into provider items with posters, plots and stable links", async () => {
@@ -113,17 +113,17 @@ test("the preview endpoint refreshes details without loading a full title page",
 describe("upstream failures map to actionable source errors", () => {
   test("a redirecting origin reports the administrator fix", async () => {
     const rotated = await fail(streamingCommunityPreview(1, origin, undefined, fetcher(async () => { throw new TypeError("redirect"); })));
-    expect(rotated.message).toContain("update its origin in Settings > Sources");
+    expect(rotated.message).toContain("Update its site address in Settings → Sources");
   });
   test("missing pages and unknown layouts keep the 404 and layout errors", async () => {
     const missing = await fail(streamingCommunityBrowse({}, origin, undefined, respond(new Response("nope", { status: 404 }))));
     expect([missing.message, missing.status]).toEqual(["StreamingCommunity does not have this page.", 404]);
     const moved = await fail(streamingCommunityBrowse({}, origin, undefined, respond("<html></html>")));
-    expect(moved.message).toContain("StreamingCommunity changed its website.");
+    expect(moved.message).toContain("StreamingCommunity moved.");
     expect(moved.status).toBe(502);
   });
   test("an invalid configured origin and foreign links are rejected", async () => {
-    expect((await fail(streamingCommunityBrowse({}, "https://example.com"))).message).toBe("StreamingCommunity needs a valid website origin in Settings > Sources.");
+    expect((await fail(streamingCommunityBrowse({}, "https://example.com"))).message).toBe("StreamingCommunity needs a valid site address in Settings → Sources.");
     expect((await fail(streamingCommunityBrowse({ url: "https://example.com/it/archive" }))).message).toBe("Use a StreamingCommunity catalogue or title link.");
   });
 });
@@ -144,7 +144,7 @@ test("saved lists expand movies, seasons and whole series without retargeting or
   expect(whole.items).toHaveLength(8);
   expect(calls.filter(path => /season-/.test(path))).toHaveLength(4);
   const rotated = await fail(streamingCommunityList(`https://streamingcommunityz.taxi/it/titles/${movie.id}-${movie.slug}`, undefined, fetcher(async () => { throw new TypeError("redirect"); })));
-  expect(rotated.message).toContain("update its origin in Settings > Sources");
+  expect(rotated.message).toContain("Update its site address in Settings → Sources");
   const foreign = await fail(streamingCommunityList("https://example.com/it/titles/1-x"));
   expect([foreign.message, foreign.status]).toEqual(["Choose a StreamingCommunity film, series or season to save.", 400]);
 });

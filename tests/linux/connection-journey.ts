@@ -36,17 +36,17 @@ async function openNative() {
 
 async function connections(ui: UiDriver, description: string) {
   if (!await ui.execute("return location.pathname.startsWith('/settings')")) {
-    await until("native or browser navigation is ready", () => ui.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')"));
+    await until("native or browser navigation is ready", () => ui.execute("return !!document.querySelector('[data-app-nav] a[href^=\"/settings\"]')"));
     await ui.section("Settings");
   }
   if (!await ui.execute("return document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=connection]')?.getAttribute('aria-current') === 'page'")) await ui.settingsSection("connection");
-  await until(description, () => ui.execute("return !!document.querySelector('[aria-label=\"Connected devices\"]') && !document.body.textContent.includes('Loading settings…')"));
+  await until(description, () => ui.execute("return !!document.querySelector('[data-remotes], [data-admin-claim]') && !document.body.textContent.includes('Loading settings…')"));
 }
 
 async function rePair(ui: UiDriver, code: string, name: string) {
-  await until("revoked browser displays the real pairing form", () => ui.execute("return !!document.querySelector('#pairing-code') && document.querySelector('.header-status [role=status]')?.textContent === 'Pairing required'"));
-  await ui.type("#remote-name", name); await ui.type("#pairing-code", code); await ui.button("Connect", ".pair-form");
-  await until("replacement browser connects with a new credential", () => ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !document.querySelector('#pairing-code')"));
+  await until("revoked browser displays the real pairing form", () => ui.execute("return !!document.querySelector('#pairing-code') && document.querySelector('[data-app-status] [role=status]')?.textContent === 'Pairing required'"));
+  await ui.type("#remote-name", name); await ui.type("#pairing-code", code); await ui.button("Pair", ".pair-form");
+  await until("replacement browser connects with a new credential", () => ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected' && !document.querySelector('#pairing-code')"));
 }
 
 try {
@@ -63,25 +63,26 @@ try {
   await primary.screenshot("connection-claim-deep-link");
   const primaryToken = await token(phone);
   const primaryIdentity = await (await api(primaryToken, "/api/controllers/me")).json() as ControllerIdentity;
-  await until("administrator deep link survives identity loading after real browser pairing", () => phone.execute("return location.pathname === '/settings/connection' && !!document.querySelector('[aria-label=\"Connected devices\"]')"));
+  await until("administrator deep link survives identity loading after real browser pairing", () => phone.execute("return location.pathname === '/settings/connection' && !!document.querySelector('[data-remotes]')"));
   assert.equal(primaryIdentity.authority, "administrator", "the current first paired browser starts as the administrator");
 
   ordinary = await startHttpRemote(`${origin}/settings/connection`, pairingCode, artifacts, until, 4447);
   const helper = ordinary.ui, helperToken = await token(helper);
-  await until("ordinary deep link cannot expose connection management", () => helper.execute("return !document.querySelector('[aria-label=\"Connected devices\"] ul') && document.body.textContent.includes('Claim administration to manage devices.')"));
+  await until("ordinary deep link cannot expose connection management", () => helper.execute("return !document.querySelector('[data-remotes] [data-remote]')"));
   assert.equal((await api(helperToken, "/api/controllers")).status, 403, "ordinary browser cannot list controllers");
 
   await connections(phone, "administrator Connections reloads the paired browser");
-  await phone.button("Make administrator", "[aria-label='Connected devices']");
+  await phone.button("Make admin", "[data-remotes]");
   await until("administrator promotion reaches the paired browser", async () => (await (await api(helperToken, "/api/controllers/me")).json() as ControllerIdentity).authority === "administrator");
   await connections(helper, "promoted browser receives live connection authority");
   await connections(phone, "original administrator retains device management");
-  await phone.button("Make controller", "[aria-label='Connected devices']");
-  await until("administrator demotion removes ordinary browser management", async () => (await (await api(helperToken, "/api/controllers/me")).json() as ControllerIdentity).authority === "controller" && !await helper.execute("return !!document.querySelector('[aria-label=\"Connected devices\"] ul')"));
+  await phone.button("Remove admin", "[data-remotes]");
+  await until("administrator demotion removes ordinary browser management", async () => (await (await api(helperToken, "/api/controllers/me")).json() as ControllerIdentity).authority === "controller" && !await helper.execute("return !!document.querySelector('[data-remotes] [data-remote]')"));
 
   await connections(phone, "administrator reloads before revocation");
-  await phone.button("Remove", "[aria-label='Connected devices']");
-  await until("revocation visibly requires pairing in the real browser", () => helper.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Pairing required' && !!document.querySelector('[role=alert]')"));
+  await phone.button("Remove", "[data-remotes]");
+  await phone.button("Remove", "[role=alertdialog]");
+  await until("revocation visibly requires pairing in the real browser", () => helper.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Pairing required' && !!document.querySelector('[role=alert]')"));
   assert.equal((await api(helperToken, "/api/controllers/me")).status, 401, "revoked credentials cannot read identity");
   await ordinary.screenshot("connection-revoked");
 
@@ -89,17 +90,17 @@ try {
   const replacementToken = await token(helper);
   assert.notEqual(replacementToken, helperToken, "replacement pairing gets new credentials");
   await ordinary.refresh();
-  await until("browser refresh reconnects with replacement credentials", async () => await token(helper) === replacementToken && await helper.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("browser refresh reconnects with replacement credentials", async () => await token(helper) === replacementToken && await helper.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
 
   await request(`/session/${session}`, undefined, "DELETE"); session = "";
   await until("native sidecar stops before recovery restart", async () => { try { return !(await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) })).ok; } catch { return true; } });
   tv = await openNative();
   await connections(tv, "restarted native Connections reloads durable state");
   await ordinary.restore();
-  await until("replacement browser reconnects after native restart", () => helper.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"), 30_000);
+  await until("replacement browser reconnects after native restart", () => helper.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"), 30_000);
   await connections(helper, "reconnected controller sees recovery claim");
   await until("recovery claim is offered after restart", () => helper.execute("return !!document.querySelector('#administrator-code:not(:disabled)')"));
-  await helper.type("#administrator-code", recoveryCode); await helper.button("Claim administrator", "[aria-label='Claim administrator']");
+  await helper.type("#administrator-code", recoveryCode); await helper.button("Become admin", "[data-admin-claim]");
   await until("recovery claim after restart grants administration", async () => (await (await api(replacementToken, "/api/controllers/me")).json() as ControllerIdentity).authority === "administrator" && !await helper.execute("return !!document.querySelector('#administrator-code')"));
   await ordinary.screenshot("connection-recovery");
   await Bun.write(`${artifacts}/connection-journey.json`, JSON.stringify({ checks, clientStateProof: "src/client/session/connection-lifetime.test.tsx covers cache retirement and same-address installation replacement", physicalHardware: false }, null, 2));

@@ -4,13 +4,16 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { SessionState } from "../../../shared/protocol";
 import { applyTvNavigation } from "../../navigation";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let root: Root, window: Window, QueuePanel: typeof import("./QueuePanel").QueuePanel;
 let closeCount = 0;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const queue = ["one", "two", "three"].map(id => ({ id, title: id, source: `https://media.example/${id}` }));
 const state: SessionState = { queue, currentEntryId: "one", queueCursorEntryId: "one", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 100, volume: 80, seekable: true, error: null } };
-const render = (value: SessionState) => act(async () => root.render(<div className="player-sheet" role="dialog"><button onClick={() => closeCount++}>Close</button><QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} /></div>));
+const render = (value: SessionState) => act(async () => root.render(<div data-player-sheet role="dialog"><button onClick={() => closeCount++}>Close</button><QueryClientProvider client={queryClient}><QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} /></QueryClientProvider></div>));
 const play = (id: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="Play ${id}"]`)!;
 
 beforeEach(async () => {
@@ -26,7 +29,7 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
   await render(state);
 });
-afterEach(async () => {
+afterEach(async () => { queryClient.clear();
   await act(async () => root.unmount());
   await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
@@ -44,21 +47,21 @@ test("focus follows an upcoming item when it becomes played", async () => {
 test("removing the focused last upcoming row restores Close for D-pad selection", async () => {
   const lastUpcoming = { ...state, queue: queue.slice(0, 2) };
   await render(lastUpcoming);
-  await act(async () => document.querySelector<HTMLElement>('[data-queue-entry-id="two"] .queue-row-actions > button:last-child')!.focus());
+  await act(async () => document.querySelector<HTMLElement>('[data-queue-entry-id="two"] [data-slot=item-actions] > button:last-child')!.focus());
   await render({ ...lastUpcoming, queue: queue.slice(0, 1) });
-  const close = document.querySelector<HTMLButtonElement>(".player-sheet > button")!;
+  const close = document.querySelector<HTMLButtonElement>("[data-player-sheet] > button")!;
   expect(document.activeElement).toBe(close);
   close.getClientRects = () => [close.getBoundingClientRect()] as unknown as DOMRectList;
-  document.querySelector<HTMLElement>(".player-sheet")!.getClientRects = close.getClientRects;
+  document.querySelector<HTMLElement>("[data-player-sheet]")!.getClientRects = close.getClientRects;
   await act(async () => { applyTvNavigation("select"); });
   expect(closeCount).toBe(1);
 });
 
 test("removing the focused last upcoming row restores Find on the idle page", async () => {
   const idle = { ...state, currentEntryId: null, queueCursorEntryId: null, queue: queue.slice(1, 2) };
-  const renderIdle = (value: SessionState) => act(async () => root.render(<section className="player-idle" data-page="Now"><button data-page-first onClick={() => closeCount++}>Find something to play</button><QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} /></section>));
+  const renderIdle = (value: SessionState) => act(async () => root.render(<section data-player-idle data-page="Now"><button data-page-first onClick={() => closeCount++}>Find something to play</button><QueryClientProvider client={queryClient}><QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} /></QueryClientProvider></section>));
   await renderIdle(idle);
-  await act(async () => document.querySelector<HTMLElement>('[data-queue-entry-id="two"] .queue-row-actions > button:last-child')!.focus());
+  await act(async () => document.querySelector<HTMLElement>('[data-queue-entry-id="two"] [data-slot=item-actions] > button:last-child')!.focus());
   await renderIdle({ ...idle, queue: [] });
   const find = document.querySelector<HTMLButtonElement>("[data-page-first]")!;
   expect(document.activeElement === find).toBe(true);

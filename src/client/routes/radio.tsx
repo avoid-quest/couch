@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { RadioPage } from "../sections/music-radio/RadioPage";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/radio")({ component: RadioPage });
+export const Route = createFileRoute("/radio")({
+  beforeLoad: () => { throw redirect({ href: "/find?browse=radio" }); },
+});

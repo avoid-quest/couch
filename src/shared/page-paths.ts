@@ -12,7 +12,7 @@ export const legacyPaths: Record<string, string> = {
   "/browse/radio": "/find", "/browse/jellyfin": "/find",
 };
 
-export const frontendPaths = ["/settings/remotes", ...Object.values(pagePaths), ...Object.keys(legacyPaths), ...Object.values(settingsPages).map(page => page.path)];
+export const frontendPaths = ["/music", "/radio", "/settings/remotes", ...Object.values(pagePaths), ...Object.keys(legacyPaths), ...Object.values(settingsPages).map(page => page.path)];
 
 export const sectionForPath = (pathname: string): string | undefined => {
   const clean = pathname.replace(/\/$/, "") || "/";

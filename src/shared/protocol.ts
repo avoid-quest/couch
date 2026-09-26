@@ -15,7 +15,8 @@ export type ExternalSubtitle = { source: string; title: string; language?: strin
 export type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = { playbackId: string; stationId: string; provider: "radio.avoid.quest"; title: string; artworkUrl?: string; description?: string; programmeUrl?: string; sampledAt: number; expiresAt: number };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
-export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
+export type Domain = "library" | "progress" | "radio" | "iptv" | "providers" | "jellyfin" | "playlists" | "for-later" | "controllers" | "settings" | "sound" | "bluetooth" | "display" | "updates" | "tools";
+export type NavigationKey ="up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 
 export type PlayerState = {
   playbackId: string | null;
@@ -49,14 +50,8 @@ export type SessionState = {
   activeProfile: WatchingProfile;
   preferences?: PlaybackPreferences;
   progressError?: string | null;
-  libraryVersion?: number;
-  radioVersion?: number;
-  iptvVersion?: number;
-  providerVersion?: number;
-  jellyfinVersion?: number;
-  playlistVersion?: number;
-  forLaterVersion?: number;
-  controllerVersion?: number;
+  // Revision per client query-key root. A bump tells controllers to refetch that domain.
+  versions?: Partial<Record<Domain, number>>;
   installationName?: string;
   setupStep?: import("./setup").SetupStep;
   appearance?: TvAppearance;

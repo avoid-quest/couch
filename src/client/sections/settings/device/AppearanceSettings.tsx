@@ -1,29 +1,29 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { defaultTvAppearance, type InterfaceSize, type TvAppearance } from "../../../../shared/appearance";
+import { ChoiceGroup } from "@/components/ChoiceGroup";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { defaultTvAppearance, interfaceSizes, type InterfaceSize, type TvAppearance } from "../../../../shared/appearance";
 import type { Credentials } from "../../../session/session";
 import { saveRemoteInterfaceSize, useRemoteInterfaceSize } from "../../../interface-size";
-import { InterfaceSizeChoices } from "./InterfaceSizeChoices";
 import { TvInterfaceSize } from "./TvInterfaceSize";
 
-type Props = { tvPresentation: boolean; credentials: Credentials | null; connected: boolean; administrator: boolean; appearance?: TvAppearance; scope?: "all" | "device" | "tv"; hostName?: string };
+type Props = { tvPresentation: boolean; credentials: Credentials | null; connected: boolean; administrator: boolean; appearance?: TvAppearance; scope?: "all" | "device" | "tv" };
 
-export function AppearanceSettings({ tvPresentation, credentials, connected, administrator, appearance = defaultTvAppearance, scope = "all", hostName = "Couch" }: Props) {
+const sizeChoices = interfaceSizes.map(size => ({ value: String(size.value), label: size.label }));
+
+export function AppearanceSettings({ tvPresentation, credentials, connected, administrator, appearance = defaultTvAppearance, scope = "all" }: Props) {
   const size = useRemoteInterfaceSize();
-  const [notice, setNotice] = useState<string | null>(null);
-  const change = async (value: InterfaceSize) => setNotice(await saveRemoteInterfaceSize(value) ? null : "Changed for this visit. This client could not save the size.");
+  const [unsaved, setUnsaved] = useState(false);
+  const change = async (value: InterfaceSize) => setUnsaved(!await saveRemoteInterfaceSize(value));
   return (
-    <div className="space-y-5">
-      {(tvPresentation || scope === "tv" || scope === "all") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} hostName={hostName} />}
+    <SettingsSection>
+      {(tvPresentation || scope !== "device") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} />}
       {!tvPresentation && scope !== "tv" && (
-        <section className="space-y-3" aria-labelledby="remote-interface-size">
-          <div className="settings-choice-row grid grid-cols-[16rem_minmax(0,1fr)] items-center gap-4 border-t border-border py-3 max-[900px]:grid-cols-1"><h3 id="remote-interface-size">This client interface size</h3><InterfaceSizeChoices label="This client interface size" value={size} onChange={value => void change(value)} /></div>
-          <p className="text-muted-foreground">Text and controls on this client. Other clients keep their own size.</p>
-          <Button variant="outline" className="min-h-11" onClick={() => void change(1)}>Reset this client to default</Button>
-          {notice && <p role="status">{notice}</p>}
-        </section>
+        <SettingsRow label="Size on this device" description="Doesn't affect video or subtitles.">
+          <ChoiceGroup label="This client interface size" value={String(size)} options={sizeChoices} onValueChange={value => void change(Number(value) as InterfaceSize)} />
+        </SettingsRow>
       )}
-      <p className="text-muted-foreground">Interface size does not change the video picture or subtitles.</p>
-    </div>
+      {unsaved && <Alert><AlertDescription>Applied, but couldn't save on this device.</AlertDescription></Alert>}
+    </SettingsSection>
   );
 }

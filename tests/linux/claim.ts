@@ -39,13 +39,13 @@ async function verifyNavigationBoundary({ ui, clients, until }: Context) {
   const guest = clients[1]!;
   await ui.button("Settings");
   await ui.settingsSection("source-folders");
-  await ui.execute("[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Add TV folder').id = 'claim-add-folder'");
+  await ui.execute("[...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Add folder').id = 'claim-add-folder'");
   await focusProbe(ui, "#claim-add-folder");
   await navigate(ui, guest, until, "select");
   await stopProbe(ui);
-  assert.equal(await ui.execute("return !!document.querySelector('[aria-label=\"TV folder browser\"]')"), false, "Paired OK cannot launch native folder administration");
-  await ui.button("Add TV folder");
-  await until("physical input opens the protected folder browser", () => ui.execute("return !!document.querySelector('[aria-label=\"TV folder browser\"]')"));
+  assert.equal(await ui.execute("return !!document.querySelector('[aria-label=\"Folder browser\"]')"), false, "Paired OK cannot launch native folder administration");
+  await ui.button("Add folder");
+  await until("physical input opens the protected folder browser", () => ui.execute("return !!document.querySelector('[aria-label=\"Folder browser\"]')"));
   await navigate(ui, guest, until, "back");
   await ui.section("Now");
 

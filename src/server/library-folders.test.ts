@@ -58,8 +58,8 @@ test("legacy source must be explicitly verified before scanning or playing, whil
   db.query("DELETE FROM library_folder_identities").run();
   db.close();
   expect(library.managedSources()[0]?.verified).toBe(false);
-  expect(() => library.scan(source.id)).toThrow("Verify");
-  await expect(library.testSource(source.id, authorize)).rejects.toThrow("Verify");
+  expect(() => library.scan(source.id)).toThrow("Confirm this folder");
+  await expect(library.testSource(source.id, authorize)).rejects.toThrow("Confirm this folder");
   await expect(library.getPlayable(item.id)).rejects.toThrow("unavailable");
   expect(library.search().items[0]?.id).toBe(item.id);
   await library.testSource(source.id, authorize, true);

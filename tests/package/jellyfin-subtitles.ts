@@ -94,7 +94,7 @@ let connected = false;
 try {
   run("docker", "network", "connect", fixture.network, container); connected = true;
   native = (await driver(nativePort, "/session", { capabilities: { alwaysMatch: { browserName: "wry", "tauri:options": { application: "/usr/bin/couch" } } } })).sessionId;
-  await until("packaged TV connects", () => tv.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("packaged TV connects", () => tv.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   if (await tv.execute("return !!document.querySelector('[role=dialog]')")) await tv.key(keys.escape);
   const connection = await driver(nativePort, `/session/${native}/execute/async`, { script: "const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke('connection_info').then(done)", args: [] });
   for (const name of ["PGS remote one", "PGS remote two"]) {
@@ -152,8 +152,8 @@ try {
     exec("xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
     assert.ok((await phone.execute("return window.__httpPointer"))?.hit, "HTTP pointer reaches its intended control after X11 translation");
   };
-  await phone.type("#pairing-code", connection.pairingCode); await phone.button("Connect");
-  await until("real phone pairs", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await phone.type("#pairing-code", connection.pairingCode); await phone.button("Pair");
+  await until("real phone pairs", () => phone.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   await select(phone, -1); await select(phone, index);
   for (const width of [390, 768, 1440]) {
     for (let attempt = 0; attempt < 3; attempt++) {

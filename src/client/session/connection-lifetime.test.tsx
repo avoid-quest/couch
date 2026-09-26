@@ -53,6 +53,7 @@ async function connected() {
 }
 async function mount() {
   const { SessionGate, useSessionGate } = await import("./session-context");
+  const { PairForm } = await import("../sections/shell/PairForm");
   const { createRoot } = await import("react-dom/client");
   function Probe() {
     gate = useSessionGate(); client = useQueryClient();
@@ -61,6 +62,7 @@ async function mount() {
       <output role="status">{gate.status}</output>
       <p>{query.data?.items[0]?.title ?? "No cached history"}</p>
       <button onClick={() => gate.unpair()}>Unpair</button>
+      <PairForm />
     </>;
   }
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
@@ -71,9 +73,9 @@ async function mount() {
   await flush();
 }
 async function pair() {
-  await act(async () => { gate.setPairingCode("123456"); gate.setRemoteName("Memory remote"); });
+  const { requestPairing } = await import("../sections/shell/PairForm");
   const count = sockets.length;
-  await act(async () => { await gate.pair({ preventDefault() {} }); });
+  await act(async () => gate.savePairing(await requestPairing(gate.pairingOrigin, "123456", "Memory remote")));
   await until(() => sockets.length > count);
   await connected();
 }
@@ -123,7 +125,7 @@ test("unpair retires in-flight reads; re-pair cannot display a late old househol
   await until(() => !!screen.queryByText("Old household"));
   const previous = client;
   delayedRead = Promise.withResolvers<Response>();
-  void previous.invalidateQueries({ queryKey: ["library", "history"] });
+  void previous.invalidateQueries({ queryKey: ["progress", "history"] });
   await until(() => !!readSignal);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Unpair" })));
   expect(client).not.toBe(previous);
@@ -149,12 +151,21 @@ test("storage-disabled pairing supplies live administrator authority and authent
   expect(requests.some(request => request.path === "/api/progress/history" && request.token === "Bearer new-secret")).toBe(true);
 });
 
+test("an older paired remote keeps its token when Couch reads the current installation ID", async () => {
+  localStorage.removeItem("couch.remote-token");
+  localStorage.setItem("modern-kodi.remote-token", "old-secret");
+  await mount(); await connected();
+  expect(gate.credentials?.token).toBe("old-secret");
+  expect(localStorage.getItem("couch.remote-token")).toBe("old-secret");
+  expect(localStorage.getItem("modern-kodi.remote-token")).toBeNull();
+});
+
 test("a role change retires administrator data and immediately changes route authority", async () => {
   await mount(); await connected();
   const previous = client;
   previous.setQueryData(["controllers", "list"], [{ name: "Administrator-only data" }]);
   role = "controller";
-  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, controllerVersion: 1 } }));
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { controllers: 1 } } }));
   await until(() => gate.identity?.authority === "controller");
   expect(client).not.toBe(previous);
   expect(client.getQueryData(["controllers", "list"])).toBeUndefined();
@@ -201,13 +212,14 @@ test("ordinary reconnect revalidates cached reads even when server version count
 });
 
 test("unpair cancels a pending pairing response rather than silently pairing the tab again", async () => {
+  window.history.replaceState(null, "", "/#pair=123456");
   await mount(); await connected();
   delayedPair = Promise.withResolvers<Response>();
-  let pending!: Promise<void>;
-  await act(async () => { pending = gate.pair({ preventDefault() {} }); });
+  await act(async () => fireEvent.submit(document.querySelector("form.pair-form")!));
+  expect(requests.at(-1)?.path).toBe("/api/pair");
   await act(async () => gate.unpair());
   delayedPair.resolve(Response.json({ token: "late-secret", installationId: installation }));
-  await act(async () => pending);
+  await flush();
   expect(gate.credentials).toBeNull();
   expect(localStorage.getItem("couch.remote-token")).toBeNull();
 });
@@ -219,7 +231,7 @@ test("a reachable local coordinator still serves and refreshes reads when the br
     await mount(); await connected();
     await until(() => !!screen.queryByText("Old household"));
     title = "Updated local library";
-    await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, libraryVersion: 1 } }));
+    await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { progress: 1 } } }));
     await until(() => !!screen.queryByText("Updated local library"));
     expect(onlineManager.isOnline()).toBe(false);
     expect(gate.connected).toBe(true);
@@ -243,7 +255,7 @@ test("live sharing changes update the connected gate", async () => {
   await mount(); await connected();
   expect(gate.remoteControlEnabled).toBe(true);
   sharing = false;
-  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, controllerVersion: 1 } }));
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, versions: { controllers: 1 } } }));
   await flush(); await flush();
   expect(gate.remoteControlEnabled).toBe(false);
 });

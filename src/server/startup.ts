@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { StartupState } from "../shared/startup";
 import { ControllerError, settingField } from "./controllers";
+import { ADMIN_ONLY } from "./messages";
 
 const help = "From SSH, run sudo lightdm --show-config and inspect sudo journalctl -u 'couch-autostart@*'. Repair the couch-appliance installation or conflicting LightDM overrides, then refresh.";
 const command = (file: string, args: string[]): Promise<string> => new Promise((resolve, reject) => {
@@ -11,7 +12,7 @@ const command = (file: string, args: string[]): Promise<string> => new Promise((
 // LightDM prints its merged configuration on stderr, with source IDs before keys.
 // Seat:* applies first, then matching seat sections in their printed order.
 export function startupEnabled(configuration: string): boolean {
-  if (/^Failed to (?:load configuration from|open configuration directory) /m.test(configuration)) throw new Error(`Could not read the complete LightDM configuration. ${help}`);
+  if (/^Failed to (?:load configuration from|open configuration directory) /m.test(configuration)) throw new Error(`Couldn't read the complete LightDM configuration. ${help}`);
   const groups = new Map<string, Record<string, string>>();
   let current: Record<string, string> | undefined;
   for (const line of configuration.split("\n")) {
@@ -50,7 +51,7 @@ export function createStartup(fullscreen: Backend["fullscreen"], backend?: Backe
         command("/usr/bin/systemctl", ["get-default"]),
         command("/usr/bin/systemctl", ["show", "display-manager.service", "--property=Id", "--value"]),
       ]);
-      if (!startupBootReady(service, target, manager)) throw new Error("Ubuntu is not configured to boot into LightDM. From SSH, inspect systemctl status lightdm.service and systemctl get-default; repair the couch-appliance installation, then refresh.");
+      if (!startupBootReady(service, target, manager)) throw new Error("Ubuntu doesn't boot into LightDM. Over SSH, check systemctl get-default.");
       return startupEnabled(configuration);
     },
     write: async (enabled: boolean) => { await command("/usr/bin/systemctl", ["--no-ask-password", "start", `couch-autostart@${enabled ? "enable" : "disable"}.service`]); },
@@ -60,7 +61,7 @@ export function createStartup(fullscreen: Backend["fullscreen"], backend?: Backe
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
-      const authorize = () => { if (!["host", "administrator"].includes(identity()?.authority ?? "")) throw new ControllerError("An administrator is required.", 403); };
+      const authorize = () => { if (!["host", "administrator"].includes(identity()?.authority ?? "")) throw new ControllerError(ADMIN_ONLY, 403); };
       try {
         authorize();
         if (request.method !== "GET" && request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });

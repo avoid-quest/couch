@@ -401,7 +401,7 @@ describe("Jellyfin source", () => {
     await jellyfin.resolve((await jellyfin.entry(itemId, "queue-1")).source.slice(9), "playback-1");
     await jellyfin.observe(player({ position: 11 }));
     expect(invalidations).toBe(0);
-    expect(warnings).toEqual(["Jellyfin could not save playback progress. Check the server connection."]);
+    expect(warnings).toEqual(["Jellyfin couldn't save your progress. Check the server connection."]);
   });
 
   test("invalid or completed upstream positions do not produce a native resume seek", async () => {
@@ -420,7 +420,7 @@ describe("Jellyfin source", () => {
     const upstream = fixture({ directPlay: false });
     const jellyfin = source();
     await jellyfin.connect(credentials(upstream.url));
-    await expect(jellyfin.resolve((await jellyfin.entry(itemId, "queue-1")).source.slice(9), "playback-1")).rejects.toThrow("remuxing and transcoding are not enabled");
+    await expect(jellyfin.resolve((await jellyfin.entry(itemId, "queue-1")).source.slice(9), "playback-1")).rejects.toThrow("can't play this format");
     await jellyfin.observe(player());
     expect(upstream.requests.some(request => request.path.startsWith("/Sessions/Playing"))).toBe(false);
   });
@@ -430,7 +430,7 @@ describe("Jellyfin source", () => {
     const jellyfin = source();
     await expect(jellyfin.connect(credentials("file:///secret"))).rejects.toThrow("Use a Jellyfin server URL");
     await expect(jellyfin.connect(credentials("http://user:password@example.test"))).rejects.toThrow("Use a Jellyfin server URL");
-    await expect(jellyfin.connect({ ...credentials(upstream.url), password: "bad" })).rejects.toThrow("Could not connect to Jellyfin");
+    await expect(jellyfin.connect({ ...credentials(upstream.url), password: "bad" })).rejects.toThrow("Couldn't connect to Jellyfin");
     expect(jellyfin.status().connected).toBe(false);
     await jellyfin.connect(credentials(upstream.url));
     const count = upstream.requests.length;
@@ -452,7 +452,7 @@ describe("Jellyfin source", () => {
     await disconnecting;
     expect(upstream.requests.filter(request => request.path === "/Sessions/Logout")).toHaveLength(1);
     expect(jellyfin.status().connected).toBe(false);
-    await expect(jellyfin.items()).rejects.toThrow("Connect Jellyfin in Settings > Sources first");
+    await expect(jellyfin.items()).rejects.toThrow("Connect Jellyfin in Settings → Sources first");
   });
 
   test("closing while authentication is pending cannot write or reopen a closed source", async () => {

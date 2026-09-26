@@ -222,10 +222,10 @@ test("a vanished source list fails without saving anything", async () => {
 });
 
 test("resolver breakdowns surface their message instead of a generic error", async () => {
-  const { service } = fixture({ resolveSource: async () => { throw new Error("yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported."); } });
+  const { service } = fixture({ resolveSource: async () => { throw new Error("Couldn't open this page. It may be unsupported."); } });
   const response = await request(service, "POST", "", { source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" } });
   expect(response.status).toBe(502);
-  expect(await response.json()).toEqual({ error: "yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported." });
+  expect(await response.json()).toEqual({ error: "Couldn't open this page. It may be unsupported." });
 });
 
 test("source saves honor the playlist count and name limits", async () => {

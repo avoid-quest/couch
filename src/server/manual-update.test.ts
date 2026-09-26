@@ -97,7 +97,7 @@ test("repair is an administrator's exact-current intent and never consults the n
   expect((await manual.repair(request({ ...repair, package: "other" }), admin)).status).toBe(400);
   const unsupported = await manual.repair(request({ ...repair, repairRuntime: true }), admin);
   expect(unsupported.status).toBe(409);
-  expect(await unsupported.json()).toMatchObject({ accepted: false, error: expect.stringContaining("Host package repair is unavailable") });
+  expect(await unsupported.json()).toMatchObject({ accepted: false, error: expect.stringContaining("can't repair system packages") });
   expect(manual.busy()).toBe(false);
   expect(calls).toEqual([]);
   expect(await (await manual.repair(request({ ...repair, expectedCurrentId: payload.candidateId }), admin)).json()).toMatchObject({ accepted: false });
@@ -113,7 +113,7 @@ test("unavailable enrolled installation rejects work until native status becomes
   expect(await manual.read(admin)).toMatchObject({ repairAvailable: false, current: null });
   expect(manual.needsRefresh()).toBe(true);
   expect(await (await manual.install(request(), admin)).json()).toMatchObject({ accepted: false });
-  await expect(manual.automatic(payload.candidateId, payload.requestId, () => {})).rejects.toThrow("App installation");
+  await expect(manual.automatic(payload.candidateId, payload.requestId, () => {})).rejects.toThrow("Reopen the installed Couch");
   expect(calls.every(op => op === "status")).toBe(true);
   upgraded = true;
   expect(await manual.read(admin)).toMatchObject({ repairAvailable: true, current: { candidateId: payload.candidateId } });

@@ -36,13 +36,13 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
   await until("mounted reference starts before browser cancellation controls", () => all(state => state.player.status === "playing"));
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
-  await httpRemote.ui.button("Pause", ".player-band");
+  await httpRemote.ui.button("Pause", "[data-player-band]");
   await until("phone pause reaches the single native audio player", () => all(state => state.player.status === "paused"));
   await httpRemote.screenshot("continuity-phone-paused");
   await httpRemote.minimize();
   await other.restore();
   await other.ui.section("Queue");
-  await other.ui.button("Stop playback", ".player-band");
+  await other.ui.button("Stop", "[data-player-band]");
   await until("second phone cancels both current playback and prepared successor", () => all(state => state.player.status === "idle"));
   await Bun.sleep(3_500);
   assert.ok(all(state => state.player.status === "idle" && state.player.playbackId === null));

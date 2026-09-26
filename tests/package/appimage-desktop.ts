@@ -55,7 +55,7 @@ try {
   const bundledUrl = await request("/url") as string;
   assert.match(bundledUrl, /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)(?:\/|$)/, "The app loads its bundled frontend");
   await Bun.write(`${evidence}/first-launch.png`, Buffer.from(await request("/screenshot"), "base64"));
-  const address = await element('//label[normalize-space(.)="Couch address"]/following::input[1]');
+  const address = await element('//input[@aria-label="Couch address"]');
   assert.ok(address, "Remote address field is labelled");
   await request(`/element/${address}/value`, { text: "127.0.0.1:44101" });
   await click('//button[normalize-space(.)="Connect"]');
@@ -78,14 +78,14 @@ try {
   await until("Shared window requests a pairing code", () => element('//label[normalize-space(.)="Pairing code"]/following::input[1]'));
   const code = inside("cat", "/evidence/host.log").match(/Pairing code:\s*(\d{6})/)?.[1];
   assert.ok(code, "The selected host supplies a pairing code");
-  const name = await element('//label[normalize-space(.)="Device name"]/following::input[1]');
+  const name = await element('//label[normalize-space(.)="Remote name"]/following::input[1]');
   assert.ok(name, "The shared shell labels the device name");
   await request(`/element/${name}/value`, { text: "AppImage client" });
   const pairing = await element('//label[normalize-space(.)="Pairing code"]/following::input[1]');
   assert.ok(pairing, "Pairing code field is labelled");
   await request(`/element/${pairing}/value`, { text: code });
-  await click('//button[normalize-space(.)="Connect"]');
-  await until("Paired Client-only window loads host navigation", () => element('//nav[@aria-label="Main navigation"]'));
+  await click('//button[normalize-space(.)="Pair"]');
+  await until("Client saves its selected-host pairing", () => execute("return !document.querySelector('.pair-form') && !!localStorage.getItem('couch.pairing:" + selectedHost + "')"));
   const authority = await asyncExecute(`
     const pairing = JSON.parse(localStorage.getItem('couch.pairing:${selectedHost}') || '{}');
     const response = await fetch('${selectedHost}/api/controllers/me', {headers:{Authorization:'Bearer ' + pairing.token}});
@@ -106,9 +106,9 @@ try {
     const mode = await asyncExecute("return (await window.__TAURI_INTERNALS__.invoke('playback_device')).mode").catch(() => null);
     return mode === "local";
   });
-  await until("Local setup offers private sharing", () => element('//button[normalize-space(.)="Keep private"]'));
-  await click('//button[normalize-space(.)="Keep private"]');
-  await until("Private local setup completes", async () => !await element('//button[normalize-space(.)="Keep private"]'));
+  await until("Local setup offers private sharing", () => element('//button[normalize-space(.)="Not now"]'));
+  await click('//button[normalize-space(.)="Not now"]');
+  await until("Private local setup completes", async () => !await element('//button[normalize-space(.)="Not now"]'));
   await until("Local navigation loads", () => element('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Find"]'));
   await click('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Find"]');
   await until("Local app shows Open file", () => element('//button[normalize-space(.)="Open file"]'));
@@ -130,8 +130,8 @@ try {
   await until("Selected PulseAudio monitor produces clocked samples", () => Bun.file(`${evidence}/playback-audio.pcm`).size > 4_800);
   await execute("const item=window.__proof.state.queue.find(item=>item.title==='sample.mp4'); window.__proof.socket.send(JSON.stringify({type:'command',requestId:crypto.randomUUID(),action:{type:'play',entryId:item.id,fromStart:true}})); return true");
   await until("Packaged libmpv reports video and audio playback", () => execute("const p=window.__proof.state?.player; return p?.status === 'playing' && p.position > 1 && p.tracks?.some(t=>t.kind === 'video') && p.tracks?.some(t=>t.kind === 'audio')"));
-  await until("Current playback offers the player view", () => element('//footer[@aria-label="Current playback"]//button[normalize-space(.)="Resume"]'));
-  await click('//footer[@aria-label="Current playback"]//button[normalize-space(.)="Resume"]');
+  await until("Current playback offers the player view", () => element('//footer[@aria-label="Now playing"]//button[normalize-space(.)="Open"]'));
+  await click('//footer[@aria-label="Now playing"]//button[normalize-space(.)="Open"]');
   await until("Native video stage is active", () => element('//div[contains(@class,"video-stage") and contains(@class,"has-video")]'));
   inside("sh", "-c", "ps -eo pid,comm,args > /evidence/processes.txt; grep -hE 'lib(mpv|avcodec|avformat|pulse|ass)' /proc/[0-9]*/maps 2>/dev/null > /evidence/media-maps.txt || true");
   inside("runuser", "-u", "qualifier", "--", "env", "DISPLAY=:99", "scrot", "-o", "/evidence/full-playing.png");

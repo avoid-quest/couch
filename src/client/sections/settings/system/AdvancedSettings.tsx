@@ -1,111 +1,81 @@
-import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, RefreshCw } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { apiFetch, type ApiCredentials } from "@/api/client";
+import { diagnosticsQuery } from "@/api/settings";
 import { isNativeHost } from "@/session/native-context";
-import type { Diagnostics } from "../../../../shared/diagnostics";
 import { DiagnosticFacts } from "./DiagnosticFacts";
 import { ToolsSettings } from "./ToolsSettings";
 
 const diagnosticTime = (at: string) => at.replace("T", " ").replace("Z", " UTC");
 
-function useExportDiagnostics({ credentials, connected, enabled, native }: { credentials: ApiCredentials; connected: boolean; enabled: boolean; native: boolean }) {
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const { origin, token } = credentials;
-
-  useEffect(() => {
-    if (!exporting || !connected || !enabled) return;
-    const controller = new AbortController();
-    setError(null); setNotice(null);
-    void apiFetch({ origin, token }, "/api/diagnostics/export", { signal: controller.signal }, 10_000)
-      .then(async response => {
-        if (native) {
-          const bytes = await response.arrayBuffer().catch(() => { throw new Error("Diagnostic transfer stopped before the report was complete. No file was saved."); });
-          if (controller.signal.aborted) return;
-          const saved = await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes));
-          if (!controller.signal.aborted) setNotice(saved ? "Diagnostics report saved." : "Save canceled. No file was saved.");
-          return;
-        }
-        const blob = await response.blob();
-        if (controller.signal.aborted) return;
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url; link.download = "couch-diagnostics.json";
-        document.body.append(link); link.click(); link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1_000);
-        setNotice("Diagnostic download started.");
-      })
-      .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "Could not save diagnostics. Check the connection and administrator access, then try again."); })
-      .finally(() => { if (!controller.signal.aborted) setExporting(false); });
-    return () => controller.abort();
-  }, [enabled, exporting, connected, origin, token, native]);
-
-  return { exporting, setExporting, error, notice };
+function useExportDiagnostics(credentials: ApiCredentials, native: boolean) {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await apiFetch(credentials, "/api/diagnostics/export", {}, 10_000);
+      if (native) {
+        const bytes = await response.arrayBuffer().catch(() => { throw new Error("Export interrupted. Nothing saved."); });
+        return await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes)) ? "Exported." : "Canceled.";
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url; link.download = "couch-diagnostics.json";
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      return "Downloaded.";
+    },
+    onSuccess: notice => toast(notice),
+  });
 }
 
 export function AdvancedSettings({ credentials, connected }: { credentials: ApiCredentials; connected: boolean }) {
-  const queryClient = useQueryClient();
-  const queryKey = ["diagnostics", credentials.origin, credentials.token];
-  const diagnostics = useQuery({
-    queryKey,
-    enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/diagnostics").then(response => response.json() as Promise<Diagnostics>),
-    retry: false,
-  });
+  const diagnostics = useQuery({ ...diagnosticsQuery(credentials), enabled: connected });
   const report = diagnostics.data ?? null;
   const native = isNativeHost();
-  const exportState = useExportDiagnostics({ credentials, connected, enabled: !!report, native });
-  const loading = diagnostics.isPending || diagnostics.isFetching;
-  const error = diagnostics.error ? "Could not load diagnostics. Check the connection and administrator access, then refresh." : exportState.error;
-  const notice = exportState.notice;
-  const refresh = () => void queryClient.invalidateQueries({ queryKey });
+  const exportDiagnostics = useExportDiagnostics(credentials, native);
+  const exporting = exportDiagnostics.isPending;
+  const loading = diagnostics.isFetching;
+  const reason: unknown = exportDiagnostics.error;
+  const exportError = !reason ? null : reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "Couldn't export diagnostics.";
+  const error = diagnostics.error ? "Couldn't load diagnostics." : exportError;
 
-
-  return <div className="min-w-0 space-y-4" data-advanced-settings>
-    <p className="text-muted-foreground">System details and diagnostics.</p>
-    <div className="flex flex-wrap gap-2">
-      <Button variant="outline" className="min-h-11" disabled={!connected || loading || exportState.exporting} onClick={refresh}><RefreshCw aria-hidden="true" />Refresh</Button>
-      <Button variant="outline" className="min-h-11" disabled={!connected || loading || exportState.exporting || !report} onClick={() => exportState.setExporting(true)}><Download aria-hidden="true" />{exportState.exporting ? "Exporting…" : native ? "Save diagnostics" : "Export diagnostics"}</Button>
-    </div>
-    <p className="text-xs text-muted-foreground">{native ? "Choose where to save the sanitized JSON report." : "Downloads a sanitized JSON report."} URLs and credentials are removed.</p>
-    {!connected && <p role="status">Connect to the TV to load diagnostics.</p>}
-    {loading && <p role="status">Loading diagnostics…</p>}
-    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-    {notice && <p role="status">{notice}</p>}
-    {report && <>
-      <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for up to {report.limits.helperSeconds / 60} minutes.</p>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Build and system</h3><DiagnosticFacts facts={[
-        { name: "Couch version", value: report.build.version, source: report.build.packaged ? "Packaged coordinator" : "Development coordinator" },
-        { name: "Commit", value: report.build.revision, source: "Coordinator build" },
-        { name: "Build target", value: report.build.target, source: "Coordinator build" },
-        ...report.system,
-      ]} /></section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Native player, display and audio</h3>{report.native ? <DiagnosticFacts facts={[
-        { name: "Native version", value: report.native.build.version, source: "Native host build" },
-        { name: "Native commit", value: report.native.build.revision, source: "Native host build" },
-        ...report.native.facts,
-      ]} /> : <p className="text-muted-foreground">{report.nativeError ?? "Native details are unavailable."}</p>}</section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Media helpers</h3><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Effective configuration</h3><DiagnosticFacts facts={report.configuration} /></section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Sources</h3>{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No error reported" }))} /> : <p className="text-muted-foreground">No source status is available.</p>}</section>
-      <section className="space-y-2 border-t border-border py-4">
-        <h3 className="font-medium">Recent errors</h3>
-        <p className="text-xs text-muted-foreground">Up to {report.limits.retentionDays} days, {report.limits.recentEntries} entries or {report.limits.historyBytes / 1024} KiB. Dates and times are UTC.</p>
-        <p className="text-xs text-muted-foreground">Current session started {diagnosticTime(report.sessionStartedAt)}.</p>
-        {report.historyError && <p role="status">{report.historyError}</p>}
-        {report.recent.length ? <ol className="max-h-72 divide-y divide-border overflow-y-auto">{report.recent.map((entry, index) => <li key={index} className="min-w-0 space-y-1 break-words py-3">
-          <p className="text-xs text-muted-foreground">{diagnosticTime(entry.at)} · {entry.source} · {entry.sessionId === report.sessionId ? "Current session" : "Earlier session"}</p>
-          <p>{entry.message}</p>
-          <p className="text-xs text-muted-foreground">Build {entry.build.version ?? "unknown"} · Commit {entry.build.revision ?? "unknown"}</p>
-          {entry.count > 1 && <p className="text-xs text-muted-foreground">{entry.count} occurrences. Last: {diagnosticTime(entry.lastAt)}</p>}
-        </li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}
-      </section>
-    </>}
+  return <div className="flex min-w-0 flex-col gap-8" data-advanced-settings>
+    <SettingsSection>
+      <SettingsRow label="Diagnostics" description="JSON report without URLs or credentials.">
+        <Button variant="outline" disabled={!connected || loading || exporting || !report} onClick={() => exportDiagnostics.mutate()}>{exporting ? "Exporting…" : "Export"}</Button>
+        <Button variant="ghost" disabled={!connected || loading || exporting} onClick={() => void diagnostics.refetch()}>Refresh</Button>
+      </SettingsRow>
+      {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Collecting…</p>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {report && <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for {report.limits.helperSeconds / 60} minutes.</p>}
+    </SettingsSection>
     <ToolsSettings credentials={credentials} connected={connected} />
+    {report && <>
+      <SettingsSection title="Build and system"><DiagnosticFacts facts={[
+        { name: "Couch version", value: report.build.version, source: report.build.packaged ? "Packaged server" : "Dev server" },
+        { name: "Commit", value: report.build.revision, source: "Server build" },
+        { name: "Build target", value: report.build.target, source: "Server build" },
+        ...report.system,
+      ]} /></SettingsSection>
+      <SettingsSection title="Player, display and audio">{report.native ? <DiagnosticFacts facts={[
+        { name: "App version", value: report.native.build.version, source: "App build" },
+        { name: "App commit", value: report.native.build.revision, source: "App build" },
+        ...report.native.facts,
+      ]} /> : <p className="text-sm text-muted-foreground">{report.nativeError ?? "Not available."}</p>}</SettingsSection>
+      <SettingsSection title="Media helpers"><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></SettingsSection>
+      <SettingsSection title="Configuration"><DiagnosticFacts facts={report.configuration} /></SettingsSection>
+      <SettingsSection title="Sources">{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No errors" }))} /> : <p className="text-sm text-muted-foreground">No sources.</p>}</SettingsSection>
+      <SettingsSection title="Recent errors" description={`Up to ${report.limits.retentionDays} days or ${report.limits.recentEntries} entries, in UTC. This session started ${diagnosticTime(report.sessionStartedAt)}.`}>
+        {report.historyError && <Alert><AlertDescription>{report.historyError}</AlertDescription></Alert>}
+        {report.recent.length ? <ol className="flex max-h-96 min-w-0 flex-col overflow-y-auto">{report.recent.map((entry, index) => <li key={index} className="min-w-0 border-b py-2 text-sm break-words">
+          <p>{entry.message}</p>
+          <p className="text-xs text-muted-foreground">{[diagnosticTime(entry.at), entry.source, entry.sessionId === report.sessionId ? "This session" : "Earlier session", `Build ${entry.build.version ?? "unknown"}`, entry.count > 1 && `${entry.count}×, last ${diagnosticTime(entry.lastAt)}`].filter(Boolean).join(" · ")}</p>
+        </li>)}</ol> : <p className="text-sm text-muted-foreground">No recent errors.</p>}
+      </SettingsSection>
+    </>}
   </div>;
 }

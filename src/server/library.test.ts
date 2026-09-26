@@ -102,7 +102,7 @@ test("queue lookup rechecks files and rejects symlinks introduced after scanning
   await expect(library.getPlayable(item.id)).rejects.toThrow("unavailable");
   await expect(library.getPlayable("unknown")).rejects.toThrow("not found");
   expect(library.search().items[0]?.available).toBe(false);
-  await expect(library.addSource("../outside")).rejects.toThrow("absolute");
+  await expect(library.addSource("../outside")).rejects.toThrow("full folder path");
   await expect(library.addSource(join(root, "missing"))).rejects.toThrow("cannot be opened");
 });
 
@@ -270,7 +270,7 @@ test("old successful audio probes are reparsed without file changes and failed m
   db.run("UPDATE library_items SET metadataVersion = 0, title = 'Known title', artist = 'Known artist', probed = 1");
   await library.scan(source.id);
   expect(library.getItem(id)).toMatchObject({ title: "Known title", artist: "Known artist", available: true });
-  expect(library.listSources()[0]?.warning).toContain("Could not read metadata");
+  expect(library.listSources()[0]?.warning).toContain("Couldn't read metadata");
   db.close();
 });
 

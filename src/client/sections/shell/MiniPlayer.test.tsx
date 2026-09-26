@@ -11,7 +11,7 @@ const state: SessionState = {
 const render = (value: SessionState, connected: boolean) => renderToStaticMarkup(<MiniPlayer state={value} connected={connected} localHost={false} run={async () => true} onOpen={() => {}} />);
 
 test("the mini player names the host while reconnecting", () => {
-  expect(render(state, false)).toContain("Reconnecting to Living room");
+  expect(render(state, false)).toContain("Reconnecting to Living room…");
 });
 
 test("the mini player reports a playback error even without a playback id", () => {

@@ -1,79 +1,90 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus, RefreshCw, Settings2, Trash2 } from "lucide-react";
-import type { ControllerIdentity } from "../../shared/controllers";
+import { useState, type FormEvent } from "react";
+import { Settings2 } from "lucide-react";
+import { toast } from "sonner";
+import { useSessionGate } from "@/session/session-context";
 import type { GuideSource } from "../../shared/iptv";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ADMIN_ONLY, deviceName } from "@/copy";
 
 export type GuideRequest = (path: string, init?: RequestInit) => Promise<Response>;
-type Props = { inline?: boolean; request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean; controllerVersion: number; origin: string; token: string };
+type Props = { inline?: boolean; request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean };
+const updated = (at: number | null) => at ? `Updated ${new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Not loaded yet";
 
-export function GuideSources({ inline = false, request, sources, host, connected, controllerVersion, origin, token }: Props) {
+export function GuideSources({ inline = false, request, sources, host, connected }: Props) {
   const [open, setOpen] = useState(false);
-  const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
+  const { identity, state, details } = useSessionGate();
   const [editing, setEditing] = useState<GuideSource | null>(null);
+  const [removing, setRemoving] = useState<GuideSource | null>(null);
   const [name, setName] = useState("");
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [guideUrl, setGuideUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
-  useEffect(() => {
-    setIdentity(null);
-    if (!connected) return;
-    const controller = new AbortController();
-    void fetch(`${origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]) })
-      .then(async response => { const value = await response.json() as ControllerIdentity; if (response.ok && !controller.signal.aborted) setIdentity(value); }).catch(() => {});
-    return () => controller.abort();
-  }, [origin, token, connected, controllerVersion]);
-  useEffect(() => { if (!open && !inline || !administrator) { setPlaylistUrl(""); setGuideUrl(""); } }, [open, inline, administrator]);
 
   async function mutate(path: string, method: string, value?: unknown) {
-    setBusy(true); setError(null); setNotice("");
+    setBusy(true); setError(null);
     try {
       await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
-      setNotice(method === "DELETE" ? "Source removed." : "Guide saved on the TV.");
+      toast(method === "DELETE" ? "Removed." : "Saved.");
       return true;
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update this source."); return false; }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Couldn't update this source."); return false; }
     finally { setBusy(false); }
   }
+  const edit = (source: GuideSource | null) => { setEditing(source); setName(source?.name ?? ""); setPlaylistUrl(""); setGuideUrl(""); setError(null); };
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (await mutate(editing ? `sources/${editing.id}` : "sources", "POST", { name, playlistUrl, guideUrl })) { setEditing(null); setName(""); setPlaylistUrl(""); setGuideUrl(""); }
+    if (await mutate(editing ? `sources/${editing.id}` : "sources", "POST", { name, playlistUrl, guideUrl })) edit(null);
   }
-  const edit = (source: GuideSource | null) => { setEditing(source); setName(source?.name ?? ""); setPlaylistUrl(""); setGuideUrl(""); setError(null); };
-  if (!administrator) return <p className="text-sm text-muted-foreground">An administrator can add or refresh guide sources.</p>;
+  if (!administrator) return <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>;
+  const disabled = busy || !connected;
   const content = <>
-      {error && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{error}</p>}
-      {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-      <ul className="divide-y">{sources.map(source => <li className="space-y-2 py-3" key={source.id}>
-        <p className="break-words font-medium">{source.name}</p>
-        <p className="text-sm text-muted-foreground">{source.channelCount} channels · {source.programCount} programs<br />{source.updatedAt ? `Updated ${new Date(source.updatedAt).toLocaleString()}` : "No cached guide"}</p>
-        {source.error && <p className="text-sm text-destructive">{source.error}</p>}
+    <SettingsSection aria-label="Live TV sources">
+      {!sources.length && <p className="text-sm text-muted-foreground">No sources yet.</p>}
+      {sources.map(source => <SettingsRow key={source.id} label={<span className="break-words">{source.name}</span>} description={<>
+        {source.channelCount} channels · {source.programCount} programs · {updated(source.updatedAt)}
+        {source.error && <span className="block text-destructive">{source.error}</span>}
+      </>}>
+        <Button variant="outline" disabled={disabled} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}>Refresh</Button>
+        <Button variant="ghost" disabled={disabled} onClick={() => edit(source)}>Edit</Button>
+        <Button variant="ghost" aria-label={`Remove ${source.name}`} disabled={disabled} onClick={() => setRemoving(source)}>Remove</Button>
+      </SettingsRow>)}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    </SettingsSection>
+    <form onSubmit={event => void save(event)}>
+      <SettingsSection title={editing ? `Edit ${editing.name}` : "Add source"} description={`URLs stay on ${deviceName(state?.installationName ?? details?.name)}. Channel tvg-id must match the XMLTV id.`}>
+        <SettingsRow label="Name" htmlFor="guide-source-name"><Input id="guide-source-name" className="w-full" value={name} maxLength={100} required disabled={disabled} onChange={event => setName(event.target.value)} /></SettingsRow>
+        <SettingsRow label="M3U URL" htmlFor="guide-playlist-url"><Input id="guide-playlist-url" className="w-full" type="password" autoComplete="off" inputMode="url" spellCheck={false} autoCapitalize="none" value={playlistUrl} maxLength={4096} required disabled={disabled} onChange={event => setPlaylistUrl(event.target.value)} placeholder="https://…" /></SettingsRow>
+        <SettingsRow label="XMLTV URL" htmlFor="guide-xmltv-url"><Input id="guide-xmltv-url" className="w-full" type="password" autoComplete="off" inputMode="url" spellCheck={false} autoCapitalize="none" value={guideUrl} maxLength={4096} required disabled={disabled} onChange={event => setGuideUrl(event.target.value)} placeholder="https://…" /></SettingsRow>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" disabled={!connected || busy} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}><RefreshCw aria-hidden="true" />Refresh</Button>
-          <Button variant="outline" disabled={!connected || busy} onClick={() => edit(source)}>Replace URLs</Button>
-          <Button variant="ghost" aria-label={`Remove ${source.name}`} disabled={!connected || busy} onClick={() => void mutate(`sources/${source.id}`, "DELETE")}><Trash2 aria-hidden="true" />Remove</Button>
+          <Button type="submit" disabled={disabled}>{busy ? "Saving…" : editing ? "Save" : "Add"}</Button>
+          {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => edit(null)}>Cancel</Button>}
         </div>
-      </li>)}</ul>
-      <form className="space-y-3 border-t pt-4" onSubmit={event => void save(event)}>
-        <h3 className="font-medium">{editing ? `Replace ${editing.name}` : "Add source"}</h3>
-        <div className="space-y-2"><Label htmlFor="guide-source-name">Source name</Label><Input id="guide-source-name" value={name} maxLength={100} required disabled={busy || !connected} onChange={event => setName(event.target.value)} /></div>
-        <div className="space-y-2"><Label htmlFor="guide-playlist-url">M3U URL</Label><Input id="guide-playlist-url" type="password" autoComplete="off" inputMode="url" spellCheck={false} autoCapitalize="none" value={playlistUrl} maxLength={4096} required disabled={busy || !connected} onChange={event => setPlaylistUrl(event.target.value)} placeholder="https://…" /></div>
-        <div className="space-y-2"><Label htmlFor="guide-xmltv-url">XMLTV URL</Label><Input id="guide-xmltv-url" type="password" autoComplete="off" inputMode="url" spellCheck={false} autoCapitalize="none" value={guideUrl} maxLength={4096} required disabled={busy || !connected} onChange={event => setGuideUrl(event.target.value)} placeholder="https://…" /></div>
-        <p className="text-sm text-muted-foreground">URLs stay on the TV. Enter both URLs when replacing a source. Each channel needs a unique tvg-id matching the XMLTV channel id. Limits: 2 MiB M3U, 16 MiB XMLTV, 5,000 channels and 100,000 programs per source.</p>
-        <p className="text-sm text-muted-foreground">Use minute-precision program times with numeric timezone offsets or UTC. Custom playback headers, DRM and catch-up are unavailable.</p>
-        <div className="flex flex-wrap gap-2"><Button disabled={busy || !connected}><Plus aria-hidden="true" />{busy ? "Loading guide…" : editing ? "Replace source" : "Import guide"}</Button>{editing && <Button type="button" variant="outline" disabled={busy} onClick={() => edit(null)}>Cancel replacement</Button>}</div>
-      </form>
+      </SettingsSection>
+    </form>
+    <AlertDialog open={!!removing} onOpenChange={value => { if (!value) setRemoving(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove {removing?.name}?</AlertDialogTitle>
+          <AlertDialogDescription>Its channels leave Live TV.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => removing && void mutate(`sources/${removing.id}`, "DELETE")}>Remove</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </>;
-  if (inline) return <section className="space-y-4" aria-label="IPTV sources"><h3 className="text-lg font-medium">IPTV</h3><p className="text-sm text-muted-foreground">Add an M3U channel list and its XMLTV guide.</p>{content}</section>;
-  return <Dialog open={open} onOpenChange={setOpen}>
+  if (inline) return <div className="flex min-w-0 flex-col gap-8">{content}</div>;
+  return <Dialog open={open} onOpenChange={value => { setOpen(value); if (!value) edit(null); }}>
     <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Guide sources</Button></DialogTrigger>
     <DialogContent className="guide-sources" data-tv-local-only={host || undefined}>
-      <DialogHeader><DialogTitle>Guide sources</DialogTitle><DialogDescription>Add a supported M3U channel list and its XMLTV guide. Use feeds you are allowed to watch.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Live TV</DialogTitle><DialogDescription>An M3U channel list plus its XMLTV guide.</DialogDescription></DialogHeader>
       {content}
     </DialogContent>
   </Dialog>;

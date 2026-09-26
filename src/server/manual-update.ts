@@ -3,6 +3,7 @@ import type { UpdateState, UpdateTransaction } from "../shared/updates";
 import { ControllerError, settingField } from "./controllers";
 import { NativeUpdateError } from "./deb-update-native";
 import type { UpdateRequest } from "../shared/updates";
+import { ADMIN_ONLY } from "./messages";
 
 type Install = { candidateId: string; requestId: string; confirmInterrupt: boolean };
 type Repair = Omit<Extract<UpdateRequest, { op: "repair-current" }>, "op">;
@@ -17,12 +18,12 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
   let current: NonNullable<UpdateState["installation"]>["current"] = null;
   const authorize = (identity: () => ControllerIdentity | null) => {
     const caller = identity();
-    if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-    if (caller.authority === "controller") throw new ControllerError("An administrator is required to install updates.", 403);
+    if (!caller) throw new ControllerError("Pair this remote first.", 401);
+    if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
   };
   const status = async (requestId?: string) => {
     const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean; installationAvailable?: boolean };
-    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The native updater is unavailable. Reopen Couch and check this installation's update status.", 503);
+    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("Updater unavailable. Reopen Couch.", 503);
     current = result.current && /^[a-f0-9]{64}$/.test(result.current.candidateId) && typeof result.current.version === "string" && typeof result.current.revision === "string" ? result.current : null;
     repairAvailable = result.repairCurrent === true;
     installationAvailable = result.installationAvailable ?? result.repairCurrent ?? false;
@@ -35,7 +36,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     guard();
     if (!previous && installationAvailable === false) {
       onUnaccepted();
-      throw new ControllerError("App installation is not available. Reopen Couch from a supported installed location, then check again.", 409);
+      throw new ControllerError("Updater unavailable. Reopen the installed Couch.", 409);
     }
     const repairing = "expectedCurrentId" in body;
     const ready = repairing ? canRepair() && current?.candidateId === body.expectedCurrentId : candidateReady(body.candidateId);
@@ -46,7 +47,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     busy = true;
     const result = await worker.request(repairing ? { op: "repair-current", ...body } : { op: "install", ...body, ...(whenIdle ? { whenIdle: true as const } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction; error?: string };
     guard();
-    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The native updater could not accept this update. Refresh its status.", 409);
+    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "Couldn't start this update. Refresh and try again.", 409);
     busy = !finished.has(result.transaction.phase);
     return result.transaction;
   };
@@ -60,14 +61,14 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       if (!body || typeof body !== "object" || Object.keys(body).sort().join(",") !== keys || typeof id !== "string" || !/^[a-f0-9]{64}$/.test(id) || repairing && typeof (body as Repair).repairRuntime !== "boolean" || typeof body.requestId !== "string" || !/^[a-f0-9]{32}$/.test(body.requestId) || typeof body.confirmInterrupt !== "boolean") throw new ControllerError("Choose the verified candidate and confirm whether playback may stop.");
       if (repairing && (body as Repair).repairRuntime !== false) {
         unaccepted = true;
-        throw new ControllerError("Host package repair is unavailable through Couch updates. Refresh and choose Repair current release to reinstall Couch files.", 409);
+        throw new ControllerError("Couch can't repair system packages. Choose Repair current release instead.", 409);
       }
       authorize(identity);
       const transaction = await submit(body, () => authorize(identity), false, () => { unaccepted = true; });
       return json({ transaction }, 202);
     } catch (error) {
       const native = error instanceof NativeUpdateError ? error.message : null;
-      return json({ error: native ?? (error instanceof ControllerError ? error.message : "The update request did not finish. Refresh status before retrying."), ...(unaccepted || native ? { accepted: false } : {}) }, error instanceof ControllerError ? error.status : native ? 409 : 400);
+      return json({ error: native ?? (error instanceof ControllerError ? error.message : "The update request didn't finish. Refresh and try again."), ...(unaccepted || native ? { accepted: false } : {}) }, error instanceof ControllerError ? error.status : native ? 409 : 400);
     }
   }
 

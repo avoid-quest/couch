@@ -1,12 +1,20 @@
+import { getRouteApi } from "@tanstack/react-router";
 import { SavedSection } from "./SavedSection";
 import { useShell } from "@/sections/shell/AppShell";
+import { useSessionGate } from "@/session/session-context";
+
+const route = getRouteApi("/saved");
 
 export function SavedPage() {
-  const shell = useShell();
-  const { state, credentials, connected, available, section, browseSection, enqueueProvider, enqueueRadio, openProvider } = shell;
+  const { credentials, available, changeSection, enqueueProvider, enqueueRadio, openProvider } = useShell();
+  const { state, connected } = useSessionGate();
+  const { tab = "later" } = route.useSearch();
+  const navigate = route.useNavigate();
   return (
     <section data-page="Saved">
-      <SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} active={section === "Saved"} onBrowse={browseSection} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} />
+      <SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} tab={tab}
+        onTabChange={next => void navigate({ search: next === "later" ? {} : { tab: next }, replace: true })}
+        onFind={() => changeSection("Find")} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} />
     </section>
   );
 }

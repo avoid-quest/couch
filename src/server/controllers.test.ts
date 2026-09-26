@@ -122,7 +122,7 @@ test("recovery availability is read from the durable claim ledger and never expo
   expect(reopened.service.claimAvailable()).toBeFalse();
   expect(reopened.store.controllerForToken(replacement.token)?.role).toBe("administrator");
   expect(reopened.store.controllerForToken(owner.token)?.role).toBe("administrator");
-  expect(() => createControllers({ store: reopened.store, onChange: () => {}, recoveryCode: "short" })).toThrow("32 to 256 hexadecimal");
+  expect(() => createControllers({ store: reopened.store, onChange: () => {}, recoveryCode: "short" })).toThrow("Check the admin code");
 });
 
 test("recovery configuration and claim requests share the 256-character upper bound", async () => {
@@ -130,7 +130,7 @@ test("recovery configuration and claim requests share the 256-character upper bo
   const oversized = "b".repeat(257);
   const f = fixture({ recoveryCode: maximum });
   const phone = f.phone();
-  expect(() => createControllers({ store: f.store, onChange: () => {}, recoveryCode: oversized })).toThrow("32 to 256 hexadecimal");
+  expect(() => createControllers({ store: f.store, onChange: () => {}, recoveryCode: oversized })).toThrow("Check the admin code");
   expect(f.store.controllerClaim(oversized)).toBeNull();
   // A stored code cannot bypass the request boundary even if inserted locally.
   f.store.createControllerClaim(oversized, true);

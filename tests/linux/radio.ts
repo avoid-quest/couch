@@ -96,7 +96,7 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
     // in both session snapshots above and below, independently of presentation.
     await httpRemote.restore();
     await httpRemote.ui.section("Now");
-    await until("paired HTTP phone displays the playing station", async () => await httpRemote.ui.execute("return document.querySelector('.mini-player strong, .player-band-heading h1')?.textContent === arguments[0]", [metadata.station.name]));
+    await until("paired HTTP phone displays the playing station", async () => await httpRemote.ui.execute("return document.querySelector('[data-mini-player] strong, [data-player-heading] h1')?.textContent === arguments[0]", [metadata.station.name]));
     await until("phone displays native ICY title and artist", async () => await httpRemote.ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${initialRadioTitle}`]));
     fixture.setTitle(metadata.key, changedRadioTitle);
     await until("a second ICY title updates while the same native playback continues", () => all(state => state.player.playbackId === playbackId && state.player.nowPlaying?.title === changedRadioTitle && state.player.nowPlaying.artist === suppliedRadioArtist && state.queue.find(entry => entry.id === metadataEntryId)?.title === metadata.station.name), 15_000);
@@ -150,7 +150,7 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
     await until("radio exposes a pending four-second reconnect before phone Stop", () => backoff(stoppedEntryId, 3), 20_000);
     const stopAt = first().radioRetry!.retryAt!;
     const stopCount = fixture.requests(stopped.key).length;
-    await httpRemote.ui.button("Stop playback");
+    await httpRemote.ui.button("Stop");
     await until("phone Stop cancels radio backoff immediately on both controllers", () => all(state => state.player.status === "idle" && !state.radioRetry && !state.player.nowPlaying));
     await unchangedAfterDeadline(stopped.key, stopCount, stopAt, "Phone Stop");
 

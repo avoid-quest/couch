@@ -2,13 +2,14 @@ import { validStreamingCommunityOrigin } from "../shared/streamingcommunity";
 import type { ControllerIdentity } from "../shared/controllers";
 import { ControllerError, settingField } from "./controllers";
 import type { Store } from "./store";
+import { ADMIN_ONLY, STORAGE_ERROR } from "./messages";
 
 export function createStreamingCommunitySettings(store: Store) {
   return { async handle(request: Request, identity: () => ControllerIdentity | null) {
     const authorize = () => {
       const caller = identity();
-      if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-      if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage website sources.", 403);
+      if (!caller) throw new ControllerError("Pair this remote first.", 401);
+      if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
     };
     const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
     try {
@@ -21,7 +22,7 @@ export function createStreamingCommunitySettings(store: Store) {
       } else if (request.method !== "GET") return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
       return json({ origin: store.streamingCommunityOrigin() });
     } catch (error) {
-      return json({ error: error instanceof ControllerError ? error.message : "Could not save the website origin. Check the TV's storage and try again." }, error instanceof ControllerError ? error.status : 500);
+      return json({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("the site address") }, error instanceof ControllerError ? error.status : 500);
     }
   } };
 }

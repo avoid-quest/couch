@@ -33,13 +33,19 @@ class Socket {
   close(code = 1000) { this.readyState = 3; this.onclose?.({ code } as CloseEvent); }
 }
 
+// The pair form submits exactly this request, then saves its result.
+async function pairWith(code: string) {
+  const { requestPairing } = await import("../sections/shell/PairForm");
+  await act(async () => gate.savePairing(await requestPairing(gate.pairingOrigin, code, "My remote")));
+}
+
 async function renderGate() {
-  const { NativeModeGate, usePlaybackDevice } = await import("../sections/shell/PlaybackDevice");
+  const { NativeModeGate, DeviceRecovery, usePlaybackDevice } = await import("../sections/shell/PlaybackDevice");
   const { SessionGate, useSessionGate } = await import("./session-context");
   const { createRoot } = await import("react-dom/client");
   function Probe() {
     gate = useSessionGate(); device = usePlaybackDevice()!;
-    return <output role="status">{device.mode}: {gate.status}: {gate.identity?.authority ?? "none"}</output>;
+    return <><output>{device.mode}: {gate.status}: {gate.identity?.authority ?? "none"}</output><DeviceRecovery /></>;
   }
   root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root.render(<NativeModeGate><SessionGate><Probe /></SessionGate></NativeModeGate>));
@@ -88,11 +94,11 @@ afterEach(async () => {
 });
 
 test("switching playback targets never sends local owner credentials to a selected host", async () => {
-  expect(screen.getByRole("status").textContent).toContain("local: connecting");
+  expect(document.querySelector("output")!.textContent).toContain("local: connecting");
   await act(async () => { await device.choose("remote", remote); });
-  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
+  expect(document.querySelector("output")!.textContent).toContain("remote: pairing-required");
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization === null)).toBe(true);
-  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  await pairWith("123456");
   expect(Socket.instances.at(-1)?.url.origin).toBe("ws://192.168.1.20:4100");
   expect(Socket.instances.at(-1)?.url.searchParams.get("token")).toBe("remote-pairing");
   expect(Socket.instances.at(-1)?.url.searchParams.get("clientProtocol")).toBe("1");
@@ -106,7 +112,7 @@ test("switching playback targets never sends local owner credentials to a select
   installation = "replacement-installation";
   await act(async () => { await device.choose("local"); });
   await act(async () => { await device.choose("remote", remote); });
-  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
+  expect(document.querySelector("output")!.textContent).toContain("remote: pairing-required");
   expect(requests.filter(request => request.url.startsWith(remote) && request.authorization === "Bearer remote-pairing").length).toBeGreaterThan(0);
   const lastDiscovery = requests.findLast(request => request.url === `${remote}/api/connection`)!;
   expect(lastDiscovery.authorization).toBeNull();
@@ -114,9 +120,9 @@ test("switching playback targets never sends local owner credentials to a select
 
 test("revoking the selected host's pairing keeps local owner authority isolated", async () => {
   await act(async () => { await device.choose("remote", remote); });
-  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  await pairWith("123456");
   await act(async () => Socket.instances.at(-1)?.close(4001));
-  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required: none");
+  expect(document.querySelector("output")!.textContent).toContain("remote: pairing-required: none");
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
   await act(async () => { await device.choose("local"); });
   expect(gate.credentials).toMatchObject({ origin: local, token: "local-owner" });
@@ -125,7 +131,7 @@ test("revoking the selected host's pairing keeps local owner authority isolated"
 test("remote administrator authority comes from the selected host", async () => {
   remoteRole = "administrator";
   await act(async () => { await device.choose("remote", remote); });
-  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  await pairWith("123456");
   expect(gate.identity?.authority).toBe("administrator");
   expect(gate.identity?.controller?.role).toBe("administrator");
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
@@ -136,14 +142,14 @@ test("remote administrator authority comes from the selected host", async () => 
 test("a restart reloads the selected host and its paired authority", async () => {
   remoteRole = "administrator";
   await act(async () => { await device.choose("remote", remote); });
-  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
-  expect(screen.getByRole("status").textContent).toContain("remote:");
+  await pairWith("123456");
+  expect(document.querySelector("output")!.textContent).toContain("remote:");
   expect(gate.identity?.authority).toBe("administrator");
   await act(async () => root.unmount());
   requests.length = 0;
   await renderGate();
   expect(invokeSpy.mock.calls.filter(([command]: [string]) => command === "playback_device")).toHaveLength(2);
-  expect(screen.getByRole("status").textContent).toContain("remote:");
+  expect(document.querySelector("output")!.textContent).toContain("remote:");
   expect(gate.credentials).toMatchObject({ origin: remote, token: "remote-pairing", installationId: installation });
   expect(gate.identity?.authority).toBe("administrator");
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
@@ -152,10 +158,10 @@ test("a restart reloads the selected host and its paired authority", async () =>
 test("Retry reconnects the bundled session after an incompatible host upgrades", async () => {
   remoteProtocol = 2;
   await act(async () => { await device.choose("remote", remote); });
-  expect(screen.getByRole("status").textContent).toContain("remote: protocol-mismatch");
-  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+  expect(document.querySelector("output")!.textContent).toContain("remote: protocol-mismatch");
+  expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
   remoteProtocol = 1;
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
-  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
-  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Try again" })));
+  expect(document.querySelector("output")!.textContent).toContain("remote: pairing-required");
+  expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
 });

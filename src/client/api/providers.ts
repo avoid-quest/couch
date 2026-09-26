@@ -1,11 +1,10 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
-import type { Credentials } from "../session/session";
-import { apiFetch } from "./client";
+import { apiFetch, apiJson, type ApiCredentials } from "./client";
 
 export type ProviderSearchPage = ProviderPage & { warning?: string };
 
-async function browse(credentials: Credentials, provider: ProviderId, target: BrowseRequest, signal: AbortSignal): Promise<ProviderSearchPage> {
+async function browse(credentials: ApiCredentials, provider: ProviderId, target: BrowseRequest, signal: AbortSignal): Promise<ProviderSearchPage> {
   const read = (request: BrowseRequest) => apiFetch(credentials,
     `/api/providers/${provider}/items?${new URLSearchParams(Object.entries({ q: request.query, url: request.url, cursor: request.cursor }).filter((entry): entry is [string, string] => !!entry[1]))}`,
     { signal }, 30_000).then(response => response.json() as Promise<ProviderPage>);
@@ -20,9 +19,11 @@ async function browse(credentials: Credentials, provider: ProviderId, target: Br
     ...(catalogue.status === "rejected" || live.status === "rejected" ? { warning: "Some RaiPlay results could not be loaded. Try this search again to refresh them." } : {}) };
 }
 
-export const providerBrowseQuery = (credentials: Credentials, provider: ProviderId, request: BrowseRequest) =>
+// External catalogs are not Couch state: keep them outside pushed domains so a
+// kept item does not re-run every open provider search.
+export const providerBrowseQuery = (credentials: ApiCredentials, provider: ProviderId, request: BrowseRequest) =>
   infiniteQueryOptions({
-    queryKey: ["search", "providers", credentials.origin, provider, request] as const,
+    queryKey: ["search", "providers", provider, request] as const,
     initialPageParam: request.cursor as string | undefined,
     queryFn: ({ pageParam, signal }) => browse(credentials, provider, { ...request, cursor: pageParam }, signal),
     getNextPageParam: (page: ProviderSearchPage) => page.nextCursor || undefined,
@@ -30,14 +31,8 @@ export const providerBrowseQuery = (credentials: Credentials, provider: Provider
     retry: false,
   });
 
-export const providerItemsQuery = (credentials: Credentials, provider: ProviderId, url: string) =>
+export const providerFavoritesQuery = (credentials: ApiCredentials) =>
   queryOptions({
-    queryKey: ["providers", provider, url] as const,
-    queryFn: ({ signal }) => browse(credentials, provider, { url }, signal),
-  });
-
-export const providerFavoritesQuery = (credentials: Credentials) =>
-  queryOptions({
-    queryKey: ["providers", "favorites", credentials.origin] as const,
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/providers/favorites", { signal }).then(r => r.json() as Promise<{ favorites: ProviderItem[] }>),
+    queryKey: ["providers", "favorites"],
+    queryFn: ({ signal }) => apiJson<{ favorites: ProviderItem[] }>(credentials, "/api/providers/favorites", { signal }),
   });

@@ -68,13 +68,13 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   assert.ok(item.duration !== null && item.duration >= 19 && item.duration < 60, "The scanned fixture is long enough to seek and short enough to require actual EOF for watched state");
 
   await stop();
-  const version = first().libraryVersion ?? 0;
+  const version = first().versions?.library ?? 0;
   await play(entryId, 0, true);
   await pause();
   await seek(7);
   await stop();
   await until("stopping native local media commits the observed point and invalidates both remote catalogs", async () =>
-    all(state => (state.libraryVersion ?? 0) > version) && Math.abs((await catalog()).progress!.position - 7) < 0.4,
+    all(state => (state.versions?.library ?? 0) > version) && Math.abs((await catalog()).progress!.position - 7) < 0.4,
   );
   const firstHistory = await history();
   const checkpoint = firstHistory.items.find(candidate => candidate.mediaId === mediaId)!;

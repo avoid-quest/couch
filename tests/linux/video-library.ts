@@ -23,13 +23,13 @@ async function nativeScreenshot(context: Context, name: string) {
 
 async function rescan(context: Context, sourceId: string, status = "ready") {
   const { ui, until, api, clients } = context;
-  const version = clients[0]!.state!.libraryVersion ?? 0;
+  const version = clients[0]!.state!.versions?.library ?? 0;
   await context.httpRemote.minimize();
   await openFolderSources(ui, until);
-  await ui.button("Scan again", folderCard(sourceId));
+  await ui.button("Rescan", folderCard(sourceId));
   await until(`video library rescan commits ${status} and invalidates both controllers`, async () =>
     (await api("/api/library/sources")).sources.some((source: LibrarySource) => source.id === sourceId && source.status === status)
-    && clients.every(client => (client.state?.libraryVersion ?? 0) > version));
+    && clients.every(client => (client.state?.versions?.library ?? 0) > version));
   await closeFolderSources(ui, until);
 }
 
@@ -111,7 +111,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   assert.ok(await ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('A local film about a night under the stars.')"));
   await ui.key(keys.escape);
   await until("movie details restore the actual opener", () => ui.execute("return document.activeElement?.getAttribute('aria-label') === arguments[0]", [`Details: ${movie.title}`]));
-  await ui.button(`Queue: ${movie.title}`, active);
+  await ui.button(`Queue ${movie.title}`, active);
   await until("TV movie Queue commits to both controllers", () => all(state => state.queue.some(entry => entry.source === `library:${movie.id}`)));
   await ui.button(`Play ${movie.title}`, active);
   await until("TV movie Play runs native video and two audio tracks", () => all(state => state.player.status === "playing" && state.player.position > 0 && state.player.tracks?.filter(track => track.kind === "audio").length === 2 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${movie.id}`));
@@ -137,7 +137,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await httpRemote.ui.key(keys.escape);
   await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", episodes[0]!.title);
-  await httpRemote.ui.button(`Queue: ${episodes[0]!.title}`, active);
+  await httpRemote.ui.button(`Queue ${episodes[0]!.title}`, active);
   await httpRemote.ui.button(`Play ${episodes[0]!.title}`, active);
   await until("phone episode selection replaces movie playback on the one native player", () => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${episodes[0]!.id}`));
   await stop();

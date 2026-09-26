@@ -57,7 +57,7 @@ export async function runMaintenanceMode(directory: string, token: string, forma
         try {
           const requestId = new URL(request.url).searchParams.get("requestId") ?? undefined;
           return reply(Response.json({ ...updates.state, installation: installed ? await manual.read(identity, requestId) : undefined }));
-        } catch { return reply(Response.json({ error: "This installation's updater is unavailable." }, { status: 503 })); }
+        } catch { return reply(Response.json({ error: "Updater unavailable. Reopen Couch." }, { status: 503 })); }
       }
       if (path === "/api/updates/install" && request.method === "POST") return reply(await manual.install(request, identity));
       if (path === "/api/updates/repair" && request.method === "POST") return reply(await manual.repair(request, identity));
@@ -78,7 +78,7 @@ export async function runMaintenanceMode(directory: string, token: string, forma
         while (!frontendReady && Date.now() < deadline) await Bun.sleep(100);
         if (!frontendReady) throw new Error("The bundled app did not acknowledge the running build.");
         const running = await readiness.collect();
-        if (JSON.stringify(running) !== JSON.stringify(loadedBuild)) throw new Error("The native and backend builds differ.");
+        if (JSON.stringify(running) !== JSON.stringify(loadedBuild)) throw new Error("The app and server versions differ.");
         if (await Bun.file(join(directory, "couch.sqlite")).exists()) {
           const database = new Database(join(directory, "couch.sqlite"), { readonly: true });
           try { if (database.query<{ quick_check: string }, []>("PRAGMA quick_check").all().some(row => row.quick_check !== "ok")) throw new Error("The retained database failed its integrity check."); }

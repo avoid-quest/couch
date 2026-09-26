@@ -1,21 +1,24 @@
 import { useShell } from "@/sections/shell/AppShell";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { deviceName } from "@/copy";
 import { SettingsLayout } from "../SettingsLayout";
 import { RestartSettings } from "./RestartSettings";
 import { StartupSettings } from "./StartupSettings";
 import { TvNameSettings } from "./TvNameSettings";
+import { useSessionGate } from "@/session/session-context";
 
 export function GeneralPage() {
-  const { credentials, connected, host, identity, details } = useShell();
+  const { credentials } = useShell();
+  const { connected, identity, details } = useSessionGate();
   const manager = identity?.authority === "administrator" || identity?.authority === "host";
   return (
     <SettingsLayout section="general">
-      {manager && credentials ? [
-        <TvNameSettings key="tv-name" credentials={credentials} connected={connected} canWrite={connected} host={!!host} />,
-        ...(details?.tvPresentation ? [<StartupSettings key="startup" credentials={credentials} connected={connected} />] : []),
-        <RestartSettings key="restart" credentials={credentials} connected={connected} />,
-      ] : identity && credentials ? [
-        <TvNameSettings key="tv-name" credentials={credentials} connected={connected} canWrite={false} host={!!host} />,
-      ] : []}
+      <SettingsSection>
+        {credentials ? <TvNameSettings credentials={credentials} connected={connected} canWrite={manager} name={details?.name} />
+          : <SettingsRow label="Name" description="Pair this browser to change it."><span className="text-sm">{deviceName(details?.name)}</span></SettingsRow>}
+        {manager && credentials && details?.tvPresentation && <StartupSettings credentials={credentials} connected={connected} />}
+        {manager && credentials && <RestartSettings credentials={credentials} connected={connected} hostName={deviceName(details?.name)} />}
+      </SettingsSection>
     </SettingsLayout>
   );
 }

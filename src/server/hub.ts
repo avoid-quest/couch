@@ -1,3 +1,4 @@
+import { ADMIN_ONLY, NO_LONGER_ADMIN, RECORDINGS_UNSUPPORTED, REMOTES_OFF, STORAGE_ERROR, UPDATING_PAUSED, VERSION_MISMATCH } from "./messages";
 import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
 import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
@@ -13,7 +14,7 @@ import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
-import type { Action, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
+import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
@@ -155,7 +156,7 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
-      if (entry.source.startsWith("recording:")) throw new Error("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.");
+      if (entry.source.startsWith("recording:")) throw new Error(RECORDINGS_UNSUPPORTED);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) {
         const station = radio.getPlayable(entry.source.slice(6));
@@ -173,7 +174,7 @@ export function createHub(options: HubOptions) {
     stopped: playbackId => subtitles.stopped(playbackId),
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
-  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue,
+  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlists"), queue: () => session.state.queue,
     upNext: () => {
       const current = session.state.queue.findIndex(entry => entry.id === session.state.currentEntryId);
       const cursor = current >= 0 ? current : session.state.queue.findIndex(entry => entry.id === session.state.queueCursorEntryId);
@@ -203,9 +204,9 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
   const forLater = createForLater({
-    databasePath: options.databasePath, onChange: () => session.invalidate("forLater"),
+    databasePath: options.databasePath, onChange: () => session.invalidate("for-later"),
     lookup: async reference => {
       if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
       if (reference.kind === "queue") {
@@ -234,7 +235,7 @@ export function createHub(options: HubOptions) {
   });
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
-    session.invalidate("controller");
+    session.invalidate("controllers");
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
@@ -260,7 +261,7 @@ export function createHub(options: HubOptions) {
     return idle.workReason() ?? (library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : null);
   };
   const idleReason = () => idle.reason(updateWork());
-  const idleAdmission = () => manual?.needsRefresh() ? "Check this Couch installation before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
+  const idleAdmission = () => manual?.needsRefresh() ? "Refresh update status before auto-install." : updates.state.policy === "idle" ? idleReason() : "Auto-install is off.";
   const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.updateFeed, undefined, admitted, options.updater ? {
     busy: () => !!manual?.busy(), idle: idleAdmission,
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),
@@ -389,6 +390,27 @@ export function createHub(options: HubOptions) {
     })();
   };
 
+  // Settings and device writes bump one revision so every remote refetches that view.
+  const writes: [RegExp, Domain[]][] = [
+    [/^\/api\/settings\/streamingcommunity$/, ["settings", "providers"]],
+    [/^\/api\/settings\//, ["settings"]],
+    [/^\/api\/sound(?:\/|$)/, ["sound"]],
+    [/^\/api\/bluetooth(?:\/|$)/, ["bluetooth", "sound"]],
+    [/^\/api\/display(?:\/|$)/, ["display"]],
+    [/^\/api\/updates(?:\/|$)/, ["updates"]],
+    [/^\/api\/tools(?:\/|$)/, ["tools"]],
+  ];
+  type Fetch = (request: Request, server: Bun.Server<SocketData>) => Promise<Response | undefined>;
+  const publishWrites = (handle: Fetch): Fetch => async (request, server) => {
+    const response = await handle(request, server);
+    if (response?.ok && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      const path = new URL(request.url).pathname;
+      const domains = writes.find(([pattern]) => pattern.test(path))?.[1];
+      if (domains) session.invalidate(...domains);
+    }
+    return response;
+  };
+
   const serveOptions: Bun.Serve.Options<SocketData> = {
     hostname,
     port: options.port ?? 3800,
@@ -403,35 +425,35 @@ export function createHub(options: HubOptions) {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
           const respond = (body: unknown, status = 200) => cors(request, json(body, status));
-          if (!store.remoteControlEnabled()) return respond({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503);
-          if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
+          if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+          if (!admitted()) return respond({ error: UPDATING_PAUSED }, 503);
           if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
           if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
           if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
           let body: unknown;
           try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
-          if (!store.remoteControlEnabled()) return respond({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503);
-          if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
+          if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+          if (!admitted()) return respond({ error: UPDATING_PAUSED }, 503);
           if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
           try {
             idle.activity();
             const token = store.pair("name" in body ? body.name : undefined);
-            session.invalidate("controller");
+            session.invalidate("controllers");
             return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
           } catch (error) {
-            return respond({ error: error instanceof ControllerError ? error.message : "Could not save this remote. Check the TV's storage." }, error instanceof ControllerError ? error.status : 500);
+            return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this remote") }, error instanceof ControllerError ? error.status : 500);
           }
         },
       },
     },
-    async fetch(request, server) {
+    fetch: publishWrites(async (request, server) => {
       const url = new URL(request.url);
       const websocket = url.pathname === "/api/ws";
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
       const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
-      if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503));
+      if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
       const identity = (): ControllerIdentity | null => {
         if (closed) return null;
         if (trusted) return { controller: null, authority: "host", claimAvailable: controllers.claimAvailable() };
@@ -440,40 +462,40 @@ export function createHub(options: HubOptions) {
         return controller ? { controller, authority: controller.role, claimAvailable: controllers.claimAvailable() } : null;
       };
       const caller = identity();
-      if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
+      if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
       if (url.pathname === "/api/settings/sharing") {
         if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
         if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
-        if (!trusted) return cors(request, json({ error: "Change remote control on the playback computer." }, 403));
+        if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
         try {
-          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
           const enabled = await settingField(request, "enabled");
-          if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remote control.");
-          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remotes.");
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
           await lan?.setEnabled(enabled);
           store.saveRemoteControlEnabled(enabled);
           if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
             socket.unsubscribe("session");
-            socket.close(4003, "Remote control is off. Your pairing is remembered.");
+            socket.close(4003, "Remotes are off. Your pairing is remembered.");
           }
-          session.invalidate("controller");
+          session.invalidate("controllers");
           return cors(request, json({ enabled }));
-        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/settings/origin-domain") {
-        if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: "An administrator is required." }, 403));
+        if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
         if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
         if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
         try {
-          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
           const value = await settingField(request, "domain");
           if (typeof value !== "string") throw new ControllerError("Enter a network address.");
           const domain = value.trim();
           const alias = domain ? originDomainUrl(domain, port) : "";
           if (alias) try { await lan?.validateAlias(alias); }
           catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
-          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
-          if (identity()?.authority === "controller" || !identity()) throw new ControllerError("Administrator access changed.", 403);
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+          if (identity()?.authority === "controller" || !identity()) throw new ControllerError(NO_LONGER_ADMIN, 403);
           const previous = store.originDomain();
           const previousAlias = previous ? originDomainUrl(previous, port, !previous.startsWith("http://")) : "";
           store.saveOriginDomain(alias);
@@ -483,7 +505,7 @@ export function createHub(options: HubOptions) {
           if (usingPreviousAlias && previousAlias !== alias) retainedOrigins.add(previousAlias);
           await lan?.refresh().catch(() => {});
           return cors(request, json({ domain: alias }));
-        } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Could not save the LAN origin domain." }, error instanceof ControllerError ? error.status : 500)); }
+        } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
@@ -500,38 +522,38 @@ export function createHub(options: HubOptions) {
         try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
         catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
       }
-      if (url.pathname === "/api/settings/restart" && request.method === "GET") return cors(request, caller.authority !== "controller" ? json({ instanceId, available: !!options.restart, ready: admitted() }) : json({ error: "An administrator is required." }, 403));
+      if (url.pathname === "/api/settings/restart" && request.method === "GET") return cors(request, caller.authority !== "controller" ? json({ instanceId, available: !!options.restart, ready: admitted() }) : json({ error: ADMIN_ONLY }, 403));
       if (url.pathname === "/api/settings/restart" && request.method === "POST") {
-        if (caller.authority === "controller") return cors(request, json({ error: "An administrator is required." }, 403));
+        if (caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
         try {
           const confirmed = await settingField(request, "confirmInterrupt");
           if (confirmed !== true) return cors(request, json({ error: "Confirm interruption before restarting Couch." }, 400));
-          if (!["host", "administrator"].includes(identity()?.authority ?? "")) return cors(request, json({ error: "Administrator access changed." }, 403));
-          if (!options.restart) return cors(request, json({ error: "Restart requires the installed systemd application." }, 409));
+          if (!["host", "administrator"].includes(identity()?.authority ?? "")) return cors(request, json({ error: NO_LONGER_ADMIN }, 403));
+          if (!options.restart) return cors(request, json({ error: "Restart needs the installed Couch app." }, 409));
           await options.restart(true);
           return cors(request, json({ ok: true, instanceId }, 202));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Restart failed." }, 409)); }
       }
       if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));
       if (manual && url.pathname === "/api/updates/repair" && request.method === "POST") return cors(request, await manual.repair(request, identity));
-      if (!admitted()) return cors(request, json({ error: "The TV is preparing an update. Controls are paused." }, 503));
+      if (!admitted()) return cors(request, json({ error: UPDATING_PAUSED }, 503));
       if (url.pathname === "/api/activity" && request.method === "POST") {
         try {
           if (await settingField(request, "activity") !== true || !admitted() || !identity()) return cors(request, json({ error: "Controls are paused." }, 503));
           idle.activity(); return cors(request, new Response(null, { status: 204 }));
-        } catch { return cors(request, json({ error: "Send a controller activity signal." }, 400)); }
+        } catch { return cors(request, json({ error: "Invalid activity signal." }, 400)); }
       }
       const finishWork = !websocket && !["GET", "HEAD"].includes(request.method) ? idle.begin("Waiting for a settings, scan or import request to finish.") : undefined;
       try {
         const playedBy = caller.controller ? { deviceId: caller.controller.id, name: caller.controller.name } : playbackActor(null);
         const currentIdentity = () => admitted() ? identity() : null;
         const authorize = () => {
-          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
           if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
         };
         if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
           ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
-          : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: "Update this desktop client or playback computer to a compatible protocol, or refresh the browser page." }, 409));
+          : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: VERSION_MISMATCH }, 409));
         if (caller.controller) store.touchController(caller.controller.id);
         if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
         if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
@@ -552,7 +574,7 @@ export function createHub(options: HubOptions) {
         if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize, playedBy) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
         return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
-    },
+    }),
     websocket: {
       data: {} as SocketData,
       maxPayloadLength: 8192,
@@ -580,7 +602,7 @@ export function createHub(options: HubOptions) {
           socket.close(1008, "Invalid command or unsupported media source.");
           return;
         }
-        const finishWork = idle.begin("Waiting for a controller command to finish.");
+        const finishWork = idle.begin("Waiting for a remote command to finish.");
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
         try {
           const playedBy = playbackActor(socket.data.controllerId);
@@ -610,8 +632,8 @@ export function createHub(options: HubOptions) {
             const label = action.type === "pause" ? action.paused ? "paused" : "resumed"
               : action.type === "stop" ? "stopped playback"
               : action.type === "remove" ? `removed ${before.queue.find(entry => entry.id === action.entryId)?.title || "an item"}`
-              : added ? `added ${action.type === "enqueue" ? action.entry.title : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? action.title || "media" : "entryId" in action ? session.state.queue.find(entry => entry.id === action.entryId)?.title || "media" : "media"}`
-              : action.type === "play" ? `started ${session.state.queue.find(entry => entry.id === action.entryId)?.title || "media"}` : null;
+              : added ? `queued ${action.type === "enqueue" ? action.entry.title : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? action.title || "media" : "entryId" in action ? session.state.queue.find(entry => entry.id === action.entryId)?.title || "media" : "media"}`
+              : action.type === "play" ? `played ${session.state.queue.find(entry => entry.id === action.entryId)?.title || "media"}` : null;
             if (label) session.notice(playedBy, `${playedBy.name} ${label}`);
           }
         } catch (error) {
@@ -689,7 +711,7 @@ export function createHub(options: HubOptions) {
     server, session, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
     prepareRestart: () => {
-      if (!admitted()) throw new Error("The TV is already preparing an update or restart.");
+      if (!admitted()) throw new Error("Already updating or restarting.");
       // The strict write happens before any irreversible shutdown. On failure the
       // authenticated listener and playback remain usable and the dirty save is retained.
       session.checkpoint();

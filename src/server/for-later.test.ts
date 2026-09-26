@@ -221,7 +221,7 @@ test("a newer Stop cancels delayed saved-item Play and reports the successful ap
   prepared.resolve();
   const response = await playing;
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ ok: true, notice: "Added to Up next. Playback was canceled by a newer control." });
+  expect(await response.json()).toEqual({ ok: true, notice: "Queued." });
   expect(session.state.queue.map(item => item.title)).toEqual(["Current", "Evening movie"]);
   expect(session.state.currentEntryId).toBeNull();
   expect(sent).toEqual(afterStop);

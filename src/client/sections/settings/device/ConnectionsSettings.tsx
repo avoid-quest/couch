@@ -1,166 +1,129 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, type ApiCredentials } from "@/api/client";
-import { controllersQuery } from "@/api/controllers";
+import { useRef, useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiSend, type ApiCredentials } from "@/api/client";
+import { claimCodeQuery, controllersQuery } from "@/api/controllers";
+import { originDomainQuery } from "@/api/settings";
 import { PairingDialog } from "@/components/PairingDialog";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { TRY_AGAIN } from "@/copy";
 import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
 
-const formatSeen = (at: number | null) => at ? new Date(at).toLocaleString() : "never";
+const formatSeen = (at: number | null) => at ? `Seen ${new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Never seen";
 
-export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, setRemoteControlEnabled, administratorClaimed, managedLan = false, lanError }: {
+export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, administratorClaimed, managedLan = false, lanError, hostName = "Couch" }: {
   credentials: ApiCredentials; connected: boolean; urls: string[]; identity: ControllerIdentity;
-  remoteControlEnabled: boolean; setRemoteControlEnabled: (enabled: boolean) => void; administratorClaimed: boolean; managedLan?: boolean; lanError?: string | null;
+  remoteControlEnabled: boolean; administratorClaimed: boolean; managedLan?: boolean; lanError?: string | null; hostName?: string;
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.controller?.id;
-  const manager = identity.authority === "administrator" || identity.authority === "host";
+  const host = identity.authority === "host";
+  const manager = identity.authority === "administrator" || host;
   const controllers = useQuery({ ...controllersQuery(credentials), enabled: connected && manager });
-  const setupCode = useQuery({
-    queryKey: ["controllers", "setup-code"],
-    enabled: connected && remoteControlEnabled && identity.authority === "host" && !administratorClaimed, retry: false,
-    queryFn: async ({ signal }) => {
-      const response = await apiFetch(credentials, "/api/controllers/claim-code", { signal });
-      return await response.json() as { code: string };
-    },
-  });
-  const originDomain = useQuery({
-    queryKey: ["settings", "origin-domain", credentials.origin],
-    enabled: connected && manager && managedLan,
-    queryFn: () => apiFetch(credentials, "/api/settings/origin-domain").then(response => response.json() as Promise<{ domain: string }>),
-  });
-  const [domain, setDomain] = useState("");
-  const [domainPending, setDomainPending] = useState(false);
-  const [domainError, setDomainError] = useState<string | null>(null);
-  useEffect(() => { if (originDomain.data) setDomain(originDomain.data.domain); }, [originDomain.data]);
+  const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed });
+  const originDomain = useQuery({ ...originDomainQuery(credentials), enabled: connected && manager && managedLan });
+  const [domainDraft, setDomainDraft] = useState<string | null>(null);
+  const domain = domainDraft ?? originDomain.data?.domain ?? "";
   const [code, setCode] = useState("");
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [pairingOpen, setPairingOpen] = useState(false);
-  const [sharingPending, setSharingPending] = useState(false);
-  const [sharingError, setSharingError] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<Controller | null>(null);
   const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
-  useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
-
-  async function claim(event: FormEvent) {
+  const refreshControllers = () => queryClient.invalidateQueries({ queryKey: controllersQuery(credentials).queryKey });
+  const claiming = useMutation({ mutationFn: (value: string) => apiSend(credentials, "/api/controllers/claim", { code: value }), onSuccess: refreshControllers });
+  const deviceChange = useMutation({
+    mutationFn: ({ target, action }: { target: Controller; action: "role" | "remove" }) => action === "role"
+      ? apiSend(credentials, `/api/controllers/${target.id}/role`, { role: target.role === "administrator" ? "controller" : "administrator" })
+      : apiSend(credentials, `/api/controllers/${target.id}`, undefined, "DELETE"),
+    onSuccess: refreshControllers,
+  });
+  // The server bumps the controllers revision, which refreshes remoteControlEnabled.
+  const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
+  const saveDomain = useMutation({
+    mutationFn: (value: string) => apiSend<{ domain: string }>(credentials, "/api/settings/origin-domain", { domain: value }),
+    onSuccess: result => { queryClient.setQueryData(originDomainQuery(credentials).queryKey, result); setDomainDraft(null); },
+  });
+  const message = (error: Error | null, fallback: string) => error ? error.message || fallback : null;
+  const pending = deviceChange.isPending;
+  const act = (target: Controller, action: "role" | "remove") => { if (!pending) deviceChange.mutate({ target, action }); };
+  function claim(event: FormEvent) {
     event.preventDefault();
-    if (claiming) return;
-    setClaiming(true); setClaimError(null);
-    try {
-      await apiFetch(credentials, "/api/controllers/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: code.trim() }) });
-      await queryClient.invalidateQueries({ queryKey: controllersQuery(credentials).queryKey });
-    } catch (reason) { setClaimError(reason instanceof Error ? reason.message : "Could not claim administration."); }
-    finally { setClaiming(false); }
+    if (!claiming.isPending) claiming.mutate(code.trim());
   }
-
-  async function act(device: Controller, action: "role" | "remove") {
-    if (pending) return;
-    setPending(true); setError(null);
-    try {
-      await apiFetch(credentials, `/api/controllers/${device.id}${action === "role" ? "/role" : ""}`, {
-        method: action === "role" ? "POST" : "DELETE",
-        headers: action === "role" ? { "Content-Type": "application/json" } : undefined,
-        body: action === "role" ? JSON.stringify({ role: device.role === "administrator" ? "controller" : "administrator" }) : undefined,
-      });
-      await queryClient.invalidateQueries({ queryKey: controllersQuery(credentials).queryKey });
-      if (action === "remove") setRemoving(null);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Request failed."); }
-    finally { setPending(false); }
-  }
-
-  async function saveSharing(enabled: boolean) {
-    if (sharingPending) return;
-    setSharingPending(true); setSharingError(null);
-    try {
-      await apiFetch(credentials, "/api/settings/sharing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
-      setRemoteControlEnabled(enabled);
-    } catch (reason) { setSharingError(reason instanceof Error ? reason.message : "Could not save remote control."); }
-    finally { setSharingPending(false); }
-  }
-
-  async function saveDomain(event: FormEvent) {
+  function submitDomain(event: FormEvent) {
     event.preventDefault();
-    if (domainPending) return;
-    setDomainPending(true); setDomainError(null);
-    try {
-      await apiFetch(credentials, "/api/settings/origin-domain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: domain.trim() }) });
-      await originDomain.refetch();
-    } catch (reason) { setDomainError(reason instanceof Error ? reason.message : "Could not save the local domain."); }
-    finally { setDomainPending(false); }
+    if (!saveDomain.isPending) saveDomain.mutate(domain.trim());
   }
 
-  return (
-    <div className="space-y-8">
-      {manager && <section aria-label="Pair a remote" className="space-y-3">
-        <h3 className="font-medium">Pair a new remote</h3>
-        <p className="text-sm text-muted-foreground">New devices pair as controllers. Promote one below to make it an administrator.</p>
-        <Button ref={pairingRef} disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
-        {!remoteControlEnabled && <p className="text-sm text-muted-foreground">Turn on remote control before pairing a device.</p>}
-        <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} openerRef={pairingRef} />
-      </section>}
-      {identity.authority === "host" && <section aria-label="Remote control" className="space-y-3">
-        <div className="flex items-center justify-between gap-4"><div><h3 className="font-medium">Allow remote control</h3><p className="text-sm text-muted-foreground">Let browsers and other Couch apps on your LAN pair with this computer.</p></div><Switch aria-label="Allow remote control" checked={remoteControlEnabled} disabled={sharingPending} onCheckedChange={saveSharing} /></div>
-        {sharingError && <p role="alert">{sharingError}</p>}
-      </section>}
-      {manager && managedLan && <section aria-label="Local network address" className="space-y-3">
-        <h3 className="font-medium">Local network address</h3>
-        <p className="text-sm text-muted-foreground">Use a DNS name that resolves only to this computer’s selected LAN address. A bare name uses port 80; include Couch’s port when port 80 is unavailable.</p>
-        <form className="flex flex-wrap items-end gap-3" onSubmit={event => void saveDomain(event)}>
-          <div className="min-w-0 space-y-2"><Label htmlFor="origin-domain">Network address</Label><Input id="origin-domain" className="min-h-11" placeholder="http://couch.avoid.local" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomain(event.target.value)} disabled={!connected || domainPending || originDomain.isPending} /></div>
-          <Button type="submit" className="min-h-11" disabled={!connected || domainPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{domainPending ? "Saving…" : "Save address"}</Button>
+  return <>
+    {manager && <SettingsSection>
+      {host && <SettingsRow label="Allow remotes" description="Phones and computers on your network can pair.">
+        <Switch aria-label="Allow remotes" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
+      </SettingsRow>}
+      <SettingsRow label="New remote" description={remoteControlEnabled ? "Scan a code with your phone." : "Turn on Allow remotes first."}>
+        <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
+      </SettingsRow>
+      {managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A name that points to ${hostName}. Add a port if 80 is taken.`}>
+        <form className="flex w-full flex-wrap items-center gap-2" onSubmit={submitDomain}>
+          <Input id="origin-domain" className="min-w-0 flex-1" placeholder="http://couch.local" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomainDraft(event.target.value)} disabled={!connected || saveDomain.isPending || originDomain.isPending} />
+          <Button type="submit" variant="outline" disabled={!connected || saveDomain.isPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{saveDomain.isPending ? "Saving…" : "Save"}</Button>
         </form>
-        {(originDomain.error || domainError) && <p role="alert" className="text-sm text-destructive">{domainError ?? (originDomain.error instanceof Error ? originDomain.error.message : "Could not read the local domain.")}</p>}
-        {lanError && <p role="status" className="text-sm text-muted-foreground">{lanError}</p>}
-      </section>}
-      {identity.authority === "host" && remoteControlEnabled && !administratorClaimed && (
-        <section aria-label="Administrator setup" data-administrator-setup className="space-y-3">
-          <h3 className="font-medium">Set up your administrator remote</h3>
-          {setupCode.isPending ? <p role="status" className="text-muted-foreground"><Spinner className="mr-2 inline size-3.5" />Loading setup code…</p>
-            : setupCode.isError || !setupCode.data || !pairUrl ? <p role="alert">Could not load administrator setup. Check the LAN connection and try again.</p> : (
-              <div className="min-w-0 space-y-2"><p className="text-sm text-muted-foreground">Pair the remote above, then enter this one-use administrator code.</p><a className="break-all underline" href={pairUrl}>{pairUrl}</a><p className="font-mono text-2xl tracking-wider" data-administrator-code>{setupCode.data.code}</p></div>
-            )}
-        </section>
-      )}
-      {identity.authority === "controller" && identity.claimAvailable && (
-        <section aria-label="Claim administration" className="space-y-3">
-          <h3 className="font-medium">Claim administration</h3>
-          <form className="flex flex-wrap items-end gap-3" onSubmit={claim}>
-            <div className="min-w-0 space-y-2"><Label htmlFor="administrator-code">Administrator code</Label>
-              <Input id="administrator-code" className="min-h-11" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming} /></div>
-            <Button className="min-h-11" type="submit" disabled={claiming || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming ? "Claiming…" : "Claim administration"}</Button>
+      </SettingsRow>}
+      {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Allow remotes.")}</AlertDescription></Alert>}
+      {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription></Alert>}
+      <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />
+    </SettingsSection>}
+    {host && remoteControlEnabled && !administratorClaimed && (
+      <SettingsSection title="Make a remote the admin" description="Pair a remote, then enter this one-time code on it." data-administrator-setup>
+        <div className="flex min-w-0 flex-col gap-1">
+          {setupCode.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
+            : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription></Alert>
+            : <><p className="font-mono text-3xl tracking-wider" data-administrator-code>{setupCode.data.code}</p><a className="break-all text-sm text-muted-foreground underline underline-offset-4" href={pairUrl}>{pairUrl}</a></>}
+        </div>
+      </SettingsSection>
+    )}
+    {identity.authority === "controller" && identity.claimAvailable && (
+      <SettingsSection data-admin-claim>
+        <SettingsRow label="Admin code" htmlFor="administrator-code" description="Shown on the computer running Couch.">
+          <form className="flex w-full flex-wrap items-center gap-2" onSubmit={claim}>
+            <Input id="administrator-code" className="min-w-0 flex-1" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming.isPending} />
+            <Button type="submit" disabled={claiming.isPending || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming.isPending ? "Checking…" : "Become admin"}</Button>
           </form>
-          {claimError && <p role="alert">{claimError}</p>}
-        </section>
-      )}
-      <section aria-label="Connected devices" className="space-y-3">
-        <h3 className="font-medium">Devices</h3>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {!manager ? <p className="text-sm text-muted-foreground">Claim administration to manage devices.</p>
-          : controllers.isPending ? <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading devices…</p>
-          : controllers.isError ? <p role="alert">Could not load devices. <Button variant="outline" className="min-h-11" onClick={() => void controllers.refetch()}>Retry</Button></p>
-          : <ul className="divide-y border-t border-border">
-              {controllers.data.map(device => (
-                <li key={device.id} className="flex flex-wrap items-center gap-3 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{device.name}{device.id === selfId && <span className="ml-2 font-normal text-muted-foreground">(this device)</span>}</p>
-                    <p className="text-sm text-muted-foreground">{device.role === "administrator" ? "Administrator" : "Controller"} · last seen {formatSeen(device.lastSeenAt)}</p>
-                  </div>
-                  {device.id !== selfId && <>
-                    <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void act(device, "role")}>{device.role === "administrator" ? "Make controller" : "Make administrator"}</Button>
-                    {removing === device.id ? <span className="flex flex-wrap items-center gap-2"><span>Remove {device.name}?</span><Button variant="destructive" className="min-h-11" disabled={pending} onClick={() => void act(device, "remove")}>Remove</Button><Button variant="outline" className="min-h-11" disabled={pending} onClick={() => setRemoving(null)}>Cancel</Button></span> : <Button variant="destructive" className="min-h-11" disabled={pending} onClick={() => setRemoving(device.id)}>Remove</Button>}
-                  </>}
-                </li>
-              ))}
-            </ul>}
-      </section>
-    </div>
-  );
+        </SettingsRow>
+        {claiming.error && <Alert variant="destructive"><AlertDescription>{message(claiming.error, "Couldn't make you admin. Check the code.")}</AlertDescription></Alert>}
+      </SettingsSection>
+    )}
+    {manager && <SettingsSection title="Paired remotes" data-remotes>
+      {controllers.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
+        : controllers.isError ? <Alert variant="destructive"><AlertDescription>Couldn't load remotes.</AlertDescription><AlertAction><Button variant="outline" size="sm" onClick={() => void controllers.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>
+        : !controllers.data.length ? <p className="text-sm text-muted-foreground">No remotes yet.</p>
+        : controllers.data.map(device => (
+            <SettingsRow key={device.id} data-remote={device.id} label={<>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this remote)</span>}</>}
+              description={[device.role === "administrator" && "Admin", formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>
+              {device.id !== selfId && <>
+                <Button variant="outline" disabled={pending} onClick={() => act(device, "role")}>{device.role === "administrator" ? "Remove admin" : "Make admin"}</Button>
+                <Button variant="ghost" disabled={pending} onClick={() => setRemoving(device)}>Remove</Button>
+              </>}
+            </SettingsRow>
+          ))}
+      {deviceChange.error && <Alert variant="destructive"><AlertDescription>{message(deviceChange.error, "Couldn't update remote. Try again.")}</AlertDescription></Alert>}
+    </SettingsSection>}
+    <AlertDialog open={!!removing} onOpenChange={open => { if (!open) setRemoving(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove {removing?.name}?</AlertDialogTitle>
+          <AlertDialogDescription>It will need to pair again.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => removing && act(removing, "remove")}>Remove</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>;
 }

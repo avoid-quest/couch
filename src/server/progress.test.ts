@@ -203,14 +203,14 @@ test("late local resolution and native observations cannot create history or res
 test("failed checkpoints never invalidate durable progress and retry before replacing the source", () => {
   const f = fixture();
   f.enqueue("one"); f.enqueue("two"); f.play("one");
-  const version = f.session.state.libraryVersion;
+  const version = f.session.state.versions?.progress;
   f.fail(true);
   f.observe(10);
   expect(f.saved()).toBeNull();
-  expect(f.session.state.libraryVersion).toBe(version);
-  expect(f.session.state.progressError).toContain("Could not save");
+  expect(f.session.state.versions?.progress).toBe(version);
+  expect(f.session.state.progressError).toContain("Couldn't save");
   expect(f.session.state.progressError).not.toContain("Private");
-  expect(() => f.play("two")).toThrow("Could not save");
+  expect(() => f.play("two")).toThrow("Couldn't save");
   expect(f.session.state.currentEntryId).toBe("one");
   f.session.command({ type: "stop" });
   expect(f.session.state.currentEntryId).toBeNull();

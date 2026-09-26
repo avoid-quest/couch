@@ -4,6 +4,7 @@ import { extname, join } from "node:path";
 import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
 import type { MediaSource } from "./session";
 import { ControllerError } from "./controllers";
+import { STORAGE_ERROR } from "./messages";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
 
@@ -80,7 +81,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
         }));
         signal.throwIfAborted();
         if (closed) throw new Error("The player is shutting down.");
-        return { ...media, subtitles: downloaded.filter((subtitle): subtitle is ExternalSubtitle => !!subtitle), ...(failed ? { subtitleWarning: [media.subtitleWarning, "Some external subtitles could not be loaded. Try again or add a text subtitle file."].filter(Boolean).join(" ") } : {}) };
+        return { ...media, subtitles: downloaded.filter((subtitle): subtitle is ExternalSubtitle => !!subtitle), ...(failed ? { subtitleWarning: [media.subtitleWarning, "Couldn't load some subtitles. Try again or add a subtitle file."].filter(Boolean).join(" ") } : {}) };
       } catch (error) { paths.forEach(remove); throw error; }
     },
     async handle(request: Request, authorize = () => {}) {
@@ -128,7 +129,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
       } catch (error) {
         if (path) remove(path);
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
-        return json({ error: "Could not add the subtitle. Check the current playback and the host's storage." }, 400);
+        return json({ error: STORAGE_ERROR("the subtitle") }, 400);
       } finally { pending--; }
     },
     observe(state: PlayerState) {

@@ -1,22 +1,10 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { LibraryItem } from "../../shared/library";
-import type { Credentials } from "../session/session";
-import { apiFetch } from "./client";
+import type { JellyfinConnection, JellyfinStatus } from "../../shared/jellyfin";
+import { apiJson, type ApiCredentials } from "./client";
 
-export const jellyfinItemsQuery = (credentials: Credentials, search: { query?: string; offset?: number; limit?: number } = {}) =>
+// Administrators also read the configured server address.
+export const jellyfinQuery = (credentials: ApiCredentials, manage = false) =>
   queryOptions({
-    queryKey: ["jellyfin", "items", search] as const,
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams();
-      if (search.query) params.set("q", search.query);
-      params.set("offset", String(search.offset ?? 0));
-      params.set("limit", String(search.limit ?? 24));
-      return apiFetch(credentials, `/api/jellyfin/items?${params}`, { signal }).then(r => r.json() as Promise<{ items: LibraryItem[]; total: number; offset: number; limit: number }>);
-    },
-  });
-
-export const jellyfinConnectionQuery = (credentials: Credentials) =>
-  queryOptions({
-    queryKey: ["jellyfin", "connection"],
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/jellyfin/connection", { signal }).then(r => r.json() as Promise<{ configured: boolean }>),
+    queryKey: ["jellyfin", manage ? "connection" : "status"] as const,
+    queryFn: ({ signal }) => apiJson<JellyfinStatus | JellyfinConnection>(credentials, manage ? "/api/jellyfin/connection" : "/api/jellyfin", { signal }),
   });

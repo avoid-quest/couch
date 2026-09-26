@@ -100,8 +100,8 @@ test("stale rename/removal and repeated removal fail without changing profile da
   store.saveProgress(viewer.id, history);
   store.saveProfilePreferences(viewer.id, preferences);
   const renamed = store.renameProfile(viewer.id, "Renamed", viewer.name);
-  expect(() => store.renameProfile(viewer.id, "Stale", viewer.name)).toThrow("renamed on another remote");
-  expect(() => store.removeProfile(viewer.id, viewer.name)).toThrow("renamed on another remote");
+  expect(() => store.renameProfile(viewer.id, "Stale", viewer.name)).toThrow("Someone else changed this");
+  expect(() => store.removeProfile(viewer.id, viewer.name)).toThrow("Someone else changed this");
   expect(store.profiles()).toContainEqual(renamed);
   expect(store.progress(viewer.id, history.mediaId)).toEqual(history);
   expect(store.playbackPreferences(viewer.id).profile).toEqual(preferences);
@@ -158,7 +158,7 @@ test("rename publishes after commit during playback, while removal and selection
   }
   const before = structuredClone(session.state), count = commands.length;
   session.renameProfile(viewer.id, "Renamed", viewer.name);
-  expect(session.state).toEqual({ ...before, activeProfile: { ...viewer, name: "Renamed" }, libraryVersion: (before.libraryVersion ?? 0) + 1 });
+  expect(session.state).toEqual({ ...before, activeProfile: { ...viewer, name: "Renamed" }, versions: { ...before.versions, library: (before.versions?.library ?? 0) + 1, progress: (before.versions?.progress ?? 0) + 1 } });
   expect(commands).toHaveLength(count);
   session.command({ type: "stop" });
   session.observe(idle);
@@ -184,8 +184,8 @@ test("only a committed removal discards a failed checkpoint, preventing later st
   const playbackId = session.state.player.playbackId;
   session.observe({ ...idle, status: "playing", playbackId, position: 24, duration: 120 });
   session.observe({ ...idle, status: "error", playbackId });
-  expect(session.state.progressError).toContain("Could not save");
-  expect(() => session.removeProfile(viewer.id, "Old name")).toThrow("renamed");
+  expect(session.state.progressError).toContain("Couldn't save");
+  expect(() => session.removeProfile(viewer.id, "Old name")).toThrow("Someone else changed this");
   fail = false;
   session.command({ type: "stop" });
   expect(store.progress(viewer.id, history.mediaId)?.position).toBe(24);
@@ -250,7 +250,7 @@ test("person naming validates, refuses stale writes and publishes without changi
   const { store } = fixture();
   for (const value of [null, "", " ", "x".repeat(61), "bad\nname"]) expect(() => store.namePerson("household", value, "Household")).toThrow("Enter your name");
   store.createProfile("Existing");
-  expect(() => store.namePerson("household", "Existing", "Household")).toThrow("already has a saved history");
+  expect(() => store.namePerson("household", "Existing", "Household")).toThrow("Name taken");
   const commands: PlaybackCommand[] = [];
   const session = createSession(store, command => commands.push(command), () => {});
   session.observe(idle);
@@ -259,9 +259,9 @@ test("person naming validates, refuses stale writes and publishes without changi
   session.observe({ ...idle, status: "paused", playbackId: session.state.player.playbackId, position: 24, duration: 120 });
   const before = structuredClone(session.state), count = commands.length;
   const named = session.namePerson("household", "Francesco", "Household");
-  expect(session.state).toEqual({ ...before, activeProfile: named, libraryVersion: (before.libraryVersion ?? 0) + 1 });
+  expect(session.state).toEqual({ ...before, activeProfile: named, versions: { ...before.versions, library: (before.versions?.library ?? 0) + 1, progress: (before.versions?.progress ?? 0) + 1 } });
   expect(commands).toHaveLength(count);
-  expect(() => session.namePerson("household", "Stale", "Household")).toThrow("renamed on another remote");
+  expect(() => session.namePerson("household", "Stale", "Household")).toThrow("Someone else changed this");
   expect(session.state.activeProfile).toEqual(named);
   session.close();
 });

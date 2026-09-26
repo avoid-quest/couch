@@ -5,6 +5,7 @@ import type { PlaylistLoadMode, PlaylistSource, SavedPlaylist, SavedPlaylistSumm
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
 import { ProviderError } from "./providers/http";
+import { CHANGED_ELSEWHERE, QUEUE_FULL } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -36,7 +37,7 @@ function playlistName(value: unknown) {
 async function body(request: Request) {
   if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new PlaylistError("Send a JSON object.");
   if (Number(request.headers.get("Content-Length")) > 8192) throw new PlaylistError("The playlist command is too large.", 413);
-  const text = await request.text().catch(() => { throw new PlaylistError("Could not read the playlist command."); });
+  const text = await request.text().catch(() => { throw new PlaylistError("Couldn't read the playlist command."); });
   if (text.length > 8192) throw new PlaylistError("The playlist command is too large.", 413);
   let value: unknown;
   try { value = JSON.parse(text); } catch { throw new PlaylistError("Invalid JSON body."); }
@@ -75,7 +76,7 @@ function resolvedSource(resolve: Options["resolveSource"], source: PlaylistSourc
   return resolve(source).catch(reason => {
     if (reason instanceof PlaylistError) throw reason;
     if (reason instanceof ProviderError) throw new PlaylistError(reason.message, reason.status);
-    throw new PlaylistError(reason instanceof Error && reason.message ? reason.message : "Could not read this source list. Try again.", 502);
+    throw new PlaylistError(reason instanceof Error && reason.message ? reason.message : "Couldn't read this source list. Try again.", 502);
   });
 }
 
@@ -86,7 +87,7 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
   if (queue.length > 500) throw new PlaylistError("A playlist can contain up to 500 entries.");
   const ids = new Set<string>();
   return queue.map(entry => {
-    if (!identifier(entry.id) || ids.has(entry.id) || typeof entry.title !== "string" || !entry.title.trim() || entry.title.length > 300 || !originalSource(entry.source)) throw new PlaylistError("The queue contains an item that cannot be saved. Add it again and retry.");
+    if (!identifier(entry.id) || ids.has(entry.id) || typeof entry.title !== "string" || !entry.title.trim() || entry.title.length > 300 || !originalSource(entry.source)) throw new PlaylistError("Up next has an item that can't be saved. Queue it again.");
     ids.add(entry.id);
     return {
       id: entry.id, title: entry.title, source: entry.source,
@@ -127,7 +128,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
   };
   const requireRevision = (row: Row, revision: unknown) => {
     if (!Number.isSafeInteger(revision) || Number(revision) < 1) throw new PlaylistError("Use the current playlist revision.");
-    if (row.revision !== revision) throw new PlaylistError("This playlist changed on another controller. Refresh it and try again.", 409);
+    if (row.revision !== revision) throw new PlaylistError(CHANGED_ELSEWHERE, 409);
   };
   const uniqueName = (name: string, id = "") => {
     if (db.query("SELECT 1 FROM saved_playlists WHERE name_key = ? AND id != ?").get(name.toLowerCase(), id)) throw new PlaylistError("A playlist already has that name.", 409);
@@ -202,7 +203,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
           requireRevision(row, input.revision);
           const entries = JSON.parse(row.entries) as QueueEntry[];
           if (!entries.length) throw new PlaylistError("This playlist is empty. Save a queue before loading it.");
-          if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError("The queue can contain up to 500 entries. Replace it or remove some entries first.");
+          if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError(QUEUE_FULL);
           loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy);
           return Response.json({ ok: true });
         }
@@ -259,7 +260,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
         if (result.changed) onChange();
         return Response.json(result.playlist ? { playlist: result.playlist } : { ok: true, undoToken: result.undoToken });
       } catch (error) {
-        return Response.json({ error: error instanceof PlaylistError || error instanceof ControllerError ? error.message : "Could not update playlists or load the queue. Check the TV's storage and current playback." }, { status: error instanceof PlaylistError || error instanceof ControllerError ? error.status : 500 });
+        return Response.json({ error: error instanceof PlaylistError || error instanceof ControllerError ? error.message : "Couldn't update the list or load Up next." }, { status: error instanceof PlaylistError || error instanceof ControllerError ? error.status : 500 });
       }
     },
     close() { db.close(); },

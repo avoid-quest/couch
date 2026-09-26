@@ -220,14 +220,14 @@ try {
   assert.equal((await api(`/api/collections/${manual.id}`, { revision, definition: { ...definition, name: "Renamed by phone" } }, 1)).status, 200);
   await until("native edit keeps its unsaved value and warns about newer committed data", () => ui.execute("return document.querySelector('#collection-name')?.value === 'TV draft' && document.querySelector('.collections-panel')?.textContent.includes('Your draft is still here')"));
   await ui.button("Save collection", panel);
-  await until("native stale save is rejected without replacing the phone edit", () => ui.execute("return document.querySelector('.collections-panel [role=alert]')?.textContent.includes('changed on another controller')"));
+  await until("native stale save is rejected without replacing the phone edit", () => ui.execute("return document.querySelector('.collections-panel [role=alert]')?.textContent.includes('Someone else changed this')"));
   assert.equal((await detail(manual.id)).collection.name, "Renamed by phone");
   await ui.button("Cancel editing", panel);
   await selected(ui, "Renamed by phone");
   const oldPreview = await detail(manual.id);
   await rename("/mnt/collections-fixtures/Red.mkv", "/mnt/Red-away.mkv");
   await rename("/mnt/collections-fixtures/Song one.flac", "/mnt/Song-one-away.flac");
-  await openFolderSources(ui, until); await ui.button("Scan again", folderCard(sourceId)); await closeFolderSources(ui, until);
+  await openFolderSources(ui, until); await ui.button("Rescan", folderCard(sourceId)); await closeFolderSources(ui, until);
   await until("rescan marks removed film and matching music unavailable", async () => !(await detail(manual.id)).items[0]!.available && !(await detail(music.id)).items[0]!.available);
   assert.equal((await api(`/api/collections/${manual.id}/load`, { revision: oldPreview.collection.revision, digest: oldPreview.digest, mode: "play" })).status, 409);
   await open(ui); await selected(ui, "Renamed by phone");
@@ -236,7 +236,7 @@ try {
   clients[1]!.socket.close(); clients[1]!.connect();
   await until("second controller reconnect receives current committed queue", () => all(state => state.queue.at(-1)?.title === "Blue"));
   await rename("/mnt/collections-fixtures", "/mnt/collections-offline");
-  await openFolderSources(ui, until); await ui.button("Scan again", folderCard(sourceId)); await closeFolderSources(ui, until);
+  await openFolderSources(ui, until); await ui.button("Rescan", folderCard(sourceId)); await closeFolderSources(ui, until);
   await until("whole source reports unavailable", async () => (await api("/api/library/sources")).data.sources[0].status === "unavailable");
   const queueBefore = clients[0]!.state!.queue;
   await webdriver(`/session/${sessionId}`, undefined, "DELETE"); sessionId = "";

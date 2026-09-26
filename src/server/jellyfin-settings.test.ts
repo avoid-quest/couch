@@ -105,7 +105,7 @@ test("connection tests distinguish rejected credentials from an unavailable serv
     const response = await context.request("/api/jellyfin/test", "POST");
     expect(response.status).toBe(502);
     const text = await response.text();
-    expect(text).toContain(code === 503 ? "Could not reach" : "rejected the saved connection");
+    expect(text).toContain(code === 503 ? "Couldn't reach" : "rejected the saved connection");
     expect(text).not.toMatch(/private|127\.0\.0\.1/);
     expect(context.configuration()).toBe(saved);
   }

@@ -114,7 +114,7 @@ test("a generic playlist confirmation remains bounded at thirty-five seconds and
   expect(outcome).toBe("pending");
   await elapse(35_000);
   await done;
-  expect(outcome).toBe("No confirmation received. Check the current state before retrying.");
+  expect(outcome).toBe("No reply from Couch. Check before retrying.");
   sockets[0]!.emit({ type: "result", requestId: sockets[0]!.sent[0]!.requestId, ok: true });
   await Promise.resolve();
   expect(outcome).not.toBe("confirmed");
@@ -127,7 +127,7 @@ test.each([false, true])("a generic atom keeps the ordinary eight-second confirm
   expect(outcome).toBe("pending");
   await elapse(8_000);
   await done;
-  expect(outcome).toBe("No confirmation received. Check the current state before retrying.");
+  expect(outcome).toBe("No reply from Couch. Check before retrying.");
 });
 
 test("changing connections rejects the old provider request and an old confirmation cannot settle the new request", async () => {
@@ -136,7 +136,7 @@ test("changing connections rejects the old provider request and an old confirmat
   const oldSocket = sockets[0]!, oldRequest = oldSocket.sent[0]!;
   await mount({ ...credentials, origin: "http://another-tv", token: "new-pairing" });
   await old;
-  expect(oldOutcome).toBe("Connection lost. Check the current state before retrying.");
+  expect(oldOutcome).toBe("Connection lost. Try again.");
   expect(sockets).toHaveLength(2);
   const nextSocket = sockets[1]!;
   await act(async () => nextSocket.emit({ type: "state", state }));

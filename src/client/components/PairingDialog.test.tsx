@@ -4,6 +4,9 @@ import { act, useRef, useState } from "react";
 import type { Root } from "react-dom/client";
 import * as session from "@/session/session";
 import { screen, fireEvent } from "@/testing";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 let sessionMock: ReturnType<typeof spyOn> | undefined;
@@ -14,7 +17,8 @@ const qr = (code = "123456") => screen.queryByRole("img", { name: `Pair another 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 async function renderDialog(connected = true, info = host) {
   const { PairingDialog } = await import("./PairingDialog");
-  await act(async () => root.render(<PairingDialog credentials={info} urls={info.urls} connected={connected} open onOpenChange={() => {}} />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><PairingDialog credentials={info} urls={info.urls} connected={connected} open onOpenChange={() => {}} /></QueryClientProvider>));
+  await flush();
 }
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" });
@@ -27,7 +31,7 @@ beforeEach(async () => {
   const { createRoot } = await import("react-dom/client");
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
-afterEach(async () => {
+afterEach(async () => { queryClient.clear();
   await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); });
   sessionMock?.mockRestore(); sessionMock = undefined; request.mockRestore();
   await window.happyDOM.abort();
@@ -50,26 +54,26 @@ test("loading, failure and retry retain manual recovery without an address-only 
   let resolve!: (response: Response) => void;
   request.mockImplementation(() => new Promise(done => { resolve = done; }));
   await renderDialog();
-  expect(qr()).toBeNull(); expect(screen.getByText("Loading pairing QR…")).toBeDefined();
+  expect(qr()).toBeNull(); expect(screen.getByText("Loading…")).toBeDefined();
   expect(button("Close")).toBeDefined();
-  await act(async () => resolve(Response.json({ error: "Unavailable" }, { status: 503 })));
-  expect(qr()).toBeNull(); expect(screen.getByRole("alert").textContent).toContain("Could not load the QR or pairing code");
+  await act(async () => resolve(Response.json({ error: "Unavailable" }, { status: 503 }))); await flush();
+  expect(qr()).toBeNull(); expect(screen.getByRole("alert").textContent).toContain("Couldn't load the code.");
   request.mockResolvedValue(Response.json({ code: "123456" }));
-  await act(async () => button("Retry pairing QR").click());
+  await act(async () => button("Try again").click()); await flush();
   expect(qr()).not.toBeNull();
 });
 
 test("disconnect removes a valid QR, ignores late responses and reconnect fetches again", async () => {
   await renderDialog(); expect(qr()).not.toBeNull();
   await renderDialog(false); expect(qr()).toBeNull();
-  expect(screen.getByRole("status").textContent).toContain("Reconnecting to the TV");
+  expect(screen.getByRole("status").textContent).toContain("Offline. Reconnecting to Couch…");
   let resolve!: (response: Response) => void;
   request.mockImplementation(() => new Promise(done => { resolve = done; }));
   await renderDialog(); expect(qr()).toBeNull();
   const signal = request.mock.calls.at(-1)?.[1]?.signal;
   await renderDialog(false);
   expect(signal?.aborted).toBe(true);
-  await act(async () => resolve(Response.json({ code: "654321" })));
+  await act(async () => resolve(Response.json({ code: "654321" }))); await flush();
   expect(qr()).toBeNull();
   request.mockResolvedValue(Response.json({ code: "123456" }));
   await renderDialog(); expect(qr()).not.toBeNull();
@@ -78,7 +82,7 @@ test("disconnect removes a valid QR, ignores late responses and reconnect fetche
 test("no advertised address leaves Close and manual recovery available", async () => {
   await renderDialog(true, { ...host, urls: [] });
   expect(qr()).toBeNull(); expect(request).not.toHaveBeenCalled();
-  expect(screen.getByRole("status").textContent).toContain("Connect the TV to the network");
+  expect(screen.getByRole("status").textContent).toContain("No network. Connect Couch to Wi-Fi or Ethernet.");
   expect(button("Close")).toBeDefined();
 });
 
@@ -87,11 +91,11 @@ for (const close of ["Close", "Escape"] as const) test(`${close} restores focus 
   function Shortcut() {
     const [open, setOpen] = useState(false);
     const openerRef = useRef<HTMLButtonElement>(null);
-    return <><button ref={openerRef} className="pair-shortcut" onClick={() => setOpen(true)}>Pair a remote</button><PairingDialog credentials={host} urls={host.urls} connected open={open} onOpenChange={setOpen} openerRef={openerRef} /></>;
+    return <><button ref={openerRef} className="pair-shortcut" onClick={() => setOpen(true)}>Pair a remote</button><QueryClientProvider client={queryClient}><PairingDialog credentials={host} urls={host.urls} connected open={open} onOpenChange={setOpen} openerRef={openerRef} /></QueryClientProvider></>;
   }
-  await act(async () => root.render(<Shortcut />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><Shortcut /></QueryClientProvider>));
   expect(request).not.toHaveBeenCalled();
-  await act(async () => button("Pair a remote").click());
+  await act(async () => button("Pair a remote").click()); await flush();
   expect(qr()).not.toBeNull();
   await act(async () => { if (close === "Close") fireEvent.click(button("Close")); else fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", code: "Escape" }); }); await flush();
   expect(screen.queryByRole("dialog")).toBeNull();

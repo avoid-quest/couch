@@ -42,7 +42,7 @@ test("a bare-name alias on port 80 is admitted only while the listener holds the
   expect(await lanUrls(network, 4100, ["http://couch.home", "http://couch.home:80"], resolve, true)).toEqual({ urls: ["http://couch.home", "http://192.168.1.20:4100"], error: null });
   const rejected = await lanUrls(network, 4100, ["http://couch.home"], resolve);
   expect(rejected.urls).toEqual(["http://192.168.1.20:4100"]);
-  expect(rejected.error).toContain("cannot listen on port 80");
+  expect(rejected.error).toContain("can't use port 80");
 });
 test("failed or mixed DNS answers omit only invalid aliases and preserve the recovery IP", async () => {
   const result = await lanUrls(network, 4100, ["http://good.home:4100", "http://missing.home:4100", "http://mixed.home:4100", "http://empty.home:4100"], (async (name: string) => {
@@ -176,7 +176,7 @@ test("port 80 aliases get their own best-effort listener, drop out when the bind
     expect(ports.filter(port => port === 4100)).toEqual([4100]);
     expect(listener.server).not.toBeNull();
     expect(listener.servers).toHaveLength(1);
-    expect(changes.at(-1)).toEqual({ urls: ["http://192.168.1.20:4100"], error: expect.stringContaining("cannot listen on port 80") });
+    expect(changes.at(-1)).toEqual({ urls: ["http://192.168.1.20:4100"], error: expect.stringContaining("can't use port 80") });
     refuse80 = false; await listener.refresh();
     expect(ports).toContain(80);
     expect(listener.servers).toHaveLength(2);
@@ -209,7 +209,7 @@ test("a proposed alias must resolve to the selected LAN address and obtain its H
   try {
     await listener.refresh();
     await expect(listener.validateAlias("http://wrong.home:4100")).rejects.toThrow("does not resolve only");
-    await expect(listener.validateAlias("http://couch.home")).rejects.toThrow("cannot listen on port 80");
+    await expect(listener.validateAlias("http://couch.home")).rejects.toThrow("can't use port 80");
     await listener.validateAlias("http://couch.home:4100");
     refuse80 = false;
     await listener.validateAlias("http://couch.home");

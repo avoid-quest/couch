@@ -53,17 +53,17 @@ afterEach(async () => {
   originalGlobals.clear();
 });
 
-async function openEditor(button = "Save metadata archive") {
+async function openEditor(button = "Export") {
   const { MetadataEditor } = await import("./MetadataEditor");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => root.render(<QueryClientProvider client={client}><MetadataEditor origin="http://selected-host" token="selected-token" id="movie-1" connected onSaved={() => {}} /></QueryClientProvider>));
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Edit metadata" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Edit details" })));
   await flush();
   await screen.findByRole("button", { name: button });
 }
 
 async function save() {
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save metadata archive" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
   await flush();
 }
 
@@ -71,13 +71,13 @@ test("native export sends selected host bytes to the save dialog", async () => {
   await openEditor(); await save();
   expect(request.mock.calls.at(-1)?.[0]).toBe("http://selected-host/api/metadata/items/movie-1/export");
   expect(invoke).toHaveBeenCalledWith("save_metadata_export", archive, { headers: { "X-Couch-Item-Id": "movie-1" } });
-  expect(screen.getByRole("status").textContent).toContain("Metadata archive saved");
+  expect(screen.getByRole("status").textContent).toContain("Exported.");
 });
 
 test("cancel and denied destination report the outcome", async () => {
   result = false;
   await openEditor(); await save();
-  expect(screen.getByRole("status").textContent).toContain("No file was saved");
+  expect(screen.getByRole("status").textContent).toContain("Canceled.");
   result = "Could not save the metadata archive: Permission denied. No complete file was saved.";
   await save();
   expect(screen.getByText(/Permission denied/)).toBeDefined();
@@ -87,7 +87,7 @@ test("interrupted transfer never opens the native save dialog", async () => {
   interrupted = true;
   await openEditor(); await save();
   expect(invoke).not.toHaveBeenCalled();
-  expect(screen.getByText(/Metadata transfer stopped/)).toBeDefined();
+  expect(screen.getByText(/Export interrupted/)).toBeDefined();
 });
 
 test("browser export keeps its download action", async () => {
@@ -95,13 +95,13 @@ test("browser export keeps its download action", async () => {
   const create = spyOn(URL, "createObjectURL").mockReturnValue("blob:archive");
   const click = spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   try {
-    await openEditor("Download saved metadata");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Download saved metadata" })));
+    await openEditor();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
     await flush();
     expect(create).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
     expect(invoke).not.toHaveBeenCalled();
-    expect(screen.getByRole("status").textContent).toContain("browser's download destination");
+    expect(screen.getByRole("status").textContent).toContain("Downloaded.");
   } finally {
     create.mockRestore(); click.mockRestore();
   }
@@ -109,13 +109,13 @@ test("browser export keeps its download action", async () => {
 
 test("artwork and match removal checkboxes submit the selected corrections", async () => {
   request.mockImplementation((async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? Response.json(metadata) : Response.json(metadata)) as typeof fetch);
-  await openEditor("Save corrections");
-  const artwork = screen.getByRole("checkbox", { name: "Remove the current artwork" });
-  const match = screen.getByRole("checkbox", { name: "Clear the TMDB match and its exported ID" });
+  await openEditor("Save");
+  const artwork = screen.getByRole("checkbox", { name: "Remove artwork" });
+  const match = screen.getByRole("checkbox", { name: "Clear TMDB match" });
   await act(async () => { fireEvent.click(artwork); fireEvent.click(match); });
   expect(artwork.getAttribute("aria-checked")).toBe("true");
   expect(match.getAttribute("aria-checked")).toBe("true");
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save corrections" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
   const post = request.mock.calls.find((call: unknown[]) => (call[1] as RequestInit | undefined)?.method === "POST");
   expect(JSON.parse(String((post?.[1] as RequestInit | undefined)?.body))).toMatchObject({ changes: { artworkId: null }, clearMatch: true });
 });

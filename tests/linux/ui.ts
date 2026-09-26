@@ -37,9 +37,9 @@ export class UiDriver {
   async addDirectMedia(url: string) {
     await this.section("Find");
     await this.type("#media-search", url);
-    await this.waitFor("Pasted link offers direct media", () => this.execute("return !!document.querySelector('.find-link-card')"));
-    await this.button("Direct media", ".find-link-choice");
-    await this.button("Queue", ".find-link-actions");
+    await this.waitFor("Pasted link offers direct media", () => this.execute("return !!document.querySelector('[aria-label=\"Pasted link\"]')"));
+    await this.button("Direct media", '[aria-label="Pasted link"]');
+    await this.button("Queue", '[aria-label="Pasted link"]');
   }
 
   async element(selector: string) {
@@ -59,13 +59,13 @@ export class UiDriver {
   }
 
   async browse() {
-    if (await this.execute("return !!document.querySelector('.player-page')")) await this.home();
+    if (await this.execute("return !!document.querySelector('[data-page=Now]')")) await this.home();
   }
 
   async controls() {
     await this.section("Now");
-    if (await this.execute("return !!document.querySelector('.player-band-hidden')")) await this.key("i");
-    await this.waitFor("Playback controls become visible", () => this.execute("return !!document.querySelector('.player-band:not(.player-band-hidden)')"));
+    if (await this.execute("return !!document.querySelector('[data-player-band=hidden]')")) await this.key("i");
+    await this.waitFor("Playback controls become visible", () => this.execute("return !!document.querySelector('[data-player-band=shown]')"));
   }
 
   async watching() {
@@ -75,7 +75,7 @@ export class UiDriver {
   }
 
   async revealElement(id: string, selector?: string) {
-    const hiddenPlayer = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; return !!element?.closest('.player-band-hidden')", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
+    const hiddenPlayer = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; return !!element?.closest('[data-player-band=hidden]')", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
     if (hiddenPlayer) await this.key("i");
   }
 
@@ -141,7 +141,7 @@ export class UiDriver {
   }
 
   async button(label: string, scope = "") {
-    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')")) return this.section("Settings");
+    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('[data-app-nav] a[href^=\"/settings\"]')")) return this.section("Settings");
     const matches = () => this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     await this.waitFor(`One ${label} button exists in ${scope || "the page"}`, async () => (await matches()).length === 1);
@@ -151,25 +151,25 @@ export class UiDriver {
   }
 
   async section(label: string) {
-    const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
+    const source = ({ Files: "Folders", Library: "Folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
     const destination = label === "Queue" || label === "Now" ? "Now" : label === "For later" ? "Saved" : source || ["Online", "Home", "Search"].includes(label) ? "Find" : label;
     if (destination === "Now") {
-      if (!await this.execute("return !!document.querySelector('.player-page')")) {
-        await this.click('.section-nav a[href="/"]');
+      if (!await this.execute("return !!document.querySelector('[data-page=Now]')")) {
+        await this.click('[data-app-status] a[href="/"]');
       }
-      await this.waitFor("Now or Up next opens", () => this.execute("return !!document.querySelector('.player-page, .player-idle')"));
-      if (label === "Queue" && !await this.execute("return !!document.querySelector('.queue-panel')")) {
-        if (await this.execute("return !!document.querySelector('.player-sheet')")) await this.key(keys.escape);
+      await this.waitFor("Now or Up next opens", () => this.execute("return !!document.querySelector('[data-page=Now]')"));
+      if (label === "Queue" && !await this.execute("return !!document.querySelector('[data-queue-panel]')")) {
+        if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
         await this.click('[data-panel="queue"]');
       }
       return;
     }
-    if (await this.execute("return !!document.querySelector('.player-page:not(.player-idle)')")) {
-      if (await this.execute("return !!document.querySelector('.player-sheet')")) await this.key(keys.escape);
-      await this.click(".player-back");
+    if (await this.execute("return !!document.querySelector('.player-page')")) {
+      if (await this.execute("return !!document.querySelector('[data-player-sheet]')")) await this.key(keys.escape);
+      await this.click(".player-page [data-back]");
     }
-    else if (await this.execute("return !!document.querySelector('.player-idle')")) await this.request(`/session/${this.session()}/url`, { url: new URL(`/${destination.toLowerCase()}`, await this.execute("return location.href")).href });
-    const target = `.section-nav a[href^="/${destination.toLowerCase()}"]`;
+    else if (await this.execute("return !!document.querySelector('[data-player-idle]')")) await this.request(`/session/${this.session()}/url`, { url: new URL(`/${destination.toLowerCase()}`, await this.execute("return location.href")).href });
+    const target = `[data-app-nav] a[href^="/${destination.toLowerCase()}"]`;
     await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
     await this.click(target);
     await this.waitFor(`${label} page opens`, () => this.execute("return !!document.querySelector(arguments[0])", [`[data-page="${destination}"]`]));
@@ -196,7 +196,7 @@ export class UiDriver {
         // Retained administrator deep link has no primary navigation item.
         const url = new URL("/settings/tv-appearance", await this.execute("return location.href")).href;
         await this.request(`/session/${this.session()}/url`, { url });
-        await this.waitFor("TV appearance route reconnects", () => this.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+        await this.waitFor("TV appearance route reconnects", () => this.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
         return;
       }
       const destination = section === "remotes" ? "connection" : section === "remote" ? "playback" : section;
@@ -249,7 +249,7 @@ export class UiDriver {
   }
 }
 
-export const qualityLabel = (value: string) => value === "auto" ? "1080p (recommended)" : value === "best" ? "Unrestricted quality" : `Up to ${value}`;
+export const qualityLabel = (value: string) => value === "auto" ? "Auto (1080p)" : value === "best" ? "Best" : value;
 
 async function settlePortals(ui: UiDriver) {
   await ui.request(`/session/${ui.session()}/execute/async`, {
@@ -279,7 +279,7 @@ export async function assertTheme(ui: UiDriver) {
   assert.equal(theme.actual, theme.expected, "Tailwind bg-primary uses the generated theme");
   assert.ok(["flex", "inline-flex"].includes(theme.display), "Generated button layout utilities are compiled");
   assert.ok(parseFloat(theme.radius) > 0, "Generated radius utilities are compiled");
-  assert.ok(theme.font.includes("Inter Variable"), "The requested Mira preset font is bundled");
+  assert.ok(theme.font.includes("Inter Tight Variable"), "The Clock font is bundled");
   return theme;
 }
 
@@ -295,7 +295,9 @@ export async function assertResponsive(ui: UiDriver, description: string) {
       clipped: [...document.querySelectorAll('button')].filter(visible).filter(element =>
         element.scrollWidth > element.clientWidth + 2 && !element.matches('[role=combobox]') && !element.querySelector('.truncate')
       ).map(element => element.getAttribute('aria-label') || element.textContent.trim()),
-      small: [...document.querySelectorAll('button:not(:disabled), input:not(:disabled), [data-slot=slider]')].filter(visible).map(element => {
+      // Checkboxes, switches and radios are hit through their label.
+      small: [...document.querySelectorAll('button:not(:disabled), input:not(:disabled), [data-slot=slider]')].filter(visible)
+        .filter(element => !element.matches('[role=checkbox], [role=switch], [role=radio]') || ![...(element.labels ?? [])].some(label => label.getBoundingClientRect().height >= 43.5)).map(element => {
         const rect = element.getBoundingClientRect();
         return { label: element.getAttribute('aria-label') || element.textContent.trim() || element.id, width: rect.width, height: rect.height };
       }).filter(rect => rect.width < 43.5 || rect.height < 43.5) };
@@ -387,14 +389,14 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     await ui.type("#pairing-code", code);
     await until("HTTP pairing form enables Connect for a complete code", async () => await ui.execute("return document.querySelector('#pairing-code')?.value.length === 6 && !document.querySelector('.pair-form button')?.disabled"));
     await ui.click(".pair-form button[type=submit], .pair-form button:not([type])");
-    await until("real HTTP remote pairs and receives current playback", async () => await ui.execute("return document.querySelector('.header-status [role=status]')?.textContent") === "Connected");
+    await until("real HTTP remote pairs and receives current playback", async () => await ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent") === "Connected");
     await assertResponsive(ui, "Phone queue");
     return { ui, theme, close, refresh: () => request(`/session/${session}/refresh`, {}),
       minimize: () => request(`/session/${session}/window/minimize`, {}),
       restore: () => request(`/session/${session}/window/rect`, { x: 1000, y: 0, width: Math.round(390 * scale), height: 900 }),
       screenshot: async (name: string) => { const png = await request(`/session/${session}/screenshot`); await Bun.write(`${artifacts}/${name}.png`, Buffer.from(png, "base64")); } };
   } catch (error) {
-    const diagnostics = await ui.execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), status: document.querySelector('.header-status')?.textContent, codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled, viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio } }").catch(() => null);
+    const diagnostics = await ui.execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), status: document.querySelector('[data-app-status]')?.textContent, codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled, viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio } }").catch(() => null);
     await Bun.write(`${artifacts}/${name}-failure.json`, JSON.stringify(diagnostics, null, 2));
     await ui.execute("document.querySelector('#pairing-code')?.setAttribute('type', 'password')").catch(() => {});
     const png = await request(`/session/${session}/screenshot`).catch(() => null);

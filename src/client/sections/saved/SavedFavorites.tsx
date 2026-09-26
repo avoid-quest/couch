@@ -1,18 +1,22 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Play, Plus, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Item } from "@/components/ui/item";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
-import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } from "@/lib/dnd";
+import { MediaList, MediaRow } from "@/components/MediaRow";
+import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
+import { useOptionalSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
+import { apiSend } from "@/api/client";
+import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
+import { playNotice, savedNotice } from "@/copy";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
@@ -23,7 +27,10 @@ type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item
 const providers = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
-const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not use this saved item.";
+const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
+const meta = (favorite: Favorite) => (favorite.kind === "provider"
+  ? [providers[favorite.item.provider], favorite.item.kind === "channel" ? "Channel" : favorite.item.kind === "collection" ? favorite.item.provider === "bandcamp" ? "Album" : "Playlist" : "", favorite.item.subtitle]
+  : ["Radio", favorite.item.groupTitle || favorite.item.countryCode]).filter(Boolean).join(" · ");
 
 // The gesture for one drop, per kind: favorites live in the provider and radio
 // stores, so a drop reorders its own kind and a cross-kind drop does nothing.
@@ -32,131 +39,102 @@ export function reorderFavorites(favorites: Favorite[], kind: Favorite["kind"], 
   return next && { kind, order: next.map(favorite => favorite.item.id) };
 }
 
-export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider, showHeading = true }: Credentials & SavedFavoriteActions & {
-  connected: boolean; canPlay: boolean; showHeading?: boolean;
+export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider, onFind }: Credentials & SavedFavoriteActions & {
+  connected: boolean; canPlay: boolean; onFind?: () => void;
 }) {
-  // Saved reads go through Query: the session invalidates ["providers"] and
-  // ["radio"] on socket revisions, replacing the version props this panel
-  // used to receive. Enqueue and play stay on the WebSocket session.
+  // The session invalidates ["providers"] and ["radio"] whenever any remote
+  // changes favorites. Enqueue and play stay on the WebSocket session.
+  const session = useOptionalSessionGate();
   const queryClient = useQueryClient();
-  const online = useQuery({ ...providerFavoritesQuery({ origin, token }), enabled: connected });
-  const radio = useQuery({ ...radioFavoritesListQuery({ origin, token }), enabled: connected });
+  const credentials = { origin, token };
+  const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
+  const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const loading = connected && (online.isPending || radio.isPending);
+  const favoritesKey = (kind: Favorite["kind"]) => kind === "provider" ? providerFavoritesQuery(credentials).queryKey : radioFavoritesListQuery(credentials).queryKey;
+  const saveOrder = (kind: Favorite["kind"], order: string[]) => apiSend(credentials, `/api/${store(kind)}/favorites/reorder`, { order }, "POST", 10_000);
+  const reorder = useMutation({
+    mutationFn: ({ kind, order }: { kind: Favorite["kind"]; order: string[] }) => saveOrder(kind, order),
+    onSettled: (_, __, { kind }) => queryClient.invalidateQueries({ queryKey: favoritesKey(kind) }),
+  });
+  const remove = useMutation({
+    mutationFn: (favorite: Favorite) => apiSend(credentials, `/api/${store(favorite.kind)}/favorites/${encodeURIComponent(favorite.item.id)}`, undefined, "DELETE"),
+    onSuccess: async (_, favorite) => {
+      // Undo saves the item again, then puts its store back in the old order.
+      const order = favorites.filter(item => item.kind === favorite.kind).map(item => item.item.id);
+      const text = savedNotice(title(favorite), false);
+      if (session) session.offerUndo(text, async () => {
+        await apiSend(credentials, `/api/${store(favorite.kind)}/favorites`, favorite.kind === "provider" ? { item: favorite.item } : { station: favorite.item });
+        await saveOrder(favorite.kind, order);
+        await queryClient.invalidateQueries({ queryKey: favoritesKey(favorite.kind) });
+      });
+      else toast(text);
+      await queryClient.invalidateQueries({ queryKey: favoritesKey(favorite.kind) });
+    },
+  });
   // Each store keeps its own persisted order; the merged list shows online
-  // favorites first, then stations. A drop updates its store optimistically.
-  const [savedOrder, setSavedOrder] = useState<{ provider?: string[]; radio?: string[] }>({});
+  // favorites first, then stations. A pending drop renders its order.
+  const order = (kind: Favorite["kind"]) => reorder.isPending && reorder.variables.kind === kind ? reorder.variables.order : undefined;
   const favorites = connected ? [
-    ...applyIdOrder(online.data?.favorites ?? [], savedOrder.provider, item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
-    ...applyIdOrder(radio.data?.favorites ?? [], savedOrder.radio, item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
+    ...applyIdOrder(online.data?.favorites ?? [], order("provider"), item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
+    ...applyIdOrder(radio.data?.favorites ?? [], order("radio"), item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
   ] : [];
-  const error = connected ? [online.error, radio.error].filter(Boolean).map(message).join(" ") : "";
-  const [actionError, setActionError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [pending, setPending] = useState(false);
-  const mutation = useRef<AbortController | null>(null);
+  const loadError = connected ? [online.error, radio.error].filter(error => error !== null).map(error => error.message).join(" ") : "";
+  const failure = remove.error ? remove.error.message || "Couldn't remove this." : reorder.error ? reorder.error.message || "Couldn't save the order." : "";
+  // Play and Queue run on the session, which reports its own errors.
+  const [enqueueing, setEnqueueing] = useState(false);
+  const pending = enqueueing || remove.isPending;
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const sensors = useDndSensors();
-  useEffect(() => { setNotice(""); setActionError(""); setPending(false); setSavedOrder({}); return () => mutation.current?.abort(); }, [origin, token, connected]);
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["providers", "favorites"] });
-    void queryClient.invalidateQueries({ queryKey: ["radio", "favorites"] });
-  };
-  const saveOrder = async (plan: { kind: Favorite["kind"]; order: string[] }) => {
-    setSavedOrder(previous => ({ ...previous, [plan.kind]: plan.order }));
-    try {
-      const response = await fetch(`${origin}/api/${plan.kind === "provider" ? "providers" : "radio"}/favorites/reorder`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ order: plan.order }), signal: AbortSignal.timeout(10_000) });
-      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error || "Could not save the new order.");
-      await queryClient.invalidateQueries({ queryKey: plan.kind === "provider" ? ["providers", "favorites"] : ["radio", "favorites"] });
-    } catch (reason) { setActionError(message(reason)); }
-    finally { setSavedOrder(({ [plan.kind]: _dropped, ...rest }) => rest); }
-  };
+  const section = useRef<HTMLElement>(null);
+  const removing = useRemovalFocus(favorites.map(key), !pending, list, () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current);
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over) return;
     const favorite = favorites.find(item => item.item.id === active.id);
-    const plan = favorite && reorderFavorites(favorites, favorite.kind, String(active.id), String(over.id));
-    if (plan) void saveOrder(plan);
+    const plan = over && favorite && reorderFavorites(favorites, favorite.kind, String(active.id), String(over.id));
+    if (plan) reorder.mutate(plan);
   };
-
-  const update = async (favorite: Favorite, action: "play" | "append" | "remove") => {
-    if (!connected || mutation.current) return;
-    const controller = new AbortController();
-    mutation.current = controller;
-    setPending(true); setActionError(""); setNotice("");
+  const enqueue = async (favorite: Favorite, playNow: boolean) => {
+    if (!connected || pending) return;
+    setEnqueueing(true);
     try {
-      if (action === "remove") {
-        const response = await fetch(`${origin}/api/${favorite.kind === "provider" ? "providers" : "radio"}/favorites/${encodeURIComponent(favorite.item.id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
-        if (!response.ok) { const body = await response.json(); throw new Error(body.error || "Could not remove this saved item."); }
-        if (controller.signal.aborted) return;
-        const index = favorites.findIndex(item => key(item) === key(favorite));
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["providers", "favorites"] }),
-          queryClient.invalidateQueries({ queryKey: ["radio", "favorites"] }),
-        ]);
-        setNotice(`Removed ${title(favorite)} from Saved.`);
-        requestAnimationFrame(() => {
-          const rows = list.current?.children;
-          (rows?.[Math.min(index, rows.length - 1)]?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? heading.current)?.focus();
-        });
-      } else {
-        const ok = await (favorite.kind === "provider" ? onEnqueueProvider(favorite.item, action === "play") : onEnqueueRadio(favorite.item, action === "play"));
-        if (!controller.signal.aborted && ok) setNotice(action === "play" ? `Starting ${title(favorite)} on the TV.` : `Added ${title(favorite)} to Up next.`);
-      }
-    } catch (reason) { if (!controller.signal.aborted) setActionError(message(reason)); }
-    finally { if (!controller.signal.aborted) setPending(false); if (mutation.current === controller) mutation.current = null; }
+      const ok = await (favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow) : onEnqueueRadio(favorite.item, playNow));
+      if (ok && !playNow) toast(playNotice(title(favorite), "queue"));
+    } finally { setEnqueueing(false); }
   };
-  return <section className="space-y-3" aria-labelledby="saved-favorites-heading">
-    <h2 ref={heading} id="saved-favorites-heading" tabIndex={-1} className={showHeading ? "text-xl font-semibold" : "sr-only"}>{showHeading ? "Online and radio" : "Channels and stations"}</h2>
-    {!connected && <p role="status">Reconnect to see saved online items and stations.</p>}
-    {loading && <p role="status">Loading saved items…</p>}
-    {error && <div role="alert"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={refresh}>Retry saved items</Button></div>}
-    {actionError && <p role="alert">{actionError}</p>}
-    {notice && <p role="status">{notice}</p>}
-    {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">{showHeading ? "No favorites yet." : "Save a channel, playlist or station to find it here."}</p>}
-    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-    <ul ref={list} className="saved-favorites grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>
-      <SortableContext items={favorites.filter(favorite => favorite.kind === "provider").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
-        {favorites.filter(favorite => favorite.kind === "provider").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`} editing>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
-      </SortableContext>
-      <SortableContext items={favorites.filter(favorite => favorite.kind === "radio").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
-        {favorites.filter(favorite => favorite.kind === "radio").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`} editing>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
-      </SortableContext>
-    </ul>
-    </DndContext>
-  </section>;
 
-  function row(favorite: Favorite, drag?: RowDrag) {
+  const row = (favorite: Favorite, index: number) => {
     const itemTitle = title(favorite);
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
-    const detail = favorite.kind === "provider" ? [providers[favorite.item.provider], favorite.item.kind === "media" ? favorite.item.live ? "Live" : favorite.item.provider === "bandcamp" ? "Track" : favorite.item.provider === "streamingcommunity" ? "Title" : "Video" : favorite.item.kind === "channel" ? "Channel" : "Collection", favorite.item.subtitle].filter(Boolean).join(" · ") : ["Radio", favorite.item.groupTitle || favorite.item.countryCode].filter(Boolean).join(" · ");
-    if (!showHeading) return <Item asChild><li data-nav-row ref={drag?.setNodeRef} style={drag?.style} className="saved-favorite-row">
-      <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="saved-favorite-art" />
-      <Button variant="ghost" className="saved-favorite-main" disabled={!connected || pending || !browse && !canPlay} aria-label={`${browse ? "Open" : "Play"} ${itemTitle}`} onClick={() => browse ? onOpenProvider(favorite.item as ProviderItem) : void update(favorite, "play")}>
-        <span className="saved-favorite-title-line"><strong>{itemTitle}</strong><small>{favorite.kind === "provider" ? [favorite.item.subtitle, providers[favorite.item.provider]].filter(Boolean).join(", ") : [favorite.item.groupTitle, "Radio"].filter(Boolean).join(", ")}</small></span>
-        {favorite.kind === "provider" ? favorite.item.kind === "media" ? (favorite.item.duration != null || favorite.item.live) && <DurationBar duration={favorite.item.duration} live={favorite.item.live} /> : <small className="saved-favorite-kind">{favorite.item.kind === "channel" ? "Channel" : "Collection"}</small> : <small className="saved-favorite-kind">Live</small>}
-      </Button>
-      <div className="saved-favorite-actions">
-        {browse && <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}>Play</Button>}
-        <Button variant="ghost" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}>Queue</Button>
-        <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle} from Saved`} onClick={() => void update(favorite, "remove")}>Remove</Button>
-      </div>
-      <span className="saved-favorite-drag">{drag?.handle}</span>
-    </li></Item>;
-    return <Item asChild><li data-nav-row ref={drag?.setNodeRef} style={drag?.style} className="flex flex-wrap items-center gap-3 border-b py-3">
-        <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="saved-media-art h-[54px] w-[46px] rounded-md" />
-        <div className="grid min-w-[100px] flex-1 gap-1.5 [overflow-wrap:anywhere]"><strong className="text-sm font-semibold">{itemTitle}</strong><small className="text-xs text-muted-foreground">{detail}</small></div>
-        <div className={`${showHeading ? "" : "saved-media-actions "}flex min-h-11 flex-wrap gap-2`}>
-          {favorite.kind === "provider" ? <>
-            <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}><Play aria-hidden="true" />Play</Button>
-            <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}><Plus aria-hidden="true" />Up next</Button>
-            {browse && <Button className="min-h-11" disabled={!connected || pending} aria-label={`Open ${itemTitle}`} onClick={() => onOpenProvider(favorite.item)}><ArrowUpRight aria-hidden="true" />Open</Button>}
-          </> : <>
-            <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}><Play aria-hidden="true" />Play</Button>
-            <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}><Plus aria-hidden="true" />Up next</Button>
-          </>}
-          <Button className="min-h-11" variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle} from Saved`} onClick={() => void update(favorite, "remove")}><X aria-hidden="true" />Remove</Button>
-        </div>
-        {drag?.handle}
-      </li></Item>;
-  }
+    return <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${itemTitle}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
+      art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} />}
+      title={itemTitle}
+      meta={meta(favorite)}
+      primary={browse
+        ? { label: "Open", onClick: () => onOpenProvider(favorite.item as ProviderItem), disabled: !connected || pending }
+        : { label: "Play", onClick: () => void enqueue(favorite, true), disabled: !connected || !canPlay || pending }}
+      actions={<>
+        {browse && <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void enqueue(favorite, true)}>Play</Button>}
+        <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${itemTitle}`} onClick={() => void enqueue(favorite, false)}>Queue</Button>
+        <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle}`} onClick={() => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); }}>Remove</Button>
+        {drag.handle}
+      </>}>
+      {favorite.kind === "radio" ? <DurationBar live /> : favorite.item.kind === "media" && (favorite.item.duration != null || favorite.item.live) && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}
+    </MediaRow>}</SortableRow>;
+  };
+  const kinds = (["provider", "radio"] as const).map(kind => favorites.filter(favorite => favorite.kind === kind));
+
+  return <section ref={section} aria-labelledby="saved-favorites-heading">
+    <h2 ref={heading} id="saved-favorites-heading" tabIndex={-1} className="sr-only">Channels &amp; stations</h2>
+    <SavedStatus connected={connected} loading={loading} />
+    {loadError && <SavedError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
+    {connected && failure && <SavedError message={failure} />}
+    {connected && !loading && !loadError && !favorites.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Find</Button>}>Nothing saved yet. Save a channel, playlist or station in Find.</SavedEmpty>}
+    {!!favorites.length && <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <MediaList ref={list} aria-label="Channels & stations">
+        {kinds.map((group, groupIndex) => <SortableContext key={groupIndex} items={group.map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
+          {group.map(favorite => row(favorite, favorites.indexOf(favorite)))}
+        </SortableContext>)}
+      </MediaList>
+    </DndContext>}
+  </section>;
 }

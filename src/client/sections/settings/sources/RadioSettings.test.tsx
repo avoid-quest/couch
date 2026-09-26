@@ -39,11 +39,11 @@ test("radio Sources imports through the server's JSON contract and clears the sa
   const { RadioSettings } = await import("./RadioSettings");
   await act(async () => root.render(<QueryClientProvider client={client}><RadioSettings connected canManage credentials={{ origin: "http://localhost", token: "paired" }} /></QueryClientProvider>));
   await act(async () => {
-    fireEvent.input(screen.getByRole("textbox", { name: "Playlist name" }), { target: { value: "Fixture playlist" } });
-    fireEvent.input(screen.getByRole("textbox", { name: "M3U playlist URL" }), { target: { value: "https://feed.example/radio.m3u" } });
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Fixture playlist" } });
+    fireEvent.input(screen.getByRole("textbox", { name: "M3U URL" }), { target: { value: "https://feed.example/radio.m3u" } });
   });
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Import playlist" })); await Bun.sleep(0); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Add" })); await Bun.sleep(0); });
   expect(radio.playlists()).toMatchObject([{ name: "Fixture playlist", stationCount: 1 }]);
   expect(screen.queryByRole("alert")).toBeNull();
-  expect((screen.getByRole("textbox", { name: "Playlist name" }) as HTMLInputElement).value).toBe("");
+  expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("");
 });

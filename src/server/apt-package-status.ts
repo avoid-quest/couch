@@ -27,7 +27,7 @@ export async function readAptPackageStatus(command = apt): Promise<AptPackageSta
     value.broken = 0;
     Object.assign(value, aptUpgradeCounts(await command(["--with-new-pkgs", "upgrade"])));
   } catch {
-    value.error = "System package checks failed or timed out. Ask the machine administrator to inspect APT locally. Couch releases are separate.";
+    value.error = "Couldn't check system packages. Check APT over SSH.";
   }
   return value;
 }

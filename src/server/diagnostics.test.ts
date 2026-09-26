@@ -99,15 +99,15 @@ test("native bridge correlates replies and bounds malformed facts", async () => 
   const report = await pending;
   expect(report!.facts).toHaveLength(40); expect(report!.facts[0]!.value).toBeNull();
   const invalid = bridge.collect(); bridge.receive(id, { bad: true });
-  await expect(invalid).rejects.toThrow("invalid diagnostic");
-  const closed = bridge.collect(); bridge.close(); await expect(closed).rejects.toThrow("closed");
+  await expect(invalid).rejects.toThrow("invalid report");
+  const closed = bridge.collect(); bridge.close(); await expect(closed).rejects.toThrow("disconnected");
   expect(await createNativeDiagnostics().collect()).toBeNull();
-  await expect(createNativeDiagnostics(() => { throw new Error("secret"); }).collect()).rejects.toThrow("Could not contact");
+  await expect(createNativeDiagnostics(() => { throw new Error("secret"); }).collect()).rejects.toThrow("Couldn't reach the app");
 });
 
 test("native timeout is bounded and late replies are ignored", async () => {
   const bridge = createNativeDiagnostics(() => {});
-  await expect(bridge.collect()).rejects.toThrow("within 2 seconds");
+  await expect(bridge.collect()).rejects.toThrow("didn't respond");
   bridge.receive("late", { facts: [] }); bridge.close();
 });
 

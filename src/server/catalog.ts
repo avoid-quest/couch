@@ -8,6 +8,7 @@ import { playbackMediaId, ViewingError } from "./progress";
 import type { Store } from "./store";
 import type { createSession } from "./session";
 import { ControllerError } from "./controllers";
+import { RECORDINGS_UNSUPPORTED } from "./messages";
 
 type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
@@ -136,7 +137,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           try { mediaId = decodeURIComponent(historyQueue[1]!); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
-          if (mediaId.startsWith("recording:")) throw new RequestError("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.", 410);
+          if (mediaId.startsWith("recording:")) throw new RequestError(RECORDINGS_UNSUPPORTED, 410);
           if (!viewing.store.sharedProgress(mediaId)) throw new RequestError("History item not found.", 404);
           const saved = viewing.session.state.queue.find(entry => playbackMediaId(entry) === mediaId) ?? viewing.store.historySource(mediaId);
           if (!saved || playbackMediaId(saved) !== mediaId) throw new RequestError("Open this item from its source again.", 409);
@@ -272,9 +273,9 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           if (request.method !== "GET") return methodNotAllowed("GET");
           if (searchParams.has("resume") && !["true", "false"].includes(searchParams.get("resume")!)) throw new RequestError("Invalid resume query.");
           const options = { query: queryText(searchParams, "q", 200), startIndex: queryInteger(searchParams, "startIndex", 0, 0, 1_000_000), resume: searchParams.get("resume") === "true" };
-          if (!jellyfin.status().connected) throw new RequestError("Connect Jellyfin in Settings > Sources first.", 409);
+          if (!jellyfin.status().connected) throw new RequestError("Connect Jellyfin in Settings → Sources first.", 409);
           try { return Response.json(await jellyfin.items(options)); }
-          catch { throw new RequestError("Could not load the Jellyfin library. Check the server connection.", 502); }
+          catch { throw new RequestError("Couldn't load the Jellyfin library. Check the server connection.", 502); }
         }
         return Response.json({ error: "Not found." }, { status: 404 });
       } catch (error) {

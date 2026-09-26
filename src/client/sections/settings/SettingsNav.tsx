@@ -2,54 +2,53 @@ import { Check } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { deviceName } from "@/copy";
+import { cn } from "@/lib/utils";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { useShell } from "@/sections/shell/AppShell";
+import { useSessionGate } from "@/session/session-context";
 
 type Props = { active: SettingsPage };
 
+/** Grouped settings pages: a rail with a check on wide screens, a Select on narrow ones. */
 export function SettingsNav({ active }: Props) {
   const navigate = useNavigate();
-  const { identity, tvPresentation, details, state } = useShell();
-  const sourcePage = active.startsWith("source-");
+  const { identity, tvPresentation, details, state } = useSessionGate();
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
-  const visible = (id: string) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
+  const visible = (id: SettingsPage) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
     && (id !== "display" || !!details?.tvPresentation)
-    && (settingsPages[id as SettingsPage].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
-  const groups = [
-    { label: "Playback", pages: ["playback", "appearance"] },
-    { label: "Library", pages: ["sources"] },
-    { label: state?.installationName ?? details?.name ?? "This device", pages: ["general", "sound", "display", "tv-appearance"] },
-    { label: "Connections", pages: ["connection", "bluetooth"] },
-    { label: "System", pages: ["updates", "advanced"] },
-  ].map(group => ({
-    ...group,
-    pages: group.pages.filter(visible).map(id => [id, settingsPages[id as SettingsPage]] as const),
-  })).filter(group => group.pages.length);
+    && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
+  const groups = ([
+    ["Playback", ["playback", "appearance"]],
+    ["Library", ["sources"]],
+    [deviceName(state?.installationName ?? details?.name), ["general", "sound", "display", "tv-appearance"]],
+    ["Connections", ["connection", "bluetooth"]],
+    ["System", ["updates", "advanced"]],
+  ] as const).map(([label, pages]) => ({ label, pages: pages.filter(visible) })).filter(group => group.pages.length);
+  const current = active.startsWith("source-") ? "sources" : active;
 
-  const current = sourcePage ? "sources" : active;
   return <>
-    <Select value={current} onValueChange={id => { const page = settingsPages[id as SettingsPage]; if (page) void navigate({ to: page.path }); }}>
-      <SelectTrigger aria-label="Settings page" data-page-first className="settings-nav-select mb-6 w-full">
+    <Select value={current} onValueChange={id => void navigate({ to: settingsPages[id as SettingsPage].path })}>
+      <SelectTrigger aria-label="Settings page" data-page-first className="w-full md:hidden">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {groups.map(group => (
           <SelectGroup key={group.label}>
             <SelectLabel>{group.label}</SelectLabel>
-            {group.pages.map(([id, page]) => <SelectItem key={id} value={id}>{page.label}</SelectItem>)}
+            {group.pages.map(id => <SelectItem key={id} value={id}>{settingsPages[id].label}</SelectItem>)}
           </SelectGroup>
         ))}
       </SelectContent>
     </Select>
-    <nav aria-label="Settings pages" className="settings-nav-rail settings-page-nav min-w-0 self-start">
-      {groups.map(group => (
-        <div key={group.label} className="mb-5">
-          <p aria-hidden="true" className="mb-1 px-3 text-xs font-normal text-muted-foreground">{group.label}</p>
-          {group.pages.map(([id, page], index) => (
-            <Button key={id} data-settings-page={id} variant="ghost" asChild className="h-auto min-h-11 w-full justify-start gap-3 rounded-none px-3 py-2.5 text-left font-normal whitespace-normal">
-              <Link data-page-first={group === groups[0] && index === 0 || undefined} aria-current={active === id || id === "sources" && sourcePage ? "page" : undefined} to={page.path}>
-                <Check aria-hidden="true" className={`size-4 shrink-0 ${active === id || id === "sources" && sourcePage ? "" : "invisible"}`} />
-                <span>{id === "connection" ? "Remotes" : page.label}</span>
+    <nav aria-label="Settings pages" className="hidden min-w-0 flex-col gap-6 md:flex">
+      {groups.map((group, groupIndex) => (
+        <div key={group.label} className="flex flex-col">
+          <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{group.label}</p>
+          {group.pages.map((id, index) => (
+            <Button key={id} data-settings-page={id} variant="ghost" asChild className="w-full justify-start font-normal">
+              <Link data-page-first={groupIndex === 0 && index === 0 || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path}>
+                <Check aria-hidden="true" className={cn(current !== id && "invisible")} />
+                {settingsPages[id].label}
               </Link>
             </Button>
           ))}

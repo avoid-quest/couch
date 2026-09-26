@@ -2,6 +2,7 @@ import type { ControllerIdentity } from "../shared/controllers";
 import type { SoundState, SoundTest } from "../shared/sound";
 import { ControllerError, settingField } from "./controllers";
 import { pulseSound, type SoundBackend, type SoundProcess } from "./sound-pulse";
+import { ADMIN_ONLY } from "./messages";
 
 type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; testAvailable?: boolean; idle: () => boolean; begin: () => () => void; backend?: SoundBackend; platform?: "linux" | "mac" | "windows" };
 export function createSound(options: Options) {
@@ -16,19 +17,19 @@ export function createSound(options: Options) {
     current.process.stop(); clearTimeout(current.timer); clearInterval(current.monitor); current.release();
     if (test) test = { ...test, status, message };
   };
-  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), ...(options.testAvailable === false ? { testUnavailableReason: "A sound test needs the media runtime on the selected playback host." } : {}), canTest: (options.testAvailable ?? options.available) && !closed && !starting && !active && options.idle() });
+  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), ...(options.testAvailable === false ? { testUnavailableReason: "Sound test isn't available here." } : {}), canTest: (options.testAvailable ?? options.available) && !closed && !starting && !active && options.idle() });
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this remote before connecting.", 401);
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
         if (closed) throw new ControllerError("The audio session is closing.", 503);
       };
       try {
         authorize();
-        if (!options.available) return json({ error: "Sound controls are unavailable on the selected playback host. Check its system sound settings." }, 503);
+        if (!options.available) return json({ error: "Sound controls aren't available here." }, 503);
         const path = new URL(request.url).pathname;
         if (path === "/api/sound/profile" && request.method === "POST" && options.routing) {
           const profile = await settingField(request, "profile"); authorize();
@@ -56,7 +57,7 @@ export function createSound(options: Options) {
           return json(await state());
         }
         if (path !== "/api/sound/test" || request.method !== "POST") return json({ error: "Not found." }, 404);
-        if (options.testAvailable === false) return json({ error: "A sound test needs the media runtime on the selected playback host." }, 503);
+        if (options.testAvailable === false) return json({ error: "Sound test isn't available here." }, 503);
         const output = await settingField(request, "output"); authorize();
         if (typeof output !== "string" || !output.length || output.length > 512) throw new ControllerError("Choose an available output.", 400);
         if (starting || active) throw new ControllerError("Stop the current sound test first.", 409);
@@ -82,21 +83,21 @@ export function createSound(options: Options) {
               if (route && route !== sink.id) { finish("error", "The test left the requested output and was stopped."); return; }
               if (route) test = { ...test, observedOutput: route, status: "playing" };
               else if (test.status === "playing") finish("error", "The test output disappeared; the test stopped.");
-            } catch { if (active && test?.id === id) finish("error", "Could not verify the test output; the test stopped."); }
+            } catch { if (active && test?.id === id) finish("error", "Couldn't verify the test output. The test stopped."); }
             finally { checking = false; }
           };
           active = { process: child, release: options.begin(), timer: setTimeout(() => finish(test?.observedOutput ? "finished" : "error", test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "The audio server never confirmed the test route."), 3_000), monitor: setInterval(() => void check(), 100) };
-          void child.exited.then(code => { if (active?.process === child) finish(code === 0 && test?.observedOutput ? "finished" : "error", code === 0 && test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "The sound test could not complete."); });
+          void child.exited.then(code => { if (active?.process === child) finish(code === 0 && test?.observedOutput ? "finished" : "error", code === 0 && test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "Couldn't finish the sound test."); });
           void check();
           return json(await state());
         } finally { starting = false; }
       } catch (error) {
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
-        if (options.platform === "mac" || options.platform === "windows") return json({ error: error instanceof Error ? error.message : "Could not read or test sound on the playback host." }, error instanceof Error && /unavailable|Check in System Settings/.test(error.message) ? 409 : 503);
-        return json({ error: "Could not read or test the playback host's audio session. Check its sound settings and try again." }, 503);
+        if (options.platform === "mac" || options.platform === "windows") return json({ error: error instanceof Error ? error.message : "Couldn't read sound settings." }, error instanceof Error && /unavailable|Check in System Settings/.test(error.message) ? 409 : 503);
+        return json({ error: "Couldn't read sound settings." }, 503);
       }
     },
     interrupt() { if (!options.idle()) finish("stopped", "Playback or maintenance started; the sound test stopped."); },
-    close() { closed = true; finish("stopped", options.platform === "mac" ? "The playback host is closing; the sound test stopped." : "The TV is closing; the sound test stopped."); },
+    close() { closed = true; finish("stopped", options.platform === "mac" ? "Couch is closing. The sound test stopped." : "The TV is closing; the sound test stopped."); },
   };
 }

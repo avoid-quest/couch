@@ -28,12 +28,12 @@ export async function verifySearch(context: MusicContext) {
         const scope = '[aria-label="Search results"]';
         const opener = `${scope} [aria-label=${JSON.stringify(`Details: ${item.title}`)}]`;
         await query(driver, item.title);
-        await until(`${name} finds ${source} item by title in shared Search`, () => driver.execute("return !!document.querySelector(arguments[0]) && !document.querySelector('.find-searching')", [opener]));
+        await until(`${name} finds ${source} item by title in shared Search`, () => driver.execute("return !!document.querySelector(arguments[0]) && ![...document.querySelectorAll('[role=status]')].some(line => line.textContent.startsWith('Still asking'))", [opener]));
         await driver.click(opener);
         const scrollPosition = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
         const count = first().queue.length;
         const prefix = source === "Library" ? `library:${item.id}` : `:${item.id}`;
-        await driver.button(`Up next: ${item.title}`, '[role="dialog"]');
+        await driver.button(`Queue ${item.title}`, '[role="dialog"]');
         await until(`${name} Search queue appends the ${source} item for both controllers`, () => all(state => state.queue.length === count + 1 && state.queue.at(-1)?.source.endsWith(prefix) === true));
         const previous = first().player.playbackId;
         await driver.click('[role="dialog"] button[aria-label^="Play: "], [role="dialog"] button[aria-label^="Resume: "]');
