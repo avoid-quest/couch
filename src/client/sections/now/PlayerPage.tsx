@@ -1,3 +1,4 @@
+import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square } from "lucide-react";
@@ -24,9 +25,10 @@ const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settin
 
 export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
+  useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, nativeHost, localHost, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, localHost, tvPresentation, videoQualityPreference } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -99,19 +101,19 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         return;
       }
       const inPlayer = root.current?.contains(document.activeElement) || document.activeElement === document.body;
-      if (!panel && !shown && inPlayer && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)) {
+      if (!panel && !shown && inPlayer && (tvPresentation ? ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "] : ["Enter"]).includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation(); wake();
         requestAnimationFrame(() => (root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])') ?? root.current?.querySelector<HTMLElement>('[data-play-button]:not(:disabled), [data-primary]:not(:disabled)'))?.focus());
         return;
       }
-      if (!panel && event.key === " " && inPlayer && !(event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea, [role="slider"]')) && transportReady && pausable && player?.playbackId) {
+      if (tvPresentation && !panel && event.key === " " && inPlayer && !(event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea, [role="slider"]')) && transportReady && pausable && player?.playbackId) {
         event.preventDefault(); void run({ type: "pause", playbackId: player.playbackId, paused: playing });
       }
       if (inPlayer) wake();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [shown, panel, queueOpen, closeQueue, playing, autoHide, transportReady, pausable, player?.playbackId, run, shell.leavePlayer, fullscreen]);
+  }, [tvPresentation, shown, panel, queueOpen, closeQueue, playing, autoHide, transportReady, pausable, player?.playbackId, run, shell.leavePlayer, fullscreen]);
   // An explicitly opened queue remains available after playback stops.
   if (!current && !queueOpen) return null;
 

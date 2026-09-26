@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ListMusic, Tv, X } from "lucide-react";
+import { Keyboard, ListMusic, Tv, X } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -13,6 +13,7 @@ import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { MiniPlayer } from "./MiniPlayer";
+import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TvAppearancePreview } from "./TvAppearancePreview";
 import { readSearchState, searchLocation, type SearchRouteState } from "@/search";
 import { createId } from "@/session/session";
@@ -99,6 +100,10 @@ function useShellValue() {
   };
   const openPlayer = (panel?: "queue") => {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
+  };
+  const focusSearch = () => {
+    setOnlineRequest(null);
+    void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };
   const leavePlayer = () => {
     if (playerTransition) void router.navigate({ href: lastBrowsePath.current, viewTransition: true });
@@ -192,7 +197,7 @@ function useShellValue() {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
-    changeSection, openPlayer, leavePlayer, browseSection, gotoSearch, changeSearch, changeSettingsSection,
+    changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
     remoteOpen, pairingOpen, onlineRequest, setupSource, sourcesOpen,
@@ -260,6 +265,7 @@ function PairingPage() {
 
 export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
   const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
@@ -313,12 +319,14 @@ export function ShellChrome({ children }: PropsWithChildren) {
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>
+              {paired && !tvPresentation && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-2 max-sm:hidden" />
             </div>
           </header>
           {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
           {onPlayer && error && <div className="fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
           {!paired ? <PairingPage /> : <>
+            {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
             {current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
