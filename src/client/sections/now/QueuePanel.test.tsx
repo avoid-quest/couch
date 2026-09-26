@@ -46,7 +46,8 @@ test("Autoplay previews the next episode separately from the explicit queue and 
   expect(titles("Up next")).toEqual(["Play Next", "Play Last"]);
   expect(screen.getByRole("list", { name: "Autoplay next" })).toHaveTextContent("Episode two");
   expect(screen.getByText("Example series · after your queue")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("switch", { name: "Autoplay" }));
+  expect(screen.getByLabelText("Autoplay", { selector: "button" })).toHaveRole("switch");
+  await userEvent.click(screen.getByText("Autoplay"));
   expect(actions).toEqual([{ type: "preferences", profileId: "household", preferences: { autoplay: false } }]);
   view.rerender(panel({ ...state, autoplay: { ...autoplay, enabled: false } }));
   expect(screen.queryByRole("list", { name: "Autoplay next" })).not.toBeInTheDocument();

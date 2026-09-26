@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { useOptionalShell } from "@/sections/shell/shell-context";
@@ -46,6 +47,7 @@ function knownLength(entry: QueueEntry): number | null {
 
 export function QueuePanel({ state, credentials, connected, available, run, titled = true }: Props) {
   const playbackClock = usePlaybackClock();
+  const autoplayId = useId();
   const shell = useOptionalShell();
   const [saveOpen, setSaveOpen] = useState(false);
   const [listName, setListName] = useState("");
@@ -60,6 +62,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const previous = queue.slice(0, cursorIndex + 1).filter(entry => entry.id !== state?.currentEntryId);
   const upNext = queue.slice(cursorIndex + 1);
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
+  const currentLabel = state?.player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished" : state?.player.status === "paused" ? "Paused" : "Playing";
   const currentLength = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
   let startsIn = currentLength == null ? null : Math.max(0, currentLength - (playbackClock.position ?? 0)) / (state?.player.speed || 1);
   const doneIn = upNext.reduce<number | null>((seconds, entry) => {
@@ -110,7 +113,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
           <DialogFooter><DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose><Button type="submit" disabled={!connected || keeping || !upNext.length || !listName.trim()}>{keeping ? "Saving…" : "Save list"}</Button></DialogFooter>
         </form>
       </DialogContent>
-    {current && <section aria-label="Playing" className="grid gap-2"><h3 className="text-sm text-muted-foreground">{state?.player.status === "paused" ? "Paused" : "Playing"}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} credentials={credentials} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
+    {current && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} credentials={credentials} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · done by ${formatEndTime(doneIn)}`}</h3>
       <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">{upNext.map((entry, index) => {
@@ -123,7 +126,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       })}</ul>
     </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Your queue is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
     {state?.autoplay && <section aria-label="Autoplay" className="grid gap-2">
-      <div className="flex items-center justify-between gap-4"><h3 className="text-base font-medium">Autoplay</h3><Switch aria-label="Autoplay" checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
+      <div className="flex items-center justify-between gap-4"><h3><Label htmlFor={autoplayId} className="touch:min-h-11 text-base">Autoplay</Label></h3><Switch id={autoplayId} checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
       {state.autoplay.enabled && state.autoplay.next ? <>
         <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after your queue"}</p>
         <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} credentials={credentials} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>

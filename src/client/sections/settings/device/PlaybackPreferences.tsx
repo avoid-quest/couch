@@ -40,8 +40,8 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
   );
   const speeds = [...new Set([1, 1.25, 1.5, values.speed])].sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value}×` }));
   return <>
-    <SettingsRow label="Autoplay" description="Continue the current series, album or playlist after your queued items.">
-      <Switch aria-label="Autoplay" checked={values.autoplay !== false} disabled={disabled} onCheckedChange={autoplay => apply({ autoplay })} />
+    <SettingsRow label="Autoplay" htmlFor="playback-autoplay" className="[&_label]:touch:min-h-11 [&_label]:items-center" description="Continue the current series, album or playlist after your queued items.">
+      <Switch id="playback-autoplay" checked={values.autoplay !== false} disabled={disabled} onCheckedChange={autoplay => apply({ autoplay })} />
     </SettingsRow>
     {language("Audio language", "audioLanguage")}
     <SettingsRow label="Subtitles">
