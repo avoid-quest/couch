@@ -6,5 +6,6 @@ import { apiJson, type ApiCredentials } from "./client";
 export const jellyfinQuery = (credentials: ApiCredentials, manage = false) =>
   queryOptions({
     queryKey: ["jellyfin", manage ? "connection" : "status"] as const,
+    staleTime: 30_000,
     queryFn: ({ signal }) => apiJson<JellyfinStatus | JellyfinConnection>(credentials, manage ? "/api/jellyfin/connection" : "/api/jellyfin", { signal }),
   });

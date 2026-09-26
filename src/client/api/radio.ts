@@ -8,6 +8,7 @@ const radioRequest = (credentials: ApiCredentials, path: string, init: RequestIn
 export const radioFavoritesListQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["radio", "favorites"],
+    staleTime: 30_000,
     queryFn: ({ signal }) => radioRequest(credentials, "favorites", { signal }).then(r => r.json() as Promise<{ favorites: RadioStation[] }>),
   });
 
@@ -27,15 +28,21 @@ export const radioProgrammesQuery = (credentials: ApiCredentials) =>
 export const radioSearchQuery = (credentials: ApiCredentials, source: "avoid radio" | "Radio playlists" | "Radio directory", query: string, refresh = false) =>
   queryOptions({
     // The external directory is independent of local favorites/source revisions.
-    queryKey: [source === "Radio directory" ? "radio-directory" : "radio", "search", source, query] as const,
+    queryKey: [source === "Radio directory" ? "radio-directory" : "radio", "search", source, source === "avoid radio" ? "" : query] as const,
+    staleTime: 30_000,
+    // The built-in catalogue is shared; each observer selects its own search.
+    select: (data: { stations: RadioStation[]; error?: string }) => {
+      if (query.length > 100) throw new Error("Search radio with at most 100 characters.");
+      return source === "avoid radio" ? { ...data, stations: data.stations.filter(station => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())) } : data;
+    },
     retry: false,
     queryFn: async ({ signal }): Promise<{ stations: RadioStation[]; error?: string }> => {
-      if (query.length > 100) throw new Error("Search radio with at most 100 characters.");
+      if (source !== "avoid radio" && query.length > 100) throw new Error("Search radio with at most 100 characters.");
       const read = <T,>(path: string) => apiFetch(credentials, path, { signal }, 30_000).then(response => response.json() as Promise<T>);
       const search = new URLSearchParams({ q: query });
       if (source === "avoid radio") {
         const { playlist, stations } = await read<AvoidRadioCatalog>(`/api/radio/avoid${refresh ? "?refresh=true" : ""}`);
-        return { stations: stations.filter(station => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())), ...(playlist?.error ? { error: playlist.error } : {}) };
+        return { stations, ...(playlist?.error ? { error: playlist.error } : {}) };
       }
       if (source === "Radio directory") return read<{ stations: RadioStation[] }>(`/api/radio/stations?${search}`);
       const { playlists: all } = await read<{ playlists: RadioPlaylistSummary[] }>("/api/radio/playlists");

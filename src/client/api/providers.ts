@@ -34,5 +34,6 @@ export const providerBrowseQuery = (credentials: ApiCredentials, provider: Provi
 export const providerFavoritesQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["providers", "favorites"],
+    staleTime: 30_000,
     queryFn: ({ signal }) => apiJson<{ favorites: ProviderItem[] }>(credentials, "/api/providers/favorites", { signal }),
   });
