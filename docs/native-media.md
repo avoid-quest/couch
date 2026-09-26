@@ -2,6 +2,8 @@
 
 The desktop window title is `Couch · instance · current item` with an active item, falling back to `Couch · instance` when idle. Tauri's native window title supplies OS window lists on every desktop; a public AppKit toolbar centers the same title on macOS. The selected session also owns system Now Playing, whether playback happens on this computer or another Couch. Its metadata, artwork, clock and transport capabilities use the same state as the visible player. OS commands return through the existing session actions with a session/playback identity; old commands cannot affect a newly selected Couch.
 
+The macOS title toolbar hides in fullscreen and returns on exit. It follows AppKit's [fullscreen notifications](https://developer.apple.com/documentation/appkit/nswindow/didenterfullscreennotification), preserving Tauri's window delegate so native controls and keyboard shortcuts use the same behavior. Run `scripts/test-native-window-title-macos.sh` in a macOS desktop session when changing this lifecycle; it exercises real fullscreen transitions, title updates, window isolation, and toolbar installation while already fullscreen.
+
 | Platform | Integration |
 | --- | --- |
 | macOS | Apple's `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` |

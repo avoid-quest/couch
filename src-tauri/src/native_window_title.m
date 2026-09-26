@@ -7,6 +7,10 @@ static NSToolbarItemIdentifier const CouchTitleIdentifier = @"quest.avoid.couch.
 @end
 
 @implementation CouchTitleToolbar
+- (void)fullscreenChanged:(NSNotification *)notification {
+    NSWindow *window = notification.object;
+    self.visible = !(window.styleMask & NSWindowStyleMaskFullScreen);
+}
 - (instancetype)init {
     self = [super initWithIdentifier:@"quest.avoid.couch.titlebar"];
     if (self) {
@@ -50,6 +54,11 @@ void couch_update_window_title(void *rawWindow, const char *rawTitle) {
         window.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
         window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
         window.toolbar = toolbar;
+        toolbar.visible = !(window.styleMask & NSWindowStyleMaskFullScreen);
+        // Observe AppKit so native window controls work without replacing Tauri's delegate.
+        for (NSNotificationName name in @[NSWindowDidEnterFullScreenNotification, NSWindowDidExitFullScreenNotification]) {
+            [NSNotificationCenter.defaultCenter addObserver:toolbar selector:@selector(fullscreenChanged:) name:name object:window];
+        }
     }
     toolbar.titleField.stringValue = title;
     toolbar.titleField.toolTip = title;
