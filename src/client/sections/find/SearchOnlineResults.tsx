@@ -121,7 +121,12 @@ function OnlineResults(props: Props) {
     void action(async signal => {
       if (item.kind === "media") {
         const existing = savedWeb(item);
-        await readSearch(props, existing ? `/api/for-later/${encodeURIComponent(existing.id)}` : "/api/for-later", signal, { method: existing ? "DELETE" : "POST", ...(existing ? {} : { body: JSON.stringify({ reference: { kind: "web", url: item.url, title: item.title, thumbnail: webThumbnail(item.thumbnail), duration: typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration >= 0 && item.duration <= 86400 ? item.duration : undefined } }) }) });
+        if (!existing && item.collection) {
+          const fresh = await browse.refetch({ throwOnError: true });
+          signal.throwIfAborted();
+          if (!fresh.data?.pages.some(page => page.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index))) throw new Error("This collection changed. Refresh it before saving this item.");
+        }
+        await readSearch(props, existing ? `/api/for-later/${encodeURIComponent(existing.id)}` : "/api/for-later", signal, { method: existing ? "DELETE" : "POST", ...(existing ? {} : { body: JSON.stringify({ reference: { kind: "web", url: item.url, title: item.title, ...(item.collection ? { collection: { url: item.collection.url, ...(item.collection.index === undefined ? {} : { index: item.collection.index }) } } : {}), thumbnail: webThumbnail(item.thumbnail), duration: typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration >= 0 && item.duration <= 86400 ? item.duration : undefined } }) }) });
         if (!signal.aborted) await client.invalidateQueries({ queryKey: ["for-later"] });
       } else {
         await readSearch(props, saved ? `/api/providers/favorites/${encodeURIComponent(item.id)}` : "/api/providers/favorites", signal, { method: saved ? "DELETE" : "POST", ...(saved ? {} : { body: JSON.stringify({ item }) }) });

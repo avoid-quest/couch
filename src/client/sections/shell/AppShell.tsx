@@ -70,7 +70,7 @@ function useShellValue() {
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingRequested, setPairingOpen] = useState(false);
   const pairingOpen = pairingRequested && remoteControlEnabled;
-  const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
+  const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number; returnPath: string; returnLabel: string; focusSelector?: string } | null>(null);
   useEffect(() => { if (section !== "Find") setOnlineRequest(null); }, [section]);
   useEffect(() => { setOnlineRequest(null); setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
@@ -120,7 +120,7 @@ function useShellValue() {
   };
   useNavigation(() => {
     if (remoteOpen) { setRemoteOpen(false); return; }
-    if (onlineRequest) { setOnlineRequest(null); changeSection("Saved"); return; }
+    if (onlineRequest) { closeOnlineRequest(true); return; }
     if (section === "Now") leavePlayer();
     else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
     else if (section !== "Home") changeSection("Home");
@@ -145,8 +145,17 @@ function useShellValue() {
     });
     return result;
   };
-  const openProvider = (item: ProviderItem) => {
-    setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1 }));
+  const closeOnlineRequest = (returnToOrigin = false) => {
+    const request = onlineRequest;
+    setOnlineRequest(null);
+    if (!request || !returnToOrigin) return;
+    void router.navigate({ href: request.returnPath, replace: true }).then(() => requestAnimationFrame(() => {
+      const target = request.focusSelector ? document.querySelector<HTMLElement>(request.focusSelector) : null;
+      (target ?? document.querySelector<HTMLElement>("[data-page-first]:not(:disabled)"))?.focus({ preventScroll: true });
+    }));
+  };
+  const openProvider = (item: ProviderItem, focusSelector?: string) => {
+    setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1, returnPath: at, returnLabel: section, focusSelector }));
     browseSection("Online");
   };
   const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean; placement?: "next" }) =>
@@ -185,7 +194,7 @@ function useShellValue() {
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
     remoteOpen, pairingOpen, onlineRequest, setupSource, sourcesOpen,
-    closeOnlineRequest: () => setOnlineRequest(null),
+    closeOnlineRequest,
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
 }
@@ -307,7 +316,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage /> : <>
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
+            {current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>

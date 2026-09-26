@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
+import { collectionTarget } from "@/collection-target";
+import { MediaDetails } from "@/components/MediaDetails";
+import { providerForUrl, type ProviderItem } from "../../../shared/providers";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -26,17 +29,16 @@ function sourceLabel(item: ForLaterItem) {
   if (item.kind === "radio") return "Radio";
   if (!item.url) return "";
   try {
-    const host = new URL(item.url).hostname.replace(/^www\./, "");
-    return { "youtube.com": "YouTube", "youtu.be": "YouTube", "twitch.tv": "Twitch", "raiplay.it": "RaiPlay", "bandcamp.com": "Bandcamp" }[host] ?? host;
+    const provider = providerForUrl(item.url);
+    return provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : new URL(item.url).hostname.replace(/^www\./, "");
   } catch { return ""; }
 }
 
 type Mode = "play" | "append" | "remove";
 
-export function ForLaterSection({ origin, token, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: {
+export function ForLaterSection({ origin, token, connected, canPlay, onFind, onOpenProvider, showHeading = true, mediaOnly = false, limit }: {
   origin: string; token: string; connected: boolean; canPlay: boolean;
-  /** @deprecated Rows always play; the details dialog is gone. */
-  inspect?: boolean;
+  onOpenProvider?: (item: ProviderItem, returnFocusLabel?: string) => void;
   /** Shown as the empty state's next step. */
   onFind?: () => void;
   /** A visible section title (Find). Saved titles the tab with its PageHeader. */
@@ -107,18 +109,31 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       {!!items.length && <MediaList ref={list} aria-label="For later">
         <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
-          {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
-            art={item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="size-full rounded-none" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />}
-            title={item.title}
-            meta={sourceLabel(item)}
-            primary={{ label: "Play", onClick: () => act(item, "play", index), disabled: !connected || !canPlay || pending }}
-            actions={<>
-              <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => act(item, "append", index)}>Queue</Button>
-              <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title}`} onClick={() => act(item, "remove", index)}>Remove</Button>
-              {drag.handle}
-            </>}>
-            {(item.duration != null || item.live) && <DurationBar duration={item.duration} live={item.live} />}
-          </MediaRow>}</SortableRow>)}
+          {items.map((item, index) => {
+            const art = item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="size-full rounded-none" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />;
+            const meta = [item.subtitle, sourceLabel(item)].filter(Boolean).join(" · ");
+            const collection = collectionTarget(item.collection);
+            const play = <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => act(item, "play", index)}>Play</Button>;
+            return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaDetails title={item.title} meta={meta} description={item.description} art={art} actions={<>
+              {action.error && action.variables?.item.id === item.id && <SavedError message={action.error.message || "Couldn't use this item."} />}
+              {play}
+              {collection && onOpenProvider && <Button variant="ghost" aria-label={`Browse ${collection.title}`} onClick={() => onOpenProvider(collection, `[data-saved-details="${CSS.escape(item.id)}"] [data-play]`)}>Browse</Button>}
+            </>}>{inspect => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
+              art={<Button variant="ghost" className="h-auto p-0 touch:h-auto" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
+              artFit="contain"
+              title={item.title}
+              meta={meta}
+              description={item.description}
+              primary={{ label: "Details", onClick: inspect }}
+              actions={<>
+                {play}
+                <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => act(item, "append", index)}>Queue</Button>
+                <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title}`} onClick={() => act(item, "remove", index)}>Remove</Button>
+                {drag.handle}
+              </>}>
+              {(item.duration != null || item.live) && <DurationBar duration={item.duration} live={item.live} />}
+            </MediaRow>}</MediaDetails>}</SortableRow>;
+          })}
         </SortableContext>
       </MediaList>}
     </DndContext>

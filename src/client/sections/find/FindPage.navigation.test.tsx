@@ -54,11 +54,11 @@ test("a list opened from Saved shows its items with Saved as the way back", asyn
     throw new Error(`Unexpected request: ${path}`);
   }) as typeof fetch);
   const commands: unknown[] = [], sections: string[] = [];
-  let closed = 0;
+  const closed: boolean[] = [];
   const shell = {
     nativeHost: false, credentials: { origin: "http://localhost", token: "paired" }, identity: null, state: null,
     connected: true, available: true, section: "Find", videoQualityPreference: { quality: "auto" }, changeSearch: () => {},
-    onlineRequest: { item: list, revision: 1 }, closeOnlineRequest: () => { closed++; }, changeSection: (name: string) => sections.push(name),
+    onlineRequest: { item: list, revision: 1, returnPath: "/saved", returnLabel: "Saved" }, closeOnlineRequest: (returnToOrigin = false) => { closed.push(returnToOrigin); }, changeSection: (name: string) => sections.push(name),
     run: async (action: unknown) => { commands.push(action); return true; },
   } as unknown as ShellValue;
   const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
@@ -72,5 +72,5 @@ test("a list opened from Saved shows its items with Saved as the way back", asyn
   expect(commands).toEqual([{ type: "enqueueProvider", provider: "youtube", url: list.url, shape: "playlist", playNow: true, quality: "auto" }]);
   const back = screen.getAllByRole("button", { name: "Saved" }).find(button => !button.hasAttribute("aria-pressed"))!;
   await userEvent.click(back);
-  expect([closed, sections]).toEqual([1, ["Saved"]]);
+  expect([closed, sections]).toEqual([[true], []]);
 });

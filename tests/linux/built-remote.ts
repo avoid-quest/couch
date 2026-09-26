@@ -27,8 +27,9 @@ seedConfiguredFixture(directory);
 const extractor = join(directory, "provider-extractor");
 const providerUrl = "https://www.youtube.com/watch?v=abcdefghijk";
 const providerTransport = "https://media.example/private-provider.mp4";
+const providerDescription = "The crew explores a quiet coastal town and follows its residents through the changing seasons.";
 await Bun.write(extractor, `#!/usr/bin/env bun
-const item = { id: "abcdefghijk", title: "Provider result fixture", webpage_url: ${JSON.stringify(providerUrl)}, url: ${JSON.stringify(providerTransport)}, vcodec: "h264", acodec: "aac", duration: 60 };
+const item = { id: "abcdefghijk", title: "Provider result fixture", channel: "Fixture series", description: ${JSON.stringify(providerDescription)}, webpage_url: ${JSON.stringify(providerUrl)}, url: ${JSON.stringify(providerTransport)}, vcodec: "h264", acodec: "aac", duration: 60 };
 console.log(JSON.stringify(process.argv.some(value => value.includes("/results?")) ? { entries: [item] } : item));
 `);
 await chmod(extractor, 0o700);
@@ -162,8 +163,26 @@ try {
   assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host");
   assert.ok(!JSON.stringify(latest).includes(providerTransport), "Resolved transport remains private to the native pipe");
   await ui.section("Now");
+  observed = { ...observed, position: 12, status: "paused" };
+  send({ type: "player", state: observed });
+  await until("native progress retains the trusted provider synopsis", async () => {
+    const history = await (await api("/api/progress/history")).json();
+    return history.items.some((item: { title: string; position: number; description?: string }) => item.title === "Provider result fixture" && item.position === 12 && item.description === providerDescription);
+  });
   await ui.stopPlayback();
   await until("provider playback stops through the browser", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
+  await ui.click('[data-app-nav] a[href="/"]');
+  await until("Home offers details for the unfinished provider item", async () => await ui.execute('return !!document.querySelector(\'[data-page="Home"] [aria-label="Details Provider result fixture"]\')'));
+  await assertResponsive(ui, "Phone Home");
+  const loadsBeforeDetails = commands.filter(command => command.type === "load").length;
+  await ui.button("Details Provider result fixture");
+  await until("Continue details expose the complete provider synopsis", async () => await ui.execute('return document.querySelector(\'[role="dialog"]\')?.textContent.includes(arguments[0])', [providerDescription]));
+  assert.equal(latest?.currentEntryId, null, "Opening details does not start playback");
+  assert.equal(commands.filter(command => command.type === "load").length, loadsBeforeDetails, "Inspection sends no native Play command");
+  await assertResponsive(ui, "Phone episode details");
+  await remote.screenshot("home-details-phone");
+  await ui.button("Close", '[role="dialog"]');
+  await until("closing episode details restores its Home trigger", async () => await ui.execute('return !document.querySelector(\'[role="dialog"]\') && document.activeElement?.getAttribute("aria-label") === "Details Provider result fixture"'));
   await ui.section("Saved");
   await remote.refresh();
   await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token') && document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected' && !!document.querySelector('[data-app-nav]')"));

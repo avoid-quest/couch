@@ -19,6 +19,25 @@ test("the queue separates upcoming and played items and estimates its finish", a
   expect(screen.getByRole("heading", { name: /^2 to play · done by/ })).toBeInTheDocument();
 });
 
+test.each([["loading", "Loading…"], ["error", "Playback error"], ["unavailable", "Player unavailable"], ["idle", "Ready to play"], ["paused", "Paused"], ["ended", "Finished"]] as const)("the current queue row reports %s truthfully", (status, label) => {
+  renderWithQueryClient(panel({ ...state, queue: state.queue.map(entry => ({ ...entry, subtitle: "MasterChef Italia" })), player: { ...state.player, status } }));
+  expect(screen.getByRole("region", { name: label })).toHaveTextContent("MasterChef Italia");
+  expect(screen.queryByRole("heading", { name: "Playing" })).not.toBeInTheDocument();
+  expect(screen.getByRole("list", { name: "Up next" })).toHaveTextContent("MasterChef Italia");
+});
+
+test.each([["Next", ["Later", "Save for later", "Remove"]], ["Last", ["Play next", "Earlier", "Save for later", "Remove"]]] as const)("ordering options for %s omit impossible moves", async (title, labels) => {
+  renderWithQueryClient(panel(state));
+  await userEvent.click(screen.getByRole("button", { name: `Options for ${title}` }));
+  expect(screen.getAllByRole("menuitem").map(item => item.textContent)).toEqual([...labels]);
+});
+
+test("a single upcoming item has only save and remove actions", async () => {
+  renderWithQueryClient(panel({ ...state, queue: state.queue.slice(0, 3) }));
+  await userEvent.click(screen.getByRole("button", { name: "Options for Next" }));
+  expect(screen.getAllByRole("menuitem").map(item => item.textContent)).toEqual(["Save for later", "Remove"]);
+});
+
 test("unknown or live lengths suppress uncertain start and finish times", () => {
   const view = renderWithQueryClient(panel({ ...state, queue: [queue[0]!, queue[1]!, { ...queue[2]!, duration: undefined }, queue[3]!] }));
   expect(screen.getByRole("heading", { name: "2 to play" })).toBeInTheDocument();

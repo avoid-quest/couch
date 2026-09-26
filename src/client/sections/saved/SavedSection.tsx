@@ -71,7 +71,7 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
       <div className="min-w-0">
         <TabsContent value="later">
           <PageHeader title="For later" />
-          <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} />
+          <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} onOpenProvider={favoriteActions.onOpenProvider} showHeading={false} />
         </TabsContent>
         <TabsContent value="channels">
           <PageHeader title="Channels & stations" />

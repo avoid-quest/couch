@@ -24,6 +24,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
     audioReady: !state?.systemAudio || state.systemAudio.volume !== null || state.systemAudio.volumeWritable === false && !state.systemAudio.error,
     transportReady: available && !!player?.playbackId && ["playing", "paused"].includes(player.status),
+    nextReady: available && !!player?.playbackId && ["playing", "paused", "ended"].includes(player.status),
     seekable: !!player?.seekable,
     pausable: !live || !!player?.seekable,
     hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.next || !!state.autoplay.pending)),
@@ -55,7 +56,7 @@ const seekLabel = <span aria-hidden="true" className="text-xs leading-none">10</
 export function PlaybackTransport({ state, credentials, connected, run, showSettings = true, pageFirst = false, prominent = false }: Props & { credentials: Credentials; showSettings?: boolean; pageFirst?: boolean; prominent?: boolean }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
-  const { available, active, transportReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
+  const { available, active, transportReady, nextReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
   const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current;
   const playLabel = ended ? "Replay" : playing ? "Pause" : "Play";
@@ -66,7 +67,7 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
       onClick={() => { if (ended && current) void run({ type: "play", entryId: current.id, fromStart: true }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>{ended ? <RotateCcw aria-hidden="true" /> : playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}</Button>}
     {(!prominent || !pausable && !ended) && <Button data-play-button={prominent || undefined} data-page-first={prominent && pageFirst || undefined} variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label="Stop" title="Stop" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>}
     {seekable && <Button variant="ghost" size="icon-lg" className={cn("flex-col gap-0", prominent && "player-seek size-11")} aria-label="Forward 10 seconds" title="Forward 10 seconds" disabled={!transportReady} onClick={() => seekBy(10)}><RotateCw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
-    {hasNext && <Button variant="ghost" size="icon-lg" className={prominent ? "size-11 [&_svg]:size-5" : undefined} aria-label="Next" title="Next" disabled={!available || !ended && !transportReady}
+    {hasNext && <Button variant="ghost" size="icon-lg" className={prominent ? "size-11 [&_svg]:size-5" : undefined} aria-label="Next" title="Next" disabled={!nextReady}
       onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>}
     {showSettings && state.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
   </div>;
