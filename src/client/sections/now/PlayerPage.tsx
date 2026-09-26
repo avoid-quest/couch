@@ -1,7 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Captions, ListVideo, Maximize, Minimize, Music2, Settings2 } from "lucide-react";
+import { ArrowLeft, Captions, Info, ListVideo, Maximize, Minimize, Music2, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -21,8 +21,8 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { cn } from "@/lib/utils";
 
-type Panel = "queue" | "tracks" | "settings";
-const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Playback" };
+type Panel = "queue" | "tracks" | "settings" | "info";
+const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Playback", info: "Show details" };
 
 export function PlayerPage() {
   const playbackClock = usePlaybackClock();
@@ -113,7 +113,7 @@ export function PlayerPage() {
   const programmeDetails = currentProgramme && <>
     {currentProgramme.genre && <Badge variant="secondary" className="h-auto max-w-full whitespace-normal break-all">{currentProgramme.genre}</Badge>}
     {(currentProgramme.artist || currentProgramme.album || currentProgramme.bitrate) && <p className="text-sm text-muted-foreground">{[currentProgramme.artist, currentProgramme.album, currentProgramme.bitrate && `${currentProgramme.bitrate} kbps`].filter(Boolean).join(" · ")}</p>}
-    {currentProgramme.description && <p className="line-clamp-3 max-w-prose text-sm text-muted-foreground">{currentProgramme.description}</p>}
+    {currentProgramme.description && <p className="max-w-prose text-sm text-muted-foreground">{currentProgramme.description}</p>}
     {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">About this show</a></Button>}
   </>;
   const unavailable = connected && player?.status === "unavailable";
@@ -125,18 +125,17 @@ export function PlayerPage() {
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
     : null;
 
-  return <section ref={root} className={cn("player-page relative h-dvh min-h-112 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
+  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
     <div className="absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
-      {elsewhere ? <div className="flex h-full flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] lg:flex-row lg:pt-0 lg:items-center lg:justify-start lg:gap-12">
-        {artwork && <div className="aspect-video w-full max-w-sm shrink-0 overflow-hidden bg-muted lg:w-2/5 lg:max-w-xl [&_img]:size-full [&_img]:object-cover">{artwork}</div>}
-        {!status && <div className="grid min-w-0 gap-2"><p className="text-3xl font-semibold tracking-tight text-muted-foreground">Playing on {name}</p>{currentProgramme && <h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme.title}</h2>}{nowPlaying && <p className="text-base">{nowPlaying}</p>}{programmeDetails}</div>}
-      </div> : <>
-        <VideoStage active={active} audioOnly={audioOnly} />
-        {active && audioOnly && <div className="absolute inset-0 flex flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] sm:flex-row sm:pt-0 sm:items-center sm:justify-start sm:gap-12">
-          <div data-player-art aria-hidden="true" className="grid aspect-square w-1/2 max-w-md shrink-0 place-items-center overflow-hidden bg-muted sm:w-auto sm:h-1/2 [&_img]:size-full [&_img]:object-cover">{artwork || <Music2 className="size-1/4 text-muted-foreground" />}</div>
-          <div data-player-audio-copy className="grid min-w-0 gap-2"><h2 className="text-3xl font-semibold tracking-tight break-words">{currentProgramme?.title || current.title}</h2><p className="text-base text-muted-foreground">{currentProgramme ? current.title : source}</p>{nowPlaying && <p role="status" className="text-base">{nowPlaying}</p>}{programmeDetails}</div>
-        </div>}
-      </>}
+      {!elsewhere && <VideoStage active={active} audioOnly={audioOnly} />}
+      {(elsewhere || active && audioOnly) && !status && <div data-player-summary className="player-summary" style={{ bottom: shown ? "var(--bottom-bar, 0px)" : 0 }}>
+        <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 place-items-center overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
+        <div data-player-audio-copy className="grid min-w-0 gap-2">
+          <p className="truncate text-sm text-muted-foreground">{elsewhere ? `Playing on ${name}` : currentProgramme ? current.title : source}</p>
+          <h2 className="line-clamp-2 text-2xl font-semibold tracking-tight break-words" title={currentProgramme?.title || current.title}>{currentProgramme?.title || current.title}</h2>
+          {nowPlaying && <p role="status" className="truncate text-sm text-muted-foreground">{nowPlaying}</p>}
+        </div>
+      </div>}
     </div>
     {player?.status === "loading" && player.buffering && <p role="status" className="absolute top-6 left-(--gutter) z-10 flex items-center gap-2 bg-background px-3 py-2 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
     {status && <div data-player-status className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-(--gutter) pb-48">
@@ -165,6 +164,7 @@ export function PlayerPage() {
         </Button>
         <div data-player-tools className="ml-auto flex min-w-0 flex-wrap items-center gap-1 max-sm:w-full">
           {state && <PlaybackVolume state={state} connected={connected} run={run} className="max-w-64" />}
+          {currentProgramme && <Button data-panel="info" variant="ghost" size="icon" aria-label="Show details" title="Show details" aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}
           {!audioOnly && <Button data-panel="tracks" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "tracks"} title="Audio & subtitles" onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
           {fullscreen.supported && <Button variant="ghost" size="icon" className="touch:min-w-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           <Button data-panel="settings" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "settings"} title="Playback" onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Playback</span></Button>
@@ -175,7 +175,7 @@ export function PlayerPage() {
       <SheetContent side="right" data-player-sheet aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); panelClose.current?.focus(); }} onCloseAutoFocus={event => { event.preventDefault(); panelTrigger.current?.focus(); }}>
         <SheetHeader className="flex-row items-center gap-2 px-6 pt-6 pb-2"><SheetClose asChild><Button ref={panelClose} variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">{panel && panelTitles[panel]}</SheetTitle></SheetHeader>
         <div className="px-6 pb-8">
-          {panel === "queue" ? <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} titled={false} />
+          {panel === "info" ? <div className="grid gap-3"><h3 className="text-xl font-semibold break-words">{currentProgramme?.title}</h3>{programmeDetails}</div> : panel === "queue" ? <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} titled={false} />
             : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>
       </SheetContent>

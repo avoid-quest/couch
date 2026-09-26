@@ -20,6 +20,8 @@ catalog provides interface icons, not brand identities.
 - **The player is one tap away.** While something plays, every browse page ends
   in the mini player: its artwork and title open the player, beside Play/Pause,
   Next and the volume slider. Volume is always a mute button and a slider.
+  The player fits the viewport at every interface size, with contained artwork
+  and no page scrolling. Long show details open in its existing side sheet.
 - **Home is a timetable.** Each row names its section and the clock time it
   matters at ("ends 21:38", "until 23:10") in a left column, with its content
   on the right. Rows appear only when they have something in them: Now,
