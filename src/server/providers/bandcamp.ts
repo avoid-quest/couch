@@ -1,6 +1,6 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { runYtDlp } from "../yt-dlp";
-import { ProviderError, providerItemId } from "./http";
+import { ProviderError, providerItemId, withProviderItem } from "./http";
 
 type Metadata = Record<string, unknown>;
 type Target = { url: string; kind: "track" | "album"; host: string };
@@ -104,10 +104,10 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
     checkTrack(detail, first);
     const image = thumbnail(info) ?? thumbnail(detail);
     const subtitle = artist(detail, true);
-    return { title, thumbnail: image, subtitle, description: label(info.description, 2000), items: items.map((item, index) => ({
+    return withProviderItem("bandcamp", source.url, "collection", { title, thumbnail: image, subtitle, description: label(info.description, 2000), items: items.map((item, index) => ({
       ...item, collection: { title, url: source.url, index }, ...(image ? { thumbnail: image } : {}), ...(subtitle ? { subtitle } : {}),
       ...(index === 0 && typeof detail.duration === "number" && Number.isFinite(detail.duration) && detail.duration >= 0 && detail.duration <= Number.MAX_SAFE_INTEGER ? { duration: detail.duration } : {}),
-    })) };
+    })) });
   }
 
   async function browse(request: BrowseRequest, signal?: AbortSignal): Promise<ProviderPage> {
@@ -122,7 +122,7 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
     const info = await extract(source, signal);
     checkTrack(info, source);
     const item = mediaItem(info, source);
-    return { title: item.title, items: [item] };
+    return { title: item.title, item, items: [item] };
   }
 
   return { browse, album };

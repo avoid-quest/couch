@@ -1,9 +1,10 @@
-import { setupUiTests, render as renderUI, act, screen, within, userEvent, createTestQueryClient } from "@/testing/react";
+import { DetailFocusRestoration } from "@/detail-navigation";
+import { setupUiTests, render as renderUI, act, screen, userEvent, createTestQueryClient } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ForLaterItem } from "../../../shared/for-later";
-import type { ProviderItem } from "../../../shared/providers";
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet } from "@tanstack/react-router";
 import { SessionGateContext } from "@/session/gate-context";
 
 setupUiTests();
@@ -25,14 +26,21 @@ const undo = async () => {
   await act(async () => { if (action && typeof action === "object" && "onClick" in action) action.onClick({} as React.MouseEvent<HTMLButtonElement>); });
 
 };
-async function render(connected = true, canPlay = true, onFind?: () => void, mediaOnly = false, onOpenProvider?: (item: ProviderItem, returnFocusLabel?: string) => void) {
+async function render(connected = true, canPlay = true, onFind?: () => void, mediaOnly = false, routed = false) {
   const { ForLaterSection, forLaterOrder: order } = await import("./ForLaterSection");
   forLaterOrder = order;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = createTestQueryClient();
-  await act(async () => view.rerender(<QueryClientProvider client={client}><SessionGateContext.Provider value={session as never}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} onFind={onFind} mediaOnly={mediaOnly} onOpenProvider={onOpenProvider} /></SessionGateContext.Provider></QueryClientProvider>));
+  const content = <ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} onFind={onFind} mediaOnly={mediaOnly} />;
+  const root = createRootRoute({ component: () => <><DetailFocusRestoration /><Outlet /></> });
+  const router = createRouter({ history: createMemoryHistory({ initialEntries: ["/saved"] }), routeTree: root.addChildren([
+    createRoute({ getParentRoute: () => root, path: "/saved", component: () => content }),
+    createRoute({ getParentRoute: () => root, path: "/item", component: () => <h1>Item details</h1> }),
+  ]) });
+  await act(async () => { if (routed) await router.load(); view.rerender(<QueryClientProvider client={client}><SessionGateContext.Provider value={session as never}>{routed ? <RouterProvider router={router} /> : content}</SessionGateContext.Provider></QueryClientProvider>); });
 
   if (connected) await screen.findByText(items.length ? items[0]!.title : "Nothing saved yet. Use Save on anything in Find.");
+  return router;
 }
 beforeEach(async () => {
   client = createTestQueryClient();
@@ -149,42 +157,17 @@ test("an empty For later leads to Find", async () => {
   expect(found).toBe(1);
 });
 
-test("saved title and artwork open full details without playing, and Close returns to the exact opener", async () => {
-  const description = "A full episode synopsis.\n".repeat(20) + "<script>Not executable</script>";
-  items = [{ id: "episode", title: "S11E07 · Puntata 7", url: "https://streamingcommunityz.photos/it/watch/1955?e=17207", subtitle: "MasterChef Italia", description, thumbnail: "https://example.com/episode.jpg" }];
-  await render();
-  for (const label of ["Details S11E07 · Puntata 7", "Artwork details for S11E07 · Puntata 7"]) {
-    const opener = button(label);
-    await userEvent.click(opener);
-    const dialog = await screen.findByRole("dialog", { name: items[0]!.title });
-    expect(dialog.textContent).toContain(description);
-    expect(dialog.querySelector("script")).toBeNull();
-    expect(within(dialog).getByText("MasterChef Italia · StreamingCommunity")).toBeVisible();
+for (const trigger of ["Details S11E07 · Puntata 7", "Artwork details for S11E07 · Puntata 7"]) {
+  test(`saved ${trigger} navigates to its stable identity without playback`, async () => {
+    items = [{ id: "episode", title: "S11E07 · Puntata 7", url: "https://streamingcommunityz.photos/it/watch/1955?e=17207", subtitle: "MasterChef Italia", thumbnail: "https://example.com/episode.jpg" }];
+    const router = await render(true, true, undefined, false, true);
+    await click(trigger);
+    expect(await screen.findByRole("heading", { name: "Item details" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/item");
+    expect(router.state.location.search).toEqual({ kind: "saved", id: "episode" });
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls.filter(call => call.method !== "GET")).toHaveLength(0);
-    await userEvent.keyboard("{Escape}");
-    expect(opener).toHaveFocus();
-  }
-});
-
-test("details offers explicit playback and browsing the saved item's parent without modifying it", async () => {
-  const collection = { title: "Artist — Album", url: "https://artist.bandcamp.com/album/album" };
-  items = [{ id: "track", title: "Track", url: "https://artist.bandcamp.com/track/one", subtitle: "Artist", description: "Album notes", collection }];
-  const opened: Array<[ProviderItem, string | undefined]> = [];
-  await render(true, true, undefined, false, (item, label) => opened.push([item, label]));
-  await click("Details Track");
-  const dialog = await screen.findByRole("dialog", { name: "Track" });
-  await userEvent.click(within(dialog).getByRole("button", { name: `Browse ${collection.title}` }));
-  expect(opened).toEqual([[expect.objectContaining({ provider: "bandcamp", kind: "collection", title: collection.title, url: collection.url }), '[data-saved-details="track"] [data-play]']]);
-  expect(calls.filter(call => call.method !== "GET")).toHaveLength(0);
-  await userEvent.click(within(dialog).getByRole("button", { name: "Play Track" }));
-  expect(calls.at(-1)).toEqual({ path: "/api/for-later/track/load", method: "POST", body: { mode: "play" } });
-});
-
-test("a failed Play from details exposes the source error inside the dialog", async () => {
-  await render(); missing = true;
-  await click("Details Evening movie");
-  const dialog = await screen.findByRole("dialog", { name: "Evening movie" });
-  await userEvent.click(within(dialog).getByRole("button", { name: "Play Evening movie" }));
-  expect((await within(dialog).findByRole("alert")).textContent).toContain("Source unavailable");
-  expect(items).toHaveLength(2);
-});
+    await act(async () => router.history.back());
+    expect(await screen.findByRole("button", { name: trigger })).toHaveFocus();
+  });
+}

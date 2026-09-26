@@ -1,3 +1,4 @@
+import { DetailFocusRestoration } from "@/detail-navigation";
 import { setupUiTests, render as renderUI, act, screen, userEvent, waitFor, within, createTestQueryClient, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { ShellProviders } from "../shell/test-providers";
@@ -36,13 +37,14 @@ async function renderHome(overrides: { current?: QueueEntry; state?: SessionStat
     changeSection: (section: string) => { if (section === "Now" || section === "Find") void router.navigate({ to: section === "Now" ? "/now" : "/find" }); },
     ...overrides,
   } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
+  const base = createRootRoute({ component: () => <ShellProviders value={shell}><DetailFocusRestoration /><Outlet /></ShellProviders> });
   const home = createRoute({ getParentRoute: () => base, path: "/", component: HomePage });
+  const item = createRoute({ getParentRoute: () => base, path: "/item", component: () => <h1>Item details</h1> });
   const player = createRoute({ getParentRoute: () => base, path: "/now", component: () => <h1>Player</h1> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <h1>Find</h1> });
   const settings = createRoute({ getParentRoute: () => base, path: "/settings", component: () => <SettingsLayout section="playback">{null}</SettingsLayout> });
   const homeSettings = createRoute({ getParentRoute: () => base, path: "/settings/home", component: SettingsHome });
-  router = createRouter({ routeTree: base.addChildren([home, player, find, settings, homeSettings]), history });
+  router = createRouter({ routeTree: base.addChildren([home, item, player, find, settings, homeSettings]), history });
   await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
 }
 
@@ -87,6 +89,14 @@ test("a fresh Home fills Radio with built-in stations and leads with the one on 
   expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Customize Home" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => /\/api\/(jellyfin|library\/sources|iptv\/sources)$/.test(String(input)))).toBe(false);
+  await userEvent.click(screen.getByRole("button", { name: "Details Lyl Radio" }));
+  expect(await screen.findByRole("heading", { name: "Item details" })).toBeInTheDocument();
+  expect(router.state.location.search).toEqual({ kind: "radio", id: "lyl" });
+  await act(async () => history.back());
+  expect(await screen.findByRole("button", { name: "Details Lyl Radio" })).toHaveFocus();
+  await userEvent.click(screen.getByRole("button", { name: "Details Alexander Nut" }));
+  expect(await screen.findByRole("heading", { name: "Item details" })).toBeInTheDocument();
+  expect(router.state.location.search).toEqual({ kind: "radio", id: "nts" });
 });
 
 test("hiding failed Home rows restores the empty state and skips their reads on the next visit", async () => {
@@ -202,9 +212,11 @@ test("Recent artwork and title open details without replaying", async () => {
   await renderHome({ playHistory: async (...args) => { played.push(args); return true; } });
   const opener = await screen.findByRole("button", { name: "Details Remembered episode" });
   await userEvent.click(opener);
-  const dialog = screen.getByRole("dialog", { name: "Remembered episode" });
-  expect(within(dialog).getByText("The full remembered episode description.")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Item details" })).toBeInTheDocument();
+  expect(history.location.pathname).toBe("/item");
+  expect(router.state.location.search).toEqual({ kind: "history", id: "movie" });
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(played).toEqual([]);
-  await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-  await waitFor(() => expect(opener).toHaveFocus());
+  await act(async () => history.back());
+  expect(await screen.findByRole("button", { name: "Details Remembered episode" })).toHaveFocus();
 });

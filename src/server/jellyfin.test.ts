@@ -627,3 +627,16 @@ for (const cancel of [false, true]) test(`Jellyfin artwork discards a late respo
   release();
   expect(await pending).toBeNull();
 });
+
+
+test("Jellyfin details reload one public item and return null for a removed item", async () => {
+  const upstream = fixture({ itemOverrides: { Overview: "A description" } });
+  const jellyfin = source();
+  await jellyfin.connect(credentials(upstream.url));
+  const item = await jellyfin.getItem(itemId);
+  expect(item).toMatchObject({ id: itemId, title: "Local test movie", description: "A description", resumePosition: 11 });
+  expect(JSON.stringify(item)).not.toContain("/private/");
+  expect(JSON.stringify(item)).not.toContain("fixture-private-token");
+  expect(await jellyfin.getItem("c".repeat(32))).toBeNull();
+  await expect(jellyfin.entry("c".repeat(32), "missing")).rejects.toThrow("unavailable");
+});

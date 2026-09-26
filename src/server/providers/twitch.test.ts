@@ -82,6 +82,7 @@ test("direct channel lookup keeps a stable item ID when a channel goes offline",
   const live = await browseTwitch({ url: "https://twitch.tv/LofiGirl/" });
   const offline = await browseTwitch({ url: "https://www.twitch.tv/lofigirl" });
   expect(live.items[0]!.id).toBe(offline.items[0]!.id);
+  expect(live.item).toMatchObject({ id: offline.item!.id, url: "https://www.twitch.tv/lofigirl", kind: "channel", title: "LofiGirl" });
   expect(live.items[0]!.live).toBe(true);
   expect(offline.items[0]).toMatchObject({ live: false, kind: "channel", description: liveChannel.description });
   expect(JSON.parse(String(fetch.mock.calls[0]![1]?.body)).variables).toEqual({ login: "lofigirl" });

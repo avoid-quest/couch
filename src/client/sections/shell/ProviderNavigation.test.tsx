@@ -5,6 +5,7 @@ import { AppShell, useShell } from "./AppShell";
 import { ShellProviders } from "./test-providers";
 import { NativeModeGate } from "./PlaybackDevice";
 import { FindPage } from "../find/FindPage";
+import { ProviderPage } from "../find/ProviderPage";
 
 setupUiTests();
 
@@ -26,16 +27,18 @@ for (const [origin, path] of [["Home", "/"], ["Saved", "/saved"]] as const) test
   const home = createRoute({ getParentRoute: () => base, path: "/", component: HomeOpener });
   const saved = createRoute({ getParentRoute: () => base, path: "/saved", component: HomeOpener });
   const find = createRoute({ getParentRoute: () => base, path: "/find", loader: () => new Promise(resolve => setTimeout(resolve, 10)), component: FindPage });
+  const collection = createRoute({ getParentRoute: () => base, path: "/collection", component: ProviderPage });
   const history = createMemoryHistory({ initialEntries: [path] });
-  const router = createRouter({ routeTree: base.addChildren([home, saved, find]), history });
+  const router = createRouter({ routeTree: base.addChildren([home, saved, find, collection]), history });
   const view = render(<></>);
   await act(async () => { await router.load(); view.rerender(<RouterProvider router={router} />); });
   await act(async () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true })));
   await waitFor(() => expect(document.getElementById("media-search")).toHaveFocus());
   await act(async () => router.navigate({ href: path }));
   await userEvent.click(screen.getAllByRole("button", { name: "Details remembered show" })[1]!);
-  expect(history.location.pathname).toBe("/find");
-  await userEvent.click(await screen.findByRole("button", { name: origin }));
+  expect(history.location.pathname).toBe("/collection");
+  expect(new URLSearchParams(history.location.search).get("url")).toBe("https://streamingcommunityz.photos/it/titles/123-show");
+  await userEvent.click(await screen.findByRole("button", { name: "Back" }));
   await waitFor(() => expect(screen.getAllByRole("button", { name: "Details remembered show" })[1]!).toHaveFocus());
   expect(history.location.pathname).toBe(path);
   expect(commands).toEqual([]);

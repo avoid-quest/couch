@@ -22,24 +22,26 @@ beforeEach(() => {
     if (url.pathname === "/api/providers/favorites") return Response.json({ favorites: [] });
     if (url.pathname === "/api/for-later") return Response.json({ items: [] });
     const target = url.searchParams.get("url");
-    if (target === showUrl) return Response.json({ title: "The show", thumbnail: cover, description: "The full show synopsis.", subtitle: "2025 · Series", items: [season] });
-    if (target === season.url) return Response.json({ title: "The show - Season 1", items: [episode] });
+    if (target === showUrl) return Response.json({ item: show, title: "The show", thumbnail: cover, description: "The full show synopsis.", subtitle: "2025 · Series", items: [season] });
+    if (target === season.url) return Response.json({ item: season, thumbnail: cover, description: "The full show synopsis.", title: "The show - Season 1", items: [episode] });
     return Response.json({ items: [show] });
   }) as typeof fetch);
 });
 
 const command = async (action: unknown) => { commands.push(action); return true; };
-function Browser({ provider = "streamingcommunity" }: { provider?: ProviderId } = {}) {
+function Browser({ provider = "streamingcommunity", initialUrl }: { provider?: ProviderId; initialUrl?: string } = {}) {
+  const [url, setUrl] = useState(initialUrl);
+  const open = useCallback((item: { url: string }) => setUrl(item.url), []);
   const [summary, setSummary] = useState<SearchResultSummary>();
   const receive = useCallback((_: string, next: SearchResultSummary) => setSummary(next), []);
   return <>
-    <SearchOnlineResults provider={provider} query="show" origin="http://localhost" token="paired" connected canPlay active quality="auto" onEnqueued={() => {}} onCommand={command} onResults={receive} />
-    {summary?.collection && <CollectionHeader collection={summary.collection} back="Back" onBack={summary.collection.back} canPlay />}
+    <SearchOnlineResults provider={provider} query="show" url={url} onOpenCollection={open} origin="http://localhost" token="paired" connected canPlay active quality="auto" onEnqueued={() => {}} onCommand={command} onResults={receive} />
+    {summary?.collection && <CollectionHeader collection={summary.collection} back="Back" onBack={() => setUrl(undefined)} canPlay />}
     <HitList hits={summary?.hits ?? []} label="Results" origin="http://localhost" token="paired" />
   </>;
 }
 
-test("opening a show and sparse season keeps cover and synopsis while episodes show their own details", async () => {
+test("opening a show and season uses server metadata while episodes show their own details", async () => {
   render(<QueryClientProvider client={createTestQueryClient()}><Browser /></QueryClientProvider>);
   await userEvent.click(await screen.findByRole("button", { name: "Open The show" }));
   await screen.findByText("The full show synopsis.");
@@ -93,4 +95,29 @@ test("Save retains the selected repeated playlist occurrence without inventing c
     { kind: "web", url, title: "Repeated video", collection: { url: collection.url, index: 1 } },
     { kind: "web", url, title: "Standalone video" },
   ]);
+});
+
+for (const fromFavorite of [false, true]) test(`a sparse channel page fills missing metadata from ${fromFavorite ? "its saved favorite" : "the search cache"} without replacing fresh identity`, async () => {
+  const channelUrl = "https://www.youtube.com/@NASA";
+  const cached = { id: "outdated-id", provider: "youtube", kind: "channel", title: "Older name", url: channelUrl, thumbnail: cover, description: "Spaceflight and exploration.", subtitle: "NASA channel" };
+  const canonical = { id: "canonical-id", provider: "youtube", kind: "channel", title: "NASA", url: channelUrl };
+  const saved: unknown[] = [];
+  spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/api/providers/favorites") {
+      if (init?.method === "POST") saved.push(JSON.parse(String(init.body)).item);
+      return Response.json({ favorites: fromFavorite ? [cached] : [] });
+    }
+    if (url.pathname === "/api/for-later") return Response.json({ items: [] });
+    if (url.searchParams.has("url")) return Response.json({ item: canonical, title: "NASA", items: [] });
+    return Response.json({ items: [cached] });
+  }) as typeof fetch);
+  render(<QueryClientProvider client={createTestQueryClient()}><Browser provider="youtube" initialUrl={fromFavorite ? channelUrl : undefined} /></QueryClientProvider>);
+  if (!fromFavorite) await userEvent.click(await screen.findByRole("button", { name: "Open Older name" }));
+  await screen.findByRole("heading", { name: "NASA" });
+  expect(await screen.findByText("Spaceflight and exploration.")).toBeInTheDocument();
+  expect(screen.getByText("NASA channel")).toBeInTheDocument();
+  expect(document.querySelector<HTMLImageElement>("[data-collection-preview] img")?.src).toBe(cover);
+  await userEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(saved).toEqual([{ ...canonical, thumbnail: cover, description: cached.description, subtitle: cached.subtitle }]);
 });

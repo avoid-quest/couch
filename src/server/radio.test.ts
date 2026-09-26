@@ -147,3 +147,27 @@ test("programme lookup trusts only stations currently imported from the avoid fe
   expect(radio.programmeStation(`radio:${station.id}`)).toEqual({ id: "avoid-radio-one", streamUrl: stream });
   expect(radio.getPlayable(station.id).source).toBe(stream);
 });
+
+
+test("station details prefer persisted playlists and favorites, then resolve the exact directory ID", async () => {
+  const calls: string[] = [];
+  const radio = fixture({ fetch: (async (input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    if (url === "https://example.com/playlist.m3u") return new Response("#EXTM3U\n#EXTINF:-1,Playlist radio\nhttps://example.com/live\n");
+    return Response.json(url.endsWith(favorite.id) ? [raw] : []);
+  }) as typeof fetch });
+  const playlist = await radio.addPlaylist({ name: "Radio", url: "https://example.com/playlist.m3u" });
+  const imported = radio.playlistStations({ playlistId: playlist.id })[0]!;
+  calls.length = 0;
+  expect(await radio.getStation(imported.id)).toEqual(imported);
+  expect(calls).toEqual([]);
+  expect(await radio.getStation(favorite.id)).toEqual(favorite);
+  expect(calls).toEqual([`https://one.api.radio-browser.info/json/stations/byuuid/${favorite.id}`]);
+  radio.saveFavorite({ ...favorite, name: "My favorite" });
+  calls.length = 0;
+  expect((await radio.getStation(favorite.id)).name).toBe("My favorite");
+  expect(calls).toEqual([]);
+  await expect(radio.getStation("invalid")).rejects.toMatchObject({ status: 400 });
+  await expect(radio.getStation("11234567-89ab-cdef-0123-456789abcdef")).rejects.toMatchObject({ status: 404 });
+});

@@ -55,6 +55,17 @@ test("revoking one of two controllers closes all its sockets and rejects later H
   expect((await controllerApi(hub, ownerToken, "/api/controllers/me")).status).toBe(200);
 });
 
+test("detail reads require a paired controller before resolving any item", async () => {
+  const { hub } = fixture();
+  const token = await pair(hub);
+  for (const path of ["/api/library/items/missing", `/api/jellyfin/items/${"a".repeat(32)}`, "/api/progress/library%3Amissing", "/api/radio/stations/01234567-89ab-cdef-0123-456789abcdef"]) {
+    expect((await fetch(`${hub.origin}${path}`)).status).toBe(401);
+    expect((await controllerApi(hub, "invalid-token", path)).status).toBe(401);
+  }
+  expect((await controllerApi(hub, token, "/api/library/items/missing")).status).toBe(404);
+  expect((await controllerApi(hub, token, "/api/progress/library%3Amissing")).status).toBe(404);
+});
+
 test("revocation prevents a delayed admitted album from appending or starting playback", async () => {
   const started = Promise.withResolvers<void>(), finished = Promise.withResolvers<void>(), album = Promise.withResolvers<ProviderPage>();
   const lookup = spyOn(bandcampModule, "loadBandcampAlbum").mockImplementation(async () => { started.resolve(); const result = await album.promise; finished.resolve(); return result; });

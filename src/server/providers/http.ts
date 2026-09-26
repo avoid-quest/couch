@@ -1,11 +1,17 @@
 import { createHash } from "node:crypto";
-import type { ProviderId } from "../../shared/providers";
+import type { ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
 
 export class ProviderError extends Error {
   constructor(message: string, readonly status = 502) { super(message); }
 }
 
 export const providerItemId = (provider: ProviderId, url: string) => `${provider}-${createHash("sha256").update(url).digest("hex").slice(0, 32)}`;
+
+/** The browsed target is independently saveable after a direct page load. */
+export function withProviderItem(provider: ProviderId, url: string, kind: ProviderItem["kind"], page: ProviderPage): ProviderPage {
+  const item = kind === "media" ? page.items.find(item => item.url === url) : undefined;
+  return { ...page, item: item ?? { id: providerItemId(provider, url), provider, kind, url, title: (page.title || provider).slice(0, 200), thumbnail: page.thumbnail, description: page.description, subtitle: page.subtitle } };
+}
 
 export async function providerJson(url: string, init: RequestInit = {}, request: typeof fetch = globalThis.fetch): Promise<unknown> {
   const signal = AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(12_000)]);

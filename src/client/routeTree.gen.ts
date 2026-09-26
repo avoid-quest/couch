@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as BrowseRouteImport } from './routes/browse'
+import { Route as CollectionRouteImport } from './routes/collection'
 import { Route as FindRouteImport } from './routes/find'
+import { Route as ItemRouteImport } from './routes/item'
 import { Route as MusicRouteImport } from './routes/music'
 import { Route as NowRouteImport } from './routes/now'
 import { Route as RadioRouteImport } from './routes/radio'
@@ -63,9 +65,19 @@ const BrowseRoute = BrowseRouteImport.update({
   path: '/browse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CollectionRoute = CollectionRouteImport.update({
+  id: '/collection',
+  path: '/collection',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FindRoute = FindRouteImport.update({
   id: '/find',
   path: '/find',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ItemRoute = ItemRouteImport.update({
+  id: '/item',
+  path: '/item',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MusicRoute = MusicRouteImport.update({
@@ -244,7 +256,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
+  '/collection': typeof CollectionRoute
   '/find': typeof FindRoute
+  '/item': typeof ItemRoute
   '/music': typeof MusicRoute
   '/now': typeof NowRoute
   '/radio': typeof RadioRoute
@@ -284,7 +298,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
+  '/collection': typeof CollectionRoute
   '/find': typeof FindRoute
+  '/item': typeof ItemRoute
   '/music': typeof MusicRoute
   '/now': typeof NowRoute
   '/radio': typeof RadioRoute
@@ -323,7 +339,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
+  '/collection': typeof CollectionRoute
   '/find': typeof FindRoute
+  '/item': typeof ItemRoute
   '/music': typeof MusicRoute
   '/now': typeof NowRoute
   '/radio': typeof RadioRoute
@@ -365,7 +383,9 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/browse'
+    | '/collection'
     | '/find'
+    | '/item'
     | '/music'
     | '/now'
     | '/radio'
@@ -405,7 +425,9 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/browse'
+    | '/collection'
     | '/find'
+    | '/item'
     | '/music'
     | '/now'
     | '/radio'
@@ -443,7 +465,9 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/browse'
+    | '/collection'
     | '/find'
+    | '/item'
     | '/music'
     | '/now'
     | '/radio'
@@ -484,7 +508,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   BrowseRoute: typeof BrowseRouteWithChildren
+  CollectionRoute: typeof CollectionRoute
   FindRoute: typeof FindRoute
+  ItemRoute: typeof ItemRoute
   MusicRoute: typeof MusicRoute
   NowRoute: typeof NowRoute
   RadioRoute: typeof RadioRoute
@@ -517,11 +543,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrowseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/collection': {
+      id: '/collection'
+      path: '/collection'
+      fullPath: '/collection'
+      preLoaderRoute: typeof CollectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/find': {
       id: '/find'
       path: '/find'
       fullPath: '/find'
       preLoaderRoute: typeof FindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/item': {
+      id: '/item'
+      path: '/item'
+      fullPath: '/item'
+      preLoaderRoute: typeof ItemRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/music': {
@@ -853,7 +893,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   BrowseRoute: BrowseRouteWithChildren,
+  CollectionRoute: CollectionRoute,
   FindRoute: FindRoute,
+  ItemRoute: ItemRoute,
   MusicRoute: MusicRoute,
   NowRoute: NowRoute,
   RadioRoute: RadioRoute,

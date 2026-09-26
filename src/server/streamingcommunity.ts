@@ -4,7 +4,7 @@ import { join } from "node:path";
 import extractor from "../../vendor/streamingcommunity/streamingcommunity.py" with { type: "text" };
 import type { BrowseRequest, ProviderItem, ProviderPage, StreamingCommunityPreview } from "../shared/providers";
 import { isStreamingCommunityHost, streamingCommunityOrigin, validStreamingCommunityOrigin } from "../shared/streamingcommunity";
-import { ProviderError, providerItemId } from "./providers/http";
+import { ProviderError, providerItemId, withProviderItem } from "./providers/http";
 const SC_MOVED = "StreamingCommunity moved. Update its site address in Settings → Sources.";
 
 export function streamingCommunityLink(source: string, origin = streamingCommunityOrigin): boolean {
@@ -263,11 +263,16 @@ export async function streamingCommunityBrowse(request: BrowseRequest, origin = 
   const page = parseInertiaPage(await streamingCommunityBody(target, {}, signal, fetchPage));
   if (page.component === "Titles/Title") {
     const season = /\/season-(\d{1,3})$/.exec(target.pathname);
-    return season ? seasonPageItems(page, origin, Number(season[1])) : titlePageItems(page, origin);
+    const context = titleContext(page, origin);
+    const result = season ? seasonPageItems(page, origin, Number(season[1])) : titlePageItems(page, origin);
+    return withProviderItem("streamingcommunity", season ? `${context.base}/season-${Number(season[1])}` : context.base, context.seasons.length || season ? "collection" : "media", result);
   }
   const genre = clean(target.searchParams.get("g"), 200);
   const label = !listPath.test(target.pathname) ? undefined : genre ? `Genre: ${genre}` : "Catalogue";
-  return listPage(page, origin, Number(target.searchParams.get("page") ?? 1), label);
+  const result = listPage(page, origin, Number(target.searchParams.get("page") ?? 1), label);
+  target.searchParams.delete("page");
+  target.hash = "";
+  return withProviderItem("streamingcommunity", target.href, "collection", result);
 }
 
 export async function streamingCommunityPreview(id: number, origin = streamingCommunityOrigin, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<StreamingCommunityPreview> {

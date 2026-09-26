@@ -1,5 +1,5 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
-import { ProviderError, providerItemId, providerJson } from "./http";
+import { ProviderError, providerItemId, providerJson, withProviderItem } from "./http";
 
 const origin = "https://www.raiplay.it";
 const channelsUrl = "https://www.rai.it/dl/RaiPlay/2016/PublishingBlock-9a2ff311-fcf0-4539-8f8f-c4fee2a71d58.html?json";
@@ -99,7 +99,7 @@ function replayDates(): string[] {
 // Public schemas used by RaiPlay's own web app and the Kodi RaiPlay catalog.
 // https://www.raiplay.it/assets/js/webcomponents/rai-search.js
 // https://github.com/maxbambi/plugin.video.raitv/blob/master/resources/lib/raiplay.py
-export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: typeof globalThis.fetch = globalThis.fetch): Promise<ProviderPage> {
+async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: typeof globalThis.fetch = globalThis.fetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   if (request.cursor !== undefined && !/^\d{1,4}$/.test(request.cursor)) throw new ProviderError("Invalid RaiPlay page cursor.", 400);
   const offset = Number(request.cursor || 0);
@@ -190,6 +190,15 @@ export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal
   }
   if (data.video) return catalogPage(cards([{ ...data, path_id: url.href }]), title);
   throw new ProviderError("RaiPlay returned an unsupported catalog response.");
+}
+
+export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: typeof globalThis.fetch = globalThis.fetch): Promise<ProviderPage> {
+  const page = await readRaiPlay(request, signal, fetch);
+  if (!request.url || request.query?.trim()) return page;
+  const url = catalogUrl(request.url);
+  const media = url.pathname.startsWith("/video/") || url.pathname.startsWith("/dirette/");
+  if (media) { url.pathname = url.pathname.replace(/\.json$/, url.pathname.startsWith("/video/") ? ".html" : ""); url.hash = ""; }
+  return withProviderItem("raiplay", url.href, media ? "media" : "collection", page);
 }
 
 export function createRaiPlayProgrammeLoader(browse: typeof browseRaiPlay = browseRaiPlay) {

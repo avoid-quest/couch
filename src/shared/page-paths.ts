@@ -12,10 +12,11 @@ export const legacyPaths: Record<string, string> = {
   "/browse/radio": "/find", "/browse/jellyfin": "/find",
 };
 
-export const frontendPaths = ["/music", "/radio", "/settings/remotes", ...Object.values(pagePaths), ...Object.keys(legacyPaths), ...Object.values(settingsPages).map(page => page.path)];
+export const frontendPaths = ["/music", "/radio", "/item", "/collection", "/settings/remotes", ...Object.values(pagePaths), ...Object.keys(legacyPaths), ...Object.values(settingsPages).map(page => page.path)];
 
 export const sectionForPath = (pathname: string): string | undefined => {
   const clean = pathname.replace(/\/$/, "") || "/";
+  if (clean === "/item" || clean === "/collection") return "Find";
   const section = Object.keys(pagePaths).find(name => pagePaths[name] === clean);
   if (section) return section;
   if (clean in legacyPaths) return sectionForPath(legacyPaths[clean]!);

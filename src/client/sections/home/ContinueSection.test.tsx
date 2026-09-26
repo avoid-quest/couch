@@ -1,7 +1,9 @@
-import { setupUiTests, render as renderUI, act, screen, waitFor, userEvent, within, createTestQueryClient } from "@/testing/react";
+import { DetailFocusRestoration } from "@/detail-navigation";
+import { setupUiTests, render as renderUI, act, screen, waitFor, userEvent, createTestQueryClient } from "@/testing/react";
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { HistoryItem } from "../../../shared/library";
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet } from "@tanstack/react-router";
 import { ContinueSection } from "./HomePage";
 
 setupUiTests();
@@ -16,8 +18,15 @@ const played: unknown[] = [], queued: HistoryItem[] = [], requests: string[] = [
 
 const button = (name: string) => screen.getByRole("button", { name });
 async function renderContinue({ connected = true, canPlay = true, feature = false, currentEntryId }: { connected?: boolean; canPlay?: boolean; feature?: boolean; currentEntryId?: string } = {}) {
-  await act(async () => view.rerender(<QueryClientProvider client={client}><ContinueSection credentials={credentials} connected={connected} canPlay={canPlay} feature={feature} currentEntryId={currentEntryId} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
+  const content = <ContinueSection credentials={credentials} connected={connected} canPlay={canPlay} feature={feature} currentEntryId={currentEntryId} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} />;
+  const root = createRootRoute({ component: () => <><DetailFocusRestoration /><Outlet /></> });
+  const router = createRouter({ history: createMemoryHistory({ initialEntries: ["/"] }), routeTree: root.addChildren([
+    createRoute({ getParentRoute: () => root, path: "/", component: () => content }),
+    createRoute({ getParentRoute: () => root, path: "/item", component: () => <h1>Item details</h1> }),
+  ]) });
+  await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
   if (connected) await screen.findByRole(historyError ? "alert" : "region", historyError ? {} : { name: "Continue" });
+  return router;
 }
 
 beforeEach(async () => {
@@ -117,17 +126,18 @@ for (const feature of [true, false]) {
 }
 
 for (const trigger of ["Details Album track", "Artwork details for Album track"]) {
-  test(`Continue ${trigger} opens a nonplaying preview and restores focus`, async () => {
-    historyItems = [{ ...online, description: "The complete episode description remains available without starting playback." }];
-    await renderContinue({ feature: true });
-    const opener = button(trigger);
-    await userEvent.click(opener);
-    const dialog = screen.getByRole("dialog", { name: "Album track" });
-    expect(within(dialog).getByText(historyItems[0]!.description!)).toBeInTheDocument();
+  test(`Continue ${trigger} navigates to its stable identity without playback`, async () => {
+    historyItems = [online];
+    const router = await renderContinue({ feature: true });
+    await userEvent.click(button(trigger));
+    expect(await screen.findByRole("heading", { name: "Item details" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/item");
+    expect(router.state.location.search).toEqual({ kind: "history", id: online.mediaId });
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(played).toEqual([]);
     expect(queued).toEqual([]);
-    await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(opener).toHaveFocus());
+    await act(async () => router.history.back());
+    expect(await screen.findByRole("button", { name: trigger })).toHaveFocus();
   });
 }
 
@@ -145,11 +155,17 @@ test("removing Continue keeps focus on the next item's nonplaying details", asyn
   expect(played).toEqual([]);
 });
 
-test("removing from the preview closes it and focuses the next item's details", async () => {
-  await renderContinue();
-  await userEvent.click(button("Details Halfway home"));
-  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove Halfway home from Continue" }));
-  await waitFor(() => expect(button("Details Album track")).toHaveFocus());
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(played).toEqual([]);
+
+test("Continue keeps its expanded rows and exact opener after Back", async () => {
+  historyItems = Array.from({ length: 7 }, (_, index) => ({ ...online, mediaId: `media:${index}`, title: `Episode ${index}` }));
+  const router = await renderContinue();
+  await act(async () => router.navigate({ href: "/?retained=yes", replace: true }));
+  expect(screen.queryByRole("button", { name: "Details Episode 6" })).toBeNull();
+  await userEvent.click(button("Show all 7"));
+  expect(router.state.location.search).toEqual({ retained: "yes", continue: "all" });
+  await userEvent.click(button("Details Episode 6"));
+  expect(await screen.findByRole("heading", { name: "Item details" })).toBeInTheDocument();
+  await act(async () => router.history.back());
+  expect(await screen.findByRole("button", { name: "Details Episode 6" })).toHaveFocus();
+  expect(button("Show fewer")).toBeInTheDocument();
 });

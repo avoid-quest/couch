@@ -176,13 +176,44 @@ try {
   await assertResponsive(ui, "Phone Home");
   const loadsBeforeDetails = commands.filter(command => command.type === "load").length;
   await ui.button("Details Provider result fixture");
-  await until("Continue details expose the complete provider synopsis", async () => await ui.execute('return document.querySelector(\'[role="dialog"]\')?.textContent.includes(arguments[0])', [providerDescription]));
+  await until("Continue opens its own history detail page with the complete synopsis", async () => await ui.execute(`
+    const search = new URLSearchParams(location.search);
+    return location.pathname === '/item' && search.get('kind') === 'history' && !!search.get('id')
+      && document.querySelector('[data-page="Item"]')?.textContent.includes(arguments[0])
+      && !document.querySelector('[role="dialog"]');
+  `, [providerDescription]));
+  const detailUrl = await ui.execute("return location.href") as string;
   assert.equal(latest?.currentEntryId, null, "Opening details does not start playback");
   assert.equal(commands.filter(command => command.type === "load").length, loadsBeforeDetails, "Inspection sends no native Play command");
-  await assertResponsive(ui, "Phone episode details");
-  await remote.screenshot("home-details-phone");
-  await ui.button("Close", '[role="dialog"]');
-  await until("closing episode details restores its Home trigger", async () => await ui.execute('return !document.querySelector(\'[role="dialog"]\') && document.activeElement?.getAttribute("aria-label") === "Details Provider result fixture"'));
+  await assertResponsive(ui, "Phone episode detail page");
+  await remote.screenshot("home-detail-page-phone");
+  await ui.button("Back", '[data-page="Item"]');
+  await until("Back from episode details restores its Home trigger", async () => await ui.execute(`
+    return location.pathname === '/' && !!document.querySelector('[data-page="Home"]')
+      && document.activeElement?.getAttribute('aria-label') === 'Details Provider result fixture';
+  `));
+  await ui.request(`/session/${ui.session()}/url`, { url: detailUrl });
+  await until("a direct episode URL loads details without transient navigation state", async () => await ui.execute(`
+    return location.href === arguments[0] && document.querySelector('[data-page="Item"]')?.textContent.includes(arguments[1]);
+  `, [detailUrl, providerDescription]));
+  await remote.refresh();
+  await until("refresh retains the episode detail URL, synopsis and pairing", async () => await ui.execute(`
+    return location.href === arguments[0] && document.querySelector('[data-page="Item"]')?.textContent.includes(arguments[1])
+      && !!localStorage.getItem('couch.remote-token')
+      && document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected';
+  `, [detailUrl, providerDescription]));
+  assert.equal(commands.filter(command => command.type === "load").length, loadsBeforeDetails, "Direct navigation and refresh send no native Play command");
+  await ui.button("Resume", '[data-page="Item"]');
+  await until("Resume on the refreshed detail page reaches native playback at saved progress", () => {
+    const load = commands.filter(command => command.type === "load").at(-1);
+    return commands.filter(command => command.type === "load").length === loadsBeforeDetails + 1
+      && load?.source === providerTransport && load.startPosition === 12
+      && latest?.player.status === "playing"
+      && latest.queue.some(item => item.id === latest?.currentEntryId && item.source === `web:${providerUrl}`);
+  });
+  assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host", "Detail-page Resume is attributed to the paired browser");
+  await ui.stopPlayback();
+  await until("detail-page playback stops through the browser", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Saved");
   await remote.refresh();
   await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token') && document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected' && !!document.querySelector('[data-app-nav]')"));
