@@ -1,4 +1,4 @@
-import { setupUiTests, act, render, screen, userEvent, testWindow } from "@/testing/react";
+import { setupUiTests, act, render, screen, userEvent, waitFor, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as core from "@tauri-apps/api/core";
 import * as events from "@tauri-apps/api/event";
@@ -151,7 +151,7 @@ test("Retry reconnects the bundled session after an incompatible host upgrades",
   expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: protocol-mismatch");
   remoteProtocol = 1;
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-  expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: pairing-required");
+  await waitFor(() => expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: pairing-required"));
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
 });
 
