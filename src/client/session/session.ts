@@ -234,8 +234,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const details = useMemo(() => publicDetails ? { ...publicDetails, name: installationName ?? publicDetails.name, player: player ?? publicDetails.player } : null, [publicDetails, installationName, player]);
 
   useEffect(() => {
-    if (details) rememberConnection(origin, details);
-  }, [origin, details]);
+    if (credentials && details) rememberConnection(origin, details);
+  }, [origin, details, !!credentials]);
 
   useEffect(() => {
     // A new origin/installation must pass public discovery before sending its

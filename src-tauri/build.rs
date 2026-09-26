@@ -19,6 +19,7 @@ fn main() {
             "save_diagnostics_export",
             "playback_device",
             "select_playback_device",
+            "forget_playback_device",
             "retry_playback_device",
             "complete_local_setup",
             "local_update_activity",

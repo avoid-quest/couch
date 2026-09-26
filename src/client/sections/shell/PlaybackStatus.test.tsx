@@ -80,3 +80,17 @@ test("Playing on exposes the same mute and volume commands as the player", async
   await user.keyboard("{End}");
   expect(actions).toEqual([{ type: "mute", muted: true }, { type: "volume", volume: 100 }]);
 });
+
+
+test("a remembered browser Couch can be forgotten without changing the current pairing", async () => {
+  rememberConnection("http://kitchen:4100", { name: "Kitchen", urls: ["http://kitchen:4100"], installationId: "kitchen-installation", player: "idle" });
+  localStorage.setItem("couch.remote-token", token);
+  await render();
+  await user.click(screen.getByRole("button", { name: "Forget Kitchen" }));
+  await user.click(screen.getByRole("button", { name: "Forget" }));
+  expect(localStorage.getItem("couch.connection")).toBeNull();
+  expect(localStorage.getItem("couch.remote-token")).toBe(token);
+  expect(location.origin).toBe(origin);
+  await user.click(screen.getByRole("button", { name: "Playing on Living room: Connected" }));
+  expect(screen.queryByRole("radio", { name: "Kitchen" })).toBeNull();
+});

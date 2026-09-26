@@ -632,6 +632,7 @@ pub fn run() {
             diagnostics_export::save_diagnostics_export,
             operating_mode::playback_device,
             operating_mode::select_playback_device,
+            operating_mode::forget_playback_device,
             operating_mode::retry_playback_device,
             operating_mode::complete_local_setup,
             operating_mode::local_update_activity,

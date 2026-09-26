@@ -18,7 +18,7 @@ let clock: import("./playback-clock").PlaybackClock;
 let installation = "remote-installation";
 let remoteRole: "controller" | "administrator" = "controller";
 let remoteProtocol = 1;
-let mode: "local" | "remote" = "local";
+let mode: "local" | "remote" | null = "local";
 let invokeSpy: ReturnType<typeof spyOn>;
 
 class Socket {
@@ -66,6 +66,7 @@ beforeEach(async () => {
     if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== 1) throw new Error("incompatible desktop client protocol");
     if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true } as T;
     if (command === "select_playback_device") { mode = (args as { mode: typeof mode }).mode; return { mode, address: remote, targets: [remote], localSetupComplete: true } as T; }
+    if (command === "forget_playback_device") { mode = null; return { mode, address: null, targets: [], localSetupComplete: true } as T; }
     if (command === "connection_info") return { origin: local, token: "local-owner", pairingCode: "", urls: [] } as T;
     return undefined as T;
   });
@@ -170,4 +171,20 @@ test("switching native targets clears the old clock before another host sends it
   expect(clock.position).toBe(0);
   await act(async () => Socket.instances.at(-1)!.emit({ type: "state", state: { ...state, player: { ...state.player, playbackId: "remote-playback", position: 15 } } }));
   expect(clock).toEqual({ playbackId: "remote-playback", position: 15, duration: 600 });
+});
+
+
+test("forgetting the selected native Couch retires its socket and requires pairing on reconnect", async () => {
+  await act(async () => { await device.choose("remote", remote); });
+  await pairWith("123456");
+  const socket = Socket.instances.at(-1)!;
+  await act(async () => { await device.forget(remote); });
+  expect(socket.readyState).toBe(3);
+  expect(localStorage.getItem(`couch.pairing:${remote}`)).toBeNull();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  requests.length = 0;
+  await act(async () => { await device.choose("remote", remote); });
+  expect(gate.credentials).toBeNull();
+  expect(gate.pairingRequired).toBe(true);
+  expect(requests.every(request => request.authorization === null)).toBe(true);
 });

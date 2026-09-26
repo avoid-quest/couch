@@ -13,7 +13,7 @@ import { ApiError, apiSend } from "@/api/client";
 import { soundQuery, soundView, type SoundView } from "@/api/settings";
 import type { Credentials } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
-import { knownConnection } from "@/session/connection";
+import { forgetConnection, knownConnection } from "@/session/connection";
 import { deviceName } from "@/copy";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { PlaybackVolume } from "@/components/PlaybackTransport";
@@ -76,7 +76,9 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   state?: ClientSessionState | null;
   run?: (action: Action) => Promise<boolean>;
 }) {
+  const gate = useOptionalSessionGate();
   const [open, setOpen] = useState(false);
+  const [forgetting, setForgetting] = useState<{ origin: string; name: string } | null>(null);
   const [address, setAddress] = useState("");
   const [target, setTarget] = useState<string | null>(null);
   const [addressError, setAddressError] = useState("");
@@ -100,13 +102,17 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     </PopoverTrigger>
     <PopoverContent align="end" className="w-96 gap-4">
       <PopoverHeader><PopoverTitle>Play on</PopoverTitle><PopoverDescription role="status">{status}</PopoverDescription></PopoverHeader>
-      {target ? <div className="grid gap-3">
+      {forgetting ? <div className="grid gap-3">
+        <p>Forget {forgetting.name}?</p>
+        <p className="text-muted-foreground">That Couch keeps playing. You'll need to pair again to reconnect.</p>
+        <div className="flex flex-wrap gap-2"><Button variant="destructive" onClick={() => { forgetConnection(forgetting.origin); if (forgetting.origin === origin) gate?.unpair(); setForgetting(null); setOpen(false); }}>Forget</Button><Button variant="ghost" onClick={() => setForgetting(null)}>Cancel</Button></div>
+      </div> : target ? <div className="grid gap-3">
         <p>Switch this browser to {new URL(target).host}?</p>
         <p className="text-muted-foreground">{name} keeps playing. You may need to pair.</p>
         <div className="flex flex-wrap gap-2"><Button onClick={() => location.assign(target)}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button></div>
       </div> : <>
         <RadioGroup aria-label="Play on" value={origin} onValueChange={choose} className="gap-0">
-          {[{ origin, name }, ...(other ? [{ origin: other.origin, name: other.details.name }] : [])].map((item, index) => <Field key={item.origin} orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id={`play-on-${index}`} value={item.origin} aria-label={item.name} /><FieldLabel htmlFor={`play-on-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{item.name}</span><span className="truncate text-muted-foreground">{new URL(item.origin).host}</span></FieldLabel></Field>)}
+          {[{ origin, name }, ...(other ? [{ origin: other.origin, name: other.details.name }] : [])].map((item, index) => <Field key={item.origin} orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id={`play-on-${index}`} value={item.origin} aria-label={item.name} /><FieldLabel htmlFor={`play-on-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{item.name}</span><span className="truncate text-muted-foreground">{new URL(item.origin).host}</span></FieldLabel>{(item.origin !== origin || !localHost && credentials && gate) && <Button variant="ghost" size="sm" aria-label={`Forget ${item.name}`} onClick={() => setForgetting(item)}>Forget</Button>}</Field>)}
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); choose(address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={!address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {addressError && <Alert variant="destructive"><AlertDescription>{addressError}</AlertDescription></Alert>}
