@@ -52,11 +52,12 @@ test("Jellyfin episodes use the series endpoint and complete pagination across s
 });
 
 test("Jellyfin music stays inside its album and uses disc/track order", async () => {
-  const track = (number: number, disc: number, index: number, overrides: Partial<BaseItemDto> = {}): BaseItemDto => ({ Id: id(number), Type: "Audio", Name: `Track ${number}`, AlbumId: parent, Album: "Album", ParentIndexNumber: disc, IndexNumber: index, ...overrides });
+  const track = (number: number, disc: number, index: number, overrides: Partial<BaseItemDto> = {}): BaseItemDto => ({ Id: id(number), Type: "Audio", Name: `Track ${number}`, Overview: "Album notes", AlbumPrimaryImageTag: "cover", AlbumId: parent, Album: "Album", ParentIndexNumber: disc, IndexNumber: index, ...overrides });
   const current = track(1, 1, 1);
   const { jellyfin, reference, requests } = await fixture(current, [track(3, 2, 1), track(9, 1, 2, { AlbumId: id(8000) }), track(8, 1, 2, { Type: "Movie" }), track(7, 1, 2, { IndexNumber: null }), track(2, 1, 2), current]);
   const result = await jellyfin.continuation(reference, signal());
   expect(result?.title).toBe("Album");
+  expect(result?.entries[0]).toMatchObject({ title: "Track 2", subtitle: "Album", description: "Album notes", artworkId: expect.stringMatching(/^[a-f0-9]{64}$/) });
   expect(result?.entries.map(entry => entry.source.split(":").at(-1))).toEqual([id(2), id(3)]);
   const query = requests.find(url => url.pathname === "/Items")!.searchParams;
   expect(query.get("albumIds")).toBe(parent);

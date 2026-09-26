@@ -352,3 +352,25 @@ test("shared playback checkpoints keep the visible record and do not revive an o
   expect(f.store.progress(older.id, item.mediaId)).toMatchObject({ position: 40, watched: false });
   expect(f.session.state.activeProfile.id).toBe("household");
 });
+
+test("late catalogue enrichment persists in active progress and retries a failed optional checkpoint", () => {
+  const f = fixture();
+  f.enqueue("one"); f.play("one"); f.observe(10);
+  f.fail(true);
+  expect(() => f.session.enrichEntry("one", "library:one", { subtitle: "Show", description: "Episode synopsis" })).not.toThrow();
+  expect(f.session.state.player.status).toBe("playing");
+  expect(f.session.state.progressError).toBeTruthy();
+  expect(f.session.state.queue[0]?.description).toBe("Episode synopsis");
+  f.fail(false); f.advance(10_000); f.observe(20);
+  expect(f.store.historySource("library:one")).toMatchObject({ subtitle: "Show", description: "Episode synopsis" });
+  expect(f.saved()?.position).toBe(20);
+  expect(f.session.state.progressError).toBeNull();
+});
+
+test("trusted artwork-only refresh replaces a saved poster without requiring a synopsis", () => {
+  const f = fixture();
+  f.enqueue("one"); f.play("one"); f.observe(10);
+  f.session.enrichEntry("one", "library:one", { thumbnail: "https://example.com/episode.jpg" }, true);
+  f.advance(10_000); f.observe(20);
+  expect(f.store.historySource("library:one")?.thumbnail).toBe("https://example.com/episode.jpg");
+});

@@ -1,5 +1,5 @@
 import { createMediaFolders } from "./media-folders";
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -429,4 +429,61 @@ test("provider history filters before the limit, deduplicates shared plays and k
   }
   expect((await request("/api/progress/history?provider=unknown")).status).toBe(400);
   expect((await (await request("/api/progress/history?provider=youtube&limit=1")).json()).items).toMatchObject([{ mediaId: ids[0], position: 40 }]);
+});
+
+test("history exposes trusted provider context even when the queued snapshot predates enrichment", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "episode", title: "S11E07", source: "web:https://streamingcommunityz.photos/it/watch/1955?e=17207", thumbnail: "https://example.com/show.jpg" };
+  const mediaId = playbackMediaId(entry)!;
+  session.command({ type: "enqueue", entry });
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 100, duration: 4209, watched: false, lastPlayedAt: 200 }, entry);
+  const details = { subtitle: "MasterChef Italia", description: "Episode synopsis", thumbnail: "https://example.com/episode.jpg", collection: { title: "Season 11", url: "https://streamingcommunityz.photos/it/titles/1955-masterchef-italia/season-11" } };
+  store.enrichHistorySource(mediaId, entry.source, details);
+  const data = await (await request("/api/progress/history")).json();
+  expect(data.items[0]).toMatchObject({ ...details, sourceLabel: "StreamingCommunity", queueEntryId: entry.id, position: 100, duration: 4209, lastPlayedAt: 200 });
+  expect(session.state.queue[0]).toEqual(entry);
+  expect(JSON.stringify(data)).not.toContain(entry.source);
+});
+
+
+test("old local history recovers current episode descriptions without changing viewing facts", async () => {
+  const { request, library, store } = fixture();
+  const item = { id: "episode", title: "Arrival", kind: "video", artist: null, album: null, duration: 3600, available: true,
+    artworkId: "episode-image", video: { plot: "The crew arrives.", show: { title: "The series" } } } as unknown as import("../shared/library").LibraryItem;
+  const read = spyOn(library, "getItem").mockReturnValue(item);
+  const facts = { mediaId: "library:episode", libraryItemId: "episode", title: item.title, position: 73, duration: 3500, watched: false, lastPlayedAt: 123 };
+  store.saveProgress("household", facts, { id: "old", source: "library:episode", title: item.title });
+  try {
+    const data = await (await request("/api/progress/history")).json();
+    expect(data.items[0]).toMatchObject({ ...facts, subtitle: "The series", description: "The crew arrives.", artworkId: "episode-image" });
+    expect(store.sharedProgress(facts.mediaId)).toEqual(facts);
+  } finally { read.mockRestore(); }
+});
+
+
+test("opaque Jellyfin artwork uses the existing authenticated artwork route without exposing its server", async () => {
+  const { request, jellyfin } = fixture();
+  const id = "b".repeat(64);
+  Object.assign(jellyfin, { artwork: async (value: string) => value === id ? { data: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" } : null });
+  const response = await request(`/api/library/artwork/${id}`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Content-Type")).toBe("image/jpeg");
+  expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  expect((await request(`/api/library/artwork/${"a".repeat(64)}`)).status).toBe(404);
+});
+
+
+test("history identifies the playing occurrence when the same media appears again in the queue", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "playing", title: "Episode", source: "web:https://www.youtube.com/watch?v=BaW_jenozKc" };
+  session.command({ type: "enqueue", entry });
+  session.command({ type: "enqueue", entry: { ...entry, id: "future-repeat" } });
+  session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
+  session.command({ type: "play", entryId: entry.id });
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 70, duration: 200, watched: false, lastPlayedAt: 100 }, entry);
+  expect((await (await request("/api/progress/history")).json()).items[0].queueEntryId).toBe(entry.id);
 });

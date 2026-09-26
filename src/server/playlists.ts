@@ -98,6 +98,8 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
       ...(entry.kind === "radio" ? { kind: entry.kind } : {}),
       ...(entry.quality && ["auto", "best", "1080p", "720p", "480p"].includes(entry.quality) ? { quality: entry.quality } : {}),
       ...(typeof entry.automaticTitle === "boolean" ? { automaticTitle: entry.automaticTitle } : {}),
+      ...(typeof entry.subtitle === "string" ? { subtitle: entry.subtitle.slice(0, 300) } : {}),
+      ...(typeof entry.description === "string" ? { description: entry.description.slice(0, 2000) } : {}),
       ...(entry.collection ? { collection: { title: entry.collection.title, url: entry.collection.url, ...(entry.collection.index === undefined ? {} : { index: entry.collection.index }) } } : {}),
     };
   });

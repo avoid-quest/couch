@@ -223,9 +223,9 @@ function RecentRail({ items, credentials, disabled, onPlay }: { items: HistoryIt
     {items.map(item => <li key={item.mediaId} className="min-w-0">
       <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.libraryItemId || item.queueEntryId)} onClick={() => onPlay(item)}
         className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal disabled:opacity-100">
-        <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover"><Artwork credentials={credentials} item={item} /></span>
+        <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork credentials={credentials} item={item} /></span>
         <span className="line-clamp-2 text-base font-medium">{item.title}</span>
-        <span className="truncate text-sm text-muted-foreground tabular-nums group-focus-visible:text-inherit">{[item.sourceLabel || (item.libraryItemId ? "Folders" : null), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
+        <span className="truncate text-sm text-muted-foreground tabular-nums group-focus-visible:text-inherit">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
       </Button>
     </li>)}
   </ol>;
@@ -244,9 +244,9 @@ function HomeRow({ title, time, action, children }: { title: string; time?: stri
 }
 
 /** The one large item on a row: artwork beside a display title and its verbs. */
-function Feature({ art, title, meta, detail, children }: { art: ReactNode; title: string; meta?: string; detail?: ReactNode; children: ReactNode }) {
-  return <div className="grid items-center gap-x-8 gap-y-4 md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
-    <div aria-hidden="true" className="aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full">{art}</div>
+function Feature({ art, artFit = "cover", title, meta, detail, children }: { art: ReactNode; artFit?: "cover" | "contain"; title: string; meta?: string; detail?: ReactNode; children: ReactNode }) {
+  return <div className={cn("grid items-center gap-x-8 gap-y-4", artFit === "contain" ? "md:grid-cols-[fit-content(24rem)_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
+    <div aria-hidden="true" className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{art}</div>
     <div className="grid min-w-0 gap-2">
       <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{title}</h3>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
@@ -299,17 +299,19 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
     <Button variant="ghost" aria-label={`Queue ${item.title}`} disabled={!connected || pending} onClick={() => void act(item, "queue")}>Queue</Button>
     <Button variant="ghost" aria-label={`Remove ${item.title} from Continue`} disabled={!connected || pending} onClick={() => void act(item, "remove")}>Remove</Button>
   </>;
-  const source = (item: HistoryItem) => item.sourceLabel || (item.libraryItemId ? "Folders" : undefined);
 
   if (history.error) return <Alert variant="destructive" className="mb-6"><AlertDescription>{history.error.message || "Couldn't load Continue."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>;
   if (!unfinished.length) return null;
   return <HomeRow title="Continue" time={`${unfinished.length} unfinished`}>
-    {lead && <Feature art={<Artwork credentials={credentials} item={lead} />} title={lead.title} meta={source(lead)} detail={<DurationBar duration={lead.duration} position={lead.position} />}>
+    {lead && <Feature art={<Artwork credentials={credentials} item={lead} intrinsic />} artFit={lead.thumbnail || lead.artworkId ? "contain" : "cover"} title={lead.title} meta={historyMeta(lead)} detail={<>
+      {lead.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{lead.description}</p>}
+      <DurationBar duration={lead.duration} position={lead.position} />
+    </>}>
       <Button data-page-first disabled={!playable(lead)} aria-label={`Resume ${lead.title}`} onClick={() => void act(lead, "resume")}>Resume</Button>
       {secondary(lead)}
     </Feature>}
     {!!rest.length && <MediaList aria-label="Continue" className={lead ? "mt-6" : undefined}>
-      {(all ? rest : rest.slice(0, shown.continue)).map(item => <MediaRow key={item.mediaId} title={item.title} meta={source(item)} art={<Artwork credentials={credentials} item={item} />}
+      {(all ? rest : rest.slice(0, shown.continue)).map(item => <MediaRow key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain" art={<Artwork credentials={credentials} item={item} />}
         primary={{ label: "Resume", onClick: () => void act(item, "resume"), disabled: !playable(item) }} actions={secondary(item)}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>)}
@@ -318,6 +320,12 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
   </HomeRow>;
 }
 
-function Artwork({ credentials, item }: { credentials: Credentials; item: { artworkId?: string; thumbnail?: string; title: string } }) {
-  return item.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={item.artworkId} /> : <MediaArtwork thumbnail={item.thumbnail} title={item.title} />;
+function historyMeta(item: HistoryItem) {
+  return [item.subtitle, item.sourceLabel || (item.libraryItemId ? "Folders" : undefined)].filter(Boolean).join(" · ");
+}
+
+function Artwork({ credentials, item, intrinsic = false }: { credentials: Credentials; item: { artworkId?: string; thumbnail?: string; title: string }; intrinsic?: boolean }) {
+  return item.artworkId
+    ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={item.artworkId} className={intrinsic ? "size-auto max-w-full rounded-none [&_img]:h-auto [&_img]:w-auto [&_img]:max-h-64 [&_img]:max-w-full [&_img]:object-contain" : undefined} />
+    : <MediaArtwork thumbnail={item.thumbnail} title={item.title} className={intrinsic ? "aspect-auto h-auto w-auto max-h-64 max-w-full object-contain" : undefined} />;
 }

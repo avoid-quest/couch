@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MediaStream } from "@jellyfin/sdk/lib/generated-client";
+import type { BaseItemDto, MediaStream } from "@jellyfin/sdk/lib/generated-client";
 import type { PlayerState } from "../shared/protocol";
 import { createJellyfin } from "./jellyfin";
 
@@ -12,9 +12,10 @@ const userId = "b".repeat(32);
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 
-function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait, logoutWait, reportWait, failReports = false }: { directPlay?: boolean; mediaStreams?: MediaStream[]; playbackWait?: () => Promise<void>; authWait?: () => Promise<void>; logoutWait?: () => Promise<void>; reportWait?: (path: string) => Promise<void>; failReports?: boolean } = {}) {
+function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait, logoutWait, reportWait, failReports = false, itemOverrides, imageResponse }: { itemOverrides?: Partial<BaseItemDto>; imageResponse?: () => Response | Promise<Response>; directPlay?: boolean; mediaStreams?: MediaStream[]; playbackWait?: () => Promise<void>; authWait?: () => Promise<void>; logoutWait?: () => Promise<void>; reportWait?: (path: string) => Promise<void>; failReports?: boolean } = {}) {
   const requests: { path: string; url: URL; authorization: string | null; body: Record<string, unknown> | null }[] = [];
   const item = { Id: itemId, Name: "Local test movie", Type: "Movie", RunTimeTicks: 900_000_000, ProductionYear: 2026, UserData: { PlaybackPositionTicks: 110_000_000, Played: false }, Path: "/private/server/path", ImageTags: { Primary: "private-image-tag" } };
+  Object.assign(item, itemOverrides);
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/(?:jellyfin|alias)/, "");
@@ -26,6 +27,7 @@ function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait,
       return body?.Pw === "fixture-password" ? Response.json({ AccessToken: "fixture-private-token", User: { Id: body.Username === "alternate-user" ? "c".repeat(32) : userId, Name: body.Username } }) : new Response(null, { status: 401 });
     }
     if (!request.headers.get("Authorization")?.includes('Token="fixture-private-token"')) return new Response(null, { status: 401 });
+    if (/^\/Items\/[a-f0-9-]+\/Images\/Primary$/.test(path)) return imageResponse?.() ?? new Response(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8l0AAAAASUVORK5CYII=", "base64"), { headers: { "Content-Type": "image/png" } });
     if (path === "/Items") return Response.json({ Items: [item], TotalRecordCount: 74 });
     if (path === "/UserItems/Resume") return Response.json({ Items: item.UserData.PlaybackPositionTicks > 0 ? [item] : [], TotalRecordCount: item.UserData.PlaybackPositionTicks > 0 ? 1 : 0 });
     if (path === `/Items/${itemId}`) return Response.json(item);
@@ -112,9 +114,11 @@ describe("Jellyfin source", () => {
     expect(await jellyfin.connect(credentials(upstream.url))).toEqual({ connected: true, serverName: "Test library", username: "fixture-user" });
     const page = await jellyfin.items({ query: "Local", startIndex: 50 });
     expect(page.total).toBe(74);
-    expect(page.items[0]).toEqual({ id: itemId, title: "Local test movie", kind: "Movie", detail: "2026", duration: 90, played: false, resumePosition: 11 });
+    expect(page.items[0]).toEqual({ id: itemId, title: "Local test movie", kind: "Movie", detail: "2026", description: null, artworkId: expect.stringMatching(/^[a-f0-9]{64}$/), duration: 90, played: false, resumePosition: 11 });
     const query = upstream.requests.find(request => request.path === "/Items")!.url.searchParams;
     expect(query.get("limit")).toBe("50");
+    expect(query.get("enableImages")).toBe("true");
+    expect(query.getAll("fields")).toContain("Overview");
     expect(query.get("startIndex")).toBe("50");
     expect(query.get("searchTerm")).toBe("Local");
     expect(query.getAll("includeItemTypes")).toEqual(["Movie", "Episode", "Audio"]);
@@ -555,4 +559,71 @@ describe("Jellyfin source", () => {
     await jellyfin.observe(player({ status, position: 0 }));
     expect(upstream.requests.filter(request => request.path === "/Sessions/Playing/Stopped")).toHaveLength(1);
   });
+});
+
+
+test("Jellyfin artwork stays authenticated, opaque and usable after reopening the host", async () => {
+  const upstream = fixture({ itemOverrides: { Overview: "<p>A quiet evening.</p>" } });
+  const directory = mkdtempSync(join(tmpdir(), "couch-jellyfin-artwork-"));
+  cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "host.sqlite");
+  const jellyfin = source(path);
+  await jellyfin.connect(credentials(upstream.url));
+  const entry = await jellyfin.entry(itemId, "queue");
+  expect({ ...entry }).toMatchObject({ subtitle: "2026", description: "A quiet evening.", duration: 90, artworkId: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  expect(JSON.stringify(entry)).not.toMatch(/private-image-tag|fixture-private-token|127\.0\.0\.1/);
+  const reopened = source(path);
+  expect(await reopened.artwork(entry.artworkId!)).toMatchObject({ mimeType: "image/png", data: expect.any(Uint8Array) });
+  const request = upstream.requests.find(row => row.path.endsWith("/Images/Primary"))!;
+  expect(request.authorization).toContain('Token="fixture-private-token"');
+  expect(request.url.searchParams.get("tag")).toBe("private-image-tag");
+  expect(request.url.searchParams.get("maxWidth")).toBe("1024");
+  expect(request.url.toString()).not.toContain("fixture-private-token");
+  await reopened.connect({ ...credentials(upstream.url), username: "alternate-user" });
+  expect(await reopened.artwork(entry.artworkId!)).toBeNull();
+  expect(upstream.requests.filter(row => row.path.endsWith("/Images/Primary"))).toHaveLength(1);
+});
+
+for (const kind of ["Episode", "Audio"] as const) test(`Jellyfin ${kind} inherits parent artwork and carries rich public metadata`, async () => {
+  const parentId = "d".repeat(32);
+  const upstream = fixture({ itemOverrides: { Type: kind, ImageTags: {}, SeriesId: parentId, SeriesName: "The series", SeriesPrimaryImageTag: "series-cover", ParentIndexNumber: 2, IndexNumber: 3, AlbumId: parentId, Album: "The album", Artists: ["The artist"], AlbumPrimaryImageTag: "album-cover", Overview: "Overview ".repeat(500) } });
+  const jellyfin = source();
+  await jellyfin.connect(credentials(upstream.url));
+  const item = (await jellyfin.items()).items[0]!;
+  expect(item.detail).toBe(kind === "Episode" ? "The series · S2 · E3" : "The artist · The album");
+  expect(item.description).toHaveLength(2000);
+  expect(await jellyfin.artwork(item.artworkId!)).not.toBeNull();
+  expect(upstream.requests.at(-1)!.path).toBe(`/Items/${parentId}/Images/Primary`);
+  const entry = await jellyfin.entry(itemId, "queue");
+  expect(entry).toMatchObject({ title: "Local test movie", subtitle: item.detail, description: item.description, artworkId: item.artworkId });
+});
+
+test("Jellyfin artwork rejects invalid or oversized raster data", async () => {
+  let response = () => new Response("<svg></svg>", { headers: { "Content-Type": "image/svg+xml" } });
+  const upstream = fixture({ imageResponse: () => response() });
+  const jellyfin = source();
+  await jellyfin.connect(credentials(upstream.url));
+  const entry = await jellyfin.entry(itemId, "queue");
+  expect(await jellyfin.artwork(entry.artworkId!)).toBeNull();
+  response = () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(2 * 1024 * 1024 + 1)); controller.close(); } }), { headers: { "Content-Type": "image/png" } });
+  expect(await jellyfin.artwork(entry.artworkId!)).toBeNull();
+  const count = upstream.requests.length;
+  expect(await jellyfin.artwork("f".repeat(64))).toBeNull();
+  expect(upstream.requests).toHaveLength(count);
+});
+
+for (const cancel of [false, true]) test(`Jellyfin artwork discards a late response after ${cancel ? "cancellation" : "disconnect"}`, async () => {
+  let started!: () => void, release!: () => void;
+  const loading = new Promise<void>(resolve => { started = resolve; });
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  const upstream = fixture({ imageResponse: async () => { started(); await waiting; return new Response(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8l0AAAAASUVORK5CYII=", "base64")); } });
+  const jellyfin = source();
+  await jellyfin.connect(credentials(upstream.url));
+  const entry = await jellyfin.entry(itemId, "queue");
+  const controller = new AbortController();
+  const pending = jellyfin.artwork(entry.artworkId!, controller.signal);
+  await loading;
+  if (cancel) controller.abort(); else await jellyfin.disconnect();
+  release();
+  expect(await pending).toBeNull();
 });

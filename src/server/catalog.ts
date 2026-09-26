@@ -1,3 +1,4 @@
+import { libraryMetadata } from "./library-metadata";
 import { providerForUrl } from "../shared/providers";
 import type { PlaybackActor } from "../shared/protocol";
 import type { LibrarySource } from "../shared/library";
@@ -13,8 +14,8 @@ import { RECORDINGS_UNSUPPORTED } from "./messages";
 type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations">;
-  jellyfin: Pick<JellyfinSource, "status" | "items">;
-  viewing?: { store: Store; session: ReturnType<typeof createSession> };
+  jellyfin: Pick<JellyfinSource, "status" | "items"> & Partial<Pick<JellyfinSource, "artwork">>;
+  viewing?: { store: Store; session: ReturnType<typeof createSession>; refreshHistory?: (items: import("../shared/library").HistoryItem[]) => void };
 };
 
 const progressIdentity = /^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64}|media:[a-f0-9]{64})$/;
@@ -98,8 +99,10 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         }
         if (viewing && pathname === "/api/progress/history") {
           if (request.method !== "GET") return methodNotAllowed("GET");
-          const { activeProfile, queue } = viewing.session.state;
+          const { activeProfile, queue, currentEntryId } = viewing.session.state;
           const queued = new Map(queue.map(entry => [playbackMediaId(entry), entry]));
+          const current = queue.find(entry => entry.id === currentEntryId);
+          if (current) queued.set(playbackMediaId(current), current);
           const provider = searchParams.get("provider");
           if (provider !== null && !["youtube", "twitch", "raiplay", "bandcamp", "streamingcommunity"].includes(provider)) throw new RequestError("Invalid provider.");
           const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100), mediaId => {
@@ -107,11 +110,15 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
             const source = queued.get(mediaId) ?? viewing.store.historySource(mediaId);
             return !!source && source.kind !== "radio" && providerForUrl(source.source.replace(/^web:/, "")) === provider;
           }).map(item => {
+            const { duration: _catalogueDuration, ...localMetadata } = item.libraryItemId ? libraryMetadata(library.getItem(item.libraryItemId)) : {};
             const queueEntry = queued.get(item.mediaId);
-            const source = queueEntry ?? viewing.store.historySource(item.mediaId);
-            const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : "Online";
-            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, sourceLabel } : {}) };
+            const saved = viewing.store.historySource(item.mediaId);
+            const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail, collection: queueEntry.collection ?? (saved.id === queueEntry.id ? saved.collection : undefined) } : {}) } : saved;
+            const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
+            const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : "Online";
+            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}), ...localMetadata };
           });
+          viewing.refreshHistory?.(items);
           return Response.json({ items, profile: activeProfile });
         }
         if (viewing && pathname === "/api/progress/undo") {
@@ -236,7 +243,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         const artwork = /^\/api\/library\/artwork\/([a-f0-9]{64})$/.exec(pathname);
         if (artwork) {
           if (request.method !== "GET") return methodNotAllowed("GET");
-          const image = library.artwork(artwork[1]!);
+          const image = library.artwork(artwork[1]!) ?? await jellyfin.artwork?.(artwork[1]!, request.signal);
           if (!image) throw new RequestError("Artwork not found.", 404);
           return new Response(Buffer.from(image.data), { headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" } });
         }

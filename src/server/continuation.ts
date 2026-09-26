@@ -1,8 +1,10 @@
+import { libraryMetadata } from "./library-metadata";
 import type { LibraryItem } from "../shared/library";
 import type { QueueEntry } from "../shared/protocol";
 import { isYouTubePlaylistUrl, providerForUrl } from "../shared/providers";
 import type { JellyfinSource } from "./jellyfin";
 import type { Library } from "./library";
+import { providerMetadata } from "./provider-metadata";
 import { loadProviderList } from "./providers";
 import { streamingCommunityWatchContext } from "./streamingcommunity";
 
@@ -11,7 +13,7 @@ export type PlaybackContinuation = { title: string; entries: QueueEntry[] };
 const numbered = (value: number | null | undefined): value is number => Number.isSafeInteger(value) && value! >= 0;
 const libraryEntry = (item: LibraryItem): QueueEntry => ({
   id: crypto.randomUUID(), title: item.title.slice(0, 300), source: `library:${item.id}`,
-  ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration == null ? {} : { duration: item.duration }),
+  ...libraryMetadata(item),
 });
 function streamingEpisode(value: string) {
   if (providerForUrl(value) !== "streamingcommunity") return null;
@@ -59,7 +61,7 @@ export function createContinuationResolver({ library, jellyfin, loadList = loadP
       if (index === undefined || !Number.isSafeInteger(index) || index < 0 || !page.items[index] || !sameItem(page.items[index]!.url)) return null;
       const title = page.title ?? collection.title;
       return { title, entries: page.items.slice(index + 1).flatMap((item, offset) => item.kind !== "media" || item.live ? [] : [{
-        id: crypto.randomUUID(), source: `web:${item.url}`, title: item.title,
+        id: crypto.randomUUID(), source: `web:${item.url}`, ...providerMetadata(item), title: item.title,
         ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }),
         ...(entry.quality ? { quality: entry.quality } : {}), collection: { title, url: collection.url, index: index + offset + 1 },
       }]) };

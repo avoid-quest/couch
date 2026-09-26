@@ -11,6 +11,7 @@ type Options = {
   databasePath: string;
   onChange: () => void;
   lookup: (reference: ForLaterReference) => Promise<QueueEntry>;
+  webMetadata?: (url: string, collection?: Extract<ForLaterReference, { kind: "web" }>["collection"]) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
   reservePlay: () => number;
   prepare: (entry: QueueEntry) => Promise<void>;
   enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;
@@ -19,7 +20,7 @@ type Row = { id: string; entry: string };
 type RemovedRow = Row & { source: string; savedAt: number; position: number };
 const publicItem = (entry: QueueEntry) => { const { source, automaticTitle: _automaticTitle, ...item } = entry; return { ...item, ...(source.startsWith("web:") ? { url: source.slice(4) } : {}) }; };
 
-export function createForLater({ databasePath, onChange, lookup, prepare, reservePlay, enqueue }: Options) {
+export function createForLater({ databasePath, onChange, lookup, prepare, reservePlay, enqueue, webMetadata }: Options) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -59,7 +60,8 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
               if (!["http:", "https:"].includes(thumbnail.protocol) || thumbnail.username || thumbnail.password) throw new ControllerError("Choose an item to save.");
             }
             if (reference.duration !== undefined && (typeof reference.duration !== "number" || !Number.isFinite(reference.duration) || reference.duration < 0 || reference.duration > 86_400)) throw new ControllerError("Choose an item to save.");
-            entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}`, ...(reference.thumbnail ? { thumbnail: reference.thumbnail } : {}), ...(reference.duration !== undefined ? { duration: reference.duration } : {}) };
+            if (reference.collection !== undefined && (!reference.collection || typeof reference.collection !== "object" || typeof reference.collection.url !== "string" || reference.collection.url.length > 2048 || reference.collection.index !== undefined && (!Number.isSafeInteger(reference.collection.index) || reference.collection.index < 0 || reference.collection.index > 2400))) throw new ControllerError("Choose an item to save.");
+            entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}`, ...(reference.thumbnail ? { thumbnail: reference.thumbnail } : {}), ...(reference.duration !== undefined ? { duration: reference.duration } : {}), ...webMetadata?.(reference.url, reference.collection) };
           } else {
             if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || !["queue", "library", "jellyfin"].includes((reference as ForLaterReference).kind) || typeof (reference as { id?: unknown }).id !== "string" || !/^[\w-]{1,80}$/.test((reference as { id: string }).id)) throw new ControllerError("Choose a library or queue item to save.");
             const found = await lookup(reference);

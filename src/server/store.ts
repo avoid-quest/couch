@@ -267,6 +267,16 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(mediaId);
       return row ? JSON.parse(row.entry) : null;
     },
+    enrichHistorySource(mediaId: string, source: string, metadata: Pick<QueueEntry, "thumbnail" | "subtitle" | "description" | "collection">) {
+      const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ? AND EXISTS (SELECT 1 FROM viewing_progress WHERE mediaId = history_sources.mediaId)").get(mediaId);
+      if (!row) return false;
+      const entry: QueueEntry = JSON.parse(row.entry);
+      if (entry.source !== source) return false;
+      const next = JSON.stringify({ ...entry, ...metadata, ...(entry.collection ? { collection: entry.collection } : {}) });
+      if (next === row.entry) return false;
+      db.query("UPDATE history_sources SET entry = ? WHERE mediaId = ? AND entry = ?").run(next, mediaId, row.entry);
+      return true;
+    },
     saveProgress(profileId: string, item: HistoryItem, entry?: QueueEntry) {
       db.transaction(() => {
         db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt, playedBy)
@@ -274,7 +284,14 @@ export function openStore(path: string, remoteControlEnabled = false) {
           title=excluded.title, libraryItemId=excluded.libraryItemId, position=excluded.position, duration=excluded.duration,
           watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt, playedBy=excluded.playedBy`)
           .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt, item.playedBy ? JSON.stringify(item.playedBy) : null);
-        if (entry) db.query("INSERT INTO history_sources VALUES (?, ?) ON CONFLICT(mediaId) DO UPDATE SET entry=excluded.entry WHERE history_sources.entry != excluded.entry").run(item.mediaId, JSON.stringify(entry));
+        if (entry) {
+          const saved = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(item.mediaId);
+          const previous: QueueEntry | undefined = saved ? JSON.parse(saved.entry) : undefined;
+          // A playing item's snapshot can predate a catalog refresh. Preserve its
+          // trusted descriptive fields without changing transport or progress.
+          const metadata = previous?.source === entry.source ? Object.fromEntries((["subtitle", "description", "thumbnail"] as const).flatMap(key => previous[key] ? [[key, previous[key]]] : [])) : {};
+          db.query("INSERT INTO history_sources VALUES (?, ?) ON CONFLICT(mediaId) DO UPDATE SET entry=excluded.entry WHERE history_sources.entry != excluded.entry").run(item.mediaId, JSON.stringify({ ...entry, ...metadata, ...(!entry.collection && previous?.id === entry.id && previous.collection ? { collection: previous.collection } : {}) }));
+        }
       })();
     },
     editSharedProgress(profileId: string, mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {

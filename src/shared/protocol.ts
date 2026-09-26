@@ -7,7 +7,7 @@ export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
 export type PlaybackCollection = { title: string; url: string; index?: number };
-export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
+export type QueueEntry = { subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
 export type ReplayGainMode = "off" | "track" | "album";

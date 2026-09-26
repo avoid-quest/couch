@@ -22,7 +22,7 @@ function fixture(loadList?: typeof loadProviderList) {
   cleanup.push(() => db.close());
   db.run("INSERT INTO library_sources (id, name, path, status) VALUES ('source', 'Fixture', '/fixture', 'ready')");
   const add = (id: string, options: { album?: string; disc?: number; track?: number; season?: number | null; episode?: number | null; available?: boolean; show?: string } = {}) => {
-    const video = options.season !== undefined || options.episode !== undefined ? JSON.stringify({ type: "episode", season: options.season ?? null, episode: options.episode ?? null, show: { id: options.show ?? "show", title: "Fixture series" } }) : null;
+    const video = options.season !== undefined || options.episode !== undefined ? JSON.stringify({ type: "episode", plot: `Synopsis of ${id}`, season: options.season ?? null, episode: options.episode ?? null, show: { id: options.show ?? "show", title: "Fixture series" } }) : null;
     db.query("INSERT INTO library_items (id, sourceId, path, title, kind, size, modified, seenScan, albumId, album, discNumber, trackNumber, video, available) VALUES (?, 'source', ?, ?, ?, 1, 1, 'scan', ?, ?, ?, ?, ?, ?)")
       .run(id, `/${id}`, id, options.album ? "audio" : "video", options.album ?? null, options.album ?? null, options.disc ?? null, options.track ?? null, video, options.available === false ? 0 : 1);
   };
@@ -41,6 +41,7 @@ test("album continuation follows disc and track metadata without queueing its cu
   add("unrelated", { album: "Other", disc: 1, track: 3 });
   const continuation = await play("current");
   expect(continuation?.title).toBe("Record");
+  expect(continuation?.entries[0]?.subtitle).toBe("Record");
   expect(continuation?.entries.map(entry => entry.title)).toEqual(["next", "alphabetically first"]);
   expect(new Set(continuation?.entries.map(entry => entry.id)).size).toBe(2);
   expect((await play("alphabetically first"))?.entries).toEqual([]);
@@ -56,7 +57,7 @@ test("numbered television continuation spans every page and season, excluding al
   const continuation = await play("episode-101");
   expect(continuation?.title).toBe("Fixture series");
   expect(continuation?.entries).toHaveLength(103);
-  expect(continuation?.entries[0]?.source).toBe("library:episode-102");
+  expect(continuation?.entries[0]).toMatchObject({ source: "library:episode-102", subtitle: "Fixture series", description: "Synopsis of episode-102" });
   expect(continuation?.entries[1]?.source).toBe("library:episode-103");
   expect(continuation?.entries.at(-1)?.source).toBe("library:episode-204");
 });
