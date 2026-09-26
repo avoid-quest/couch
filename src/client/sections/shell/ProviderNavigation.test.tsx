@@ -15,7 +15,7 @@ function HomeOpener() {
 
 test("provider browsing returns to its Home origin and restores focus without playing", async () => {
   const commands: unknown[] = [];
-  spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ items: [], favorites: [], title: "Remembered show" })) as typeof fetch);
+  spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ items: [], favorites: [], title: "Remembered show" })) as unknown as typeof fetch);
   const gate = {
     credentials: { origin: "http://localhost", token: "host" }, connected: true, status: "connected", booting: false,
     state: { queue: [], currentEntryId: null, player: { status: "idle", position: 0, duration: null, volume: 50, playbackId: null }, activeProfile: { id: "household", name: "Household" } },
