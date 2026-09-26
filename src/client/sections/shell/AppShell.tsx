@@ -275,7 +275,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const pairingRef = useRef<HTMLButtonElement>(null);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
-  const onPlayer = paired && section === "Now" && !!current;
+  const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
 

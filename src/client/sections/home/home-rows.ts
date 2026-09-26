@@ -9,8 +9,10 @@ export const defaultHomeRows: HomeRow[] = [
   { id: "radio", shown: true }, { id: "recent", shown: true }, { id: "upNext", shown: false },
 ];
 const storageKey = "couch.home-rows";
+let sessionRows: HomeRow[] | null = null;
 
 export function readHomeRows(storage?: Pick<Storage, "getItem">): HomeRow[] {
+  if (!storage && sessionRows) return sessionRows;
   try {
     const saved = JSON.parse((storage ?? localStorage).getItem(storageKey) ?? "[]") as HomeRow[];
     const known = saved.filter((row, index) => Object.hasOwn(homeRowLabels, row?.id) && saved.findIndex(other => other.id === row.id) === index).map(row => ({ id: row.id, shown: row.shown !== false }));
@@ -22,13 +24,16 @@ export function readHomeRows(storage?: Pick<Storage, "getItem">): HomeRow[] {
 export function useHomeRows() {
   const [rows, setRows] = useState(() => readHomeRows());
   useEffect(() => {
-    const update = (event: StorageEvent) => { if (event.key === storageKey || event.key === null) setRows(readHomeRows()); };
+    const update = (event: StorageEvent) => { if (event.key === storageKey || event.key === null) { sessionRows = null; setRows(readHomeRows()); } };
+    const refresh = () => setRows(readHomeRows());
     window.addEventListener("storage", update);
-    return () => window.removeEventListener("storage", update);
+    window.addEventListener(storageKey, refresh);
+    return () => { window.removeEventListener("storage", update); window.removeEventListener(storageKey, refresh); };
   }, []);
   const save = useCallback((next: HomeRow[]) => {
     setRows(next);
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* The choice lasts for this visit. */ }
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); sessionRows = null; } catch { sessionRows = next; }
+    window.dispatchEvent(new Event(storageKey));
   }, []);
   return useMemo(() => ({
     rows,
