@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setupUiTests, renderWithQueryClient, screen, testWindow, userEvent } from "@/testing/react";
+import { beforeEach, expect, spyOn, test } from "bun:test";
 import * as core from "@tauri-apps/api/core";
-import { Window } from "happy-dom";
-import { act } from "react";
-import type { Root } from "react-dom/client";
-import { fireEvent, screen } from "@/testing";
 import type { MetadataView } from "../../shared/metadata";
+import { MetadataEditor } from "./MetadataEditor";
+
+setupUiTests();
 
 const metadata: MetadataView = {
   id: "movie-1", type: "movie", revision: "revision-1", match: null,
@@ -13,109 +12,85 @@ const metadata: MetadataView = {
   origins: Object.fromEntries(["title", "originalTitle", "showTitle", "plot", "year", "premiered", "genres", "season", "episode", "artworkId"].map(key => [key, "Imported/local"])) as MetadataView["origins"],
 };
 const archive = new Uint8Array([1, 2, 3, 4]);
-const originalGlobals = new Map<string, PropertyDescriptor | undefined>();
-let window: Window, root: Root, request: ReturnType<typeof spyOn>, invoke: ReturnType<typeof spyOn>;
-let result: boolean | string = true;
-let interrupted = false;
-const flush = () => act(async () => { await Bun.sleep(20); });
+let request: ReturnType<typeof spyOn>, invoke: ReturnType<typeof spyOn>;
+let user: ReturnType<typeof userEvent.setup>;
+let result: boolean | string;
+let interrupted: boolean;
 
-beforeEach(async () => {
-  window = new Window({ url: "http://tauri.localhost" });
+beforeEach(() => {
+  testWindow.happyDOM.setURL("http://tauri.localhost");
   Object.assign(window, { __COUCH_NATIVE_HOST__: true });
-  for (const key of ["window", "document", "navigator", "location", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "DocumentFragment", "MutationObserver", "ResizeObserver", "Event", "MouseEvent", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
-    originalGlobals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  }
-  result = true; interrupted = false;
+  user = userEvent.setup();
+  result = true;
+  interrupted = false;
   invoke = spyOn(core, "invoke").mockImplementation(async <T,>(): Promise<T> => {
     if (typeof result === "string") throw result;
     return result as T;
   });
-  request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
-    expect(String(input).startsWith("http://selected-host/api/metadata/items/movie-1")).toBe(true);
-    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer selected-token");
+  request = spyOn(globalThis, "fetch").mockImplementation((async (_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === "POST") {
       if (interrupted) return new Response(new ReadableStream({ start(controller) { controller.error(new Error("Transfer interrupted")); } }));
       return new Response(archive, { headers: { "Content-Type": "application/x-tar" } });
     }
     return Response.json(metadata);
   }) as typeof fetch);
-  const { createRoot } = await import("react-dom/client");
-  root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 
-afterEach(async () => {
-  await act(async () => root.unmount());
-  request.mockRestore(); invoke.mockRestore();
-  await window.happyDOM.abort();
-  for (const [key, descriptor] of originalGlobals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originalGlobals.clear();
-});
-
-async function openEditor(button = "Export") {
-  const { MetadataEditor } = await import("./MetadataEditor");
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><MetadataEditor origin="http://selected-host" token="selected-token" id="movie-1" connected onSaved={() => {}} /></QueryClientProvider>));
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Edit details" })));
-  await flush();
-  await screen.findByRole("button", { name: button });
+async function openEditor() {
+  renderWithQueryClient(<MetadataEditor origin="http://selected-host" token="selected-token" id="movie-1" connected onSaved={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Edit details" }));
+  await screen.findByRole("button", { name: "Export" });
 }
 
-async function save() {
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
-  await flush();
-}
+const save = () => user.click(screen.getByRole("button", { name: "Export" }));
 
-test("native export sends selected host bytes to the save dialog", async () => {
-  await openEditor(); await save();
-  expect(request.mock.calls.at(-1)?.[0]).toBe("http://selected-host/api/metadata/items/movie-1/export");
+test("native export sends authenticated selected host bytes to the save dialog", async () => {
+  await openEditor();
+  await save();
+  expect(await screen.findByRole("status")).toHaveTextContent("Exported.");
+  const [url, init] = request.mock.calls.at(-1)!;
+  expect(url).toBe("http://selected-host/api/metadata/items/movie-1/export");
+  expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer selected-token");
   expect(invoke).toHaveBeenCalledWith("save_metadata_export", archive, { headers: { "X-Couch-Item-Id": "movie-1" } });
-  expect(screen.getByRole("status").textContent).toContain("Exported.");
 });
 
 test("cancel and denied destination report the outcome", async () => {
   result = false;
-  await openEditor(); await save();
-  expect(screen.getByRole("status").textContent).toContain("Canceled.");
+  await openEditor();
+  await save();
+  expect(await screen.findByRole("status")).toHaveTextContent("Canceled.");
   result = "Could not save the metadata archive: Permission denied. No complete file was saved.";
   await save();
-  expect(screen.getByText(/Permission denied/)).toBeDefined();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Permission denied");
 });
 
 test("interrupted transfer never opens the native save dialog", async () => {
   interrupted = true;
-  await openEditor(); await save();
+  await openEditor();
+  await save();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Export interrupted");
   expect(invoke).not.toHaveBeenCalled();
-  expect(screen.getByText(/Export interrupted/)).toBeDefined();
 });
 
 test("browser export keeps its download action", async () => {
   Object.assign(window, { __COUCH_NATIVE_HOST__: false });
   const create = spyOn(URL, "createObjectURL").mockReturnValue("blob:archive");
-  const click = spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-  try {
-    await openEditor();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Export" })));
-    await flush();
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(click).toHaveBeenCalledTimes(1);
-    expect(invoke).not.toHaveBeenCalled();
-    expect(screen.getByRole("status").textContent).toContain("Downloaded.");
-  } finally {
-    create.mockRestore(); click.mockRestore();
-  }
+  const click = spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  await openEditor();
+  await save();
+  expect(await screen.findByRole("status")).toHaveTextContent("Downloaded.");
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(click).toHaveBeenCalledTimes(1);
+  expect(invoke).not.toHaveBeenCalled();
 });
 
-test("artwork and match removal checkboxes submit the selected corrections", async () => {
-  request.mockImplementation((async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? Response.json(metadata) : Response.json(metadata)) as typeof fetch);
-  await openEditor("Save");
-  const artwork = screen.getByRole("checkbox", { name: "Remove artwork" });
-  const match = screen.getByRole("checkbox", { name: "Clear TMDB match" });
-  await act(async () => { fireEvent.click(artwork); fireEvent.click(match); });
-  expect(artwork.getAttribute("aria-checked")).toBe("true");
-  expect(match.getAttribute("aria-checked")).toBe("true");
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+test("artwork and match removal submit the selected corrections", async () => {
+  request.mockImplementation(async (_input: RequestInfo | URL) => Response.json(metadata));
+  await openEditor();
+  await user.click(screen.getByRole("checkbox", { name: "Remove artwork" }));
+  await user.click(screen.getByRole("checkbox", { name: "Clear TMDB match" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Saved.");
   const post = request.mock.calls.find((call: unknown[]) => (call[1] as RequestInit | undefined)?.method === "POST");
   expect(JSON.parse(String((post?.[1] as RequestInit | undefined)?.body))).toMatchObject({ changes: { artworkId: null }, clearMatch: true });
 });
