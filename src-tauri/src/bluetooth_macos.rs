@@ -217,7 +217,7 @@ impl Bluetooth {
             let operation = self.pending.lock().unwrap().operation.clone();
             let Some(controller) = (unsafe { IOBluetoothHostController::defaultController() })
             else {
-                return Ok(json!({"adapter":"absent","devices":[],"operation":operation}));
+                return Ok(json!({"adapter":"absent","devices":[],"operation":operation,"support":super::support::macos()}));
             };
             // The generated binding encodes this C enum as unsigned, but macOS returns signed int.
             let power: i32 = unsafe { msg_send![&*controller, powerState] };
@@ -255,7 +255,7 @@ impl Bluetooth {
                 })
                 .collect();
             Ok(
-                json!({"adapter":if power == 1 { "available" } else { "off" },"devices":devices,"operation":operation}),
+                json!({"adapter":if power == 1 { "available" } else { "off" },"devices":devices,"operation":operation,"support":super::support::macos()}),
             )
         })
     }

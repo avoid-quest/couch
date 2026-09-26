@@ -1,3 +1,6 @@
+#[path = "bluetooth_support.rs"]
+mod support;
+
 use serde::Deserialize;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use serde_json::Value;
@@ -154,7 +157,7 @@ mod linux {
         async fn inventory(&self) -> Result<Value, String> {
             let session = self.session().await?;
             let names = session.adapter_names().await.map_err(|e| e.to_string())?;
-            let mut state = json!({"adapter":"absent","devices":[],"operation":self.pending.lock().unwrap().operation});
+            let mut state = json!({"adapter":"absent","devices":[],"operation":self.pending.lock().unwrap().operation,"support":support::linux()});
             if names.is_empty() { return Ok(state); }
             let adapter = session.default_adapter().await.map_err(|e| e.to_string())?;
             state["adapter"] = json!(if blocked() { "blocked" } else if adapter.is_powered().await.map_err(|e| e.to_string())? { "available" } else { "off" });

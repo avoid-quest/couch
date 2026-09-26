@@ -1,0 +1,90 @@
+{
+  "linux": {
+    "adapter": "available",
+    "devices": [
+      {
+        "address": "AA:BB:CC:DD:EE:01",
+        "name": "Speaker",
+        "paired": true,
+        "connected": true
+      },
+      {
+        "address": "AA:BB:CC:DD:EE:02",
+        "name": "Headphones",
+        "paired": true,
+        "connected": false
+      },
+      {
+        "address": "AA:BB:CC:DD:EE:03",
+        "name": "New speaker",
+        "paired": false,
+        "connected": false
+      }
+    ],
+    "operation": null,
+    "support": {
+      "powerUnavailableReason": null,
+      "connectUnavailableReason": null,
+      "disconnectUnavailableReason": null,
+      "forgetUnavailableReason": null,
+      "pairingNotice": null
+    }
+  },
+  "macos": {
+    "adapter": "available",
+    "devices": [
+      {
+        "address": "AA:BB:CC:DD:EE:01",
+        "name": "Speaker",
+        "paired": true,
+        "connected": true
+      },
+      {
+        "address": "AA:BB:CC:DD:EE:02",
+        "name": "Headphones",
+        "paired": true,
+        "connected": false
+      },
+      {
+        "address": "AA:BB:CC:DD:EE:03",
+        "name": "New speaker",
+        "paired": false,
+        "connected": false
+      }
+    ],
+    "operation": null,
+    "support": {
+      "powerUnavailableReason": "Couch cannot yet turn on Bluetooth on macOS. Open System Settings on the Mac running Couch.",
+      "forgetUnavailableReason": "Couch cannot yet forget devices on macOS. Open System Settings on the Mac running Couch."
+    }
+  },
+  "windows": {
+    "adapter": "available",
+    "devices": [
+      {
+        "address": "AA:BB:CC:DD:EE:01",
+        "name": "Speaker",
+        "paired": true,
+        "connected": true
+      },
+      {
+        "address": "AA:BB:CC:DD:EE:02",
+        "name": "Headphones",
+        "paired": true,
+        "connected": false
+      },
+      {
+        "address": "AA:BB:CC:DD:EE:03",
+        "name": "New speaker",
+        "paired": false,
+        "connected": false
+      }
+    ],
+    "operation": null,
+    "support": {
+      "connectUnavailableReason": "Couch cannot yet connect paired devices on Windows. Open System Settings on the Windows computer running Couch.",
+      "disconnectUnavailableReason": "Couch cannot yet disconnect devices on Windows. Open System Settings on the Windows computer running Couch.",
+      "pairingNotice": "Pairing needs your confirmation on the Windows computer running Couch. Be ready to respond to its Windows prompt. Cancelling in Couch may not dismiss that prompt."
+    }
+  }
+}
