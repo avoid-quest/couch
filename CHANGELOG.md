@@ -1,5 +1,17 @@
 # couch
 
+## 0.2.0-preview.18
+
+### Patch Changes
+
+- Rebuild Home and the player with clearer browsing, inspectable saved media and history, responsive artwork, explicit fullscreen controls, and video controls that fade over the picture.
+
+- Continue albums and playlists with optional Autoplay while keeping Up next explicit. Preserve source details through playback and history, and keep continuation scoped to the selected profile.
+
+- Add native media controls and descriptive window titles, improve radio programme details and artwork, and remove redundant success notifications.
+
+- Make forgetting saved Couches deliberate, preserve navigation and keyboard focus, refresh views after server changes, and align settings and recovery messages across phones, desktops, web and TV.
+
 ## 0.2.0-preview.17
 
 ### Patch Changes
