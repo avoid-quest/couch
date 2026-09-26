@@ -11,7 +11,6 @@ import { isNativeHost, isTvPresentation } from "./native-context";
 import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
-import { useIdleCursor } from "../useIdleCursor";
 import { useInterfaceSize } from "../interface-size";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
@@ -159,7 +158,6 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, [versions, connected, !!state, queryClient]);
 
   useInterfaceSize(tvPresentation, state?.appearance);
-  useIdleCursor(tvPresentation);
 
   useEffect(() => {
     if (!localHost || !credentials) return;

@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ListVideo, Music2, Settings2 } from "lucide-react";
@@ -51,14 +52,20 @@ export function PlayerPage() {
   const wake = () => {
     setShown(true);
     clearTimeout(timer.current);
-    if (playing && !panel) timer.current = setTimeout(() => setShown(false), 4000);
+    if (playing && !panel) timer.current = setTimeout(() => { if (!root.current?.querySelector(":focus-visible")) setShown(false); }, 4000);
   };
   useEffect(() => {
     clearTimeout(timer.current);
     if (!playing || panel) setShown(true);
-    else timer.current = setTimeout(() => setShown(false), 4000);
+    else timer.current = setTimeout(() => { if (!root.current?.querySelector(":focus-visible")) setShown(false); }, 4000);
     return () => clearTimeout(timer.current);
   }, [playing, panel]);
+  useEffect(() => {
+    if (!nativeHost || !current || shown) return;
+    const playerWindow = getCurrentWindow();
+    void playerWindow.setCursorVisible(false).catch(() => {});
+    return () => { void playerWindow.setCursorVisible(true).catch(() => {}); };
+  }, [nativeHost, !!current, shown]);
   useEffect(() => {
     if (!retry) return;
     setNow(Date.now());
@@ -114,7 +121,7 @@ export function PlayerPage() {
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
     : null;
 
-  return <section ref={root} className="player-page relative h-dvh min-h-112 overflow-hidden bg-background" data-page="Now" aria-label="Player" onMouseMove={playing ? wake : undefined}>
+  return <section ref={root} className={cn("player-page relative h-dvh min-h-112 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" aria-label="Player" onPointerMove={wake} onFocus={wake} onBlur={wake}>
     <div className="absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {elsewhere ? <div className="flex h-full flex-col gap-6 overflow-y-auto px-(--gutter) pt-6 pb-[calc(var(--bottom-bar,12rem)+1.5rem)] lg:flex-row lg:pt-0 lg:items-center lg:justify-start lg:gap-12">
         {artwork && <div className="aspect-video w-full max-w-sm shrink-0 overflow-hidden bg-muted lg:w-2/5 lg:max-w-xl [&_img]:size-full [&_img]:object-cover">{artwork}</div>}
