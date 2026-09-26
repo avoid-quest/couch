@@ -56,7 +56,8 @@ Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12. The page gutter is
 `px-(--gutter)` (3rem, 1rem on phones).
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
-windows narrower than 960px) raises every control to a 44px target.
+windows narrower than 960px) raises every control to a 44px target. Sonner toast
+actions use its `actionButton` classes because its default height is 24px.
 
 ## Components
 

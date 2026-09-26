@@ -45,6 +45,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: "cn-toast shadow-none! text-sm!",
           content: "min-w-0",
           title: "truncate",
+          actionButton: "touch:min-h-11 touch:min-w-11",
         },
       }}
       {...props}
