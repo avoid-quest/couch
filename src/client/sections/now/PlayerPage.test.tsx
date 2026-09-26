@@ -418,7 +418,7 @@ test("ended video can advance to its known Autoplay item without enabling seekin
   expect(actions).toEqual([{ type: "next", playbackId: "playback" }]);
 });
 
-test("video details show the episode synopsis and open its collection through app navigation", async () => {
+test("video details show the episode synopsis and open all seasons through app navigation", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const opened: unknown[] = [];
   const collection = { title: "MasterChef Italia - Season 11", url: "https://streamingcommunityz.photos/it/titles/1955-masterchef-italia/season-11" };
@@ -431,6 +431,7 @@ test("video details show the episode synopsis and open its collection through ap
   expect(details).toHaveTextContent(current.description);
   expect(details).toHaveTextContent(current.subtitle);
   await userEvent.click(within(details).getByRole("button", { name: "Browse collection" }));
-  expect(opened).toEqual([{ id: collection.url, url: collection.url, title: collection.title, provider: "streamingcommunity", kind: "collection" }]);
+  const showUrl = "https://streamingcommunityz.photos/it/titles/1955-masterchef-italia";
+  expect(opened).toEqual([{ id: showUrl, url: showUrl, title: collection.title, provider: "streamingcommunity", kind: "collection" }]);
   expect(actions).toEqual([]);
 });

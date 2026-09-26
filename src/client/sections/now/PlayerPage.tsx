@@ -18,7 +18,7 @@ import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { cn } from "@/lib/utils";
-import { providerForUrl } from "../../../shared/providers";
+import { collectionTarget } from "@/collection-target";
 
 type Panel = "tracks" | "settings" | "info";
 const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback", info: "About this show" };
@@ -119,9 +119,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
   const buffering = player?.status === "loading" && player.buffering;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
-  const collection = current?.collection;
-  const collectionProvider = collection && providerForUrl(collection.url);
-  const hasInfo = !!(currentProgramme || current?.description || collectionProvider);
+  const collection = collectionTarget(current?.collection);
+  const hasInfo = !!(currentProgramme || current?.description || collection);
   const infoLabel = currentProgramme ? "About this show" : "Details";
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
@@ -215,7 +214,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {hasInfo && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "info" }); }}><Info aria-hidden="true" />{infoLabel}<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
             <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" />Stop playback</Button>
           </div>}
-          {panel === "info" ? <div className="grid gap-3"><h3 className="text-xl font-semibold break-words">{currentProgramme?.title || current?.title}</h3>{currentProgramme ? programmeDetails : <>{current?.subtitle && <p className="text-sm text-muted-foreground">{current.subtitle}</p>}{current?.description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{current.description}</p>}</>}{collection && collectionProvider && <Button variant="outline" className="w-fit" onClick={() => shell.openProvider({ id: collection.url, url: collection.url, title: collection.title, provider: collectionProvider, kind: "collection" })}>Browse collection</Button>}</div> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
+          {panel === "info" ? <div className="grid gap-3"><h3 className="text-xl font-semibold break-words">{currentProgramme?.title || current?.title}</h3>{currentProgramme ? programmeDetails : <>{current?.subtitle && <p className="text-sm text-muted-foreground">{current.subtitle}</p>}{current?.description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{current.description}</p>}</>}{collection && <Button variant="outline" className="w-fit" onClick={() => shell.openProvider(collection)}>Browse collection</Button>}</div> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>
       </SheetContent>
     </Sheet>
