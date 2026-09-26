@@ -145,6 +145,9 @@ test.each([true, false])("radio shows provider details and keeps observed track 
   const radio = { ...shell, localHost, current, programme, state: { ...state, currentEntryId: current.id, queue: [current], player: { ...state.player, nowPlaying: { artist: "Track artist", title: "Observed song" } } } } as ShellValue;
   await act(async () => view.rerender(<ShellProviders value={radio}><PlayerPage /></ShellProviders>));
   expect(screen.getByRole("heading", { name: "Alexander Nut" })).toBeInTheDocument();
+  expect(screen.queryByText("Broken beat and soul.")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Show details" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("Alexander Nut");
   expect(screen.getByText("Detroit House")).toBeVisible();
   expect(screen.getByText("Broken beat and soul.")).toBeVisible();
   expect(screen.getByText("Allysha Joy · Live session · 320 kbps")).toBeVisible();

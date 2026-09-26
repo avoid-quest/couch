@@ -134,6 +134,18 @@ try {
   await until("browser Play reaches the coordinator and its native pipe", () => latest?.currentEntryId === entry.id && latest.player.status === "playing" && commands.some(command => command.type === "load" && command.source === entry.source));
   assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host", "Playback is attributed to the paired browser");
   await ui.section("Now");
+  for (const size of [1, 1.3]) {
+    await ui.execute("document.documentElement.style.setProperty('--interface-scale', arguments[0])", [String(size)]);
+    await until(`player fits the viewport without page scrolling at ${size}× interface size`, async () => await ui.execute(`
+      const player = document.querySelector('[data-page="Now"]');
+      if (!player) return false;
+      const rect = player.getBoundingClientRect();
+      return Math.abs(rect.top) <= 1 && Math.abs(rect.bottom - innerHeight) <= 1
+        && document.documentElement.scrollHeight <= innerHeight + 1
+        && document.documentElement.scrollWidth <= innerWidth + 1;
+    `));
+  }
+  await ui.execute("document.documentElement.style.removeProperty('--interface-scale')");
   await ui.button("Stop");
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Find");
