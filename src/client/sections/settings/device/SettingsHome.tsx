@@ -11,7 +11,7 @@ export function SettingsHome() {
     <SettingsSection description="Choose the rows and their order on this device. Empty rows stay hidden.">
       <ol aria-label="Home rows">
         {layout.rows.map((row, index) => <li key={row.id}>
-          <SettingsRow label={homeRowLabels[row.id]} htmlFor={`home-row-${row.id}`}>
+          <SettingsRow label={homeRowLabels[row.id]} className="[&_label]:touch:min-h-11 [&_label]:items-center" htmlFor={`home-row-${row.id}`}>
             <Switch id={`home-row-${row.id}`} checked={row.shown} onCheckedChange={checked => layout.toggle(row.id, checked)} />
             <div className="ml-auto flex gap-1">
               <Button variant="ghost" size="icon" aria-label={`Move ${homeRowLabels[row.id]} up`} disabled={index === 0} onClick={() => layout.move(row.id, -1)}><ChevronUp aria-hidden="true" /></Button>
