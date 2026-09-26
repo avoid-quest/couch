@@ -94,7 +94,7 @@ const platformState = (platform: keyof typeof inventories): BluetoothState => st
 test("Mac power guidance precedes any mutation while Bluetooth is off", async () => {
   const state = { ...platformState("macos"), adapter: "off" as const };
   const { actions } = await inventoryView(state);
-  expect(screen.getByText(/current macOS Bluetooth adapter cannot turn Bluetooth on/).textContent).toContain("playback host");
+  expect(screen.getByText(/Couch cannot yet turn on Bluetooth on macOS/).textContent).toContain("running Couch");
   const power = screen.getByRole("button", { name: "Turn on" }) as HTMLButtonElement;
   expect(power.disabled).toBe(true);
   await act(async () => fireEvent.click(power));
@@ -103,7 +103,7 @@ test("Mac power guidance precedes any mutation while Bluetooth is off", async ()
 
 test("Mac Forget is guidance-only while Connect and Disconnect stay supported", async () => {
   const { actions } = await inventoryView(platformState("macos"));
-  expect(screen.getAllByText(/current macOS Bluetooth adapter cannot forget devices/)).toHaveLength(2);
+  expect(screen.getAllByText(/Couch cannot yet forget devices on macOS/)).toHaveLength(2);
   const forget = screen.getByRole("button", { name: "Forget Speaker" }) as HTMLButtonElement;
   expect(forget.disabled).toBe(true);
   await act(async () => fireEvent.click(forget));
@@ -116,8 +116,8 @@ test("Mac Forget is guidance-only while Connect and Disconnect stay supported", 
 
 test("Windows connection guidance prevents mutations and destructive confirmations but preserves Forget", async () => {
   const { actions } = await inventoryView(platformState("windows"));
-  expect(screen.getByText(/current Windows Bluetooth adapter cannot connect paired devices/).textContent).toContain("playback host");
-  expect(screen.getByText(/current Windows Bluetooth adapter cannot disconnect devices/).textContent).toContain("playback host");
+  expect(screen.getByText(/Couch cannot yet connect paired devices on Windows/).textContent).toContain("running Couch");
+  expect(screen.getByText(/Couch cannot yet disconnect devices on Windows/).textContent).toContain("running Couch");
   for (const name of ["Connect Headphones", "Disconnect Speaker"]) {
     const button = screen.getByRole("button", { name }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
@@ -133,7 +133,7 @@ test("Windows connection guidance prevents mutations and destructive confirmatio
 
 test("Windows explains playback-desktop consent before starting supported pairing", async () => {
   const { actions } = await inventoryView(platformState("windows"));
-  expect(screen.getByText(/Pairing requires consent in the local Windows prompt/).textContent).toContain("playback host's desktop");
+  expect(screen.getByText(/Pairing needs your confirmation/).textContent).toContain("Windows computer running Couch");
   expect(screen.getByText(/Cancelling in Couch may not dismiss that prompt/)).toBeTruthy();
   expect(actions).toEqual([]);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Connect New speaker" })));
@@ -201,5 +201,5 @@ test("runtime operation failure remains visible alongside adapter guidance", asy
   state.operation = { id: "failed", kind: "pair", device: state.devices[2]!.address, status: "error", endsAt: 0, prompt: null, message: "Windows Bluetooth pair ended with code 5." };
   await inventoryView(state);
   expect(screen.getByRole("status").textContent).toContain("Windows Bluetooth pair ended with code 5.");
-  expect(screen.getByText(/current Windows Bluetooth adapter cannot connect paired devices/)).toBeTruthy();
+  expect(screen.getByText(/Couch cannot yet connect paired devices on Windows/)).toBeTruthy();
 });
