@@ -431,3 +431,15 @@ test("live clocks ignore native volume when system audio owns it", () => {
     expect(publications).toBe(count + 1);
   } finally { session.close(); store.close(); }
 });
+
+
+test("catalogue enrichment does not replace the selected occurrence of a repeated playlist item", () => {
+  const store = openStore(":memory:");
+  const session = createSession(store, () => {}, () => {});
+  const entry = { id: "one", title: "Repeated video", source: "web:https://www.youtube.com/watch?v=BaW_jenozKc", collection: { title: "Playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", index: 1 } };
+  try {
+    session.command({ type: "enqueue", entry });
+    session.enrichEntry(entry.id, entry.source, { description: "Video synopsis", collection: { ...entry.collection, index: 0 } }, true);
+    expect(session.state.queue[0]).toMatchObject({ description: "Video synopsis", collection: entry.collection });
+  } finally { session.close(); store.close(); }
+});

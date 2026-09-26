@@ -1,3 +1,4 @@
+import { libraryMetadata } from "./library-metadata";
 import { ADMIN_ONLY, NO_LONGER_ADMIN, RECORDINGS_UNSUPPORTED, REMOTES_OFF, STORAGE_ERROR, UPDATING_PAUSED, VERSION_MISMATCH } from "./messages";
 import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
 import { frontendPaths } from "../shared/page-paths";
@@ -217,6 +218,7 @@ export function createHub(options: HubOptions) {
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
   const forLater = createForLater({
+    webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
     databasePath: options.databasePath, onChange: () => session.invalidate("for-later"),
     lookup: async reference => {
       if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
@@ -228,7 +230,7 @@ export function createHub(options: HubOptions) {
       if (reference.kind !== "library") throw new ControllerError("Choose a library or queue item to save.");
       const item = library.getItem(reference.id);
       if (!item) throw new ControllerError("This item is no longer in the library.", 404);
-      return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) };
+      return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...libraryMetadata(item) };
     },
     prepare: async entry => {
       if (entry.source.startsWith("library:")) await library.getPlayable(entry.source.slice(8));
@@ -351,14 +353,14 @@ export function createHub(options: HubOptions) {
           // The local metadata read also needs the guard after asynchronous I/O.
           if (!authorized()) return null;
           const item = library.getItem(action.itemId);
-          return { entry: { id: action.entryId, title: media.title.slice(0, 300), source: `library:${action.itemId}`, ...(item?.artworkId ? { artworkId: item.artworkId } : {}), ...(item?.duration ? { duration: item.duration } : {}) }, fromStart: action.fromStart };
+          return { entry: { id: action.entryId, title: media.title.slice(0, 300), source: `library:${action.itemId}`, ...libraryMetadata(item) }, fromStart: action.fromStart };
         };
         break;
       case "enqueueAlbum":
         prepare = () => {
           const { album, items } = library.albumTracks(action.albumId);
           if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
-          return { title: album.title, entries: items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })) };
+          return { title: album.title, entries: items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...libraryMetadata(item) })) };
         };
         break;
       case "enqueueRadio":
@@ -381,7 +383,7 @@ export function createHub(options: HubOptions) {
       for (const entry of "entry" in prepared ? [prepared.entry] : prepared.entries) {
         const mediaId = playbackMediaId(entry);
         if (mediaId && (entry.subtitle || entry.description || entry.thumbnail)) {
-          const details = { ...(entry.subtitle ? { subtitle: entry.subtitle } : {}), ...(entry.description ? { description: entry.description } : {}), ...(entry.thumbnail ? { thumbnail: entry.thumbnail } : {}) };
+          const details = { ...(entry.subtitle ? { subtitle: entry.subtitle } : {}), ...(entry.description ? { description: entry.description } : {}), ...(entry.thumbnail ? { thumbnail: entry.thumbnail } : {}), ...(entry.collection ? { collection: entry.collection } : {}) };
           try { if (store.enrichHistorySource(mediaId, entry.source, details)) session.invalidate("progress"); } catch { /* Optional catalogue refresh must not prevent playback. */ }
         }
       }

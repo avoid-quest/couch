@@ -15,7 +15,7 @@ afterEach(() => { for (const cleanup of close.splice(0).reverse()) cleanup(); })
 const entry: QueueEntry = { id: "movie", source: "library:movie", title: "Evening movie", artworkId: "poster" };
 const reference = { kind: "library", id: "movie" };
 function fixture(options: Partial<Parameters<typeof createForLater>[0]> = {}) {
-  const changed = mock(() => {}), enqueue = mock(() => {});
+  const changed = mock(() => {}), enqueue = mock((..._args: Parameters<Parameters<typeof createForLater>[0]["enqueue"]>) => {});
   const service = createForLater({ databasePath: ":memory:", onChange: changed, lookup: async () => entry, prepare: async () => {}, reservePlay: () => 7, enqueue, ...options });
   close.push(() => service.close());
   return { service, changed, enqueue };
@@ -226,4 +226,25 @@ test("a newer Stop cancels delayed saved-item Play without appending an unreques
   expect(session.state.currentEntryId).toBeNull();
   expect(sent).toEqual(afterStop);
   expect(await list(f.service)).toEqual([saved]);
+});
+
+
+test("online saves retain server catalogue context, ignoring client descriptive fields", async () => {
+  const url = "https://www.youtube.com/watch?v=BaW_jenozKc";
+  const metadata = { subtitle: "A channel", description: "A trusted synopsis.", collection: { title: "A playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", index: 2 } };
+  const f = fixture({ webMetadata: source => source === url ? metadata : {} });
+  const response = await request(f.service, "POST", "", { reference: { kind: "web", url, title: "A video", description: "Forged description", collection: { url: "https://evil.example" } } });
+  expect(response.status).toBe(201);
+  const item = (await response.json()).item;
+  expect(item).toMatchObject(metadata);
+  expect((await list(f.service))[0]).toMatchObject(metadata);
+  expect((await request(f.service, "POST", `/${item.id}/load`, { mode: "play" })).status).toBe(200);
+  expect(f.enqueue.mock.calls[0]?.[0]).toMatchObject(metadata);
+  expect(JSON.stringify(item)).not.toContain("Forged");
+});
+
+test("saving a queued catalogue entry retains descriptions through playlist capture", async () => {
+  const details = { subtitle: "The series", description: "The crew arrives." };
+  const f = fixture({ lookup: async () => ({ ...entry, ...details }) });
+  expect(await save(f.service)).toMatchObject(details);
 });

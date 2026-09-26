@@ -37,7 +37,7 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
       const read = <T,>(path: string) => apiFetch(props, path, { signal }, 20_000).then(response => response.json() as Promise<T>);
       if (source === "Jellyfin") {
         const result = await read<JellyfinItems>(`/api/jellyfin/items?${new URLSearchParams({ q: query, startIndex: String(offset) })}`);
-        return { total: result.total, items: result.items.map(item => ({ id: item.id, title: item.title, video: item.kind !== "Audio", detail: [item.kind, item.detail].filter(Boolean).join(" · "), available: true, position: item.resumePosition, duration: item.duration, watched: item.played })) };
+        return { total: result.total, items: result.items.map(item => ({ id: item.id, title: item.title, artworkId: item.artworkId, plot: item.description, video: item.kind !== "Audio", detail: [item.kind, item.detail].filter(Boolean).join(" · "), available: true, position: item.resumePosition, duration: item.duration, watched: item.played })) };
       }
       const result = await read<LibrarySearch>(`/api/library/items?${new URLSearchParams({ q: query, offset: String(offset), limit: String(pageSize) })}`);
       return { total: result.total,

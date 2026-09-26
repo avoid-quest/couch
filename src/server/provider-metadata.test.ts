@@ -25,7 +25,8 @@ test("legacy episode refresh resolves its canonical season and exposes only that
   const metadata = await resolveProviderMetadata(url, new AbortController().signal, fetchPage);
   expect(metadata.subtitle).toBe(details.subtitle);
   expect(metadata.description).toBe(details.description);
-  expect(Object.keys(metadata).sort()).toEqual(["description", "subtitle", "thumbnail"]);
+  expect(metadata.collection).toEqual({ title: "MasterChef Italia - Season 11", url: `${origin}/it/titles/1955-masterchef-italia/season-11` });
+  expect(Object.keys(metadata).sort()).toEqual(["collection", "description", "subtitle", "thumbnail"]);
   expect(JSON.stringify(metadata)).not.toContain("private");
   expect(requests).toHaveLength(2);
 });
@@ -134,4 +135,39 @@ test("one refresh drains later entries even when the first lookups fail or retur
     expect(calls).toBe(3);
     expect(store.historySource(rows[2]!.mediaId)).toMatchObject(details);
   } finally { metadata.close(); store.close(); }
+});
+
+
+test("fresh playback context replaces old history while background descriptions preserve the chosen playlist", () => {
+  const store = openStore(":memory:");
+  const first = { title: "First playlist", url: "https://www.youtube.com/playlist?list=PL1111111111", index: 0 };
+  const second = { title: "Second playlist", url: "https://www.youtube.com/playlist?list=PL2222222222", index: 2 };
+  try {
+    store.saveProgress("household", progress, { ...entry, collection: first });
+    store.saveProgress("household", progress, { ...entry, collection: second });
+    expect(store.historySource(mediaId)?.collection).toEqual(second);
+    store.enrichHistorySource(mediaId, entry.source, { ...details, collection: first });
+    expect(store.historySource(mediaId)).toMatchObject({ ...details, collection: second });
+  } finally { store.close(); }
+});
+
+test("a previously browsed playlist cannot choose Autoplay context for a bare YouTube video", async () => {
+  const store = openStore(":memory:");
+  const item: ProviderItem = { id: "video", provider: "youtube", kind: "media", title: "Video", url: "https://www.youtube.com/watch?v=BaW_jenozKc", description: "Video synopsis", collection: { title: "Previously browsed", url: "https://www.youtube.com/playlist?list=PL1234567890", index: 3 } };
+  const metadata = createProviderMetadata({ store, cachedItem: () => item, onChange: () => {} });
+  try {
+    expect(await metadata.load(item.url)).toEqual({ description: "Video synopsis" });
+    expect(providerMetadata(item, true).collection).toEqual(item.collection);
+  } finally { metadata.close(); store.close(); }
+});
+
+
+test("new standalone playback clears an earlier selected playlist from history", () => {
+  const store = openStore(":memory:");
+  const collection = { title: "Earlier playlist", url: "https://www.youtube.com/playlist?list=PL1111111111", index: 0 };
+  try {
+    store.saveProgress("household", progress, { ...entry, collection });
+    store.saveProgress("household", { ...progress, lastPlayedAt: 200 }, { ...entry, id: "new-standalone-occurrence" });
+    expect(store.historySource(mediaId)?.collection).toBeUndefined();
+  } finally { store.close(); }
 });

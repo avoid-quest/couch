@@ -4,10 +4,10 @@ import type { QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
 import { streamingCommunityList, streamingCommunityWatchContext } from "./streamingcommunity";
 
-export type ProviderMetadata = Pick<QueueEntry, "subtitle" | "description" | "thumbnail">;
+export type ProviderMetadata = Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
 
 // Only catalogue fields enter history. Extractor transport/auth metadata remains private.
-export function providerMetadata(item?: ProviderItem): ProviderMetadata {
+export function providerMetadata(item?: ProviderItem, selectedCollection = false): ProviderMetadata {
   if (!item) return {};
   const result: ProviderMetadata = {};
   for (const key of ["subtitle", "description"] as const) {
@@ -17,6 +17,7 @@ export function providerMetadata(item?: ProviderItem): ProviderMetadata {
   if (item.thumbnail) {
     try { const url = new URL(item.thumbnail); if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) result.thumbnail = url.href; } catch { /* Optional artwork. */ }
   }
+  if (item.collection && (item.provider !== "youtube" || selectedCollection) && providerForUrl(item.collection.url) === item.provider) result.collection = { ...item.collection };
   return result;
 }
 

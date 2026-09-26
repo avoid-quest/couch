@@ -1,3 +1,4 @@
+import { libraryMetadata } from "./library-metadata";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import type { CollectionDefinition, CollectionFilter, CollectionPreview, SavedCollection } from "../shared/collections";
@@ -153,7 +154,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
           const available = current.items.filter(item => item.available);
           if (!available.length) throw new CollectionError("No available items in this preview.");
           if (input.mode === "append" && queue().length + available.length > 500) throw new CollectionError(QUEUE_FULL);
-          loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration !== null ? { duration: item.duration } : {}) })), input.mode, authorize, playedBy, collection.name);
+          loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...libraryMetadata(item) })), input.mode, authorize, playedBy, collection.name);
           return Response.json({ ok: true, loaded: available.length, missing: current.items.length - available.length });
         }
         if (request.method === "GET") return Response.json(preview(get(id)));

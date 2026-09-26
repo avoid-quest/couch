@@ -6,6 +6,8 @@ export type JellyfinItem = {
   title: string;
   kind: "Movie" | "Episode" | "Audio";
   detail: string | null;
+  description?: string | null;
+  artworkId?: string;
   duration: number | null;
   played: boolean;
   resumePosition: number;

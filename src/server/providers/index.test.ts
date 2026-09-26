@@ -128,3 +128,13 @@ test("browse bounds parallel work, forwards cancellation and aborts requests on 
   expect(signals.every(signal => signal.aborted)).toBe(true);
   expect((await catalog.handle(api("favorites"))).status).toBe(503);
 });
+
+test("cached metadata can resolve the explicitly selected duplicate playlist occurrence", async () => {
+  const collection = { title: "Two viewings", url: "https://www.youtube.com/playlist?list=PL1234567890" };
+  const browse = async () => ({ items: [0, 1].map(index => ({ ...item, collection: { ...collection, index } })) });
+  const catalog = fixture({ browse: { youtube: browse, twitch: browse, raiplay: browse, bandcamp: browse, streamingcommunity: browse } });
+  expect((await catalog.handle(api(`youtube/items?url=${encodeURIComponent(collection.url)}`))).status).toBe(200);
+  expect(catalog.cachedItem(item.url, { ...collection, index: 1 })?.collection?.index).toBe(1);
+  expect(catalog.cachedItem(item.url, { ...collection, index: 8 })).toBeUndefined();
+  expect(catalog.cachedItem(item.url, { url: "https://www.youtube.com/playlist?list=PL9999999999", index: 1 })).toBeUndefined();
+});

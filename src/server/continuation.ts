@@ -1,3 +1,4 @@
+import { libraryMetadata } from "./library-metadata";
 import type { LibraryItem } from "../shared/library";
 import type { QueueEntry } from "../shared/protocol";
 import { isYouTubePlaylistUrl, providerForUrl } from "../shared/providers";
@@ -12,7 +13,7 @@ export type PlaybackContinuation = { title: string; entries: QueueEntry[] };
 const numbered = (value: number | null | undefined): value is number => Number.isSafeInteger(value) && value! >= 0;
 const libraryEntry = (item: LibraryItem): QueueEntry => ({
   id: crypto.randomUUID(), title: item.title.slice(0, 300), source: `library:${item.id}`,
-  ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration == null ? {} : { duration: item.duration }),
+  ...libraryMetadata(item),
 });
 function streamingEpisode(value: string) {
   if (providerForUrl(value) !== "streamingcommunity") return null;
