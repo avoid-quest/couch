@@ -2,6 +2,7 @@ import { renderWithQueryClient, screen, setupUiTests, testWindow, userEvent } fr
 import { beforeEach, expect, spyOn, test } from "bun:test";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { rememberConnection } from "@/session/connection";
+import type { Action, SessionState } from "../../../shared/protocol";
 
 setupUiTests();
 const origin = "http://living-room:4100";
@@ -16,9 +17,9 @@ beforeEach(() => {
   request = spyOn(globalThis, "fetch").mockImplementation((async input => Response.json(String(input).endsWith("/api/sound") ? { outputs: [], routing: null, defaultOutput: null } : { adapter: "off", devices: [] })) as typeof fetch);
 });
 
-async function render() {
+async function render(state?: SessionState, run?: (action: Action) => Promise<boolean>) {
   const { PlaybackStatus } = await import("./PlaybackStatus");
-  const base = createRootRoute({ component: () => <PlaybackStatus credentials={{ origin, token, installationId: "living-room-installation" }} connected status="Connected" installationName="Living room" /> });
+  const base = createRootRoute({ component: () => <PlaybackStatus credentials={{ origin, token, installationId: "living-room-installation" }} connected status="Connected" installationName="Living room" state={state} run={run} /> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => null });
   const sound = createRoute({ getParentRoute: () => base, path: "/settings/sound", component: () => null });
   const router = createRouter({ routeTree: base.addChildren([find, sound]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
@@ -65,4 +66,17 @@ test("addresses with pairing details or paths cannot become destinations", async
     expect(screen.queryByRole("button", { name: "Switch" })).toBeNull();
   }
   expect(window.location.origin).toBe(origin);
+});
+
+test("Playing on exposes the same mute and volume commands as the player", async () => {
+  const actions: Action[] = [];
+  await render({
+    queue: [], currentEntryId: null, installationName: "Living room", activeProfile: { id: "household", name: "Household" },
+    player: { status: "idle", playbackId: null, position: 0, duration: null, seekable: false, volume: 40, error: null },
+    systemAudio: { selectedOutput: "speakers", observedOutput: "speakers", volume: 40, muted: false, error: null },
+  }, async action => { actions.push(action); return true; });
+  await user.click(screen.getByRole("button", { name: "Mute Living room" }));
+  screen.getByRole("slider", { name: "Volume" }).focus();
+  await user.keyboard("{End}");
+  expect(actions).toEqual([{ type: "mute", muted: true }, { type: "volume", volume: 100 }]);
 });

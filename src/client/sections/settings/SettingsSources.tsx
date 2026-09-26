@@ -44,9 +44,9 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
     folders: folderSources && (folderSources.length ? `${plural(folderSources.length, "folder")} · ${plural(folderSources.reduce((total, item) => total + item.itemCount, 0), "item")}` : "Not set up"),
     jellyfin: jellyfin.data && (jellyfin.data.connected ? jellyfin.data.serverName || "Connected" : "Not set up"),
     iptv: iptv.data && (iptv.data.sources.length ? `${plural(iptv.data.sources.length, "list")} · ${plural(iptv.data.sources.reduce((total, item) => total + item.channelCount, 0), "channel")}` : "Not set up"),
-    radio: radioSources && (radioSources.length ? plural(radioSources.length, "playlist") : "Built in only"),
-    "streaming-community": streaming.data?.origin,
-    metadata: metadata.data && (metadata.data.configured ? "Set up" : "Not set up"),
+    radio: !canManage ? "Admin only" : radioSources && (radioSources.length ? plural(radioSources.length, "playlist") : "Built in only"),
+    "streaming-community": !canManage ? "Admin only" : streaming.data?.origin,
+    metadata: !canManage ? "Admin only" : metadata.data && (metadata.data.configured ? "Set up" : "Not set up"),
   };
 
   return (

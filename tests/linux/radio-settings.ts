@@ -37,7 +37,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
   const refresh = async (id: string) => {
     const source = async () => (await api("/api/radio/sources")).sources.find((source: RadioPlaylistSummary) => source.id === id);
     const before = await source();
-    await phone.button("Refresh", sourceCard(id));
+    await phone.button("Update stations", sourceCard(id));
     await until("source refresh completes", async () => {
       const after = await source();
       return (after.updatedAt !== before.updatedAt || after.error !== before.error) && await phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')");
@@ -116,7 +116,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     await until("native Find receives the imported stations", () => ui.execute("return [...document.querySelectorAll('[aria-label=\"Search results\"] button[aria-label^=\"Play Imported station\"]')].length === 3"));
     if (process.env.COUCH_TEST_LIVE_RADIO === "1") {
       await open();
-      await phone.button("Refresh", "[data-avoid-radio]");
+      await phone.button("Update stations", "[data-avoid-radio]");
       await until("one-step avoid import completes in Sources", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
       const avoid = (await summaries()).find(source => source.name === "avoid radio")!;
       assert.ok(avoid, "The actual avoid radio source imports");

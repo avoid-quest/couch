@@ -216,7 +216,7 @@ function ConnectionStatus() {
     <Button variant="ghost" size="sm" onClick={reconnect}>{TRY_AGAIN}</Button>
     <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
   </>;
-  if (status === "protocol-mismatch") return <Alert variant="destructive"><AlertDescription>{PROTOCOL_MISMATCH}</AlertDescription>{recovery && <div className="flex flex-wrap gap-1 pt-1">{recovery}</div>}</Alert>;
+  if (status === "protocol-mismatch") return <Alert variant="destructive"><AlertDescription>{localHost ? PROTOCOL_MISMATCH : `Update this remote or ${name} so both run the same version.`}</AlertDescription>{recovery && <div className="flex flex-wrap gap-1 pt-1">{recovery}</div>}</Alert>;
   if (status === "connection-rejected") return <Alert variant="destructive"><AlertDescription>{name} refused this address. Open Couch at the address it shows.</AlertDescription></Alert>;
   if (status === "build-mismatch") return <StatusLine actions={<Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button>}>{name} was updated.</StatusLine>;
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
@@ -230,11 +230,12 @@ function PairingPage() {
   const { localHost, credentials, details, booting, retryHost, status } = useSessionGate();
   const device = usePlaybackDevice();
   if (localHost) return <Onboarding title="Starting Couch">
-    {booting ? <StatusLine busy>Starting…</StatusLine> : <Button className="self-start" onClick={retryHost}>{TRY_AGAIN}</Button>}
+    {booting ? <StatusLine busy>Starting…</StatusLine> : <><p className="text-sm text-muted-foreground">Couldn't start Couch on this computer. If it keeps failing, restart this computer.</p><Button className="self-start" onClick={retryHost}>{TRY_AGAIN}</Button></>}
   </Onboarding>;
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
-  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description="On Couch, open Pair a remote and enter the code.">
+  const name = deviceName(details?.name);
+  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Remotes → Pair a remote, then enter the code shown there.`}>
     {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This remote was removed. Pair again."}</AlertDescription></Alert>}
     {status !== "protocol-mismatch" && <PairForm />}
   </Onboarding>;
@@ -300,7 +301,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage /> : <>
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error") && section !== "Now" && section !== "Home" && state && <MiniPlayer state={state} connected={connected} run={run} localHost={localHost} onOpen={() => shell.changeSection("Now")} />}
+            {current && (active || player?.status === "error") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={() => shell.changeSection("Now")} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>

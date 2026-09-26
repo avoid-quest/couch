@@ -226,7 +226,6 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
           options={(["off", "track", "album"] as ReplayGainMode[]).map(mode => ({ value: mode, label: mode[0]!.toUpperCase() + mode.slice(1) }))} />
           {saveDefault("replayGain", "volume leveling")}</SettingsSection>}
         <SettingsSection title="Sound">
-          <PanelStepper label="Volume" value={String(player.volume)} disabled={!connected || pending} onStep={direction => { void run({ type: "volume", volume: Math.max(0, Math.min(100, player.volume + direction * 5)) }); }} />
           <PanelStepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => adjustDelay("audioDelay", player.audioDelay ?? 0, direction)} />
         </SettingsSection>
       </>}

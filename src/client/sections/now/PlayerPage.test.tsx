@@ -42,7 +42,7 @@ test("player keys leave focused buttons outside the player available", async () 
   expect(space.defaultPrevented).toBe(false);
   expect(document.activeElement).toBe(outside);
   expect(actions).toEqual([]);
-  expect(screen.queryByRole("slider", { name: "Volume" })).toBeNull();
+  expect(screen.getByRole("slider", { name: "Volume" })).toBeInTheDocument();
   expect(screen.getByRole("group", { name: "Couch volume" }).textContent).toContain("40%");
 });
 
@@ -60,7 +60,7 @@ test("Escape leaves an open overlay to close itself before leaving the player", 
 test("Escape closes the player sheet before leaving the player", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   await act(async () => view.rerender(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
-  await userEvent.click(screen.getByRole("button", { name: "Settings" }));
+  await userEvent.click(screen.getByRole("button", { name: "Playback" }));
   expect(screen.queryByRole("dialog")).not.toBeNull();
   await act(async () => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
   expect(screen.queryByRole("dialog")).toBeNull();

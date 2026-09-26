@@ -48,7 +48,7 @@ async function render(sharing = false) {
 
 async function openUpdates() {
   await user.click(button("Playing on 192.168.1.10:4100"));
-  await user.click(button("Update this app"));
+  await user.click(button("Update Couch on this computer"));
 }
 
 test("first launch chooses a device before requesting local startup", async () => {
@@ -222,6 +222,7 @@ test("a route change closes Play on and resumes the selected remote connection",
 });
 
 test("Play on marks the current computer and switches directly to a remembered Couch", async () => {
+  localStorage.setItem("couch.target-names", JSON.stringify({ "http://192.168.1.20:4100": { invalid: "name" } }));
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100", "http://192.168.1.20:4100"], localSetupComplete: true };
   await render();
   await user.click(button("Playing here"));
@@ -266,8 +267,8 @@ test("an offline remote keeps this installation's update controls and shared-win
   expect(invoke.mock.calls.some(([name]) => name === "local_update_activity")).toBe(true);
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(false);
   await openUpdates();
-  expect(screen.getByRole("dialog", { name: "Update this app" })).toBeInTheDocument();
-  expect(screen.getByText(/Only this app/)).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Update Couch on this computer" })).toBeInTheDocument();
+  expect(screen.getByText(/Only Couch on this computer/)).toBeInTheDocument();
   expect(await screen.findByText("Hosted update")).toBeInTheDocument();
   expect(button("Install")).toBeEnabled();
   expect(screen.getByLabelText("Channel")).toBeInTheDocument();
@@ -299,7 +300,7 @@ test("this app gives recovery guidance without Linux appliance instructions", as
   }) as typeof fetch);
   await render();
   await openUpdates();
-  expect(screen.getByRole("dialog", { name: "Update this app" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Update Couch on this computer" })).toBeInTheDocument();
   expect(await screen.findByText("Needs repair")).toBeInTheDocument();
   expect(screen.getAllByText(/Reinstall Couch from its installer/)).toHaveLength(1);
   expect(screen.getByText("Update with the Couch installer. Your data stays.")).toBeInTheDocument();

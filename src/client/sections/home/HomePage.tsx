@@ -1,13 +1,14 @@
 import { usePlaybackClock } from "@/session/playback-clock";
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Pause, Play } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -30,16 +31,18 @@ import { avoidRadioPlaylistId } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/library";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
+import { homeRowLabels, useHomeRows, type HomeRowId } from "./home-rows";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
 
-const shown = { continue: 4, upNext: 8, radio: 6, later: 4 };
+const shown = { continue: 4, upNext: 8, radio: 6, later: 4, recent: 12 };
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Home reads like a timetable for the evening: each row is labelled with the
  * clock time it matters at, and only rows with something in them appear.
+ * Each device picks which rows it shows and in what order.
  */
 export function HomePage() {
   const playbackClock = usePlaybackClock();
@@ -48,10 +51,18 @@ export function HomePage() {
   const { identity, state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const now = useDurationClock();
-  const history = useQuery({ ...historyQuery(credentials), enabled: connected });
-  const later = useQuery({ ...forLaterQuery(credentials), enabled: connected });
-  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const [queueOpen, setQueueOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const layout = useHomeRows();
+  // Keep a waiting queue reachable whenever the mini player is absent.
+  const playerBand = !!current && (shell.active || state?.player.status === "error");
+  const onHome = layout.rows.filter(row => row.shown || row.id === "upNext" && !playerBand);
+  const hasRow = (id: HomeRowId) => onHome.some(row => row.id === id);
+  const playerFallback = !!current && !playerBand && !hasRow("now");
+  const historyShown = hasRow("continue") || hasRow("recent");
+  const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
+  const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
+  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && hasRow("radio") });
 
   const player = state?.player;
   const queue = state?.queue ?? [];
@@ -70,12 +81,19 @@ export function HomePage() {
   const doneBy = clock;
 
   const unfinished = (history.data?.items ?? []).filter(item => item.position > 0 && !item.watched);
+  const recent = (history.data?.items ?? []).filter(item => !(item.position > 0 && !item.watched)).slice(0, shown.recent);
   const savedMedia = later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [];
   const stations = [...shell.recentRadio, ...favorites.data?.favorites ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index).slice(0, shown.radio);
-  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
+  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && hasRow("radio") && stations.some(station => station.sourceId === avoidRadioPlaylistId), refetchInterval: 60_000 });
   const onAir = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
-  const settled = !history.isPending && !later.isPending && !favorites.isPending;
-  const empty = settled && !history.error && !later.error && !favorites.error && !current && !upcoming.length && !unfinished.length && !savedMedia.length && !stations.length;
+  const queries = [
+    ...(historyShown ? [history] : []),
+    ...(hasRow("later") ? [later] : []),
+    ...(hasRow("radio") ? [favorites] : []),
+  ];
+  const filled: Record<HomeRowId, boolean> = { now: !!current, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
+  const empty = !playerFallback && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
+  const featureContinue = !(current && layout.rows.find(row => row.id === "now")?.shown);
   const canManage = identity?.authority === "host" || identity?.authority === "administrator";
 
   const art = (item: { artworkId?: string; thumbnail?: string; title: string }) => <Artwork credentials={credentials} item={item} />;
@@ -93,12 +111,8 @@ export function HomePage() {
     : player?.status === "error" ? `Can't play ${current.title}`
     : [sourceLabel(current.source), paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
 
-  return <section data-page="Home" aria-label="Home" className="pt-2">
-    <h1 className="sr-only">Home</h1>
-    {later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
-    {favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
-
-    {current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
+  const rows: Record<HomeRowId, ReactNode> = {
+    now: current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}
         detail={!live && length ? <span className="flex items-center gap-3 text-sm tabular-nums text-muted-foreground"><Progress value={(playbackClock.position ?? 0) / length * 100} aria-label="Playback progress" className="h-1 max-w-xs flex-1 rounded-none bg-muted [&_[data-slot=progress-indicator]]:bg-foreground" />{formatDuration(playbackClock.position ?? 0)} / {formatDuration(length)}</span> : undefined}>
         <Button data-page-first onClick={() => shell.changeSection("Now")}>Open player</Button>
@@ -106,17 +120,17 @@ export function HomePage() {
           {paused ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}{paused ? "Play" : "Pause"}
         </Button>
       </Feature>
-    </HomeRow>}
+    </HomeRow>,
 
-    {!!upcoming.length && <HomeRow title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}
+    upNext: !!upcoming.length && <HomeRow title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}
       action={<Button variant="ghost" data-panel="queue" onClick={() => setQueueOpen(true)}>Edit</Button>}>
       <UpNextStrip plan={plan.slice(0, shown.upNext)} more={upcoming.length - shown.upNext} now={now} disabled={!available} pageFirst={!current}
         art={art} onPlay={entry => void run({ type: "play", entryId: entry.id })} onMore={() => setQueueOpen(true)} />
-    </HomeRow>}
+    </HomeRow>,
 
-    <ContinueSection credentials={credentials} connected={connected} canPlay={available} feature={!current} onPlay={shell.playHistory} onAdd={queueHistory} />
+    continue: <ContinueSection credentials={credentials} connected={connected} canPlay={available} feature={featureContinue} onPlay={shell.playHistory} onAdd={queueHistory} />,
 
-    {!!stations.length && <HomeRow title="Radio" time={stations.some(station => onAir(station.id)) ? "On air now" : "Your stations"}
+    radio: !!stations.length && <HomeRow title="Radio" time={stations.some(station => onAir(station.id)) ? "On air now" : plural(stations.length, "station")}
       action={<Button variant="ghost" onClick={() => void navigate({ href: "/find?browse=radio" })}>Browse</Button>}>
       <ul aria-label="Radio stations" className="grid border-t sm:grid-cols-2 sm:gap-x-6 xl:grid-cols-3">
         {stations.map(station => {
@@ -133,17 +147,51 @@ export function HomePage() {
           </li>;
         })}
       </ul>
-    </HomeRow>}
+    </HomeRow>,
 
-    {!!savedMedia.length && <HomeRow title="For later" time={`${savedMedia.length} saved`} action={<Button variant="ghost" onClick={() => shell.changeSection("Saved")}>Open Saved</Button>}>
+    later: !!savedMedia.length && <HomeRow title="For later" time={`${savedMedia.length} saved`} action={<Button variant="ghost" onClick={() => shell.changeSection("Saved")}>Open Saved</Button>}>
       <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} showHeading={false} mediaOnly limit={shown.later} />
-    </HomeRow>}
+    </HomeRow>,
+
+    recent: !!recent.length && <HomeRow title="Played recently" time={plural(recent.length, "title")}>
+      <RecentRail items={recent} credentials={credentials} disabled={!available} onPlay={item => void shell.playHistory(item, { fromStart: true }).then(ok => { if (ok) toast(playNotice(item.title, "play")); }, reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
+    </HomeRow>,
+  };
+
+  return <section data-page="Home" aria-label="Home" className="pt-2">
+    <h1 className="sr-only">Home</h1>
+    {hasRow("recent") && !hasRow("continue") && history.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load Played recently.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {hasRow("later") && later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {hasRow("radio") && favorites.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load your radio stations.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void favorites.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+
+    {playerFallback && <Button data-page-first className="mb-6" onClick={() => shell.changeSection("Now")}>Open player</Button>}
+    {onHome.map(row => <Fragment key={row.id}>{rows[row.id]}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">
       <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle><EmptyDescription>Couch searches YouTube, Twitch, RaiPlay, radio and your folders at once. What you watch, queue and save shows up here.</EmptyDescription></EmptyHeader>
       <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>
       {canManage && <SourcesStatus credentials={credentials} connected={connected} active onAddSource={() => void navigate({ to: "/settings/sources" })} />}
     </Empty>}
+
+    <footer className="border-t py-6"><Button variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={() => setCustomizing(true)}>Customize Home</Button></footer>
+
+    <Sheet modal={false} open={customizing} onOpenChange={setCustomizing}>
+      <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>
+        <SheetHeader className="flex-row items-center gap-2 px-6 pt-6 pb-2"><SheetClose asChild><Button variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">Customize Home</SheetTitle></SheetHeader>
+        <div className="grid gap-4 px-6 pb-8">
+          <p className="text-sm text-muted-foreground">Choose the rows this device shows and their order. Empty rows stay hidden, and Up next appears whenever nothing is playing.</p>
+          <ol aria-label="Home rows" className="border-t">
+            {layout.rows.map((row, index) => <li key={row.id} className="flex items-center gap-3 border-b py-2">
+              <Switch id={`home-row-${row.id}`} checked={row.shown} onCheckedChange={checked => layout.toggle(row.id, checked)} />
+              <label htmlFor={`home-row-${row.id}`} className={cn("min-w-0 flex-1 cursor-pointer text-base", !row.shown && "text-muted-foreground")}>{homeRowLabels[row.id]}</label>
+              <Button variant="ghost" size="icon" aria-label={`Move ${homeRowLabels[row.id]} up`} disabled={index === 0} onClick={() => layout.move(row.id, -1)}><ChevronUp aria-hidden="true" /></Button>
+              <Button variant="ghost" size="icon" aria-label={`Move ${homeRowLabels[row.id]} down`} disabled={index === layout.rows.length - 1} onClick={() => layout.move(row.id, 1)}><ChevronDown aria-hidden="true" /></Button>
+            </li>)}
+          </ol>
+          <Button variant="ghost" className="-ml-2.5 justify-self-start" onClick={layout.reset}>Reset to default</Button>
+        </div>
+      </SheetContent>
+    </Sheet>
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
       <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-md" showCloseButton={false}>
@@ -184,6 +232,20 @@ function UpNextStrip({ plan, more, now, disabled, pageFirst, art, onPlay, onMore
       {more > 0 && <li className="grid place-items-start"><Button variant="ghost" onClick={onMore}>{more} more</Button></li>}
     </ol>
   </div>;
+}
+
+/** What played lately, newest first: artwork tiles that play from the start. */
+function RecentRail({ items, credentials, disabled, onPlay }: { items: HistoryItem[]; credentials: Credentials; disabled: boolean; onPlay: (item: HistoryItem) => void }) {
+  return <ol data-nav-row aria-label="Played recently" className="grid auto-cols-[minmax(10rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-1 lg:auto-cols-[minmax(12rem,1fr)]">
+    {items.map(item => <li key={item.mediaId} className="min-w-0">
+      <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.libraryItemId || item.queueEntryId)} onClick={() => onPlay(item)}
+        className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal disabled:opacity-100">
+        <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover"><Artwork credentials={credentials} item={item} /></span>
+        <span className="line-clamp-2 text-base font-medium">{item.title}</span>
+        <span className="truncate text-sm text-muted-foreground tabular-nums group-focus-visible:text-inherit">{[item.sourceLabel || (item.libraryItemId ? "Folders" : null), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
+      </Button>
+    </li>)}
+  </ol>;
 }
 
 /** A divided row: the section name and its clock time on the left, content on the right. */

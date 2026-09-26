@@ -110,6 +110,9 @@ export function NativeModeGate({ children }: PropsWithChildren) {
 }
 
 const hostOf = (address: string) => address.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+// Native choices remember only addresses, so each Couch's name is kept here once seen.
+const namesKey = "couch.target-names";
+const targetNames = (): Record<string, string> => { try { return Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(namesKey) || "{}") ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string")); } catch { return {}; } };
 const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and its remotes disconnect." : reason === "playback" ? "Playback here stops." : "Remotes can't reach this computer until you switch back.";
 
 /** Recovery for an unreachable remote Couch, shown as the shell's status line. */
@@ -136,7 +139,7 @@ export function InstallationUpdates({ open, onOpenChange }: { open: boolean; onO
         const connection = await invoke<Credentials>("connection_info");
         if (stop.signal.aborted) return;
         if (!connection?.origin || !connection.token) throw new Error("Updater starting…");
-        await acknowledgeFrontend(connection, stop.signal, 10_000).catch(() => { throw new Error("Couldn't verify this app's version."); });
+        await acknowledgeFrontend(connection, stop.signal, 10_000).catch(() => { throw new Error("Couldn't verify the version on this computer."); });
         setCredentials(connection); setError(null);
       } catch (reason) { if (!stop.signal.aborted) { setError(message(reason)); timer = setTimeout(() => void connect(), 2_000); } }
     };
@@ -145,7 +148,7 @@ export function InstallationUpdates({ open, onOpenChange }: { open: boolean; onO
   }, []);
   return <QueryClientProvider client={queryClient}><Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent data-tv-local-only>
-      <DialogHeader><DialogTitle>Update this app</DialogTitle><DialogDescription>Only this app. The Couch it plays on updates separately.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Update Couch on this computer</DialogTitle><DialogDescription>Only Couch on this computer. The Couch it plays on updates separately.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {credentials ? <UpdatesSettings credentials={credentials} connected target="this app" /> : !error && <StatusLine busy>Connecting…</StatusLine>}
     </DialogContent>
@@ -195,6 +198,13 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const [warning, setWarning] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
   const dismiss = useEffectEvent(() => device?.dismiss());
+  const [names, setNames] = useState(targetNames);
+  useEffect(() => {
+    if (device?.mode !== "remote" || !device.address || !installationName || names[device.address] === installationName) return;
+    const next = { ...names, [device.address]: installationName };
+    setNames(next);
+    try { localStorage.setItem(namesKey, JSON.stringify(next)); } catch { /* Names are a convenience; addresses still work. */ }
+  }, [device?.mode, device?.address, installationName, names]);
   useEffect(() => () => dismiss(), []);
   if (!device) return null;
   const close = () => { setOpen(false); setDialog(null); device.dismiss(); };
@@ -219,14 +229,14 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
         <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
           <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>This computer</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>
           {targets.map((target, index) => {
-            const named = device.mode === "remote" && device.address === target && installationName;
+            const named = device.mode === "remote" && device.address === target && installationName || names[target];
             return <Field orientation="horizontal" className="items-center py-1.5" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{named || hostOf(target)}</span>{named && <span className="truncate text-muted-foreground">{hostOf(target)}</span>}</FieldLabel></Field>;
           })}
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
         <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={close} />
-        {updates && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" onClick={() => openDialog("updates")}>Update this app</Button>}
+        {updates && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" onClick={() => openDialog("updates")}>Update Couch on this computer</Button>}
       </PopoverContent>
     </Popover>
     <AlertDialog open={dialog === "confirmation"} onOpenChange={value => { if (!value) close(); }}>

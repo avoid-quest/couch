@@ -32,10 +32,10 @@ export function MetadataSettings({ credentials, connected, canManage, hostName }
   }
 
   return (
-    <SettingsSection aria-label="TMDB metadata settings" description={`Add a TMDB token to match videos. It stays on ${deviceName(hostName)}.`} data-tv-local-only>
+    <SettingsSection aria-label="Movie & show info settings" description={`Add a TMDB token to match videos. It stays on ${deviceName(hostName)}.`} data-tv-local-only>
       {canManage ? <SettingsRow label="TMDB token" htmlFor="metadata-token" description={<span role="status">{page.isFetching ? "Checking…" : page.data?.configured ? "Token saved" : "No token"}</span>}>
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
-          <Input autoComplete="new-password" className="min-w-0 flex-1" disabled={!available || pending} id="metadata-token" maxLength={2048} onChange={event => setToken(event.target.value)} placeholder="API Read Access Token" spellCheck={false} type="password" value={token} />
+          <Input autoComplete="new-password" className="min-w-0 flex-1" disabled={!available || pending} id="metadata-token" maxLength={2048} onChange={event => setToken(event.target.value)} placeholder="TMDB read access token" spellCheck={false} type="password" value={token} />
           <Button type="submit" variant="outline" disabled={!available || pending || !token}>Save</Button>
           {page.data?.configured && <AlertDialog>
             <AlertDialogTrigger asChild><Button type="button" variant="ghost" disabled={!available || pending}>Clear</Button></AlertDialogTrigger>

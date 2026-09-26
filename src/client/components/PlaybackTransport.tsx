@@ -59,7 +59,7 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
   const playing = player.status === "playing";
   const { seekBy } = useSessionGate();
   return <div className="flex items-center gap-0.5" role="group" aria-label="Playback controls">
-    {pausable && <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" aria-label={playing ? "Pause" : "Resume"} title={playing ? "Pause" : "Resume"} disabled={!transportReady}
+    {pausable && <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause" : "Play"} disabled={!transportReady}
       onClick={() => { if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>{playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}</Button>}
     {seekable && <Button variant="ghost" size="icon-lg" className="flex-col gap-0" aria-label="Back 10 seconds" title="Back 10 seconds" disabled={!transportReady} onClick={() => seekBy(-10)}><RotateCcw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
     {seekable && <Button variant="ghost" size="icon-lg" className="flex-col gap-0" aria-label="Forward 10 seconds" title="Forward 10 seconds" disabled={!transportReady} onClick={() => seekBy(10)}><RotateCw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
@@ -70,13 +70,13 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
   </div>;
 }
 
-export function PlaybackVolume({ state, connected, run, showSlider = true }: Props & { showSlider?: boolean }) {
+export function PlaybackVolume({ state, connected, run, showSlider = true, className }: Props & { showSlider?: boolean; className?: string }) {
   const { available, audioReady } = playbackCapabilities(state, connected);
   const target = deviceName(state.installationName);
   const muted = state.systemAudio?.muted;
-  return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1")} role="group" aria-label={`${target} volume`}>
+  return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} role="group" aria-label={`${target} volume`}>
     {state.systemAudio ? <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio.muteWritable === false} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" className="size-4 shrink-0" />}
     {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady || state.systemAudio?.volumeWritable === false} onCommit={volume => run({ type: "volume", volume })} />}
-    <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "Unknown" : `${Math.round(state.player.volume)}%`}</span>
+    <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "—" : `${Math.round(state.player.volume)}%`}</span>
   </div>;
 }
