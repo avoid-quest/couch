@@ -1,5 +1,23 @@
 # couch
 
+## 0.2.0-preview.19
+
+### Patch Changes
+
+- [#607](https://github.com/avoid-quest/couch/pull/607) [`4591c7b`](https://github.com/avoid-quest/couch/commit/4591c7bab4f8724a665593848a7864cc7eb15967) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Open media details and provider collections on their own pages, with refreshable links and Back navigation that preserves browsing context.
+
+- [#601](https://github.com/avoid-quest/couch/pull/601) [`c8e1209`](https://github.com/avoid-quest/couch/commit/c8e1209784d5c6d549749c9d4190b352f9aca821) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Hide the macOS cursor when player controls disappear and restore it when controls return or playback is left.
+
+- [#600](https://github.com/avoid-quest/couch/pull/600) [`a97aa5b`](https://github.com/avoid-quest/couch/commit/a97aa5b2efe4d80574360f091c5fdc1a45b9581b) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Hide the macOS title toolbar in fullscreen and restore it when returning to a window.
+
+- [#606](https://github.com/avoid-quest/couch/pull/606) [`fe817de`](https://github.com/avoid-quest/couch/commit/fe817de2a23b1f6bc61a40775071b1493904e7c3) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Make hover feedback visible across navigation, player controls, media actions and settings fields.
+
+- [#604](https://github.com/avoid-quest/couch/pull/604) [`fa65b8c`](https://github.com/avoid-quest/couch/commit/fa65b8ce1f337443b177ed3ef0e481bf8471b53f) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Add YouTube-style playback shortcuts, app navigation keys, and a keyboard shortcuts guide. Keep typing, open panels, focused controls, and TV navigation in control of their own keys.
+
+- [#605](https://github.com/avoid-quest/couch/pull/605) [`059d68a`](https://github.com/avoid-quest/couch/commit/059d68a101f7a00cdd2a61c21f24ae19549b711c) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Render update release notes as Markdown with readable headings, lists, links and tables.
+
+- [#602](https://github.com/avoid-quest/couch/pull/602) [`f21945f`](https://github.com/avoid-quest/couch/commit/f21945fdaaaead91e3ed3ea702ee6d16d6145de4) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Keep player controls in consistent positions across loading, playback modes and queue changes.
+
 ## 0.2.0-preview.18
 
 ### Patch Changes

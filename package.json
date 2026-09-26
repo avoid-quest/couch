@@ -1,6 +1,6 @@
 {
   "name": "couch",
-  "version": "0.2.0-preview.18",
+  "version": "0.2.0-preview.19",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.2",
