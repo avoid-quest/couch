@@ -78,6 +78,12 @@ test("a deferred idle install reopens local maintenance after the checkpoint", a
     if (!ready) await Bun.sleep(10);
   }
   expect(ready).toBe(true);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const state = await (await f.fetchLocal("/api/updates")).json();
+    if (state.currentCheck) break;
+    await Bun.sleep(10);
+  }
+  expect((await (await f.fetchLocal("/api/updates")).json()).currentCheck).toBe(true);
   f.send({ type: "appimageResume", nonce: "premature" });
   expect(await f.wait(m => m.type === "appimageResumed" && m.nonce === "premature")).toMatchObject({ error: "No matching local update checkpoint to resume." });
   f.send({ type: "appimageQuiesce", nonce: "close", whenIdle: false, confirmInterrupt: true });
