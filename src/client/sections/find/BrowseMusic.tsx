@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -21,6 +22,7 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
   onAlbum: (id: string, playNow: boolean) => Promise<boolean>;
   onTrack: (id: string, playNow: boolean) => Promise<boolean>;
 }) {
+  const navigate = useNavigate();
   const [view, setView] = useState<View>({ kind: "artists", offset: 0 });
   const [busy, setBusy] = useState(false);
   const artists = useQuery({ ...musicArtistsQuery(credentials, view.offset), enabled: connected && active && view.kind === "artists" });
@@ -61,7 +63,9 @@ export function BrowseMusic({ credentials, connected, canPlay, active, onBack, o
         <DurationBar duration={item.duration} />
       </MediaRow>)}</MediaList>
     </>}
-    {!query.isPending && !query.error && !total && view.kind !== "album" && <p className="text-sm text-muted-foreground">{view.kind === "albums" && view.artist ? "No albums for this artist." : "No tagged music yet. Add a folder in Settings, then scan it."}</p>}
+    {!query.isPending && !query.error && !total && view.kind !== "album" && (view.kind === "albums" && view.artist
+      ? <p className="text-sm text-muted-foreground">No albums for this artist.</p>
+      : <div className="grid justify-items-start gap-3"><p className="text-sm text-muted-foreground">No tagged music yet. Add a folder of music, then scan it.</p><Button variant="outline" onClick={() => void navigate({ to: "/settings/sources" })}>Add a folder</Button></div>)}
     {view.kind !== "album" && total > musicPageSize && <nav className="flex items-center gap-3" aria-label="Music pages">
       <Button variant="ghost" disabled={view.offset === 0} onClick={() => setView({ ...view, offset: Math.max(0, view.offset - musicPageSize) })}>Previous</Button>
       <span className="text-sm text-muted-foreground">{view.offset + 1}–{Math.min(view.offset + musicPageSize, total)} of {total}</span>

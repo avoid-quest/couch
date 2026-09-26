@@ -146,16 +146,16 @@ test.each([true, false])("radio shows provider details and keeps observed track 
   await act(async () => view.rerender(<ShellProviders value={radio}><PlayerPage /></ShellProviders>));
   expect(screen.getByRole("heading", { name: "Alexander Nut" })).toBeInTheDocument();
   expect(screen.queryByText("Broken beat and soul.")).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Show details" }));
+  await userEvent.click(screen.getByRole("button", { name: "About this show" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("Alexander Nut");
   expect(screen.getByText("Detroit House")).toBeVisible();
   expect(screen.getByText("Broken beat and soul.")).toBeVisible();
   expect(screen.getByText("Allysha Joy · Live session · 320 kbps")).toBeVisible();
   expect(screen.getAllByText("Track artist — Observed song").length).toBeGreaterThan(0);
-  expect(screen.getByRole("link", { name: "About this show" })).toHaveAttribute("href", programme.programmeUrl);
+  expect(screen.getByRole("link", { name: "Open show page" })).toHaveAttribute("href", programme.programmeUrl);
   expect(document.querySelector(`img[src="${programme.artworkUrl}"]`)).not.toBeNull();
   await act(async () => view.rerender(<ShellProviders value={{ ...radio, nativeHost: true }}><PlayerPage /></ShellProviders>));
-  expect(screen.queryByRole("link", { name: "About this show" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Open show page" })).toBeNull();
   expect(screen.getByText("Broken beat and soul.")).toBeVisible();
 });
 

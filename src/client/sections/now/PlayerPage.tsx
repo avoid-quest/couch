@@ -22,7 +22,7 @@ import { useSessionGate } from "@/session/session-context";
 import { cn } from "@/lib/utils";
 
 type Panel = "queue" | "tracks" | "settings" | "info";
-const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Playback", info: "Show details" };
+const panelTitles: Record<Panel, string> = { queue: "Up next", tracks: "Audio & subtitles", settings: "Playback", info: "About this show" };
 
 export function PlayerPage() {
   const playbackClock = usePlaybackClock();
@@ -111,10 +111,10 @@ export function PlayerPage() {
   const heading = !connected ? `Reconnecting to ${name}…` : [player?.nowPlaying?.artist, source === "Media" ? null : source, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(" · ");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const programmeDetails = currentProgramme && <>
-    {currentProgramme.genre && <Badge variant="secondary" className="h-auto max-w-full whitespace-normal break-all">{currentProgramme.genre}</Badge>}
+    {currentProgramme.genre && <Badge variant="secondary" className="h-auto max-w-full whitespace-normal break-words">{currentProgramme.genre}</Badge>}
     {(currentProgramme.artist || currentProgramme.album || currentProgramme.bitrate) && <p className="text-sm text-muted-foreground">{[currentProgramme.artist, currentProgramme.album, currentProgramme.bitrate && `${currentProgramme.bitrate} kbps`].filter(Boolean).join(" · ")}</p>}
     {currentProgramme.description && <p className="max-w-prose text-sm text-muted-foreground">{currentProgramme.description}</p>}
-    {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">About this show</a></Button>}
+    {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a></Button>}
   </>;
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current.kind === "radio" || current.source.startsWith("radio:") ? "The station stopped sending audio." : current.source.startsWith("file:") || current.source.startsWith("library:") ? "The file is missing from its folder." : current.live ? "This stream has ended." : "This video is unavailable.";
@@ -164,9 +164,9 @@ export function PlayerPage() {
         </Button>
         <div data-player-tools className="ml-auto flex min-w-0 flex-wrap items-center gap-1 max-sm:w-full">
           {state && <PlaybackVolume state={state} connected={connected} run={run} className="max-w-64" />}
-          {currentProgramme && <Button data-panel="info" variant="ghost" size="icon" aria-label="Show details" title="Show details" aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}
+          {currentProgramme && <Button data-panel="info" variant="ghost" size="icon" aria-label="About this show" title="About this show" aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}
           {!audioOnly && <Button data-panel="tracks" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "tracks"} title="Audio & subtitles" onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /><span className="max-sm:sr-only">Audio & subtitles</span></Button>}
-          {fullscreen.supported && <Button variant="ghost" size="icon" className="touch:min-w-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+          {fullscreen.supported && <Button variant="ghost" size="icon" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           <Button data-panel="settings" variant="ghost" className="touch:min-w-11" aria-pressed={panel === "settings"} title="Playback" onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /><span className="max-sm:sr-only">Playback</span></Button>
         </div>
       </div>

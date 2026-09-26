@@ -1,4 +1,4 @@
-import { setupUiTests, render as renderUI, act, screen, userEvent, waitFor, createTestQueryClient, testWindow } from "@/testing/react";
+import { setupUiTests, render as renderUI, act, screen, userEvent, waitFor, within, createTestQueryClient, testWindow } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { ShellProviders } from "../shell/test-providers";
 import { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet } from "@tanstack/react-router";
@@ -7,6 +7,7 @@ import type { ShellValue } from "../shell/AppShell";
 import { HomePage } from "./HomePage";
 import type { QueueEntry, SessionState } from "../../../shared/protocol";
 import { defaultHomeRows } from "./home-rows";
+import { avoidRadioPlaylistId } from "../../../shared/radio";
 
 setupUiTests();
 
@@ -40,14 +41,15 @@ async function renderHome(overrides: { current?: QueueEntry; state?: SessionStat
   await act(async () => { await router.load(); view.rerender(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
 }
 
-test("Home waits for radio favorites, recovers from their failure, and offers source settings when empty", async () => {
+test("Home waits for radio favorites, recovers from their failure, and offers source settings when nothing is set up", async () => {
   const favorites = Promise.withResolvers<Response>();
   let retryFavorites = false;
   request = spyOn(globalThis, "fetch").mockImplementation((async input => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/progress/history" || path === "/api/for-later") return Response.json({ items: [] });
     if (path === "/api/radio/favorites") return retryFavorites ? Response.json({ favorites: [] }) : favorites.promise;
-    if (path === "/api/jellyfin/connection") return Response.json({ configured: false });
+    if (path === "/api/jellyfin") return Response.json({ connected: false });
+    if (path === "/api/radio/avoid") return Response.json({ stations: [] });
     if (path === "/api/library/sources" || path === "/api/iptv/sources") return Response.json({ sources: [] });
     throw new Error(`Unexpected request: ${path}`);
   }) as typeof fetch);
@@ -59,9 +61,27 @@ test("Home waits for radio favorites, recovers from their failure, and offers so
   retryFavorites = true;
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(await screen.findByRole("heading", { name: "Find something to play" })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Add a source" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Add folders, Jellyfin or Live TV" }));
   expect(history.location.pathname).toBe("/settings/sources");
   expect(await screen.findByRole("heading", { name: "Source settings" })).toBeInTheDocument();
+});
+
+test("a fresh Home fills Radio with built-in stations and leads with the one on air", async () => {
+  const station = (id: string, name: string) => ({ id, name, url: `https://radio.example/${id}`, sourceId: avoidRadioPlaylistId, groupTitle: "avoid radio" });
+  request = spyOn(globalThis, "fetch").mockImplementation((async input => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/radio/avoid") return Response.json({ stations: [station("nts", "NTS Radio"), station("lyl", "Lyl Radio")] });
+    if (path === "/api/radio/avoid/programmes") return Response.json({ programmes: { nts: { stationId: "nts", provider: "radio.avoid.quest", title: "Alexander Nut", sampledAt: Date.now(), expiresAt: Date.now() + 60_000 } } });
+    if (path === "/api/radio/favorites") return Response.json({ favorites: [] });
+    if (path === "/api/jellyfin") return Response.json({ connected: false });
+    if (path.endsWith("/sources")) return Response.json({ sources: [] });
+    return Response.json({ items: [] });
+  }) as typeof fetch);
+  await renderHome();
+  expect(await screen.findByRole("heading", { name: "Alexander Nut" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Play NTS Radio" })).toBeInTheDocument();
+  expect(within(screen.getByRole("list", { name: "Radio stations" })).getByRole("button", { name: "Play Lyl Radio" })).toHaveTextContent("Live");
+  expect(screen.queryByRole("heading", { name: "Find something to play" })).toBeNull();
 });
 
 test("hiding failed Home rows restores the empty state and skips their reads on the next visit", async () => {
