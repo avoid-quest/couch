@@ -5,7 +5,7 @@ import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote 
 type Remote = { state: SessionState | null; command: (action: Action) => Promise<void> };
 
 async function nativeWindow() {
-  const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--name", "^Couch$"], { stdout: "pipe", stderr: "inherit" });
+  const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--name", "^Couch( ·|$)"], { stdout: "pipe", stderr: "inherit" });
   const window = (await new Response(search.stdout).text()).trim().split("\n")[0]!;
   assert.equal(await search.exited, 0, "The actual native TV window exists");
   return window;
