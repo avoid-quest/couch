@@ -254,7 +254,7 @@ export function PairingPage() {
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
-  if (details?.localSetupAvailable && !credentials) return <Onboarding title="Set up Couch on this computer" description="This browser will manage Couch on this computer. You can pair other devices from Settings → Devices.">
+  if (details?.localSetupAvailable && device?.mode !== "remote" && !credentials) return <Onboarding title="Set up Couch on this computer" description="This browser will manage Couch on this computer. You can pair other devices from Settings → Devices.">
     <Button className="self-start" disabled={setup.isPending} onClick={() => setup.mutate(origin)}>{setup.isPending ? "Setting up…" : "Set up Couch"}</Button>
     {setup.error && <Alert variant="destructive"><AlertDescription>{errorText(setup.error)}</AlertDescription></Alert>}
   </Onboarding>;
