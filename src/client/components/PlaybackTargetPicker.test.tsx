@@ -20,16 +20,7 @@ test("selected playback and its canonical destination appear in one Output sheet
   await userEvent.click(screen.getByRole("button", { name: "Output" }));
   expect(screen.getByText("In this playback · This device")).toBeInTheDocument();
   expect(screen.getByRole("switch", { name: "Desk output" })).toBeChecked();
-  expect(screen.getByRole("slider", { name: "Desk volume" })).toHaveAttribute("aria-orientation", "vertical");
-});
-
-test("choosing another playback controls it without assigning devices", async () => {
-  const selected: string[] = [], assigned: unknown[] = [];
-  renderPicker({ state: { ...state, playbacks: [...playbacks, { id: "family", title: "Album", status: "paused", deviceIds: ["kitchen"] }] }, selectPlayback: (id: string) => selected.push(id), assignDevices: async (ids: string[]) => { assigned.push(ids); return true; } });
-  await userEvent.click(screen.getByRole("button", { name: "Output" }));
-  await userEvent.click(screen.getByRole("button", { name: "Control" }));
-  expect(selected).toEqual(["family"]);
-  expect(assigned).toEqual([]);
+  expect(screen.getByRole("slider", { name: "Desk volume" })).toBeInTheDocument();
 });
 
 test("audio devices can join or leave the selected playback and adjust their own volume", async () => {
@@ -44,13 +35,9 @@ test("audio devices can join or leave the selected playback and adjust their own
   expect(assigned).toEqual([["desk", "kitchen"]]);
 });
 
-test("occupied device offers view-only Control and confirms replacement before moving", async () => {
-  const selected: string[] = [], assigned: unknown[] = [];
-  renderPicker({ state: { ...state, devices: [devices[0], { ...devices[1], playbackId: "family" }], playbacks: [...playbacks, { id: "family", title: "Album", status: "playing", deviceIds: ["kitchen"] }] }, selectPlayback: (id: string) => selected.push(id), assignDevices: async (...args: unknown[]) => { assigned.push(args); return true; } });
-  await userEvent.click(screen.getByRole("button", { name: "Output" }));
-  await userEvent.click(screen.getAllByRole("button", { name: "Control" }).at(-1)!);
-  expect(selected).toEqual(["family"]);
-  expect(assigned).toEqual([]);
+test("occupied device confirms replacement before moving", async () => {
+  const assigned: unknown[] = [];
+  renderPicker({ state: { ...state, devices: [devices[0], { ...devices[1], playbackId: "family" }], playbacks: [...playbacks, { id: "family", title: "Album", status: "playing", deviceIds: ["kitchen"] }] }, assignDevices: async (...args: unknown[]) => { assigned.push(args); return true; } });
   await userEvent.click(screen.getByRole("button", { name: "Output" }));
   await userEvent.click(screen.getByRole("button", { name: "Replace…" }));
   expect(assigned).toEqual([]);
@@ -62,7 +49,7 @@ test("without a selected playback, destinations remain available for a new one",
   const created: string[] = [];
   renderPicker({ state: { ...state, sessionId: null, deviceIds: [], playbacks: [] }, newPlayback: async (id: string) => { created.push(id); return true; } });
   await userEvent.click(screen.getByRole("button", { name: "Output" }));
-  expect(screen.queryByRole("button", { name: "Move here" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Move playback here" })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Options for Desk" }));
   await userEvent.click(screen.getByRole("menuitem", { name: "New playback here" }));
   expect(created).toEqual(["desk"]);
@@ -73,7 +60,7 @@ test("Move replaces only the selected playback destination", async () => {
   const assigned: unknown[] = [];
   renderPicker({ assignDevices: async (...args: unknown[]) => { assigned.push(args); return true; } });
   await userEvent.click(screen.getByRole("button", { name: "Output" }));
-  await userEvent.click(screen.getByRole("button", { name: "Move here" }));
+  await userEvent.click(screen.getByRole("button", { name: "Move playback here" }));
   expect(assigned).toEqual([[["kitchen"], false]]);
 });
 

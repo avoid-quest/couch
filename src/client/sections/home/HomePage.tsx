@@ -6,6 +6,7 @@ import { ArrowLeft, Pause, Play, Square } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -29,7 +30,7 @@ import { offline, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/library";
-import type { QueueEntry } from "../../../shared/protocol";
+import type { PlaybackSummary, QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
 import { useHomeRows, type HomeRowId } from "./home-rows";
 
@@ -38,6 +39,7 @@ export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean
 const shown = { continue: 4, upNext: 8, radio: 6, later: 4, recent: 12 };
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+const playbackStatus: Record<PlaybackSummary["status"], string> = { playing: "Playing", paused: "Paused", loading: "Loading…", unavailable: "Ready to resume", error: "Needs attention", idle: "Ready", ended: "Ended" };
 
 /**
  * Home reads like a timetable for the evening: each row is labelled with the
@@ -48,16 +50,25 @@ export function HomePage() {
   const playbackClock = usePlaybackClock();
   const shell = useShell();
   const { credentials, available, current, programme } = shell;
-  const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, videoQualityPreference, rendererTargetId, selectPlayback, joinPlayback } = useSessionGate();
   const navigate = useNavigate();
   const details = useDetailNavigation();
   const now = useDurationClock();
   const [queueOpen, setQueueOpen] = useState(false);
+  const [joiningPlaybackId, setJoiningPlaybackId] = useState<string | null>(null);
+  const [replaceJoinId, setReplaceJoinId] = useState<string | null>(null);
   const layout = useHomeRows();
-  const playerBand = !!current && (shell.active || state?.player.status === "error");
-  const onHome = layout.rows.filter(row => row.shown);
+  const activePlaybacks = state?.playbacks?.filter(playback => playback.deviceIds.length > 0) ?? [];
+  const otherPlaybacks = activePlaybacks.filter(playback => playback.id !== state?.sessionId);
+  const localDevice = state?.devices?.find(device => device.id === rendererTargetId);
+  const displacedPlayback = activePlaybacks.find(playback => playback.id === localDevice?.playbackId);
+  const joiningPlayback = activePlaybacks.find(playback => playback.id === replaceJoinId);
+  const join = (id: string) => { setJoiningPlaybackId(id); void joinPlayback(id).finally(() => setJoiningPlaybackId(null)); };
+  const currentAssigned = !!current && activePlaybacks.some(playback => playback.id === state?.sessionId);
+  const playerBand = currentAssigned && (shell.active || state?.player.status === "error");
+  const onHome = layout.rows.filter(row => row.shown || row.id === "now" && otherPlaybacks.length > 0);
   const hasRow = (id: HomeRowId) => onHome.some(row => row.id === id);
-  const playerFallback = !!current && !playerBand && !hasRow("now");
+  const playerFallback = currentAssigned && !playerBand && !hasRow("now");
   const historyShown = hasRow("continue") || hasRow("recent");
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
@@ -93,9 +104,9 @@ export function HomePage() {
     ...(hasRow("later") ? [later] : []),
     ...(hasRow("radio") ? [favorites] : []),
   ];
-  const filled: Record<HomeRowId, boolean> = { now: !!current, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
+  const filled: Record<HomeRowId, boolean> = { now: currentAssigned || !!otherPlaybacks.length, upNext: !!upcoming.length, continue: !!unfinished.length, radio: !!stations.length, later: !!savedMedia.length, recent: !!recent.length };
   const empty = !playerFallback && !builtIn.isLoading && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
-  const featureContinue = !(current && layout.rows.find(row => row.id === "now")?.shown);
+  const featureContinue = !(currentAssigned && hasRow("now"));
   // Nothing playing or to continue: the first station on air leads its row.
   const lead = !current && !unfinished.length ? stations.find(station => onAir(station.id)) : undefined;
   const leadShow = lead && onAir(lead.id);
@@ -118,14 +129,28 @@ export function HomePage() {
     : [sourceLabel(current.source), player?.status === "unavailable" ? "Ready to resume" : paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, playingOn && `On ${playingOn}`].filter(Boolean).join(", ");
 
   const rows: Record<HomeRowId, ReactNode> = {
-    now: current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
-      <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}
+    now: (currentAssigned || otherPlaybacks.length > 0) && <HomeRow title="Now" time={currentAssigned ? live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined : undefined}>
+      {currentAssigned && current && <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}
         detail={!live && length ? <span className="flex items-center gap-3 text-sm tabular-nums text-muted-foreground"><Progress value={(playbackClock.position ?? 0) / length * 100} aria-label="Playback progress" className="h-1 max-w-xs flex-1 rounded-none bg-muted [&_[data-slot=progress-indicator]]:bg-foreground" />{formatDuration(playbackClock.position ?? 0)} / {formatDuration(length)}</span> : undefined}>
         <Button data-page-first onClick={() => shell.changeSection("Now")}>Open player</Button>
         <Button variant="ghost" disabled={!connected || (resumable ? false : pausable ? !transportReady : !transportActive)} onClick={() => { if (resumable) { if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: false }); else void run({ type: "play", entryId: current.id }); } else if (!pausable) void run({ type: "stop" }); else if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>
           {!pausable && !resumable ? <Square aria-hidden="true" className="fill-current" /> : paused || resumable ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}{!pausable && !resumable ? "Stop" : paused || resumable ? "Play" : "Pause"}
         </Button>
-      </Feature>
+      </Feature>}
+      {otherPlaybacks.length > 0 && <ul aria-label="Other playbacks" className={currentAssigned ? "mt-6 border-t" : undefined}>
+        {otherPlaybacks.map(playback => {
+          const canJoin = !!rendererTargetId && !!localDevice?.connected && !playback.deviceIds.includes(rendererTargetId);
+          const names = playback.deviceIds.map(id => state?.devices?.find(device => device.id === id)?.name).filter(Boolean).join(", ");
+          const joining = joiningPlaybackId === playback.id;
+          return <li key={playback.id} className="flex min-w-0 items-center gap-2 border-b py-2">
+            <Button variant="ghost" className="h-auto touch:h-auto min-w-0 flex-1 flex-col items-start rounded-none px-0 py-2 text-left whitespace-normal" disabled={!connected || joining} onClick={() => { selectPlayback(playback.id); shell.openPlayer(); }}>
+              <span className="w-full truncate text-base font-medium">{playback.title}</span>
+              <span className="w-full truncate text-sm text-muted-foreground">{playbackStatus[playback.status]} · {names}</span>
+            </Button>
+            {canJoin && <Button variant="ghost" size="sm" className="shrink-0" disabled={!connected || !!state?.handoff || joiningPlaybackId !== null} onClick={() => displacedPlayback ? setReplaceJoinId(playback.id) : join(playback.id)}>{joining ? "Adding…" : "Add this device"}</Button>}
+          </li>;
+        })}
+      </ul>}
     </HomeRow>,
 
     upNext: !!upcoming.length && <HomeRow title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}
@@ -179,6 +204,10 @@ export function HomePage() {
       <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
       <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>
     </Empty>}
+
+    <AlertDialog open={!!replaceJoinId} onOpenChange={open => { if (!open) setReplaceJoinId(null); }}>
+      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Replace playback on {localDevice?.name}?</AlertDialogTitle><AlertDialogDescription>{localDevice?.name} is playing {displacedPlayback?.title}. Adding it to {joiningPlayback?.title} will stop that playback here.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (replaceJoinId) join(replaceJoinId); setReplaceJoinId(null); }}>Replace and add</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+    </AlertDialog>
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>
       <SheetContent side="right" aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false}>

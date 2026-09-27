@@ -132,7 +132,7 @@ test("Played recently offers history retry when Continue is hidden", async () =>
 test("an unavailable player keeps recovery reachable with Now and Up next hidden", async () => {
   localStorage.setItem("couch.home-rows", JSON.stringify(defaultHomeRows.map(row => ({ ...row, shown: false }))));
   const current: QueueEntry = { id: "current", source: "youtube", title: "Current", duration: 120 };
-  const state = { queue: [current, { ...current, id: "next", title: "Waiting film" }], currentEntryId: current.id, player: { status: "unavailable", position: 0, duration: 120, volume: 40, playbackId: null }, activeProfile: { id: "household", name: "Household" } } as SessionState;
+  const state = { sessionId: "session", deviceIds: ["desk"], playbacks: [{ id: "session", title: current.title, status: "unavailable", deviceIds: ["desk"] }], queue: [current, { ...current, id: "next", title: "Waiting film" }], currentEntryId: current.id, player: { status: "unavailable", position: 0, duration: 120, volume: 40, playbackId: null }, activeProfile: { id: "household", name: "Household" } } as SessionState;
   await renderHome({ state, current, active: false });
   expect(screen.queryByRole("heading", { name: "Up next" })).toBeNull();
   for (const { status, queue } of [
@@ -197,7 +197,7 @@ test("Settings Home applies row visibility and order and retains them after relo
 test("Home live controls stop an unpausable stream instead of sending Pause", async () => {
   localStorage.setItem("couch.home-rows", JSON.stringify(defaultHomeRows.map(row => ({ ...row, shown: row.id === "now" }))));
   const current: QueueEntry = { id: "live", title: "Live station", source: "radio:station", kind: "radio" };
-  const state = { queue: [current], currentEntryId: current.id, player: { status: "playing", playbackId: "live-playback", position: 0, duration: null, volume: 40, seekable: false }, activeProfile: { id: "household", name: "Household" } } as SessionState;
+  const state = { sessionId: "session", deviceIds: ["desk"], playbacks: [{ id: "session", title: current.title, status: "playing", deviceIds: ["desk"] }], queue: [current], currentEntryId: current.id, player: { status: "playing", playbackId: "live-playback", position: 0, duration: null, volume: 40, seekable: false }, activeProfile: { id: "household", name: "Household" } } as SessionState;
   const commands: unknown[] = [];
   await renderHome({ state, current, active: true, run: async action => { commands.push(action); return true; } });
   expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
