@@ -2035,7 +2035,7 @@ test("Core without a native player advertises browser playback and waits for an 
 test("a native playback channel advertises the native target independently of browser rendering", async () => {
   const { hub } = fixture();
   expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ capabilities: { browserPlayback: true, nativePlayback: true } });
-  expect(hub.session.state.targets).toEqual([{ id: "native", name: "Couch TV", kind: "endpoint", backend: "native", connected: false }]);
+  expect(hub.session.state.targets).toEqual([{ id: "native", name: "Couch", kind: "endpoint", backend: "native", connected: false }]);
   hub.session.observe(idle);
   expect(hub.session.state).toMatchObject({ targetId: "native", targets: [{ id: "native", connected: true }], player: { status: "idle" } });
 });
