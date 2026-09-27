@@ -130,8 +130,9 @@ try {
   const { ui } = remote;
   assert.equal(await ui.execute("return location.origin"), origin);
   assert.equal(await ui.execute("return !!window.__TAURI_INTERNALS__"), false);
-  await ui.button("Output");
-  await ui.button("Control", '[aria-label="Other playbacks"]');
+  await ui.click('[data-app-nav] a[href="/"]');
+  await ui.waitFor("Home shows the assigned host playback", () => ui.execute('return !!document.querySelector(\'[aria-label="Other playbacks"] li > button\')'));
+  await ui.click('[aria-label="Other playbacks"] li > button:first-child');
   await ui.section("Now");
   await ui.waitFor("browser shows the selected host playback's queue", () => ui.execute("return !!document.querySelector('[aria-label=\"Play Built remote fixture\"]')"));
   assert.deepEqual(latest?.deviceIds, ["native"], "Controlling playback preserves its native device assignment");
