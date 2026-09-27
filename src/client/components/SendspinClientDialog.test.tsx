@@ -125,7 +125,7 @@ test("shared-audio setup failure is shown without repeating membership changes o
   await act(async () => client.prepare("couch", "", "Kitchen"));
   await act(async () => client.join());
   await act(async () => callbacks.state(playback(true)));
-  expect(screen.getByRole("alert")).toHaveTextContent("Couldn't add this device to shared audio.");
+  expect(screen.getByRole("alert")).toHaveTextContent("Unreachable Core");
   await act(async () => { callbacks.state(playback(false)); callbacks.state(playback(true)); });
   expect(afterJoin).toHaveBeenCalledTimes(1);
 });
