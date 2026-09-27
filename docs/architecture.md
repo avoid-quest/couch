@@ -133,8 +133,8 @@ consult [multiroom research](research/multiroom-snapcast-sendspin.md). The
 deployment proposal, not a prerequisite or the current implementation plan.
 
 Core-only Linux deployment reuses the compiled executable with embedded frontend and a
-dedicated systemd account/data directory. Pairing and one-time administrator recovery
-use the existing authorization paths. See [service installation](core-service.md).
+dedicated systemd account/data directory. The first pairing establishes an administrator; optional recovery
+uses the existing authorization path. See [service installation](core-service.md).
 The desktop installation retains its own state and updater.
 
 ## External access
