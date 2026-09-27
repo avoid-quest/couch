@@ -178,13 +178,11 @@ function useShellValue() {
   const player = state?.player;
   const programme = connected ? state?.radioProgramme : null;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
-  const playbackState = state as typeof state & { devices?: { id: string; name: string; connected: boolean }[]; deviceIds?: string[] };
-  const assignedIds = playbackState?.deviceIds ?? [];
   const { available } = playbackCapabilities(state, connected);
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   // Terse, stable labels for the header's screen-reader status and the Couch connection popover.
   const statusLabel = booting ? "Starting" : {
-    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" && assignedIds.length ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
+    connecting: "Connecting", syncing: "Syncing", connected: "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
   }[status];
 
   return {

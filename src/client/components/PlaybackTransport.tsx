@@ -18,11 +18,14 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   const live = player?.live || current?.live || current?.kind === "radio" || current?.source.startsWith("radio:");
   const assigned = state?.deviceIds ?? [];
+  const devices = state?.devices?.filter(device => assigned.includes(device.id)) ?? [];
   const devicesReady = assigned.length ? assigned.every(id => state?.devices?.some(device => device.id === id && device.connected)) : state?.devices?.some(device => device.connected);
   const available = connected && !!player && (player.status !== "unavailable" || !!devicesReady);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   return {
     available,
+    volume: devices.length ? devices.reduce((total, device) => total + device.volume, 0) / devices.length : player?.volume ?? 0,
+    muted: devices.length ? devices.every(device => device.muted) : state?.systemAudio?.muted ?? false,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
     audioReady: !state?.systemAudio || state.systemAudio.volume !== null || state.systemAudio.volumeWritable === false && !state.systemAudio.error,
     transportReady: available && !!player?.playbackId && ["playing", "paused"].includes(player.status),
@@ -80,13 +83,12 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
 }
 
 export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className }: Props & { showSlider?: boolean; showValue?: boolean; className?: string }) {
-  const { available, audioReady } = playbackCapabilities(state, connected);
+  const { available, audioReady, volume, muted } = playbackCapabilities(state, connected);
   const playbackState = state as typeof state & { devices?: { id: string; name: string }[]; deviceIds?: string[] };
   const target = playbackState.deviceIds?.map(id => playbackState.devices?.find(device => device.id === id)?.name).filter(Boolean).join(", ") || deviceName(state.installationName);
-  const muted = state.systemAudio?.muted;
   return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} role="group" aria-label={`${target} volume`}>
-    {state.systemAudio ? <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio.muteWritable === false} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" className="size-4 shrink-0" />}
-    {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady || state.systemAudio?.volumeWritable === false} onCommit={volume => run({ type: "volume", volume })} />}
-    {showValue && <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "—" : `${Math.round(state.player.volume)}%`}</span>}
+    <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio?.muteWritable === false} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button>
+    {showSlider && <RangeControl label="Volume" value={volume} max={100} disabled={!available || !audioReady || state.systemAudio?.volumeWritable === false} onCommit={volume => run({ type: "volume", volume })} />}
+    {showValue && <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "—" : `${Math.round(volume)}%`}</span>}
   </div>;
 }

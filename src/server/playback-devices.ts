@@ -1,4 +1,5 @@
 import type { PlaybackDevice, PlaybackSummary } from "../shared/protocol";
+import { fromSendspinVolume, toSendspinVolume } from "../shared/audio-volume";
 import type { openPlaybackCatalog } from "./playback-catalog";
 import type { createPlaybackTargetRegistry } from "./playback-targets";
 import type { createSendspin, SendspinDevice } from "./sendspin";
@@ -18,6 +19,7 @@ type Options = {
   ready: (deviceId: string) => boolean;
   activate: (deviceId: string) => Promise<void>;
   localVolume?: (volume: number, muted: boolean, authorize: () => void) => Promise<unknown>;
+  localLevel?: () => { volume: number | null; muted: boolean };
 };
 const deviceId = (audio: SendspinDevice) => audio.deviceId ?? `audio-${audio.id}`;
 
@@ -37,18 +39,21 @@ export function createPlaybackDevices(options: Options) {
     const runtimes = options.runtimes();
     const audioDevices = options.host()?.devices ?? [];
     const devices: PlaybackDevice[] = registry.targets.filter(target => target.kind === "endpoint").map(target => {
-      const owner = runtimes.find(value => active(value) && assigned(value).includes(target.id));
+      const selected = runtimes.find(value => assigned(value).includes(target.id));
+      const owner = selected && active(selected) ? selected : undefined;
       const audio = audioDevices.find(audio => deviceId(audio) === target.id);
-      const shared = owner?.session.state.targetId?.startsWith("sendspin:");
+      const shared = selected?.session.state.targetId?.startsWith("sendspin:");
       const player = registry.deviceState(target.id);
+      const hardware = target.id === "native" ? options.localLevel?.() : undefined;
+      const sdkVolume = audio?.volume === undefined ? undefined : audio.deviceId ? fromSendspinVolume(audio.volume) : audio.volume;
       return { id: target.id, name: target.name, connected: target.connected || !!audio, playbackId: owner?.id,
-        volume: mutedDevices.get(target.id) ?? (shared ? audio?.volume : owner?.session.state.systemAudio?.volume ?? player?.volume) ?? 100,
-        muted: shared ? audio?.muted ?? false : mutedDevices.has(target.id), audio: !!audio,
+        volume: hardware?.volume ?? mutedDevices.get(target.id) ?? (shared ? sdkVolume : selected?.session.state.systemAudio?.volume ?? (selected?.session.state.targetId === target.id ? selected.session.state.player.volume : player?.volume)) ?? 100,
+        muted: hardware?.muted ?? (shared ? audio?.muted ?? false : mutedDevices.has(target.id)), audio: !!audio,
         requiresGesture: !!audio && !options.ready(target.id) };
     });
     for (const audio of audioDevices) if (!devices.some(device => device.id === deviceId(audio))) {
       const id = deviceId(audio), owner = runtimes.find(value => active(value) && assigned(value).includes(id));
-      devices.push({ id, name: audio.name, connected: audio.connected, playbackId: owner?.id, volume: audio.volume, muted: audio.muted, audio: true, requiresGesture: !!audio.deviceId && !options.ready(id) });
+      devices.push({ id, name: audio.name, connected: audio.connected, playbackId: owner?.id, volume: audio.deviceId ? fromSendspinVolume(audio.volume) : audio.volume, muted: audio.muted, audio: true, requiresGesture: !!audio.deviceId && !options.ready(id) });
     }
     // Remember disconnected destinations by their persistent identity; never create a second row on reconnect.
     for (const value of runtimes) for (const id of assigned(value)) if (!devices.some(device => device.id === id)) {
@@ -83,6 +88,14 @@ export function createPlaybackDevices(options: Options) {
     groups.set(runtime.id, { host, group, endpoint });
     group.refresh();
     return group;
+  };
+  const directLevel = async (id: string, volume: number, muted: boolean) => {
+    const expected = muted ? 0 : volume;
+    registry.volume(id, expected);
+    const deadline = Date.now() + 3000;
+    while (Math.abs((registry.deviceState(id)?.volume ?? Infinity) - expected) > 0.5 && Date.now() < deadline) await Bun.sleep(20);
+    if (Math.abs((registry.deviceState(id)?.volume ?? Infinity) - expected) > 0.5) throw new Error("This device did not confirm its volume before playback moved.");
+    if (muted) mutedDevices.set(id, volume); else mutedDevices.delete(id);
   };
   async function assign(runtime: Runtime, ids: string[], authorize: () => void, takeover = false) {
     const generation = runtime.sourceGeneration;
@@ -135,8 +148,9 @@ export function createPlaybackDevices(options: Options) {
     } else if (shared || ids[0]!.startsWith("audio-")) {
       const group = groupFor(runtime), before = [...group.members];
       const clients = ids.map(id => options.host()!.devices.find(audio => deviceId(audio) === id)!.id);
+      const initialLevels = Object.fromEntries(clients.map((clientId, index) => [clientId, ids[index] === "native" && options.localVolume ? { volume: 100, muted: false } : { volume: options.host()?.devices.find(audio => audio.id === clientId)?.deviceId ? toSendspinVolume(requested[index]!.volume) : requested[index]!.volume, muted: requested[index]!.muted }]));
       try {
-        await runtime.targets.control(group.id, () => group.setMembers(clients), clients);
+        await runtime.targets.control(group.id, () => group.setMembers(clients, initialLevels), clients);
         guard();
         await runtime.targets.move(group.id, guard, { takeover: true });
       } catch (error) {
@@ -144,6 +158,7 @@ export function createPlaybackDevices(options: Options) {
         throw error;
       }
     } else {
+      if (previous && runtime.session.state.targetId === previous.id && !(ids[0] === "native" && options.localVolume)) await directLevel(ids[0]!, requested[0]!.volume, requested[0]!.muted);
       await runtime.targets.move(ids[0]!, guard, { takeover: true });
       await previous?.setMembers([]);
     }
@@ -179,12 +194,16 @@ export function createPlaybackDevices(options: Options) {
       authorize();
       if (!assigned(runtime).includes(id)) throw new Error("Choose this playback’s device to adjust its volume.");
       const group = groups.get(runtime.id)?.group;
-      if (group && runtime.session.state.targetId === group.id) {
+      if (id === "native" && options.localVolume) await options.localVolume(volume, muted, authorize);
+      else if (group && runtime.session.state.targetId === group.id) {
         const client = options.host()?.devices.find(audio => deviceId(audio) === id);
         if (!client) throw new Error("That device is disconnected.");
-        await group.setMemberVolume(client.id, volume, muted);
-      } else if (id === "native" && options.localVolume) await options.localVolume(volume, muted, authorize);
-      else { registry.volume(id, muted ? 0 : volume); if (muted) mutedDevices.set(id, volume); else mutedDevices.delete(id); }
+        await group.setMemberVolume(client.id, client.deviceId ? toSendspinVolume(volume) : volume, muted);
+      } else {
+        if (id === "native" && runtime.targets.nativeAssigned) await runtime.session.command({ type: "volume", volume: muted ? 0 : volume }, authorize);
+        else registry.volume(id, muted ? 0 : volume);
+        if (muted) mutedDevices.set(id, volume); else mutedDevices.delete(id);
+      }
       options.changed();
     },
   };

@@ -380,7 +380,8 @@ export function createHub(options: HubOptions) {
       for (let attempt = 0; attempt < 120 && sockets.has(socket) && !socket.data.audioReady; attempt++) await Bun.sleep(250);
       if (!socket.data.audioReady) throw new Error("Tap Enable audio in Couch on the selected device, then try again.");
     },
-    localVolume: systemAudio ? (volume, muted, authorize) => muted ? soundRouting!.mute(true, authorize) : soundRouting!.volume(volume, authorize) : undefined,
+    localLevel: systemAudio ? () => soundRouting!.state : undefined,
+    localVolume: systemAudio ? async (volume, muted, authorize) => { await soundRouting!.volume(volume, authorize); await soundRouting!.mute(muted, authorize); } : undefined,
   });
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
@@ -403,7 +404,7 @@ export function createHub(options: HubOptions) {
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
     active: () => { const runtime = nativeRuntime(); return runtime.targets.nativeAssigned && ["loading", "playing", "paused"].includes(runtime.session.state.player.status); },
     pin: output => options.sendPlayer?.({ type: "audioOutput", output }),
-    lost: error => { const runtime = nativeRuntime(); if (runtime.targets.nativeAssigned) runtime.session.audioLost(error); }, changed: value => nativeRuntime().session.updateSystemAudio(value),
+    lost: error => { const runtime = nativeRuntime(); if (runtime.targets.nativeAssigned) runtime.session.audioLost(error); }, changed: value => { nativeRuntime().session.updateSystemAudio(value); publishPlaybacks(); },
     ...(macAudio ? { backend: macAudio.routing, subscribe: macAudio.subscribe, platform: "mac" as const } : {}),
     ...(windowsAudio ? { backend: windowsAudio.routing, subscribe: windowsAudio.subscribe, platform: "windows" as const, setSystemDefault: false } : {}),
   });
@@ -959,6 +960,9 @@ export function createHub(options: HubOptions) {
             await devices.assign(runtime, action.deviceIds, authorize, action.takeover);
           } else if (action.type === "deviceVolume") {
             await devices.volume(runtime, action.deviceId, action.volume, action.muted, authorize);
+          } else if (action.type === "volume" || action.type === "mute") {
+            const playback = devices.snapshot(runtime);
+            await Promise.all(playback.devices.filter(device => playback.deviceIds.includes(device.id)).map(device => devices.volume(runtime, device.id, action.type === "volume" ? action.volume : device.volume, action.type === "mute" ? action.muted : device.muted, authorize)));
           } else if (action.type === "selectTarget") {
             await devices.assign(runtime, [action.targetId], authorize, action.takeover);
           } else if (action.type === "navigate") {
@@ -969,12 +973,8 @@ export function createHub(options: HubOptions) {
             for (const listener of listeners) listener.publish("navigation", navigation);
           } else {
             if (action.type === "remove") inspections.get(`${runtime.id}:${action.entryId}`)?.abort();
-            if (targets.nativeAssigned && soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
-            else if (targets.nativeAssigned && soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
-            else {
-              if (targets.nativeAssigned && soundRouting && action.type === "pause" && !action.paused) options.sendPlayer?.({ type: "audioOutput", output: soundRouting.prepare() });
-              await session.command(action, authorize, playedBy);
-            }
+            if (targets.nativeAssigned && soundRouting && action.type === "pause" && !action.paused) options.sendPlayer?.({ type: "audioOutput", output: soundRouting.prepare() });
+            await session.command(action, authorize, playedBy);
           }
           if (playedBy && action.type !== "navigate") {
             const added = ["enqueue", "enqueueLibrary", "enqueueJellyfin", "enqueueProvider", "enqueueRadio", "enqueueWeb", "enqueueAlbum"].includes(action.type);

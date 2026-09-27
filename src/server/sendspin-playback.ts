@@ -119,8 +119,17 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
       } finally { await active.close(); }
     })();
   };
-  const setMembers = async (ids: string[]) => {
+  const applyVolume = async (clientId: string, volume: number, muted: boolean) => {
+    env.core.sendServerCommand(clientId, { player: { command: PlayerCommand.VOLUME, volume } });
+    env.core.sendServerCommand(clientId, { player: { command: PlayerCommand.MUTE, mute: muted } });
+    const deadline = Date.now() + 3000;
+    const confirmed = () => env.device(clientId)?.connected && env.device(clientId)?.volume === volume && env.device(clientId)?.muted === muted;
+    while (!closed && !confirmed() && env.device(clientId)?.connected && Date.now() < deadline) await delay(20);
+    if (closed || !confirmed()) throw new Error("Sendspin did not confirm the member volume.");
+  };
+  const setMembers = async (ids: string[], initialLevels: Record<string, { volume: number; muted: boolean }> = {}) => {
     if (ids.length > maxMembers || new Set(ids).size !== ids.length || ids.some(clientId => !env.device(clientId)?.connected)) throw new Error("Select connected Sendspin members.");
+    if (Object.entries(initialLevels).some(([clientId, level]) => !ids.includes(clientId) || !level || !Number.isFinite(level.volume) || level.volume < 0 || level.volume > 100 || typeof level.muted !== "boolean")) throw new Error("Invalid Sendspin member volume.");
     if (uncertain) throw new Error("Reconnect Sendspin before changing uncertain outputs.");
     await enqueue(async () => {
       const previous = [...selected];
@@ -128,6 +137,8 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
       env.assign(id, previous, ids);
       const removed = previous.filter(clientId => !ids.includes(clientId));
       const added = ids.filter(clientId => !selected.has(clientId));
+      try { for (const clientId of added) if (initialLevels[clientId]) await applyVolume(clientId, initialLevels[clientId]!.volume, initialLevels[clientId]!.muted); }
+      catch (error) { env.assign(id, ids, previous); throw error; }
       for (const clientId of removed) { end(clientId); selected.delete(clientId); }
       for (const clientId of added) { selected.add(clientId); if (startedUs) startStream(clientId); }
       publish(); observe();
@@ -137,14 +148,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
   };
   const setMemberVolume = async (clientId: string, volume: number, muted: boolean) => {
     if (!selected.has(clientId) || !env.device(clientId)?.connected || !Number.isFinite(volume) || volume < 0 || volume > 100 || typeof muted !== "boolean") throw new Error("Invalid Sendspin member volume.");
-    await enqueue(async () => {
-      env.core.sendServerCommand(clientId, { player: { command: PlayerCommand.VOLUME, volume } });
-      env.core.sendServerCommand(clientId, { player: { command: PlayerCommand.MUTE, mute: muted } });
-      const deadline = Date.now() + 3000;
-      const confirmed = () => env.device(clientId)?.connected && env.device(clientId)?.volume === volume && env.device(clientId)?.muted === muted;
-      while (!closed && !confirmed() && env.device(clientId)?.connected && Date.now() < deadline) await delay(20);
-      if (closed || !confirmed()) throw new Error("Sendspin did not confirm the member volume.");
-    });
+    await enqueue(() => applyVolume(clientId, volume, muted));
   };
   publish();
   return {
