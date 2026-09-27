@@ -25,8 +25,8 @@ function fixture(options: Partial<Parameters<typeof createHub>[0]> = {}) {
   };
   return { ...start(), start };
 }
-function request(hub: Hub, token: string, path: string, mode = "personal", method = "GET", body?: unknown) {
-  return fetch(`${hub.origin}${path}`, { method, headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Couch-Session": mode }, body: body === undefined ? undefined : JSON.stringify(body) });
+function request(hub: Hub, token: string, path: string, playback = "default", method = "GET", body?: unknown) {
+  return fetch(`${hub.origin}${path}`, { method, headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Couch-Playback": playback }, body: body === undefined ? undefined : JSON.stringify(body) });
 }
 async function pair(hub: Hub) {
   const response = await fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode }) });
@@ -41,8 +41,8 @@ class Peer {
   targetId = "";
   player = { ...idle };
   holdEcho?: PlaybackCommand["type"];
-  constructor(hub: Hub, token: string, mode?: string) {
-    this.socket = new BunSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=1${mode ? `&session=${mode}` : ""}`, { headers: { Origin: hub.origin } });
+  constructor(hub: Hub, token: string, playback = "default") {
+    this.socket = new BunSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=1&playback=${encodeURIComponent(playback)}`, { headers: { Origin: hub.origin } });
     this.socket.addEventListener("message", event => {
       const message = JSON.parse(String(event.data)) as ServerMessage;
       this.messages.push(message);
@@ -70,24 +70,24 @@ class Peer {
   }
   get state(): SessionState { const message = this.messages.findLast(message => message.type === "state"); if (message?.type !== "state") throw new Error("Missing state"); return message.state; }
   async command(action: Action) { const requestId = crypto.randomUUID(); this.send({ type: "command", requestId, action }); return this.wait(message => message.type === "result" && message.requestId === requestId); }
-  async register() { await this.wait(message => message.type === "state"); this.send({ type: "registerRenderer" }); await this.wait(message => message.type === "rendererRegistered"); expect(await this.command({ type: "selectTarget", targetId: this.targetId })).toMatchObject({ ok: true }); }
-  async play(id: string, position: number) {
+  async register() { await this.wait(message => message.type === "state"); this.send({ type: "registerRenderer" }); await this.wait(message => message.type === "rendererRegistered"); expect(await this.command({ type: "assignDevices", deviceIds: [this.targetId] })).toMatchObject({ ok: true }); }
+  async play(id: string, position: number, renderer: Peer = this) {
     expect(await this.command({ type: "enqueue", entry: { id, title: id, source: `https://media.example/${id}.mp4` }, playNow: true })).toMatchObject({ ok: true });
     await this.wait(message => message.type === "state" && message.state.currentEntryId === id && message.state.player.status === "playing");
-    this.player = { ...this.player, position };
-    this.send({ type: "rendererObservation", sessionId: this.sessionId, state: this.player });
+    renderer.player = { ...renderer.player, position };
+    renderer.send({ type: "rendererObservation", sessionId: renderer.sessionId, state: renderer.player });
     await this.wait(message => (message.type === "clock" && message.position === position) || (message.type === "state" && message.state.player.position === position));
   }
   close() { if (this.socket.readyState === WebSocket.CLOSED) return Promise.resolve(); return new Promise<void>(resolve => { this.socket.addEventListener("close", () => resolve(), { once: true }); this.socket.close(); }); }
 }
 async function setup() {
   const f = fixture(), aToken = await pair(f.hub), bToken = await pair(f.hub);
-  const a = new Peer(f.hub, aToken, "personal"), b = new Peer(f.hub, bToken, "personal"), household = new Peer(f.hub, aToken);
+  const a = new Peer(f.hub, aToken), b = new Peer(f.hub, bToken), household = new Peer(f.hub, aToken, f.hub.session.state.sessionId);
   await Promise.all([a.register(), b.register(), household.wait(message => message.type === "state")]);
   return { ...f, aToken, bToken, a, b, household };
 }
 
-test("paired controllers play independently without leaking queue, clocks, or activity into other sessions", async () => {
+test("default playbacks keep queues, clocks, and activity separate", async () => {
   const { a, b, household } = await setup();
   await a.play("alice", 41); await b.play("bob", 83);
   expect(a.sessionId).not.toBe(b.sessionId);
@@ -101,50 +101,77 @@ test("paired controllers play independently without leaking queue, clocks, or ac
   }
 });
 
-test("HTTP playlist capture and load, progress, and for-later lookup use the authenticated personal session", async () => {
+test("HTTP source actions use the selected playback's queue and history", async () => {
   const { hub, aToken, bToken, a, b, household } = await setup();
   await a.play("alice", 41); await b.play("bob", 83);
-  expect((await request(hub, bToken, "/api/for-later", "personal", "POST", { reference: { kind: "queue", id: "alice" } })).status).toBe(404);
-  const saved = await request(hub, aToken, "/api/playlists", "personal", "POST", { name: "Alice queue" });
+  expect((await request(hub, bToken, "/api/for-later", "default", "POST", { reference: { kind: "queue", id: "alice" } })).status).toBe(404);
+  const saved = await request(hub, aToken, "/api/playlists", "default", "POST", { name: "Alice queue" });
   expect(saved.status).toBe(201);
   const { playlist } = await saved.json() as { playlist: { id: string; revision: number; entries: { title: string }[] } };
   expect(playlist.entries.map(entry => entry.title)).toEqual(["alice"]);
-  expect((await request(hub, bToken, `/api/playlists/${playlist.id}/load`, "personal", "POST", { mode: "append", revision: playlist.revision })).status).toBe(200);
+  expect((await request(hub, bToken, `/api/playlists/${playlist.id}/load`, "default", "POST", { mode: "append", revision: playlist.revision })).status).toBe(200);
   await b.wait(message => message.type === "state" && message.state.queue.length === 2);
   expect(a.state.queue).toHaveLength(1); expect(household.state.queue).toEqual([]);
-  expect((await request(hub, aToken, "/api/for-later", "personal", "POST", { reference: { kind: "queue", id: "alice" } })).status).toBe(201);
+  expect((await request(hub, aToken, "/api/for-later", "default", "POST", { reference: { kind: "queue", id: "alice" } })).status).toBe(201);
   await a.command({ type: "stop" }); await b.command({ type: "stop" });
-  for (const [token, mode, titles] of [[aToken, "personal", ["alice"]], [bToken, "personal", ["bob"]], [aToken, "household", []]] as const) {
-    const history = await request(hub, token, "/api/progress/history", mode);
+  for (const [token, playback, titles] of [[aToken, a.state.sessionId, ["alice"]], [bToken, b.state.sessionId, ["bob"]], [aToken, household.state.sessionId, []]] as const) {
+    const history = await request(hub, token, "/api/progress/history", playback);
     expect(history.status).toBe(200);
     const { items } = await history.json() as { items: { title: string; position: number }[] };
     expect(items.map(item => item.title)).toEqual([...titles]);
-    if (mode === "personal") expect(items[0]?.position).toBe(token === aToken ? 41 : 83);
+    if (playback !== household.state.sessionId) expect(items[0]?.position).toBe(token === aToken ? 41 : 83);
   }
 });
 
-test("invalid session selectors and unpaired host personal sessions are rejected", async () => {
-  const { hub } = fixture(), token = await pair(hub);
-  for (const mode of ["other", "personal:someone-else", ""]) {
-    expect((await request(hub, token, "/api/progress/history", mode)).status).toBe(400);
-    expect((await fetch(`${hub.origin}/api/ws?token=${token}&session=${encodeURIComponent(mode)}`, { headers: { Origin: hub.origin } })).status).toBe(400);
+test("creating playback rotates only its creator's default and preserves the running timeline", async () => {
+  const { hub, aToken, bToken, a, b } = await setup();
+  await a.play("alice", 41);
+  const oldId = a.state.sessionId, otherId = b.state.sessionId, playbackId = a.player.playbackId;
+  const created = await request(hub, aToken, "/api/playbacks", "default", "POST", {});
+  expect(created.status).toBe(200);
+  const { id } = await created.json() as { id: string };
+  expect(id).toMatch(/^playback:/);
+  const next = new Peer(hub, aToken);
+  await next.wait(message => message.type === "state");
+  expect(next.state.sessionId).toBe(id);
+  expect(next.state.queue).toEqual([]);
+  expect(next.messages.some(message => message.type === "rendererCommand")).toBe(false);
+  expect(a.state.sessionId).toBe(oldId);
+  expect(a.state.currentEntryId).toBe("alice");
+  expect(a.player.playbackId).toBe(playbackId);
+  expect(b.state.sessionId).toBe(otherId);
+  const old = new Peer(hub, bToken, oldId);
+  await old.wait(message => message.type === "state");
+  expect(old.state.currentEntryId).toBe("alice");
+  expect((await request(hub, bToken, "/api/progress/history", oldId)).status).toBe(200);
+});
+
+test("unknown playback IDs fail while paired controllers may explicitly control another playback", async () => {
+  const { hub, aToken, bToken, a } = await setup();
+  for (const id of ["other", "playback:missing", ""]) {
+    expect((await request(hub, bToken, "/api/progress/history", id)).status).toBe(404);
+    expect((await fetch(`${hub.origin}/api/ws?token=${bToken}&playback=${encodeURIComponent(id)}`, { headers: { Origin: hub.origin } })).status).toBe(404);
   }
-  expect((await request(hub, hostToken, "/api/progress/history")).status).toBe(403);
-  expect((await fetch(`${hub.origin}/api/ws?token=${hostToken}&session=personal`, { headers: { Origin: hub.origin } })).status).toBe(403);
+  expect((await request(hub, bToken, "/api/progress/history", a.state.sessionId)).status).toBe(200);
+  const controller = new Peer(hub, bToken, a.state.sessionId);
+  await controller.wait(message => message.type === "state");
+  expect(controller.state.sessionId).toBe(a.state.sessionId);
+  expect((await request(hub, hostToken, "/api/progress/history", a.state.sessionId)).status).toBe(200);
+  expect((await request(hub, "unpaired", "/api/progress/history", a.state.sessionId)).status).toBe(401);
 });
 
 test("an occupied browser target cannot be implicitly taken over by another session", async () => {
   const { a, b } = await setup(); await a.play("alice", 41); await b.play("bob", 83);
-  const results = await Promise.all([b.command({ type: "selectTarget", targetId: a.targetId }), a.command({ type: "selectTarget", targetId: b.targetId })]);
+  const results = await Promise.all([b.command({ type: "assignDevices", deviceIds: [a.targetId] }), a.command({ type: "assignDevices", deviceIds: [b.targetId] })]);
   expect(results).toEqual([expect.objectContaining({ ok: false }), expect.objectContaining({ ok: false })]);
   expect(a.state.targetId).toBe(a.targetId); expect(b.state.targetId).toBe(b.targetId);
   expect(a.player.status).toBe("playing"); expect(b.player.status).toBe("playing");
 });
 
-test("restart restores each private checkpoint without autoplay or household contamination", async () => {
+test("restart restores independent checkpoints without autoplay or changing the legacy playback", async () => {
   const f = await setup(); await f.a.play("alice", 41); await f.b.play("bob", 83);
   await f.close(); const restarted = f.start();
-  const a = new Peer(restarted.hub, f.aToken, "personal"), b = new Peer(restarted.hub, f.bToken, "personal"), household = new Peer(restarted.hub, f.aToken);
+  const a = new Peer(restarted.hub, f.aToken), b = new Peer(restarted.hub, f.bToken), household = new Peer(restarted.hub, f.aToken, restarted.hub.session.state.sessionId);
   await Promise.all([a.wait(message => message.type === "state"), b.wait(message => message.type === "state"), household.wait(message => message.type === "state")]);
   expect(a.state.player).toMatchObject({ status: "unavailable", position: 41 });
   expect(b.state.player).toMatchObject({ status: "unavailable", position: 83 });
@@ -156,17 +183,25 @@ test("restart restores each private checkpoint without autoplay or household con
   expect(household.state.currentEntryId).toBeNull();
 });
 
-test("revoking one controller closes its private playback while another personal session keeps playing", async () => {
-  const { hub, aToken, a, b, household } = await setup(); await a.play("alice", 41); await b.play("bob", 83);
+test("revocation closes its browser renderer but leaves playback on another authorized device", async () => {
+  const { hub, aToken, bToken, a, b } = await setup();
+  expect(await a.command({ type: "assignDevices", deviceIds: [] })).toMatchObject({ ok: true });
+  expect(await b.command({ type: "assignDevices", deviceIds: [] })).toMatchObject({ ok: true });
+  expect(await a.command({ type: "assignDevices", deviceIds: [b.targetId] })).toMatchObject({ ok: true });
+  await a.play("alice", 41, b);
+  const playbackId = a.state.sessionId;
   const { controller } = await (await request(hub, aToken, "/api/controllers/me")).json() as { controller: { id: string } };
   const closed = new Promise<void>(resolve => a.socket.addEventListener("close", () => resolve(), { once: true }));
-  expect((await request(hub, hostToken, `/api/controllers/${controller.id}`, "household", "DELETE")).status).toBe(200);
+  expect((await request(hub, hostToken, `/api/controllers/${controller.id}`, hub.session.state.sessionId, "DELETE")).status).toBe(200);
   await closed;
-  expect(a.messages.some(message => message.type === "rendererCommand" && message.command.type === "stop")).toBe(true);
+  expect(a.socket.readyState).toBe(WebSocket.CLOSED);
   expect((await request(hub, aToken, "/api/progress/history")).status).toBe(401);
-  expect(b.player).toMatchObject({ status: "playing", position: 83 });
+  expect(b.player).toMatchObject({ status: "playing", position: 41 });
   expect(b.socket.readyState).toBe(WebSocket.OPEN);
-  expect(household.state.queue).toEqual([]);
+  const controllerView = new Peer(hub, bToken, playbackId);
+  await controllerView.wait(message => message.type === "state");
+  expect(controllerView.state.currentEntryId).toBe("alice");
+  expect(controllerView.state.player.status).toBe("playing");
 });
 
 test("live browser seek commands clamp to the renderer's observed seekable window", async () => {
@@ -183,13 +218,13 @@ test("live browser seek commands clamp to the renderer's observed seekable windo
 
 test("browser observations reject reversed or nonfinite seekable windows", () => {
   for (const seekRange of [{ start: 200, end: 100 }, { start: Number.NaN, end: 200 }, { start: 100, end: Infinity }]) {
-    expect(() => parseRendererMessage({ type: "rendererObservation", sessionId: "personal:test", state: { ...idle, seekRange } })).toThrow("Invalid renderer observation");
+    expect(() => parseRendererMessage({ type: "rendererObservation", sessionId: "playback:test", state: { ...idle, seekRange } })).toThrow("Invalid renderer observation");
   }
 });
 
-test("household diagnostics redact personal renderer errors while preserving the owner's error", async () => {
-  const { hub, a, household } = await setup(); await a.play("private-diagnostics", 41);
-  const secret = "private-backend-item-confidential-73019";
+test("diagnostics redact renderer errors outside the selected playback state", async () => {
+  const { hub, a, household } = await setup(); await a.play("source-diagnostics", 41);
+  const secret = "backend-item-confidential-73019";
   a.player = { ...a.player, status: "error", error: secret };
   a.send({ type: "rendererObservation", sessionId: a.sessionId, state: a.player });
   await a.wait(message => message.type === "state" && message.state.player.error === secret);
@@ -197,33 +232,31 @@ test("household diagnostics redact personal renderer errors while preserving the
   expect(JSON.stringify(household.messages)).not.toContain(secret);
   expect(await a.command({ type: "enqueueRadio", entryId: "missing", stationId: "missing", playNow: true })).toMatchObject({ ok: false });
   for (const path of ["/api/diagnostics", "/api/diagnostics/export"]) {
-    const response = await request(hub, hostToken, path, "household");
+    const response = await request(hub, hostToken, path, household.state.sessionId);
     expect(response.status).toBe(200);
     const report = await response.text();
     expect(report).not.toContain(secret);
-    expect(report).toContain("Personal playback reported an error.");
-    expect(report).toContain("A personal playback command failed.");
   }
 });
 
-test("retiring the only playing personal session allows the household update idle window to expire", async () => {
+test("revoking the only browser renderer allows the update idle window to expire", async () => {
   let now = 0;
   const { hub } = fixture({ idleNow: () => now, sendPlayer: () => {} });
   hub.session.observe(idle);
-  const token = await pair(hub), peer = new Peer(hub, token, "personal");
-  await peer.register(); await peer.play("private-idle", 41);
+  const token = await pair(hub), peer = new Peer(hub, token);
+  await peer.register(); await peer.play("idle-playback", 41);
   expect(hub.idleReason()).toBe("Waiting for playback to stop.");
   const { controller } = await (await request(hub, token, "/api/controllers/me")).json() as { controller: { id: string } };
   const closed = new Promise<void>(resolve => peer.socket.addEventListener("close", () => resolve(), { once: true }));
-  expect((await request(hub, hostToken, `/api/controllers/${controller.id}`, "household", "DELETE")).status).toBe(200);
+  expect((await request(hub, hostToken, `/api/controllers/${controller.id}`, hub.session.state.sessionId, "DELETE")).status).toBe(200);
   await closed;
-  expect((await request(hub, hostToken, "/api/controllers/me", "household")).status).toBe(200);
+  expect((await request(hub, hostToken, "/api/controllers/me", hub.session.state.sessionId)).status).toBe(200);
   expect(hub.session.state.player.status).toBe("idle");
   now += 10 * 60_000 + 1;
   expect(hub.idleReason()).toBeNull();
 });
 
-test("a shared source change cancels a busy handoff and still stops another affected personal session", async () => {
+test("a shared source change cancels a busy handoff and stops every affected playback", async () => {
   const sessions: ReturnType<typeof sessionModule.createSession>[] = [];
   const original = sessionModule.createSession;
   const creation = spyOn(sessionModule, "createSession").mockImplementation((...args) => { const session = original(...args); sessions.push(session); return session; });
@@ -234,27 +267,27 @@ test("a shared source change cancels a busy handoff and still stops another affe
     return new Response('<tv><channel id="one"/><programme channel="one" start="20260927000000 +0000" stop="20260928000000 +0000"><title>One</title></programme></tv>');
   } });
   cleanup.push(() => server.stop(true));
-  const response = await request(hub, aToken, "/api/iptv/sources", "personal", "POST", { name: "Test guide", playlistUrl: `http://127.0.0.1:${server.port}/list.m3u`, guideUrl: `http://127.0.0.1:${server.port}/guide.xml` });
+  const response = await request(hub, aToken, "/api/iptv/sources", "default", "POST", { name: "Test guide", playlistUrl: `http://127.0.0.1:${server.port}/list.m3u`, guideUrl: `http://127.0.0.1:${server.port}/guide.xml` });
   expect(response.status).toBe(201);
   const { source } = await response.json() as { source: { id: string } };
   const { channels } = await (await request(hub, aToken, "/api/iptv/guide")).json() as { channels: { id: string }[] };
   for (const [token, peer] of [[aToken, a], [bToken, b]] as const) {
-    expect((await request(hub, token, `/api/iptv/channels/${channels[0]!.id}/play`, "personal", "POST")).status).toBe(200);
+    expect((await request(hub, token, `/api/iptv/channels/${channels[0]!.id}/play`, "default", "POST")).status).toBe(200);
     await peer.wait(message => message.type === "state" && message.state.player.status === "playing");
   }
-  const destination = new Peer(hub, await pair(hub), "personal");
+  const destination = new Peer(hub, await pair(hub));
   destination.holdEcho = "seek";
   await destination.wait(message => message.type === "state");
   destination.send({ type: "registerRenderer" });
   await destination.wait(message => message.type === "rendererRegistered");
-  const moving = a.command({ type: "selectTarget", targetId: destination.targetId });
+  const moving = a.command({ type: "assignDevices", deviceIds: [destination.targetId] });
   await destination.wait(message => message.type === "rendererCommand" && message.command.type === "seek");
   const before = a.messages.length;
   const affected = sessions.find(session => session.state.sessionId === a.sessionId)!;
   const stop = affected.stopForSourceChange;
   const failure = spyOn(affected, "stopForSourceChange").mockImplementation(() => { stop(); throw new Error("Simulated output cleanup failure"); });
   try {
-    expect((await request(hub, aToken, `/api/iptv/sources/${source.id}`, "personal", "DELETE")).status).toBe(204);
+    expect((await request(hub, aToken, `/api/iptv/sources/${source.id}`, "default", "DELETE")).status).toBe(204);
     destination.send({ type: "rendererObservation", sessionId: destination.sessionId, state: destination.player });
     expect(await moving).toMatchObject({ ok: false });
     await b.wait(message => message.type === "state" && message.state.currentEntryId === null);
@@ -266,7 +299,7 @@ test("a shared source change cancels a busy handoff and still stops another affe
 });
 
 
-test("an in-memory Core keeps personal playback stores in memory", async () => {
+test("an in-memory Core keeps independent playback stores in memory", async () => {
   const paths: string[] = [], original = storeModule.openStore;
   const opening = spyOn(storeModule, "openStore").mockImplementation((path, ...args) => { paths.push(path); return original(path, ...args); });
   try {
@@ -280,32 +313,26 @@ test("an in-memory Core keeps personal playback stores in memory", async () => {
 });
 
 
-test("changing controlled playback preserves the renderer, private progress and queue", async () => {
-  const { hub, aToken, a, b } = await setup();
-  await a.play("private-audio", 28);
-  const attachment = a.targetId;
-  const playbackId = a.player.playbackId!;
-  const from = a.messages.length;
-  a.send({ type: "selectSession", mode: "household" });
-  await a.wait(message => message.type === "state" && message.state.sessionMode === "household", from);
-  expect(a.state.queue).toEqual([]);
+test("selecting another playback changes the control view without moving or decoding its media", async () => {
+  const { a, b } = await setup();
+  await a.play("alice", 28);
+  const aId = a.state.sessionId, bId = b.state.sessionId, attachment = a.targetId, playbackId = a.player.playbackId!;
+  const from = b.messages.length;
+  b.send({ type: "selectPlayback", playbackId: aId });
+  await b.wait(message => message.type === "state" && message.state.sessionId === aId, from);
+  expect(b.state.currentEntryId).toBe("alice");
+  expect(b.player.playbackId).toBeNull();
   expect(a.player.status).toBe("playing");
-  expect(a.messages.slice(from).some(message => message.type === "rendererCommand" && message.command.type === "stop")).toBe(false);
-  a.player = { ...a.player, position: 54 };
-  a.send({ type: "rendererObservation", sessionId: a.sessionId, state: a.player });
-  const personalController = new Peer(hub, aToken, "personal");
-  await personalController.wait(message => message.type === "state" && message.state.player.position === 54);
-  expect(personalController.state.targetId).toBe(attachment);
-  expect(await personalController.command({ type: "pause", playbackId, paused: true })).toMatchObject({ ok: true });
-  await personalController.wait(message => message.type === "state" && message.state.player.status === "paused");
+  expect(b.messages.slice(from).some(message => message.type === "rendererCommand")).toBe(false);
+  expect(await b.command({ type: "pause", playbackId, paused: true })).toMatchObject({ ok: true });
+  await b.wait(message => message.type === "state" && message.state.player.status === "paused");
   expect(a.player.status).toBe("paused");
+  const back = b.messages.length;
+  b.send({ type: "selectPlayback", playbackId: bId });
+  await b.wait(message => message.type === "state" && message.state.sessionId === bId, back);
   expect(b.state.queue).toEqual([]);
-  const back = a.messages.length;
-  a.send({ type: "selectSession", mode: "personal" });
-  await a.wait(message => message.type === "state" && message.state.sessionMode === "personal", back);
-  expect(a.state.currentEntryId).toBe("private-audio");
-  expect(a.state.player.position).toBe(54);
-  expect(a.targetId).toBe(attachment);
+  expect(a.state.currentEntryId).toBe("alice");
+  expect(a.state.targetId).toBe(attachment);
   expect(a.messages.filter(message => message.type === "rendererRegistered")).toHaveLength(1);
 });
 
