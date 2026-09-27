@@ -99,6 +99,14 @@ consult [multiroom research](research/multiroom-snapcast-sendspin.md). The
 [PWA runtime exploration](research/couch-runtime-options.md) is an alternative
 deployment proposal, not a prerequisite or the current implementation plan.
 
+## External access
+
+Core admits an explicitly configured canonical HTTPS origin only through exact
+trusted proxy peers. Forwarded requests never receive native-host authority, even
+when the proxy connects over loopback. External pairing is a separate opt-in;
+revocation and Allow remotes retain their existing meaning. Discovery and scoped
+media URLs use the external origin. See [deployment configuration](remote-access.md).
+
 ## Frontend delivery
 
 ```

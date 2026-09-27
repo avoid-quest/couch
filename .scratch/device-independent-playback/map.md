@@ -110,3 +110,8 @@ provider attempt ownership and rollback have focused integration coverage. This
 closes the demonstrated authentication gap without starting an encoder. Broader
 formats, native enrollment, groups, independent sessions and external access remain
 in their existing issues. Target controls shipped as draft PR #617.
+
+[Explicit external access](issues/07-internet-access.md) now has canonical HTTPS
+origin/trusted-peer admission, separate pairing opt-in and host-token isolation.
+A real Caddy fixture verifies TLS discovery; private-CA browser trust limits are
+recorded. Jellyfin browser delivery is draft [PR #618](https://github.com/avoid-quest/couch/pull/618).

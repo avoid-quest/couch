@@ -23,6 +23,9 @@ if (process.argv.includes("--version")) {
 }
 
 const native = process.env.COUCH_NATIVE === "1";
+const externalOrigin = process.env.COUCH_EXTERNAL_ORIGIN;
+const trustedProxyIps = process.env.COUCH_TRUSTED_PROXY_IPS;
+if (!!externalOrigin !== !!trustedProxyIps || process.env.COUCH_EXTERNAL_PAIRING && !externalOrigin) throw new Error("Configure COUCH_EXTERNAL_ORIGIN and COUCH_TRUSTED_PROXY_IPS together.");
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
@@ -56,6 +59,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
+  ...(externalOrigin && trustedProxyIps ? { remoteAccess: { origin: externalOrigin, trustedProxyIps: trustedProxyIps.split(",").map(value => value.trim()), pairing: process.env.COUCH_EXTERNAL_PAIRING === "1" } } : {}),
   updater,
   managedLan: native && !previewProxyLan,
   publishedLan: previewProxyLan,

@@ -329,3 +329,35 @@ These results are not physical audio-output validation or an exact-revision merg
 
 Limits: conservative direct play only; no claim of multi-audio, external captions,
 Jellyfin transcoding, physical TV playback or packaged exact-revision qualification.
+
+## Explicit HTTPS proxy admission — 2026-09-27
+
+- Typecheck and diff whitespace checks pass. Classifier + real-hub tests: **17 pass,
+  0 fail, 130 assertions**. Tests reject spoofed/ambiguous forwarding metadata,
+  untrusted transport peers, wrong origins and external private-host-token access.
+  Explicit pairing, discovery, controller HTTP/WSS semantics, renderer registration,
+  revocation and sharing-off behavior pass (test transport itself uses loopback WS).
+- Existing hub/controller/media-relay/Jellyfin-browser plus classifier tests: **139
+  pass, 0 fail, 1745 assertions** in 5 files. The classifier's six tests overlap
+  the 17 above; combined unique test count is **150**. Log:
+  `.artifacts/device-independent-playback/remote-access-regressions.log`.
+- Official Caddy **2.11.4**, isolated container, TLS internal CA, no global trust
+  installation: HTTPS discovery returns only `https://localhost:8443`. The actual
+  Docker Desktop connection's raw Core peer is `127.0.0.1`; it is explicitly trusted.
+- Collaborative Chromium rejects the fixture's private certificate and navigates
+  to `chrome-error://chromewebdata/`. No available preview tool grants per-origin
+  certificate trust. This is recorded as a browser qualification gap, not a pass.
+- No production packaging/workflow changes or hosted dispatch occurred.
+
+Actual TLS/WSS qualification with explicit fixture CA also passed: shared React page
+200, canonical discovery, real Jellyfin range delivery (206, 1024 bytes), paused
+handoff at 5 seconds/1.25× between **two simulated renderers**, resume and stop. Old
+and stopped grants returned 404. Script and sanitized evidence are in
+`.artifacts/device-independent-playback/https-proxy/{qualify.ts,qualification.json}`.
+This is real Caddy/Jellyfin network transport, not browser decoding; external host
+authority is covered by hub tests, not this script (host token intentionally absent).
+
+The preceding Jellyfin review additionally found and fixed a timeout after resolution:
+its owned timer now clears when resolution finishes, leaving explicit handoff cleanup
+in charge. Both focused handoff tests passed, including survival past the 15-second
+resolution deadline. The fix is included in Jellyfin PR #618.
