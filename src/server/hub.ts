@@ -131,7 +131,7 @@ export function createHub(options: HubOptions) {
   let sendspinError: string | null = null;
   const sendspinIdentity = openSendspinIdentity(options.databasePath);
   const sessionId = store.installationId();
-  const playbackCatalog = openPlaybackCatalog(options.databasePath, sessionId);
+  const playbackCatalog = openPlaybackCatalog(options.databasePath, sessionId, options.sendPlayer ? "native" : undefined);
   const runtimes = new Map<string, Runtime>();
   const playbackStates = new Map<string, { status: import("../shared/protocol").PlayerState["status"]; retry: boolean }>();
   const retiring = new Set<Promise<void>>();
@@ -209,7 +209,7 @@ export function createHub(options: HubOptions) {
     }
     const viewingStore = createSessionStore(store, privateStore ?? store);
     const playback = jellyfin.createPlayback();
-    const targets = registry.bind(id, () => session, { defaultNative: storageKey === null, kind: mode });
+    const targets = registry.bind(id, () => session, { defaultNative: record.deviceIds.length === 1 && record.deviceIds[0] === "native", kind: mode });
     let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
     const runtime = { id, mode, owner, disposed: false, sourceGeneration: 0, store: viewingStore, privateStore } as Runtime;
     const session = createSession(viewingStore, targets.send, (state, clock) => {

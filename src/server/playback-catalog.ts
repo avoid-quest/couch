@@ -8,7 +8,7 @@ const view = (row: Row): PlaybackRecord => ({ ...row, deviceIds: JSON.parse(row.
 const defaultKey = (clientId: string | null) => clientId === null ? "host" : `client:${clientId}`;
 
 // Playback metadata shares Core's SQLite file; media state stays in its existing stores.
-export function openPlaybackCatalog(databasePath: string, installationId: string) {
+export function openPlaybackCatalog(databasePath: string, installationId: string, localDeviceId?: string) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -30,7 +30,7 @@ export function openPlaybackCatalog(databasePath: string, installationId: string
     if (selected) return get(selected.playbackId)!;
     const id = clientId === null ? installationId : `personal:${clientId}`;
     // Existing household and personal session stores retain their exact IDs and file keys.
-    db.query("INSERT OR IGNORE INTO playback_catalog (id, owner, storageKey) VALUES (?, ?, ?)").run(id, clientId, clientId);
+    db.query("INSERT OR IGNORE INTO playback_catalog (id, owner, storageKey, deviceIds) VALUES (?, ?, ?, ?)").run(id, clientId, clientId, JSON.stringify(clientId === null && localDeviceId ? [localDeviceId] : []));
     db.query("INSERT OR IGNORE INTO playback_defaults VALUES (?, ?)").run(key, id);
     return get(db.query<{ playbackId: string }, [string]>("SELECT playbackId FROM playback_defaults WHERE clientKey = ?").get(key)!.playbackId)!;
   }).immediate();

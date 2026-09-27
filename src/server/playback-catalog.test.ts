@@ -18,9 +18,10 @@ test("legacy playback stores survive catalog migration and default rotation", ()
   const personalQueue = [{ id: "personal", title: "Personal movie", source: "https://example.com/personal.mp4" }];
   shared.saveQueue(householdQueue);
   personal.saveQueue(personalQueue);
-  let catalog = openPlaybackCatalog(databasePath, installationId);
+  let catalog = openPlaybackCatalog(databasePath, installationId, "native");
   try {
-    expect(catalog.defaultFor(null)).toEqual({ id: installationId, owner: null, storageKey: null, deviceIds: [] });
+    expect(catalog.defaultFor(null)).toEqual({ id: installationId, owner: null, storageKey: null, deviceIds: ["native"] });
+    catalog.assign(installationId, []);
     expect(catalog.defaultFor("client-a")).toEqual({ id: "personal:client-a", owner: "client-a", storageKey: "client-a", deviceIds: [] });
     const next = catalog.create("client-a");
     expect(next.id).toMatch(/^playback:/);
@@ -35,7 +36,8 @@ test("legacy playback stores survive catalog migration and default rotation", ()
     expect(catalog.defaultFor("client-b").id).toBe("personal:client-b");
 
     catalog.close();
-    catalog = openPlaybackCatalog(databasePath, installationId);
+    catalog = openPlaybackCatalog(databasePath, installationId, "native");
+    expect(catalog.get(installationId)?.deviceIds).toEqual([]);
     expect(catalog.defaultFor("client-a").id).toBe(next.id);
     expect(catalog.get(next.id)?.deviceIds).toEqual(["living-room", "kitchen"]);
     expect(catalog.all().map(record => record.id)).toEqual([installationId, "personal:client-a", next.id, host.id, "personal:client-b"]);

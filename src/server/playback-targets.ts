@@ -193,7 +193,6 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
     },
     bind(id: string, session: () => Session, { defaultNative = false, kind = defaultNative ? "household" : "personal" }: { defaultNative?: boolean; kind?: "household" | "personal" } = {}) {
       if (closed || bindings.has(id)) throw new Error("Playback session is already bound or closed.");
-      if (defaultNative && kind !== "household") throw new Error("Only the household session has a default native output.");
       if (defaultNative && native && claims.has(native.target.id)) throw new Error("That playback output is occupied.");
       const binding: Binding = { id, kind, session, assigned: defaultNative ? native : undefined, busy: false, closed: false, changed(handoff = session().state.handoff ?? null) {
         if (!binding.closed) session().updateTargets(binding.assigned?.target.id, [...endpoints.values()].map(endpoint => descriptor(endpoint, binding)), handoff);
