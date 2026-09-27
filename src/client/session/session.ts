@@ -23,9 +23,9 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false) {
-  const [selection, setSelection] = useState<{ owner: Credentials | null; mode: SessionMode }>({ owner: credentials, mode: "household" });
-  const sessionMode = sameCredentials(selection.owner, credentials) ? selection.mode : "household";
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, initialMode: SessionMode = "household") {
+  const [selection, setSelection] = useState<{ owner: Credentials | null; mode: SessionMode }>({ owner: credentials, mode: initialMode });
+  const sessionMode = sameCredentials(selection.owner, credentials) ? selection.mode : initialMode;
   const scopedCredentials = useMemo(() => credentials ? { ...credentials, sessionMode } : null, [credentials, sessionMode]);
   const currentMode = useRef(sessionMode);
   currentMode.current = sessionMode;

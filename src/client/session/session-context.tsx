@@ -116,7 +116,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver);
+  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver, localHost ? "household" : "personal");
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
@@ -255,6 +255,11 @@ export function SessionGate({ children }: PropsWithChildren) {
     const attempt = ++commandAttempt.current;
     setError(null);
     try {
+      const startsPlayback = action.type === "play" || "playNow" in action && action.playNow === true;
+      if (startsPlayback && before && !before.targetId && rendererTargetId) {
+        await command({ type: "selectTarget", targetId: rendererTargetId });
+        if (!current()) return false;
+      }
       await command(action);
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";
@@ -276,7 +281,7 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (current() && attempt === commandAttempt.current) setError(errorText(reason));
       return false;
     }
-  }, [command, dismissUndo, offerUndo, readObservation]);
+  }, [command, dismissUndo, offerUndo, readObservation, rendererTargetId]);
 
   const seekBy = useCallback((seconds: number) => {
     const player = readObservation()?.player;
