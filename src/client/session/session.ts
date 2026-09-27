@@ -55,7 +55,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   useEffect(() => {
     if (!sameCredentials(selectHere.current, credentials)) selectHere.current = null;
     setRendererTargetId(null);
-    setOwnerMode(sessionMode);
+    setOwnerMode(currentMode.current);
     setState(null);
     observation.current = null;
     setClock(emptyPlaybackClock);
@@ -145,7 +145,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
-      if (sessionMode === "personal") url.searchParams.set("session", "personal");
+      if (currentMode.current === "personal") url.searchParams.set("session", "personal");
       const asset = buildKey(loadedBuild);
       if (asset && !desktopProtocol) url.searchParams.set("build", asset);
       if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
@@ -173,8 +173,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
-      socketMode.current = sessionMode;
-      const isCurrent = () => !disposed && currentMode.current === sessionMode && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
+      socketMode.current = currentMode.current;
+      const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
       handshake = setTimeout(() => connection.close(), 8_000);
 
       connection.onopen = () => {
@@ -204,6 +204,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererBaseline = !!message.state.sessionId;
           registerNative();
           clearTimeout(handshake);
+          const mode = message.state.sessionMode ?? "household";
+          if (mode !== currentMode.current) return;
+          socketMode.current = mode;
+          setOwnerMode(mode);
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
@@ -218,7 +222,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
             connection.close(4002, "Invalid response");
             return;
           }
-          if (!baseline) return;
+          if (!baseline || !ready.current) return;
           const previous = observation.current;
           if (previous?.player.playbackId !== message.playbackId) return;
           observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
@@ -279,7 +283,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current = null;
       socketCredentials.current = null;
     };
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, reconnectAttempt, sessionMode]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, reconnectAttempt]);
 
   const current = sameCredentials(owner, credentials) && ownerMode === sessionMode;
   const snapshot = current ? state : null;
@@ -352,7 +356,19 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const selectSession = useCallback((mode: SessionMode, playLocally = false) => {
     selectHere.current = playLocally ? credentials : null;
     setSessionSelectionError(null);
-    if (mode !== sessionMode) ready.current = false;
+    if (mode !== currentMode.current) {
+      ready.current = false;
+      currentMode.current = mode;
+      observation.current = null;
+      setState(null);
+      setClock(emptyPlaybackClock);
+      for (const request of pending.current.values()) {
+        clearTimeout(request.timer);
+        request.reject(new Error("Playback selection changed."));
+      }
+      pending.current.clear();
+      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "selectSession", mode }));
+    }
     setSelection({ owner: credentials, mode });
   }, [credentials, sessionMode]);
 

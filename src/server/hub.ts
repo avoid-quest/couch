@@ -108,7 +108,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   return url.origin;
 };
 type Runtime = { id: string; mode: "household" | "personal"; owner: string | null; disposed: boolean; sourceGeneration: number; store: ReturnType<typeof createSessionStore>; privateStore?: ReturnType<typeof openStore>; session: ReturnType<typeof createSession>; targets: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["bind"]>; subtitles: ReturnType<typeof createSubtitles>; radioProgramme: ReturnType<typeof createRadioProgramme>; playback: ReturnType<ReturnType<typeof createJellyfin>["createPlayback"]>; catalog: ReturnType<typeof createCatalog> };
-type SocketData = { runtime: Runtime; renderer?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type SocketData = { runtime: Runtime; rendererSessionId?: string; renderer?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
@@ -747,20 +747,31 @@ export function createHub(options: HubOptions) {
         if (typeof message !== "string") { socket.close(1003, "JSON text messages required."); return; }
         let command;
         try {
-          const renderer = parseRendererMessage(JSON.parse(message));
+          const value = JSON.parse(message);
+          if (value?.type === "selectSession") {
+            if (value.mode !== "household" && value.mode !== "personal" || value.mode === "personal" && !socket.data.controllerId) throw new Error("Invalid playback selection.");
+            const next = value.mode === "personal" ? createRuntime(socket.data.controllerId!) : household;
+            socket.unsubscribe(topic(runtime, socket.data.playbackClock));
+            socket.data.runtime = next;
+            socket.subscribe(topic(next, socket.data.playbackClock));
+            socket.send(JSON.stringify({ type: "state", state: snapshot(next) } satisfies ServerMessage));
+            return;
+          }
+          const renderer = parseRendererMessage(value);
           if (renderer) {
             const sendRenderer = (command: PlaybackCommand) => {
               // Revocation still retires playback on the socket before closing it.
               if (command.type !== "stop") socket.data.authorize();
-              if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
+              if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId: socket.data.rendererSessionId!, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
             };
+            if (renderer.type === "registerNativeRenderer" || renderer.type === "registerRenderer") socket.data.rendererSessionId ??= sessionId;
             if (renderer.type === "registerNativeRenderer") {
               if (!socket.data.controllerId || socket.data.renderer) throw new Error("Native receiver enrollment requires its own paired connection.");
               store.markNativeReceiverUsed();
               socket.data.receiver = registry.registerReceiver(socket.data.controllerId, `${playbackActor(socket.data.controllerId)?.name ?? "Couch"} player`, sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
               socket.data.renderer = socket.data.receiver;
               socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
-              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
+              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId: socket.data.rendererSessionId! } satisfies ServerMessage));
             } else if (renderer.type === "nativeLease") {
               if (!socket.data.receiver) throw new Error("Unregistered native receiver.");
               socket.data.receiver.renew();
@@ -768,8 +779,8 @@ export function createHub(options: HubOptions) {
             } else if (renderer.type === "registerRenderer") {
               if (socket.data.receiver) throw new Error("A native receiver cannot also register as a browser.");
               socket.data.renderer ??= registry.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize);
-              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
-            } else if (socket.data.renderer && renderer.sessionId === sessionId) socket.data.renderer.observe(renderer.state);
+              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId: socket.data.rendererSessionId! } satisfies ServerMessage));
+            } else if (socket.data.renderer && renderer.sessionId === socket.data.rendererSessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");
             return;
           }

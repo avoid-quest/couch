@@ -278,3 +278,33 @@ test("an in-memory Core keeps personal playback stores in memory", async () => {
     expect(paths).toEqual([":memory:", ":memory:", ":memory:"]);
   } finally { opening.mockRestore(); }
 });
+
+
+test("changing controlled playback preserves the renderer, private progress and queue", async () => {
+  const { hub, aToken, a, b } = await setup();
+  await a.play("private-audio", 28);
+  const attachment = a.targetId;
+  const playbackId = a.player.playbackId!;
+  const from = a.messages.length;
+  a.send({ type: "selectSession", mode: "household" });
+  await a.wait(message => message.type === "state" && message.state.sessionMode === "household", from);
+  expect(a.state.queue).toEqual([]);
+  expect(a.player.status).toBe("playing");
+  expect(a.messages.slice(from).some(message => message.type === "rendererCommand" && message.command.type === "stop")).toBe(false);
+  a.player = { ...a.player, position: 54 };
+  a.send({ type: "rendererObservation", sessionId: a.sessionId, state: a.player });
+  const personalController = new Peer(hub, aToken, "personal");
+  await personalController.wait(message => message.type === "state" && message.state.player.position === 54);
+  expect(personalController.state.targetId).toBe(attachment);
+  expect(await personalController.command({ type: "pause", playbackId, paused: true })).toMatchObject({ ok: true });
+  await personalController.wait(message => message.type === "state" && message.state.player.status === "paused");
+  expect(a.player.status).toBe("paused");
+  expect(b.state.queue).toEqual([]);
+  const back = a.messages.length;
+  a.send({ type: "selectSession", mode: "personal" });
+  await a.wait(message => message.type === "state" && message.state.sessionMode === "personal", back);
+  expect(a.state.currentEntryId).toBe("private-audio");
+  expect(a.state.player.position).toBe(54);
+  expect(a.targetId).toBe(attachment);
+  expect(a.messages.filter(message => message.type === "rendererRegistered")).toHaveLength(1);
+});
