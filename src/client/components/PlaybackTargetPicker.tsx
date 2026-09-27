@@ -21,7 +21,7 @@ export function PlaybackTargetPicker() {
   const selected = playbacks.find(playback => playback.id === state?.sessionId);
   const assignedIds = state?.deviceIds ?? selected?.deviceIds ?? [];
   const disabled = !connected || !!state?.handoff || pending !== null;
-  const waiting = pending?.map(id => devices.find(device => device.id === id)).filter(device => device?.requiresGesture).map(device => device!.name) ?? [];
+  const waiting = pending && pending.length > 1 ? pending.map(id => devices.find(device => device.id === id)).filter(device => device?.requiresGesture).map(device => device!.name) : [];
   const assign = (ids: string[], takeover = false, close = true) => {
     setPending(ids);
     void assignDevices(ids, takeover).then(ok => { if (ok && close) setOpen(false); }).finally(() => setPending(null));
@@ -50,7 +50,7 @@ export function PlaybackTargetPicker() {
                 <p className="min-h-8 text-xs text-muted-foreground">{!device.connected ? "Disconnected" : occupied ? `Playing ${otherPlayback?.title ?? "another playback"}` : assigned ? "In this playback" : "Available"}{local && " · This device"}</p>
                 <label className="mt-2 flex min-h-11 items-center gap-2 text-xs"><Switch aria-label={`${device.name} output`} checked={assigned} disabled={!canToggle} onCheckedChange={checked => assign(checked ? [...assignedIds, device.id] : assignedIds.filter(id => id !== device.id), false, false)} />{assigned ? "On" : "Off"}</label>
                 {assigned && <Button size="sm" variant="ghost" disabled={!volumeEnabled} onClick={() => { void setDeviceVolume(device.id, device.volume, !device.muted); }}>{device.muted ? "Unmute" : "Mute"}</Button>}
-                {assigned && local && device.requiresGesture && <Button size="sm" variant="ghost" onClick={() => { void activateDeviceAudio(); }}>Enable audio</Button>}
+                {assigned && assignedIds.length > 1 && local && device.requiresGesture && <Button size="sm" variant="ghost" onClick={() => { void activateDeviceAudio(); }}>Enable audio</Button>}
                 {occupied && otherPlayback && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(otherPlayback.id); setOpen(false); }}>Control</Button>}
                 {selected && !assigned && device.connected && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => occupied ? (setReplace(device), setOpen(false)) : assign([device.id])}>{occupied ? "Replace…" : "Move here"}</Button>}
               </div>;
