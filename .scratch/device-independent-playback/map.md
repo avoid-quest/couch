@@ -7,8 +7,9 @@ model. [Architecture](../../docs/architecture.md) records current seams. The
 resolved labels there do not close this matrix. Preserve their receipts and archives.
 
 Library pairing grants control of playback in that Library; administrator access is
-separate. A window must explicitly select another Playback, and neither selecting nor
-opening it changes device assignment. The paired-device UI should disclose shared
+separate. Participants follow their assigned Playback and can change its media,
+queue and devices. Explicit Control selects another Playback without rendering;
+Join adds this device. Opening a window never changes device assignment. The paired-device UI should disclose shared
 control. Legacy `household`/`personal` selectors are storage/migration aliases,
 not active user workflows. The old global Sendspin group and Listen together dialog
 are superseded by assigning audio Devices to an individual Playback.
@@ -18,7 +19,9 @@ are superseded by assigning audio Devices to an individual Playback.
 A row is **PARTIAL** when a built-app journey covers some of it; it stays open until
 the complete capability has been observed. A test, simulated peer or screenshot alone
 does not complete a row. The [software observations](model-software-observations-2026-09-27.md)
-record the earlier setup paths and their limitations.
+record the earlier setup paths and their limitations. The
+[shared-video observations](shared-video-observations-2026-09-28.md) record participant
+controls, native/browser picture output and the user's physical phone result.
 Record build revision, source, client/Device, steps, observed media/state, failure
 and recovery, and measured timing/resources where relevant. Separate actual device
 observations, software-output results and unavailable physical checks.
@@ -30,19 +33,19 @@ observations, software-output results and unavailable physical checks.
 | Library and permissions | Browse/manage sources and authorized settings across browser/desktop/TV; pair a second device and confirm shared-control disclosure and admin separation. | PARTIAL — shared browsing and Find used; full administration/revocation coverage remains open. |
 | Control only | Open/navigate/select another Playback while its renderer continues; no media fetch, local decoder, screen navigation or implicit takeover. Close controller and confirm remote playback. | PARTIAL — native selected browser HLS, then Quit; browser continued at 71 s. Traffic audit remains open. |
 | Concurrent Playback | Two people/devices play different media, queues, progress and tracks; create another Playback without changing either existing queue. | PARTIAL — independent browser/native radio earlier; browser HLS and native HLS have separate timelines. Track/progress persistence remains open. |
-| Audio devices | Add/remove two compatible audio Devices on one timeline, then run two independent Playbacks with separate synchronized delivery. Check membership, reconnect, per-device/shared loudness and the optional external audio-server setting. | PARTIAL — phone + standalone Mac shared radio audible without the reported pop; removal and producer cleanup observed. Automatic native readiness, two shared Playbacks and external-server checks remain open. |
+| Audio devices | Add/remove two compatible audio Devices on one timeline, then run two independent Playbacks with separate synchronized delivery. Check membership, reconnect, per-device/shared loudness and the optional external audio-server setting. | PARTIAL — phone + standalone Mac shared radio audible without the reported pop; removal and producer cleanup observed. Native joined without Enable audio in the new built app. Two shared Playbacks and external-server checks remain open. |
+| Shared video and participant controls | One screen shows video while selected Devices share sound; every participant changes media, queue and transport. Join an ongoing Playback without a separate setup mode. | PARTIAL — native moving Mux HLS picture plus phone soundtrack physically confirmed as apparently aligned on a2e53fbc. Browser picture plus Mac sound has decoder/SDK evidence. Browser pause and seek changed native picture; native media selection changed shared radio. Multi-screen video is deferred by user choice. Complete source/track coverage remains open. |
 | Identity and scope | Rename once; check one Device entry across pairing, direct rendering and synchronized audio, plus restart and browser origin/profile limits. Verify each visible transport/queue/volume control names its Playback or Device. | PARTIAL — Rename, refresh and pairing persistence observed with one browser row; full origin/migration and control-scope review remain open. |
 | Audio/video Move | Move ongoing audio and video both directions; verify queue occurrence, position/live distance, pause intent, speed and compatible tracks. Confirm destination readiness before source retirement. | PARTIAL — live radio both directions; unoccupied HLS moved both ways at 392.1 s, paused, 1.5× and compatible tracks. Native destination opened the correct Playback and user confirmed video picture. Intermittent readiness failure and retry speed loss remain open. |
 | Occupation and failure | Replace an occupied Device explicitly; refuse incompatible combinations contextually; recover preparation, autoplay gesture, disconnect and uncertain-silence failures without duplicate playback. | PARTIAL — occupied Replace shown and failed HLS move kept browser paused at 247.122 s / 1.5×. Broader failures remain open. |
-| Lifecycle | Navigate, close renderer/controller, revoke access and restart Core; reconnect with accurate resumable state, no stale command or unexpected autoplay. | PARTIAL — controller Quit/reopen preserved browser playback; Core restart retained checkpoints without autoplay and explicit resume worked. Home recovery fix and revocation remain open. |
+| Lifecycle | Navigate, close renderer/controller, revoke access and restart Core; reconnect with accurate resumable state, no stale command or unexpected autoplay. | PARTIAL — controller Quit/reopen preserved browser playback. Shared-video host restart retained the item, 379.4821 s and three assigned Devices without autoplay; offline membership stayed visible. Removing an offline output exposed a UI restriction, now corrected. Revocation and complete recovery coverage remain open. |
 | Sources and efficiency | Real supported native/provider/direct browser/HLS/DASH/live-DVR sources, audio/subtitle tracks and quality limits, with actionable capability failures; measure startup, seek, Move, cleanup, decoders and traffic. | PARTIAL — Sygma and Mux HLS observed, shared producer exited after Move. One native radio reopen stayed Loading; DASH/provider/track/quality coverage remains open. |
 | Physical audio | Measure speaker timing and output behavior on actual available devices. Software PCM/SDK evidence remains labeled separately. | PARTIAL — user confirmed phone and Mac audible together with no pop on 7b6be47a after the first-block fade. Timing/synchronization remain unmeasured. |
 
 Implementation includes the Playback catalog, per-Playback Sendspin producers,
 the native output reservation and Library lifetime fixes, and one Output mixer.
 Device assignment stays behind `createPlaybackDevices`. Observations above are from
-builds `7b6be47a`, `eab5768c`, `33390923` and earlier recorded builds; subsequent fixes need a new built-app
-check. Migration, failure behavior, complete
+builds `a2e53fbc`, `da15c350`, `7b6be47a`, `eab5768c`, `33390923` and earlier recorded builds; each receipt states its limits. Migration, failure behavior, complete
 source coverage and physical measurements still require acceptance evidence. Follow
 [`docs/ci.md`](../../docs/ci.md) for relevant checks and `act` before dispatching
 workflow or packaging changes; do not merge or release here.
