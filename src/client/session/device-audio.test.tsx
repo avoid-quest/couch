@@ -97,7 +97,7 @@ test("managed native lease reserves before playback and releases only its owning
     await waitFor(() => expect(device.audioReady).toBe(true));
     expect(clients[0]!.unlock).toHaveBeenCalledTimes(1);
     await act(async () => device.reserve("group-one", "direct-player"));
-    expect(ipc).toHaveBeenCalledWith("native_audio_begin", { managed: true, retiringPlaybackId: "direct-player" });
+    expect(ipc).toHaveBeenCalledWith("native_audio_begin", { managed: true, playbackOwner: "group-one", retiringPlaybackId: "direct-player" });
     await act(async () => device.reserve("group-one"));
     expect(ipc.mock.calls.filter(([name]) => name === "native_audio_begin")).toHaveLength(1);
     await act(async () => device.release("other-group"));

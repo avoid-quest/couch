@@ -1,4 +1,4 @@
-import { setupUiTests } from "@/testing/react";
+import { setupUiTests, waitFor } from "@/testing/react";
 import { afterEach, expect, test } from "bun:test";
 import { createBrowserRenderer } from "./browser-renderer";
 import type { PlayerState } from "../../shared/protocol";
@@ -39,7 +39,7 @@ test("unknown browser audio tracks do not invent a selected audio stream", () =>
   renderer.close();
 });
 
-test("available audio metadata reports real choices and applies explicit track selection", () => {
+test("available audio metadata reports real choices and applies explicit track selection", async () => {
   const states: PlayerState[] = [];
   const renderer = createBrowserRenderer(state => states.push(state));
   renderer.command({ type: "load", playbackId: "first", source: "https://example.org/video.mp4", paused: true });
@@ -50,14 +50,14 @@ test("available audio metadata reports real choices and applies explicit track s
   ];
   Object.defineProperty(media, "audioTracks", { value: tracks });
   renderer.command({ type: "track", playbackId: "first", kind: "audio", index: 1 });
-  expect(states.at(-1)?.tracks).toEqual([
+  await waitFor(() => expect(states.at(-1)?.tracks).toEqual([
     { id: "en", label: "English", language: "en", selected: false, kind: "audio", index: 0 },
     { id: "it", label: "Italian", language: "it", selected: true, kind: "audio", index: 1 },
-  ]);
+  ]));
   renderer.close();
 });
 
-test("video-only metadata reports no audio selection", () => {
+test("video-only metadata reports no audio selection", async () => {
   const states: PlayerState[] = [];
   const renderer = createBrowserRenderer(state => states.push(state));
   renderer.command({ type: "load", playbackId: "first", source: "https://example.org/video.mp4", paused: true });
@@ -65,7 +65,7 @@ test("video-only metadata reports no audio selection", () => {
   Object.defineProperty(media, "audioTracks", { value: [] });
   Object.defineProperty(media, "videoWidth", { value: 640 });
   media.dispatchEvent(new Event("durationchange"));
-  expect(states.at(-1)?.audioTracksKnown).toBe(true);
+  await waitFor(() => expect(states.at(-1)?.audioTracksKnown).toBe(true));
   expect(states.at(-1)?.tracks).toEqual([{ id: "default-video", index: 0, kind: "video", label: "Video", language: "", selected: true }]);
   renderer.close();
 });
@@ -93,11 +93,11 @@ test("autoplay refusal sets a structured gesture flag which a successful retry c
   media.play = () => Promise.resolve();
   renderer.play();
   await Bun.sleep(0);
-  expect(states.at(-1)?.requiresGesture).toBe(false);
+  await waitFor(() => expect(states.at(-1)?.requiresGesture).toBe(false));
   renderer.close();
 });
 
-test("waiting playback reports loading and buffering does not leak across sources", () => {
+test("waiting playback reports loading and buffering does not leak across sources", async () => {
   const states: PlayerState[] = [];
   const renderer = createBrowserRenderer(state => states.push(state));
   renderer.command({ type: "load", playbackId: "first", source: "https://example.org/first.mp4", paused: true });
@@ -106,7 +106,7 @@ test("waiting playback reports loading and buffering does not leak across source
   Object.defineProperty(media, "readyState", { configurable: true, value: 2 });
   media.dispatchEvent(new Event("canplay"));
   media.dispatchEvent(new Event("waiting"));
-  expect(states.at(-1)).toMatchObject({ playbackId: "first", status: "loading", buffering: true });
+  await waitFor(() => expect(states.at(-1)).toMatchObject({ playbackId: "first", status: "loading", buffering: true }));
 
   renderer.command({ type: "load", playbackId: "second", source: "https://example.org/second.mp4", paused: true });
   expect(states.at(-1)).toMatchObject({ playbackId: "second", buffering: false });
@@ -166,7 +166,7 @@ test("DASH stays lazy, preserves paused preparation/start position, and caps ada
   expect(fixture.calls).toContainEqual(["https://example.org/movie.mpd?token=secret", 42]);
   expect(video.playbackRate).toBe(1.5);
   expect(plays).toBe(0);
-  expect(states.at(-1)).toMatchObject({ status: "paused", audioTracksKnown: true });
+  await waitFor(() => expect(states.at(-1)).toMatchObject({ status: "paused", audioTracksKnown: true }));
   video.playbackRate = 0;
   video.dispatchEvent(new Event("waiting"));
   expect(states.at(-1)?.speed).toBe(1.5);
@@ -268,7 +268,7 @@ test("DASH speed intent survives old destruction and commands during preparation
   await Bun.sleep(0);
   renderer.command({ type: "load", playbackId: "new", source: "https://example.org/new.mpd", paused: true });
   renderer.command({ type: "speed", playbackId: "new", speed: 1.75 });
-  expect(states.at(-1)?.speed).toBe(1.75);
+  await waitFor(() => expect(states.at(-1)?.speed).toBe(1.75));
   destroy.resolve();
   await Bun.sleep(0);
   expect(fixture.calls).toContainEqual(["speed", 1.75, false]);
@@ -319,23 +319,23 @@ for (const extension of ["mpd", "m3u8"]) test(`public ${extension} tracks retain
   Object.defineProperty(document.querySelector("video")!, "readyState", { configurable: true, value: 2 });
   await Bun.sleep(0);
   expect(imports).toBe(1);
-  expect(states.at(-1)).toMatchObject({ audioTracksKnown: true, status: "paused" });
+  await waitFor(() => expect(states.at(-1)).toMatchObject({ audioTracksKnown: true, status: "paused" }));
   const initial = states.at(-1)!.tracks!;
   expect(initial.map(track => [track.kind, track.language, track.selected])).toEqual([["audio", "en", true], ["audio", "it", false], ["subtitle", "en", false]]);
   const italianIndex = initial.find(track => track.language === "it")!.index;
   const captionIndex = initial.find(track => track.kind === "subtitle")!.index;
   audio = [italian, english]; fixture.event("audiotrackschanged");
-  expect(states.at(-1)!.tracks!.find(track => track.language === "it")!.index).toBe(italianIndex);
+  await waitFor(() => expect(states.at(-1)!.tracks!.find(track => track.language === "it")!.index).toBe(italianIndex));
   renderer.command({ type: "track", playbackId: "manifest", kind: "audio", index: italianIndex });
-  expect(states.at(-1)!.tracks!.find(track => track.language === "it")!.selected).toBe(true);
+  await waitFor(() => expect(states.at(-1)!.tracks!.find(track => track.language === "it")!.selected).toBe(true));
   renderer.command({ type: "track", playbackId: "manifest", kind: "subtitle", index: captionIndex });
-  expect(states.at(-1)!.tracks!.find(track => track.kind === "subtitle")!.selected).toBe(true);
+  await waitFor(() => expect(states.at(-1)!.tracks!.find(track => track.kind === "subtitle")!.selected).toBe(true));
   renderer.command({ type: "track", playbackId: "manifest", kind: "subtitle", index: -1 });
-  expect(states.at(-1)!.tracks!.find(track => track.kind === "subtitle")!.selected).toBe(false);
+  await waitFor(() => expect(states.at(-1)!.tracks!.find(track => track.kind === "subtitle")!.selected).toBe(false));
   audio = [english]; text = []; fixture.event("trackschanged");
   renderer.command({ type: "track", playbackId: "manifest", kind: "audio", index: italianIndex });
   expect(english.active).toBe(false);
-  expect(states.at(-1)!.tracks).toHaveLength(1);
+  await waitFor(() => expect(states.at(-1)!.tracks).toHaveLength(1));
   renderer.command({ type: "stop" }); await Bun.sleep(0);
   const count = states.length;
   fixture.event("trackschanged"); fixture.error(3016);
@@ -357,16 +357,16 @@ test.each([false, true])("manifest live range follows DVR updates, clamps seeks 
   Object.defineProperty(video, "duration", { configurable: true, value: Infinity });
   await Bun.sleep(0);
   expect(fixture.calls).toContainEqual(["https://media.example/live.m3u8", undefined]);
-  expect(states.at(-1) as unknown).toMatchObject({ live: true, duration: null, seekable: !radio, seekRange: radio ? undefined : range });
+  await waitFor(() => expect(states.at(-1) as unknown).toMatchObject({ live: true, duration: null, seekable: !radio, seekRange: radio ? undefined : range }));
   video.currentTime = 150;
   renderer.command({ type: "seek", playbackId: "live", position: 1 });
   expect(video.currentTime).toBe(radio ? 150 : 120);
   range = { start: 140, end: 200 }; fixture.event("manifestupdated");
-  expect(states.at(-1) as unknown).toMatchObject({ seekRange: radio ? undefined : range });
+  await waitFor(() => expect(states.at(-1) as unknown).toMatchObject({ seekRange: radio ? undefined : range }));
   renderer.command({ type: "seek", playbackId: "live", position: 999 });
   expect(video.currentTime).toBe(radio ? 150 : 200);
   range = { start: 200, end: 200 }; fixture.event("manifestupdated");
-  expect(states.at(-1)?.seekable).toBe(false);
+  await waitFor(() => expect(states.at(-1)?.seekable).toBe(false));
   renderer.close(); await Bun.sleep(0);
 });
 

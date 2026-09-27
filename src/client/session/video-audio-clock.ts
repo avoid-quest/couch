@@ -1,5 +1,4 @@
 import { TimingObject, type ITimingObject } from "timing-object";
-import { createUpdateStepwise, setTimingsrc, setTimingsrcWithCustomUpdateFunction } from "timingsrc";
 import type { PlaybackCommand, PlayerState } from "../../shared/protocol";
 
 export type AudioClockSample = { groupId: string; positionMs: number; playbackSpeed: number };
@@ -8,8 +7,9 @@ type NativeState = Pick<PlayerState, "playbackId" | "status" | "position" | "dur
 type VideoCommand = Extract<PlaybackCommand, { type: "seek" | "speed" | "pause" }>;
 
 /** Feed the maintained media synchronizer from the local Sendspin player's audio clock. */
-function follow(readClock: ReadClock, ready: () => boolean, attach: (timing: ITimingObject) => () => void) {
+function follow(readClock: ReadClock, ready: () => boolean, attach: (timing: ITimingObject, sync: typeof import("timingsrc")) => () => void) {
   const timing = new TimingObject();
+  let library: Promise<typeof import("timingsrc")> | undefined;
   let stopped = false;
   let refreshing = false;
   let detach: (() => void) | undefined;
@@ -23,7 +23,10 @@ function follow(readClock: ReadClock, ready: () => boolean, attach: (timing: ITi
         return;
       }
       await timing.update({ position: Math.max(0, sample.positionMs / 1000), velocity: Math.max(0, sample.playbackSpeed) });
-      if (!stopped && !detach) detach = attach(timing);
+      if (!stopped && !detach) {
+        const sync = await (library ??= import("timingsrc"));
+        if (!stopped && !detach) detach = attach(timing, sync);
+      }
     } finally { refreshing = false; }
   };
   void refresh().catch(() => {});
@@ -33,7 +36,7 @@ function follow(readClock: ReadClock, ready: () => boolean, attach: (timing: ITi
 
 export function followBrowserVideo(video: HTMLVideoElement, readClock: ReadClock) {
   video.muted = true;
-  return follow(readClock, () => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA, timing => setTimingsrc(video, timing));
+  return follow(readClock, () => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA, (timing, sync) => sync.setTimingsrc(video, timing));
 }
 
 /** Native mpv keeps its own observed state; this adapter only coalesces synchronizer writes. */
@@ -67,6 +70,6 @@ export function followNativeVideo(readState: () => NativeState, send: (command: 
   const stop = follow(readClock, () => {
     const state = readState();
     return !!state.playbackId && ["paused", "playing"].includes(state.status);
-  }, timing => setTimingsrcWithCustomUpdateFunction(media, timing, createUpdateStepwise(0.1)));
+  }, (timing, sync) => sync.setTimingsrcWithCustomUpdateFunction(media, timing, sync.createUpdateStepwise(0.1)));
   return () => { stopped = true; stop(); recent.clear(); };
 }
