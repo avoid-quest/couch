@@ -1,29 +1,28 @@
-# Couch playback
+# Couch language
 
-Vocabulary for accessing one Couch library and choosing where its media plays.
+[The playback contract](docs/playback-product.md) defines behavior. Use these words
+in the application and active product documents.
 
-## Language
+**Library**: Media, sources and authorized settings coordinated by one Couch Core.
+Connecting to a Library does not assign a playback device.
 
-**Couch Core**: The authority for a Couch library, integrations, access permissions
-and playback sessions. It can serve clients without being a playback device.
-_Avoid_: Player, desktop app when referring to this authority.
+**Playback**: One durable queue, current item, timeline, intent, track choices and
+watching preferences. Several Playbacks may run independently. A window selects
+which authorized Playback it controls; that choice does not move or stop it.
 
-**UI client**: A user interface connected to Core for browsing, management and
-playback control. It may also offer a renderer on the same device.
-_Avoid_: Remote when it implies a reduced interface.
+**Device**: A named place that can render media. One persistent client identity and
+name spans pairing, direct rendering and synchronized audio. Device loudness stays
+with that Device.
 
-**Playback target**: A selectable destination for a session's playback: one
-renderer or a synchronized output group.
-_Avoid_: Server, device when the destination could be a group.
+**Move**: Continue the same Playback on a different Device, preserving its state.
 
-**Renderer**: The endpoint that consumes media and produces picture or sound.
-Its supported formats and output controls depend on the device and playback backend.
-_Avoid_: Client when only playback, rather than the UI, is meant.
+**Add device**: Give a compatible audio Device the existing Playback's timeline.
+Sendspin synchronization is internal. This action creates no separate Playback.
 
-**Playback session**: The continuing queue, current item, playback intent and
-observed progress that can move between targets.
-_Avoid_: Player instance, connection, individual media load.
+**New playback**: Start a separate queue and timeline without changing another
+Playback. A client has a default Playback for convenience; the default is not an
+ownership mode.
 
-**Media delivery**: The path and representation that make a source playable by
-a target, including direct access, relay, remuxing or transcoding.
-_Avoid_: Transcoding as a synonym for streaming.
+Core, renderer, assignment, media delivery, Sendspin client IDs and legacy session
+aliases are implementation terms. Their seams are recorded in
+[architecture](docs/architecture.md), not exposed as setup choices.

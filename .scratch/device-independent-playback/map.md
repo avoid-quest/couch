@@ -1,64 +1,44 @@
-# Device-independent playback
+# Playback backlog and acceptance
 
-Status: local-only; Sendspin-only synchronized audio; hardware qualification remains
+[The active product contract](../../docs/playback-product.md) defines the replacement
+model. [Architecture](../../docs/architecture.md) records current seams. The
+[original brief](brief.md), [issues 01–08](issues/) and
+[2026-09-27 map](map-2026-09-27.md) record earlier decisions and observations;
+resolved labels there do not close this matrix. Preserve their receipts and archives.
 
-## Current direction
+Library pairing grants control of playback in that Library; administrator access is
+separate. A window must explicitly select another Playback, and neither selecting nor
+opening it changes device assignment. The paired-device UI should disclose shared
+control. Legacy `household`/`personal` selectors are storage/migration aliases,
+not active user workflows. The old global Sendspin group and Listen together dialog
+are superseded by assigning audio Devices to an individual Playback.
 
-Clients fetch, decode and render supported sources directly. Core owns authorization,
-queue/session intent, persistence and output assignment. Idle controllers fetch no
-media. Sendspin owns group synchronization. Preserve the existing app presentation.
+## Built-app acceptance matrix
 
-The user selected local-only deployment and Sendspin-only audio on 2026-09-27.
-Snapcast, its TCP producer and the separate external-pairing mode are retired.
-Local HTTPS is optional; public deployment and WAN qualification are outside scope.
+Every row is **PENDING** until a current built-app setup-to-playback journey is
+recorded. A test, simulated peer or screenshot alone does not complete a row.
+Record build revision, source, client/Device, steps, observed media/state, failure
+and recovery, and measured timing/resources where relevant. Separate actual device
+observations, software-output results and unavailable physical checks.
 
-The user explicitly abandoned new Jellyfin work on 2026-09-27. Existing native
-provider support remains compatible; new Core browser relays/adaptation are removed.
-The uncommitted HLS experiment is preserved in stash
-`6b5303026b2056bdbf34fb39efd05923bac7de72`, with ignored qualification artifacts.
-It is not an implementation dependency or a priority for future agents.
-
-## Existing backlog
-
-| Issue | Current state | Completion still needed |
+| Capability | Journey to observe | Status |
 | --- | --- | --- |
-| [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
-| [02 Client sources](issues/02-remote-source-compatibility.md) | Implemented | Physical/platform qualification remains separate. |
-| [03 Groups](issues/03-multiroom-output.md) | Both roles, administrator hosting settings and bounded admission retries implemented | Physical speaker timing and device qualification only. |
-| [04 Adaptation](issues/04-media-adaptation.md) | Client HLS/DASH adaptation and caps implemented | Further webpage rendition selection waits for a demonstrated provider need. |
-| [05 Core/receivers](issues/05-core-and-receivers.md) | Compiled independent startup/recovery and unit syntax pass | Real systemd boot and physical/platform qualification; no Linux device available. |
-| [06 Independent sessions](issues/06-independent-sessions.md) | Implemented | Disk/HTTP/WS isolation and real browser workflows pass. |
-| [07 Local access](issues/07-internet-access.md) | Public access retired; optional local HTTPS retained | No public deployment required. |
-| [08 UI parity](issues/08-shared-ui-parity.md) | Session/group flows checked | Physical desktop/TV platform qualification remains separate. |
+| Fresh and migrated Library | First setup/pairing through the app; reopen and migrate existing queue, progress, checkpoint, name and credentials without duplicate identity. | PENDING |
+| Runtime placement | Standalone desktop; independent Core with TV window closed; browser and additional native client connected once. Select a usable home-network address on a Mac with virtual interfaces. Verify hardware and maintenance target the named machine. | PENDING |
+| Library and permissions | Browse/manage sources and authorized settings across browser/desktop/TV; pair a second device and confirm shared-control disclosure and admin separation. | PENDING |
+| Control only | Open/navigate/select another Playback while its renderer continues; no media fetch, local decoder, screen navigation or implicit takeover. Close controller and confirm remote playback. | PENDING |
+| Concurrent Playback | Two people/devices play different media, queues, progress and tracks; create another Playback without changing either existing queue. | PENDING |
+| Audio devices | Add/remove two compatible audio Devices on one timeline, then run two independent Playbacks with separate synchronized delivery. Check membership, reconnect, per-device/shared loudness and the optional external audio-server setting. | PENDING |
+| Identity and scope | Rename once; check one Device entry across pairing, direct rendering and synchronized audio, plus restart and browser origin/profile limits. Verify each visible transport/queue/volume control names its Playback or Device. | PENDING |
+| Audio/video Move | Move ongoing audio and video both directions; verify queue occurrence, position/live distance, pause intent, speed and compatible tracks. Confirm destination readiness before source retirement. | PENDING |
+| Occupation and failure | Replace an occupied Device explicitly; refuse incompatible combinations contextually; recover preparation, autoplay gesture, disconnect and uncertain-silence failures without duplicate playback. | PENDING |
+| Lifecycle | Navigate, close renderer/controller, revoke access and restart Core; reconnect with accurate resumable state, no stale command or unexpected autoplay. | PENDING |
+| Sources and efficiency | Real supported native/provider/direct browser/HLS/DASH/live-DVR sources, audio/subtitle tracks and quality limits, with actionable capability failures; measure startup, seek, Move, cleanup, decoders and traffic. | PENDING |
+| Physical audio | Measure speaker timing and output behavior on actual available devices. Software PCM/SDK evidence remains labeled separately. | PENDING |
 
-## Coordination
-
-The active PR chain includes independent sessions #629, TypeScript Sendspin hosting
-#631 and official JS Sendspin client #632, historical validation #633, local/Sendspin-only
-scope #634, hosting settings #635 and the local-qualification layer. The Python
-Sendspin experiment (#628) is closed and preserved on
-`archive/sendspin-python-20260927`; it is removed from the application. The user
-requires both independent optional roles: clients join an existing server, and Core
-can host groups. Both are implemented. Hosting is opt-in; Couch enrollment provisions
-owner-bound PSKs. Host interoperability uses AES-GCM; its library lacks PIN server
-onboarding. The client uses official pairing when connecting to an external server.
-Nothing is merged or released. Existing main remains `3bd72c7d` after fetch.
-
-Runtime costs: client video decoding/rendering is the main direct-play workload.
-Core source resolution is transient; group PCM decoding/distribution is the central
-media workload. Ordinary direct playback keeps provider traffic on renderers. Hosted
-group PCM is 192 kB/s per receiver before overhead. Do not infer physical performance
-or total decoding cost from the Core-only process measurements below.
-
-Current software results, exact-revision gate location and each hardware check's
-next action: [local workflow qualification](local-workflow-2026-09-27.md).
-Earlier decoder/browser/network measurements remain in
-[boundary qualification](boundaries-2026-09-27.md). The user confirms no external
-Sendspin server or Linux device is available. Physical-output and systemd-boot
-checks require those environments. Third-party PIN onboarding is explicitly deferred
-and outside this continuation; it is not a completion blocker.
-
-The pre-retirement source is preserved at
-`archive/playback-before-local-sendspin-20260927` (`6356e76d`).
-
-Earlier receipts and archived experiments: [validation.md](validation.md).
+Implementation is in progress on the playback-model stack layer. Current code has a
+Playback catalog/default pointer and per-Playback Sendspin producers, with assignment
+behind `createPlaybackDevices`. The actual UI journeys, migration, failure behavior,
+source coverage and physical measurements still require acceptance evidence. Follow
+[`docs/ci.md`](../../docs/ci.md) for relevant checks and `act` before dispatching
+workflow or packaging changes; do not merge or release here.

@@ -1,5 +1,7 @@
 # Play remote media and move the session between browser and Couch TV
 
+> Historical issue record (2026-09-27). Its design and completion claims describe the earlier session/group model. Follow [the replacement product contract](../../../docs/playback-product.md) and [current acceptance matrix](../map.md).
+
 Type: task
 Status: resolved
 Blocked by: none
