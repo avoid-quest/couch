@@ -316,6 +316,35 @@ async fn check_lan_address(url: &Url) -> Result<(), String> {
     Ok(())
 }
 
+async fn own_library(app: &tauri::AppHandle, candidate: &Url) -> bool {
+    let host = app.state::<Host>();
+    if !host.local_running.load(Ordering::Relaxed) { return false; }
+    let Some(Ok(local)) = host.connection.borrow().clone() else { return false; };
+    let origin = candidate.origin().ascii_serialization();
+    if local.origin == origin || local.urls.iter().any(|url| url == &origin) { return true; }
+
+    let url = candidate.clone();
+    let Ok(Ok(Ok(addrs))) = tokio::time::timeout(
+        Duration::from_secs(4),
+        tauri::async_runtime::spawn_blocking(move || addresses(&url)),
+    ).await else { return false; };
+    let Some(domain) = candidate.host_str() else { return false; };
+    let Ok(local_client) = connection_client().timeout(Duration::from_secs(2)).build() else { return false; };
+    let Ok(candidate_client) = connection_client().timeout(Duration::from_secs(2)).resolve_to_addrs(domain.trim_matches(['[', ']']), &addrs).build() else { return false; };
+    let (local_response, candidate_response) = tokio::join!(
+        local_client.get(format!("{}/api/connection", local.origin)).send(),
+        candidate_client.get(format!("{origin}/api/connection")).send(),
+    );
+    let (Ok(local_response), Ok(candidate_response)) = (local_response, candidate_response) else { return false; };
+    if !local_response.status().is_success() || !candidate_response.status().is_success() { return false; }
+    let (Ok(local_details), Ok(candidate_details)) = tokio::join!(
+        local_response.json::<serde_json::Value>(),
+        candidate_response.json::<serde_json::Value>(),
+    ) else { return false; };
+    let local_id = local_details["installationId"].as_str();
+    local_id.is_some_and(|id| !id.is_empty() && candidate_details["installationId"].as_str() == Some(id))
+}
+
 pub(crate) fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, String> {
     let status = details["player"]
         .as_str()
@@ -469,6 +498,16 @@ pub async fn select_playback_device(
     let modes = app.state::<Modes>();
     let _guard = modes.operation.lock().await;
     let mut choice = modes.current();
+    let mut mode = mode;
+    let mut remote_address = None;
+    if mode == Mode::Remote {
+        let url = target(address.as_deref().ok_or("Enter another Couch's LAN address.")?)?;
+        if own_library(&app, &url).await {
+            mode = Mode::Local;
+        } else {
+            remote_address = Some(url.origin().ascii_serialization());
+        }
+    }
     let host = app.state::<Host>();
     let output_active = {
         let owner = host.renderer_owner.lock().expect("renderer owner lock poisoned");
@@ -482,13 +521,7 @@ pub async fn select_playback_device(
     }
     let _switching = Switching(&host.switching_library);
     if mode == Mode::Remote {
-        let address = target(
-            address
-                .as_deref()
-                .ok_or("Enter another Couch's LAN address.")?,
-        )?
-        .origin()
-        .ascii_serialization();
+        let address = remote_address.expect("remote target was validated");
         if choice.mode == Some(Mode::Remote) && choice.address.as_deref() == Some(&address) { return Ok(choice); }
         if output_active && !confirm_interrupt {
             return Err("confirmation-required:local-device".into());
