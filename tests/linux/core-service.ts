@@ -81,11 +81,17 @@ try {
   const pair = await request(origin, "/api/pair", undefined, { code, name: "Core service qualification" });
   assert.equal(pair.status, 200);
   const { token } = await pair.json();
-  assert.equal((await (await request(origin, "/api/controllers/me", token)).json()).authority, "controller");
-  assert.equal((await request(origin, "/api/controllers/claim", token, { code: recovery })).status, 200);
+  assert.equal((await (await request(origin, "/api/controllers/me", token)).json()).authority, "administrator");
+  const recoveryPair = await request(origin, "/api/pair", undefined, { code, name: "Recovery administrator" });
+  assert.equal(recoveryPair.status, 200);
+  const recoveryToken = (await recoveryPair.json()).token;
+  assert.equal((await (await request(origin, "/api/controllers/me", recoveryToken)).json()).authority, "controller");
+  assert.equal((await request(origin, "/api/settings", recoveryToken, { name: "Unauthorized rename" })).status, 403);
+  assert.equal((await request(origin, "/api/controllers/claim", recoveryToken, { code: recovery })).status, 200);
+  assert.equal((await (await request(origin, "/api/controllers/me", recoveryToken)).json()).authority, "administrator");
   assert.equal((await (await request(origin, "/api/controllers/me", token)).json()).authority, "administrator");
   assert.equal((await request(origin, "/api/settings", token, { name: "Independent Core qualification" })).status, 200);
-  checks.push("HTTP pairing, separate one-use administrator bootstrap and persistent settings");
+  checks.push("first pairing establishes administrator; second controller requires recovery for administrator settings");
   socket = new WebSocket(await remoteSocketUrl(origin, token), { headers: { Origin: origin } });
   let baseline: SessionState | undefined;
   socket.onmessage = event => { const message = JSON.parse(String(event.data)); if (message.type === "state") baseline = message.state; };
@@ -98,6 +104,7 @@ try {
   const restored = await (await request(origin, "/api/controllers/me", token)).json();
   assert.equal(restored.authority, "administrator");
   assert.equal(restored.claimAvailable, false);
+  assert.equal((await (await request(origin, "/api/controllers/me", recoveryToken)).json()).authority, "administrator");
   const nextDiscovery = await (await request(origin, "/api/connection")).json();
   assert.equal(nextDiscovery.installationId, discovery.installationId);
   assert.equal(nextDiscovery.name, "Independent Core qualification");
@@ -106,7 +113,7 @@ try {
   checks.push("restart without bootstrap preserves identity, administrator and settings; consumed recovery stays invalid");
   await stop();
   checks.push("both SIGTERM shutdowns exit cleanly");
-  await Bun.write(join(artifacts, "result.json"), JSON.stringify({ build, binarySha256: createHash("sha256").update(await Bun.file(binary).arrayBuffer()).digest("hex"), checks, passed: true }, null, 2) + "\n");
+  await Bun.write(join(artifacts, "result.json"), JSON.stringify({ build, binarySha256: createHash("sha256").update(await Bun.file(binary).bytes()).digest("hex"), checks, passed: true }, null, 2) + "\n");
   console.log(`Core service qualification passed (${checks.length} checks). Report: ${join(artifacts, "result.json")}`);
 } finally {
   socket?.close();

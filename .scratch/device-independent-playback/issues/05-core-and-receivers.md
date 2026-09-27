@@ -96,8 +96,9 @@ implementation in this issue.
 
 A Linux systemd unit and explicit build/install/bootstrap/update instructions now
 reuse the existing compiled Core. The unit forces Core-only mode, binds loopback
-by default and uses a dedicated account and data directory. The existing browser
-pairing and one-use administrator recovery establish control without a local TV UI.
+by default and uses a dedicated account and data directory. The first browser
+pairing becomes administrator; optional one-use recovery can promote a replacement
+controller without a local TV UI.
 No desktop window, player, data directory or updater behavior changes.
 
 [Deployment guide](../../../docs/core-service.md) includes the compiled process

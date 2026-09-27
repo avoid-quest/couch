@@ -36,23 +36,20 @@ mode. It binds loopback port 4100 by default; choose another port in
 
 ## Pair and become administrator
 
-A fresh Core permits browser pairing. Pairing alone creates a controller; a separate
-one-use recovery code establishes the administrator when there is no local TV UI.
-Generate the code immediately before starting, because it expires after ten minutes:
+A fresh Core permits browser pairing. The first paired device becomes administrator
+when the installation has no devices; later pairings are controllers. Normal setup
+needs only the six-digit pairing code, not a recovery secret:
 
 ```sh
-sudo sh -c 'umask 077; printf "COUCH_ADMIN_RECOVERY_CODE=%s\n" "$(openssl rand -hex 32)" > /etc/couch-core/bootstrap.env'
 sudo systemctl daemon-reload
 sudo systemctl enable --now couch-core.service
 sudo journalctl -u couch-core.service -n 20 --no-pager
-sudo cat /etc/couch-core/bootstrap.env
 curl --fail http://127.0.0.1:4100/api/health
 ```
 
-Open `http://127.0.0.1:4100`, pair with the six-digit code in the journal, then open
-Settings → Remotes (`/settings/connection`) and enter the recovery value under
-**Admin code → Become admin**. A headless host can be reached through an SSH tunnel
-from your computer:
+Open `http://127.0.0.1:4100` and pair with the six-digit code in the journal.
+Protect journal access and complete the first pairing from your own browser.
+A headless host can be reached through an SSH tunnel from your computer:
 
 ```sh
 ssh -N -L 4100:127.0.0.1:4100 user@core-host
@@ -61,19 +58,35 @@ ssh -N -L 4100:127.0.0.1:4100 user@core-host
 Keep the browser URL and Core port consistent with the tunnel. If that local port is
 occupied, configure another Core port and forward that same port. Pairings are tied
 to their browser origin; switching to a LAN or HTTPS address requires pairing at
-that address. After confirming administrator access:
+that address. Administrator pairings survive restart; the six-digit code changes.
+An existing administrator can manage later devices in Settings → Remotes.
+
+### Optional administrator recovery
+
+If administrator access is lost on an existing installation, create a temporary
+one-use recovery code. It expires ten minutes after Core starts with it:
+
+```sh
+sudo sh -c 'umask 077; printf "COUCH_ADMIN_RECOVERY_CODE=%s\n" "$(openssl rand -hex 32)" > /etc/couch-core/bootstrap.env'
+sudo systemctl restart couch-core.service
+sudo journalctl -u couch-core.service -n 20 --no-pager
+sudo cat /etc/couch-core/bootstrap.env
+```
+
+Pair a replacement browser with the current six-digit code, or use an already
+paired controller. In Settings → Remotes (`/settings/connection`), enter the
+recovery value under **Admin code → Become admin**. This promotes that controller;
+it does not revoke other administrators. After confirming access:
 
 ```sh
 sudo rm /etc/couch-core/bootstrap.env
 sudo systemctl restart couch-core.service
 ```
 
-The administrator pairing survives restart. The six-digit pairing code changes.
 A consumed or expired recovery code cannot be revived by restarting; generate a
-new code if recovery is needed. Recovery also allows an existing installation to
-establish a replacement administrator. Protect journal access and the root-owned
-bootstrap file. The current application accepts this secret through its environment
-and removes it before launching media helpers; keep the bootstrap file temporary.
+new code if needed. Recovery does not bypass disabled remote sharing. Protect the
+root-owned bootstrap file. The application accepts this secret through its
+environment and removes it before launching media helpers; keep the file temporary.
 
 ## Configuration and media
 
