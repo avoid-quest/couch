@@ -24,7 +24,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   return {
     available,
-    resumable: available && player?.status === "unavailable" && !!current,
+    resumable: available && assigned.length > 0 && player?.status === "unavailable" && !!current,
     volume: devices.length ? devices.reduce((total, device) => total + device.volume, 0) / devices.length : player?.volume ?? 0,
     muted: devices.length ? devices.every(device => device.muted) : state?.systemAudio?.muted ?? false,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
@@ -84,6 +84,7 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
 }
 
 export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className }: Props & { showSlider?: boolean; showValue?: boolean; className?: string }) {
+  if (state.deviceIds?.length === 0) return null;
   const { available, audioReady, volume, muted } = playbackCapabilities(state, connected);
   const playbackState = state as typeof state & { devices?: { id: string; name: string }[]; deviceIds?: string[] };
   const target = playbackState.deviceIds?.map(id => playbackState.devices?.find(device => device.id === id)?.name).filter(Boolean).join(", ") || deviceName(state.installationName);

@@ -5,7 +5,7 @@ import type { PlaylistLoadMode, PlaylistSource, SavedPlaylist, SavedPlaylistSumm
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
 import { ProviderError } from "./providers/http";
-import { CHANGED_ELSEWHERE, QUEUE_FULL } from "./messages";
+import { CHANGED_ELSEWHERE, PlaybackError, QUEUE_FULL } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -267,7 +267,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
         if (result.changed) onChange();
         return Response.json(result.playlist ? { playlist: result.playlist } : { ok: true, undoToken: result.undoToken });
       } catch (error) {
-        return Response.json({ error: error instanceof PlaylistError || error instanceof ControllerError ? error.message : "Couldn't update the list or load Up next." }, { status: error instanceof PlaylistError || error instanceof ControllerError ? error.status : 500 });
+        return Response.json({ error: error instanceof PlaylistError || error instanceof ControllerError || error instanceof PlaybackError ? error.message : "Couldn't update the list or load Up next." }, { status: error instanceof PlaylistError || error instanceof ControllerError || error instanceof PlaybackError ? error.status : 500 });
       }
     },
     close() { db.close(); },

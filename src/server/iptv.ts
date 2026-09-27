@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shared/iptv";
 import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
-import { ADMIN_ONLY } from "./messages";
+import { ADMIN_ONLY, PlaybackError } from "./messages";
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => ControllerIdentity | null;
@@ -266,7 +266,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         }
         return json({ error: "Not found." }, 404);
       } catch (error) {
-        return json({ error: error instanceof GuideError ? error.message : "Couldn't complete the guide request." }, error instanceof GuideError ? error.status : 500);
+        return json({ error: error instanceof GuideError || error instanceof PlaybackError ? error.message : "Couldn't complete the guide request." }, error instanceof GuideError || error instanceof PlaybackError ? error.status : 500);
       }
     },
     close() {

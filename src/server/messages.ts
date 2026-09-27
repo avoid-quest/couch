@@ -9,3 +9,6 @@ export const VERSION_MISMATCH = "This Couch runs a different version. Update one
 export const REMOTES_OFF = (name: string) => `Remotes are off. Turn on Allow remotes on ${name}.`;
 export const STORAGE_ERROR = (thing: string) => `Couldn't save ${thing}. Couch may be out of space.`;
 export const PLAY_CANCELED = "Another action canceled playback.";
+export class PlaybackError extends Error {
+  constructor(message: string, readonly status = 409) { super(message); }
+}

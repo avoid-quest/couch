@@ -5,7 +5,7 @@ import type { ForLaterReference } from "../shared/for-later";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError, settingField } from "./controllers";
 import { capturePlaylistEntries } from "./playlists";
-import { CHANGED_ELSEWHERE, PLAY_CANCELED } from "./messages";
+import { CHANGED_ELSEWHERE, PLAY_CANCELED, PlaybackError } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -144,7 +144,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
         return Response.json({ ok: true, ...(undoToken ? { undoToken } : {}) });
       } catch (error) {
         if (error instanceof Error && error.message === PLAY_CANCELED) return Response.json({ error: error.message }, { status: 409 });
-        return Response.json({ error: error instanceof ControllerError ? error.message : "Couldn't open this saved item. Its source may be gone." }, { status: error instanceof ControllerError ? error.status : 409 });
+        return Response.json({ error: error instanceof ControllerError || error instanceof PlaybackError ? error.message : "Couldn't open this saved item. Its source may be gone." }, { status: error instanceof ControllerError || error instanceof PlaybackError ? error.status : 409 });
       }
     },
     close() { db.close(); },

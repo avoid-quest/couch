@@ -9,7 +9,7 @@ import { playbackMediaId, ViewingError } from "./progress";
 import type { SessionStore } from "./session-store";
 import type { createSession } from "./session";
 import { ControllerError } from "./controllers";
-import { RECORDINGS_UNSUPPORTED } from "./messages";
+import { PlaybackError, RECORDINGS_UNSUPPORTED } from "./messages";
 
 type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
@@ -318,7 +318,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         }
         return Response.json({ error: "Not found." }, { status: 404 });
       } catch (error) {
-        if (error instanceof RequestError || error instanceof RadioError || error instanceof ViewingError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
+        if (error instanceof RequestError || error instanceof RadioError || error instanceof ViewingError || error instanceof ControllerError || error instanceof PlaybackError) return Response.json({ error: error.message }, { status: error.status });
         return Response.json({ error: "The media catalog is temporarily unavailable." }, { status: 500 });
       }
     },

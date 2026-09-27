@@ -1,13 +1,14 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { AudioCodec, PlaybackStateType, PlayerCommand, serverNowUs, type SendspinCore } from "@sonn-audio/node-sendspin";
 import { createPcmDecoder, validatePcmSource } from "./pcm-decoder";
+import { PlaybackError } from "./messages";
 import type { PlaybackCommand, PlaybackTarget, PlayerState } from "../shared/protocol";
 
 export const sendspinDrainMs = 1000;
 const leadUs = 500_000, maxMembers = 32;
 type Load = Extract<PlaybackCommand, { type: "load" }> & { duration?: number };
 export function validateSendspinLoad(command: Load) {
-  if (!command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(command.audioSource ?? command.source)) throw new Error("Choose one device for this source. Playing on several devices requires a supported audio source.");
+  if (!command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(command.audioSource ?? command.source)) throw new PlaybackError("Choose one device for this source. Playing on several devices requires a supported audio source.");
   validatePcmSource(command);
   if (command.preferences?.speed !== undefined && (!Number.isFinite(command.preferences.speed) || command.preferences.speed < 0.25 || command.preferences.speed > 4)) throw new Error("Invalid playback speed.");
 }

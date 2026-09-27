@@ -6,7 +6,7 @@ import type { LibraryItem } from "../shared/library";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
 import type { createLibrary } from "./library";
-import { CHANGED_ELSEWHERE, QUEUE_FULL } from "./messages";
+import { CHANGED_ELSEWHERE, PlaybackError, QUEUE_FULL } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -179,7 +179,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
         onChange();
         return Response.json(collection ? preview(collection) : { ok: true });
       } catch (error) {
-        return Response.json({ error: error instanceof CollectionError || error instanceof ControllerError ? error.message : "Couldn't update the collection or load Up next." }, { status: error instanceof CollectionError || error instanceof ControllerError ? error.status : 500 });
+        return Response.json({ error: error instanceof CollectionError || error instanceof ControllerError || error instanceof PlaybackError ? error.message : "Couldn't update the collection or load Up next." }, { status: error instanceof CollectionError || error instanceof ControllerError || error instanceof PlaybackError ? error.status : 500 });
       }
     },
     close() { if (!closed) { closed = true; db.close(); } },
