@@ -143,6 +143,7 @@ try {
   }
 
   const queuedIds = state!.queue.map(item => item.id).join();
+  const currentEntryId = state!.currentEntryId;
   controller.close();
   await request(`/session/${session}`, undefined, "DELETE");
   session = "";
@@ -150,7 +151,7 @@ try {
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until("restarted compiled desktop app starts its sidecar", sidecar, 30_000);
   await connect(token);
-  await until("paired queue persists across restart without autoplay", () => state?.queue.map(item => item.id).join() === queuedIds && state.currentEntryId === null && state.player.status === "idle");
+  await until("paired queue persists across restart without autoplay", () => state?.queue.map(item => item.id).join() === queuedIds && state.currentEntryId === currentEntryId && state.player.status === (currentEntryId ? "unavailable" : "idle"));
 
   const binaries = await Bun.file(`${artifacts}/binaries.sha256`).text();
   assert.match(binaries, /\/work\/bin\/couch$/m, "receipt includes the launched Tauri binary hash");

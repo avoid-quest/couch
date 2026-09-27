@@ -63,3 +63,48 @@ Source preparation, idle assignment cleanup, assignment progress, single-device
 backend selection, current device gain and HLS program filtering changed after
 this build. The next exact-revision gates and built observations must qualify them.
 Historical failures and receipts remain retained in `.artifacts` and `/tmp` logs.
+
+## Mixer build eab5768c — restart, video moves and physical phone check
+
+Independent Core :4416 and the normally launched Couch Mixer.app retained their
+existing data. Browser/native pairings and names survived restart. Neither saved
+video started automatically. Explicit browser Play resumed its 247.122 s checkpoint
+at 1.5×. Home's disabled Pause after restart was a real UI defect; the subsequent
+change enables resume consistently on Home, the mini player and the full player.
+
+An occupied native checkpoint rejected a paused HLS move at 352.435 s / 1.5×.
+The browser stayed paused at that position. Try again retained position but reset
+speed to 1×. This is an unresolved failure-path limitation, not a passing transfer.
+
+Live radio moved browser → native successfully. Adding the browser needed a
+contextual native Enable audio action; one retry reverted membership, a later
+retry succeeded. Requesting HLS while both Devices played radio kept the existing
+audio and queue intact. Its generic catalog error was incorrect; subsequent code
+returns the specific device-capability message. Removing native returned to direct
+browser delivery and HLS Resume worked without changing modes.
+
+Paused HLS browser → available native succeeded: handoff began 21:22:31.002 UTC,
+native confirmed 392.1 s / 1.5× with compatible tracks at 21:22:34.435, and Device
+assignment committed by 21:22:34.445. Reverse transfer began 21:25:13.694 and
+committed to the browser by 21:25:14.393, still paused at 392.1 s / 1.5×. These
+are software-state timings. The native window still showed the prior Playback;
+subsequent code presents a newly committed native video assignment once. That
+presentation change still needs its built-app check.
+
+Rename in Settings → Devices changed the browser to “Mac browser”; refresh retained
+one identity and pairing. The user's separate phone playback continued. No ffmpeg
+producer remained after the video moves. Resource point samples and the detailed
+sequence are retained in `.artifacts/mixer-eab5768c-observations.md`.
+
+The user paired an Android phone through the app and confirmed audible Sygma Radio.
+They added mbp from Output, adjusted its fader, and confirmed both devices audible.
+They reported a very bad pop from the **phone** when adding the Mac. A subsequent
+10 ms first-block fade targets the abrupt start in that direct-to-shared transition;
+physical resolution is unverified. This is physical playback evidence, not a
+synchronization or acoustic-latency measurement.
+
+Linux core/build/native-unit and built-browser checks passed on eab5768c. Native
+smoke reached real libmpv pixels and restart, then failed an obsolete idle-checkpoint
+expectation, now aligned with resumable intent. The Mac full gate failed a PCM
+readiness race; its existing check now waits for paused decoder readiness before
+resuming. Failed receipts remain preserved and are not passing gates.
