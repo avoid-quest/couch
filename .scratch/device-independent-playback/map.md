@@ -24,7 +24,7 @@ It is not an implementation dependency or a priority for future agents.
 | --- | --- | --- |
 | [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
 | [02 Client sources](issues/02-remote-source-compatibility.md) | Implemented | Physical/platform qualification remains separate. |
-| [03 Groups](issues/03-multiroom-output.md) | Both roles implemented; real browser/group transfer and external PSK peers qualified | Physical speaker timing; PIN-only third-party receivers wait for maintained support. |
+| [03 Groups](issues/03-multiroom-output.md) | Both roles implemented; real browser/group transfer and external PSK peers qualified | Settings-based hosting and bounded admission retries; physical speaker timing is separate. |
 | [04 Adaptation](issues/04-media-adaptation.md) | Client HLS/DASH adaptation and caps implemented | Further webpage rendition selection waits for a demonstrated provider need. |
 | [05 Core/receivers](issues/05-core-and-receivers.md) | Compiled independent startup/recovery and unit syntax pass | Real systemd boot and physical/platform qualification; no Linux device available. |
 | [06 Independent sessions](issues/06-independent-sessions.md) | Implemented | Disk/HTTP/WS isolation and real browser workflows pass. |
@@ -53,9 +53,9 @@ or total decoding cost from the Core-only process measurements below.
 Current results, full decoder/browser/network workload measurements, exact-revision
 gate location and each external blocker's next action:
 [boundary qualification](boundaries-2026-09-27.md). The user confirms no external
-Sendspin server or Linux device is available. The remaining PIN, physical-output,
-and systemd-boot checks require the specified dependency/environment;
-they are not missing implementations of either Sendspin role.
+Sendspin server or Linux device is available. Physical-output and systemd-boot
+checks require those environments. Third-party PIN onboarding is explicitly deferred
+and outside this continuation; it is not a completion blocker.
 
 The pre-retirement source is preserved at
 `archive/playback-before-local-sendspin-20260927` (`6356e76d`).

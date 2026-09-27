@@ -2,7 +2,8 @@
 
 Read `AGENTS.md`, `CONTEXT.md`, `docs/architecture.md`, then [map.md](map.md).
 Scope: local computer/home network only; Sendspin is the sole synchronized-audio
-backend. Both optional Sendspin roles are implemented.
+backend. Both optional Sendspin roles are implemented. Third-party PIN onboarding
+is deferred and outside scope; it is not a completion blocker.
 Use map.md and the latest validation receipt to select an actual remaining gap;
 hardware/interoperability qualification does not imply missing application code.
 Public hosting/WAN qualification is retired; consult local HTTPS only if needed.

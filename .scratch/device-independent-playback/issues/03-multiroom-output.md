@@ -2,7 +2,8 @@
 
 Type: task
 Status: both roles implemented; actual software boundaries qualified
-Remaining qualification: physical outputs and third-party receiver interoperability
+Remaining software: settings-based hosting and bounded retries after denied admission
+Remaining qualification: physical outputs; third-party PIN onboarding is deferred
 
 ## Scope
 
@@ -35,9 +36,9 @@ physical speaker qualification; transfers remain gated by the output's qualifica
 Host 0.6.2 requires AES-GCM and explicit PSK provisioning. Its maintained library
 has no server PIN onboarding; the Rust alternative has no replacement host pairing
 API. Use Couch pairing for Couch clients and the documented PSK path for compatible
-third-party receivers. Add PIN-only receiver support only when a maintained host
-API and an actual target receiver are available; do not implement custom crypto.
-The official client still supports pairing with another server that provides it.
+third-party receivers. Third-party PIN onboarding is explicitly deferred and outside
+this continuation; it is not a completion blocker. The official client retains its
+existing pairing support for another server that provides it.
 
 No external server, Linux device or physical speaker setup is available. On the
 intended hardware, measure synchronized speaker capture across pause, seek, loss
