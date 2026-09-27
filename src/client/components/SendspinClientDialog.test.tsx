@@ -60,6 +60,23 @@ test("connection status follows SDK observations after connect resolves and acro
   expect(screen.getByRole("status")).toHaveTextContent("Waiting for Sendspin connection or pairing…");
 });
 
+test("exhausted reconnects show a recoverable stop and Leave permits a fresh Join", async () => {
+  const user = userEvent.setup();
+  render(<DialogProbe />);
+  await act(async () => client.prepare("external", "wss://music.local/sendspin", "Kitchen"));
+  await user.click(screen.getByRole("button", { name: "Join" }));
+  await act(async () => { callbacks.state(playback(false)); callbacks.error(new Error(adapter.sendspinReconnectStopped)); });
+  expect(screen.getByRole("alert")).toHaveTextContent("Sendspin stopped reconnecting. Leave and join again.");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Open pairing window" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Leave Sendspin" }));
+  await act(async () => client.prepare("external", "wss://music.local/sendspin", "Kitchen"));
+  await user.click(screen.getByRole("button", { name: "Join" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await act(async () => callbacks.state(playback(true)));
+  expect(screen.getByRole("status")).toHaveTextContent("Connected to Sendspin.");
+});
+
 test("hosting enrollment prepares identity but only a fresh Join connects", async () => {
   const requests: RequestInit[] = [];
   spyOn(globalThis, "fetch").mockImplementation((async (_url, init) => {

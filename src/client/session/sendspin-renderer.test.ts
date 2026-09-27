@@ -95,3 +95,39 @@ test("failed unlock cleans up and reports an actionable connection error", async
   expect(f.player.disconnect).toHaveBeenCalledTimes(1);
   expect(f.callbacks.error).toHaveBeenCalledTimes(1);
 });
+
+test("reconnect budget survives socket opens and cached state; terminal state fences controls", async () => {
+  const f = fixture(); await f.renderer.preload(); await f.renderer.connectFromGesture();
+  for (let attempt = 1; attempt <= 7; attempt++) {
+    f.config().reconnect?.onReconnecting?.(1);
+    f.config().onStateChange?.({ isPlaying: false, volume: 100, muted: false, playerState: "synchronized", serverState: { controller: { supported_commands: ["play"] } }, groupState: {} });
+  }
+  expect(f.callbacks.error).not.toHaveBeenCalled();
+  f.config().reconnect?.onReconnecting?.(1);
+  expect(f.player.disconnect).not.toHaveBeenCalled();
+  await Promise.resolve();
+  expect(f.player.disconnect).toHaveBeenCalledWith("user_request");
+  expect(f.callbacks.error).toHaveBeenCalledTimes(1);
+  expect(f.callbacks.error.mock.calls[0]?.[0].message).toBe("Sendspin stopped reconnecting. Leave and join again.");
+  expect(f.callbacks.state.mock.calls.at(-1)?.[0]).toMatchObject({ connected: false, isPlaying: false, supportedCommands: [] });
+  expect(f.callbacks.pairingPin).toHaveBeenCalledWith(null);
+  expect(f.renderer.transport("play")).toBe(false);
+  f.renderer.setVolume(30); f.renderer.setMuted(true); f.renderer.openPairingWindow();
+  expect(f.player.setVolume).not.toHaveBeenCalled();
+  expect(f.player.setMuted).not.toHaveBeenCalled();
+  expect(f.player.openPairingWindow).not.toHaveBeenCalled();
+  f.config().reconnect?.onExhausted?.();
+  f.config().onPairingPin?.("123456");
+  f.config().onStateChange?.({ isPlaying: false, volume: 100, muted: false, playerState: "synchronized", serverState: {}, groupState: {} });
+  expect(f.callbacks.error).toHaveBeenCalledTimes(1);
+  await expect(f.renderer.connectFromGesture()).rejects.toThrow("Leave and join again");
+});
+
+test("Leave cancels a queued terminal disconnect", async () => {
+  const f = fixture(); await f.renderer.preload(); await f.renderer.connectFromGesture();
+  for (let attempt = 0; attempt < 8; attempt++) f.config().reconnect?.onReconnecting?.(1);
+  await f.renderer.disconnect();
+  await Promise.resolve();
+  expect(f.player.disconnect).toHaveBeenCalledTimes(1);
+  expect(f.callbacks.error).not.toHaveBeenCalled();
+});

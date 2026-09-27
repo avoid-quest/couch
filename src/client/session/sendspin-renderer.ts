@@ -19,6 +19,7 @@ export interface SendspinRendererCallbacks {
   pairingPin?(pin: string | null, languages?: string[]): void;
 }
 const transports: SendspinTransport[] = ["play", "pause", "stop", "next", "previous"];
+export const sendspinReconnectStopped = "Sendspin stopped reconnecting. Leave and join again.";
 
 // Preload before enabling Connect: unlock must be the first awaited work in its
 // gesture handler. The SDK owns decoding, clock synchronization and Web Audio.
@@ -33,18 +34,36 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
   let player: SendspinPlayer | undefined;
   let connecting: Promise<void> | undefined;
   let disposed = false;
+  let reconnects = 0;
+  let reconnectStopped = false;
   let enrollment: SendspinEnrollment | undefined = config.psk ? { psk: config.psk, serverId: config.serverId } : undefined;
   let supportedCommands: SendspinTransport[] = [];
+  let lastState: SendspinRendererState | undefined;
   const fail = (reason: unknown) => {
     const error = reason instanceof Error ? reason : new Error(String(reason));
     if (!disposed) callbacks.error(error);
     return error;
   };
   const publish: NonNullable<SendspinPlayerConfig["onStateChange"]> = state => {
-    if (disposed) return;
+    if (disposed || reconnectStopped) return;
     supportedCommands = transports.filter(command => state.serverState.controller?.supported_commands?.includes(command));
-    callbacks.state({ connected: player?.isConnected ?? false, isPlaying: state.isPlaying, volume: state.volume, muted: state.muted, metadata: state.serverState.metadata, group: state.groupState, supportedCommands });
+    lastState = { connected: player?.isConnected ?? false, isPlaying: state.isPlaying, volume: state.volume, muted: state.muted, metadata: state.serverState.metadata, group: state.groupState, supportedCommands };
+    callbacks.state(lastState);
     if (state.playerState === "error") fail(new Error("Sendspin playback failed."));
+  };
+  const stopReconnecting = () => {
+    if (disposed || reconnectStopped) return;
+    reconnectStopped = true;
+    // The SDK opens a socket after onReconnecting returns. Let that call finish
+    // before disconnecting so its new socket and retry timer are also closed.
+    queueMicrotask(() => {
+      if (disposed) return;
+      player?.disconnect("user_request");
+      supportedCommands = [];
+      callbacks.state({ connected: false, isPlaying: false, volume: lastState?.volume ?? 100, muted: lastState?.muted ?? false, metadata: undefined, group: { ...lastState?.group, playback_state: "stopped" }, supportedCommands });
+      callbacks.pairingPin?.(null);
+      callbacks.error(new Error(sendspinReconnectStopped));
+    });
   };
   return {
     get clientId() { return clientId; },
@@ -61,6 +80,7 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
     },
     connectFromGesture(): Promise<void> {
       if (disposed) return Promise.reject(new Error("This Sendspin connection is closed."));
+      if (reconnectStopped) return Promise.reject(new Error(sendspinReconnectStopped));
       if (connecting) return connecting;
       if (player?.isConnected) return Promise.resolve();
       if (!library) return Promise.reject(fail(new Error("Wait for Sendspin to load, then connect again.")));
@@ -70,19 +90,20 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
           correctionMode: "sync", suite: config.suite ?? "aesgcm", unpairedAccess: false,
           ...(enrollment ? { longTermPsks: [enrollment] } : {}),
           onStateChange: publish,
-          onPairingPin: (pin, languages) => { if (!disposed) callbacks.pairingPin?.(pin, languages); },
-          reconnect: { maxAttempts: 7, onExhausted: () => { if (!disposed) fail(new Error("Sendspin connection lost. Disconnect and try again.")); } },
+          onPairingPin: (pin, languages) => { if (!disposed && !reconnectStopped) callbacks.pairingPin?.(pin, languages); },
+          reconnect: { maxAttempts: 7, onReconnecting: () => { if (++reconnects > 7) stopReconnecting(); }, onExhausted: stopReconnecting },
         });
         const current = player;
         // Do not await an import, enrollment request or another teardown here.
         const unlocked = current.unlock();
         connecting = (async () => {
           await unlocked;
-          if (disposed) { await current.disconnect("user_request"); return; }
+          if (disposed || reconnectStopped) { await current.disconnect("user_request"); return; }
           await current.connect();
-          if (disposed) await current.disconnect("user_request");
+          if (disposed || reconnectStopped) await current.disconnect("user_request");
         })().catch(async reason => {
           await current.disconnect("user_request");
+          if (reconnectStopped) throw new Error(sendspinReconnectStopped);
           throw fail(reason);
         }).finally(() => { connecting = undefined; });
         return connecting;
@@ -98,14 +119,14 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
       await player?.disconnect("user_request");
     },
     setVolume(volume: number) {
-      if (!disposed && player && Number.isFinite(volume)) player.setVolume(Math.max(0, Math.min(100, volume)));
+      if (!disposed && !reconnectStopped && player && Number.isFinite(volume)) player.setVolume(Math.max(0, Math.min(100, volume)));
     },
-    setMuted(muted: boolean) { if (!disposed) player?.setMuted(muted); },
+    setMuted(muted: boolean) { if (!disposed && !reconnectStopped) player?.setMuted(muted); },
     transport(command: SendspinTransport) {
-      if (disposed || !player?.isConnected || !supportedCommands.includes(command)) return false;
+      if (disposed || reconnectStopped || !player?.isConnected || !supportedCommands.includes(command)) return false;
       player.sendCommand(command, undefined);
       return true;
     },
-    openPairingWindow() { if (!disposed) player?.openPairingWindow(); },
+    openPairingWindow() { if (!disposed && !reconnectStopped) player?.openPairingWindow(); },
   };
 }

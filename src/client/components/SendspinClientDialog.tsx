@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
-import { createSendspinRenderer, type SendspinRendererState } from "@/session/sendspin-renderer";
+import { createSendspinRenderer, sendspinReconnectStopped, type SendspinRendererState } from "@/session/sendspin-renderer";
 import { useSessionGate } from "@/session/session-context";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
@@ -57,7 +57,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
       if (!current()) return;
       prepared = createSendspinRenderer({ url: url.href, name: name.trim() || "Couch browser" }, {
         state: value => { if (current()) { setState(value); if (value.connected) setEverConnected(true); } },
-        error: () => { if (current()) setError("Sendspin couldn't connect or continue playback. Leave and try again."); },
+        error: reason => { if (current()) setError(reason.message === sendspinReconnectStopped ? sendspinReconnectStopped : "Sendspin couldn't connect or continue playback. Leave and try again."); },
         pairingPin: value => { if (current()) setPin(value); },
       });
       await prepared.preload();
@@ -99,6 +99,7 @@ export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: {
   const idle = sendspin.phase === "idle";
   const waiting = ["preparing", "joining", "leaving"].includes(sendspin.phase);
   const playback = sendspin.state;
+  const retryStopped = sendspin.error === sendspinReconnectStopped;
   const transport = playback?.isPlaying ? "pause" : "play";
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent onCloseAutoFocus={onCloseAutoFocus}>
     <DialogHeader><DialogTitle>Sendspin playback</DialogTitle><DialogDescription>Join a server's synchronized audio group on this device.</DialogDescription></DialogHeader>
@@ -121,9 +122,9 @@ export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: {
         <div className="flex items-center gap-3"><Slider aria-label="Sendspin volume" defaultValue={[playback.volume]} key={playback.volume} onValueCommit={([value]) => sendspin.volume(value!)} /><Button variant="ghost" onClick={() => sendspin.mute(!playback.muted)}>{playback.muted ? "Unmute" : "Mute"}</Button></div>
         {playback.supportedCommands.includes(transport) && <Button variant="outline" onClick={() => sendspin.transport(transport)}>{transport === "pause" ? "Pause" : "Play"}</Button>}
       </div>}
-      {sendspin.external && (["joining", "joined"].includes(sendspin.phase) || sendspin.pin) && <Button variant="outline" onClick={sendspin.pair}>Open pairing window</Button>}
+      {!retryStopped && sendspin.external && (["joining", "joined"].includes(sendspin.phase) || sendspin.pin) && <Button variant="outline" onClick={sendspin.pair}>Open pairing window</Button>}
       {waiting && <p role="status">{sendspin.phase === "joining" ? "Joining…" : sendspin.phase === "leaving" ? "Leaving…" : "Preparing…"}</p>}
-      {sendspin.phase === "joined" && <p role="status">{playback?.connected ? "Connected to Sendspin." : sendspin.everConnected ? "Disconnected. Waiting to reconnect…" : "Waiting for Sendspin connection or pairing…"}</p>}
+      {sendspin.phase === "joined" && !retryStopped && <p role="status">{playback?.connected ? "Connected to Sendspin." : sendspin.everConnected ? "Disconnected. Waiting to reconnect…" : "Waiting for Sendspin connection or pairing…"}</p>}
       <Button variant="ghost" disabled={sendspin.phase === "leaving"} onClick={() => void sendspin.leave()}>Leave Sendspin</Button>
     </div>}
     {sendspin.error && <Alert variant="destructive"><AlertDescription>{sendspin.error}</AlertDescription></Alert>}
