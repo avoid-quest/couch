@@ -104,7 +104,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
   return url.origin;
 };
-type SocketData = { renderer?: ReturnType<ReturnType<typeof createPlaybackTargets>["register"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type SocketData = { renderer?: ReturnType<ReturnType<typeof createPlaybackTargets>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargets>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
@@ -152,7 +152,7 @@ export function createHub(options: HubOptions) {
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const targets = createPlaybackTargets(options.sendPlayer, () => session, { observeNative: options.observePlayer });
+  const targets = createPlaybackTargets(options.sendPlayer, () => session, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed() });
   const session = createSession(store, targets.send, (state, clock) => {
     idle.playback(state.player.status, !!state.radioRetry);
     radioProgramme?.observe(state);
@@ -170,9 +170,9 @@ export function createHub(options: HubOptions) {
       }
     }
   }, {
-    admitted, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned,
+    admitted, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned, nativeRenderer: () => targets.nativeRenderer,
     validateCommand: command => {
-      if (targets.nativeAssigned) return;
+      if (targets.nativeRenderer) return;
       if (command.type === "load") browserCompatible(command);
       if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported in the browser yet.");
     },
@@ -180,10 +180,10 @@ export function createHub(options: HubOptions) {
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing, destination = targets.destination) => {
       const browser = destination?.backend === "browser";
-      if (browser && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
+      if ((browser || destination?.remote) && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on the Core's own player only.");
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing, browser ? destination.capabilities ?? { mp4H264Aac: false, mp3: false } : undefined).then(media => {
-        if (!browser) return preparing ? media : subtitles.prepare(media, playbackId, signal);
+        if (!browser) return preparing || destination?.remote ? media : subtitles.prepare(media, playbackId, signal);
         try {
           signal.throwIfAborted();
           destination.authorize?.();
@@ -636,7 +636,7 @@ export function createHub(options: HubOptions) {
     }),
     websocket: {
       data: {} as SocketData,
-      maxPayloadLength: 8192,
+      maxPayloadLength: 64 * 1024,
       backpressureLimit: 4 * 1024 * 1024,
       closeOnBackpressureLimit: true,
       idleTimeout: 60,
@@ -658,11 +658,24 @@ export function createHub(options: HubOptions) {
         try {
           const renderer = parseRendererMessage(JSON.parse(message));
           if (renderer) {
-            if (renderer.type === "registerRenderer") {
-              socket.data.renderer ??= targets.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, command => {
-                socket.data.authorize();
-                if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
-              }, renderer.capabilities, socket.data.authorize);
+            const sendRenderer = (command: PlaybackCommand) => {
+              socket.data.authorize();
+              if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
+            };
+            if (renderer.type === "registerNativeRenderer") {
+              if (!socket.data.controllerId || socket.data.renderer) throw new Error("Native receiver enrollment requires its own paired connection.");
+              store.markNativeReceiverUsed();
+              socket.data.receiver = targets.registerReceiver(socket.data.controllerId, `${playbackActor(socket.data.controllerId)?.name ?? "Couch"} player`, sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
+              socket.data.renderer = socket.data.receiver;
+              socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
+              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
+            } else if (renderer.type === "nativeLease") {
+              if (!socket.data.receiver) throw new Error("Unregistered native receiver.");
+              socket.data.receiver.renew();
+              socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
+            } else if (renderer.type === "registerRenderer") {
+              if (socket.data.receiver) throw new Error("A native receiver cannot also register as a browser.");
+              socket.data.renderer ??= targets.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize);
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
             } else if (socket.data.renderer && renderer.sessionId === sessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");

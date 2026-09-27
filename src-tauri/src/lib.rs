@@ -9,6 +9,7 @@ mod display;
 mod file_export;
 mod metadata_export;
 mod native_cursor;
+mod native_receiver;
 mod native_window_title;
 mod now_playing;
 mod operating_mode;
@@ -68,7 +69,8 @@ struct Host {
 }
 
 impl Host {
-    fn report(&self, state: &PlayerState) {
+    fn report(&self, app: &tauri::AppHandle, state: &PlayerState) {
+        if operating_mode::remote_selected(app) { native_receiver::report(app, state); return; }
         self.report_message(serde_json::json!({ "type": "player", "state": state }));
     }
 
@@ -160,7 +162,8 @@ mod connection_tests {
 
 #[tauri::command]
 fn set_video_rect(window: tauri::WebviewWindow, rect: VideoRect, host: tauri::State<'_, Host>) -> Result<(), String> {
-    operating_mode::local_authority(&window)?;
+    operating_mode::trusted(&window)?;
+    if operating_mode::local_authority(&window).is_err() && !native_receiver::active(window.app_handle()) { return Err("No local receiver owns this video surface.".into()); }
     if ![rect.x, rect.y, rect.width, rect.height]
         .iter()
         .all(|value| value.is_finite())
@@ -261,32 +264,36 @@ pub(crate) fn local_update_status(
     }
 }
 
+fn start_player(app: &tauri::AppHandle) -> Result<(), String> {
+    let host = app.state::<Host>();
+    if let Some((player_receiver, display_receiver)) =
+        host.workers.lock().expect("worker lock poisoned").take()
+    {
+        let handle = app.clone();
+        let display_path = host.data_dir.join("display-output");
+        std::thread::Builder::new()
+            .name("display".into())
+            .spawn(move || display::run(handle, display_path, display_receiver))
+            .map_err(|error| error.to_string())?;
+        let handle = app.clone();
+        let worker = std::thread::Builder::new()
+            .name("native-player".into())
+            .spawn(move || player::run(handle, player_receiver))
+            .map_err(|error| error.to_string())?;
+        #[cfg(windows)]
+        host.player_worker.lock().expect("player worker lock poisoned").replace(worker);
+        #[cfg(not(windows))]
+        drop(worker);
+    }
+    Ok(())
+}
+
 fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), String> {
     let host = app.state::<Host>();
     if host.child.lock().expect("sidecar lock poisoned").is_some() {
         return Ok(());
     }
-    if playback {
-        if let Some((player_receiver, display_receiver)) =
-            host.workers.lock().expect("worker lock poisoned").take()
-        {
-            let handle = app.clone();
-            let display_path = host.data_dir.join("display-output");
-            std::thread::Builder::new()
-                .name("display".into())
-                .spawn(move || display::run(handle, display_path, display_receiver))
-                .map_err(|error| error.to_string())?;
-            let handle = app.clone();
-            let worker = std::thread::Builder::new()
-                .name("native-player".into())
-                .spawn(move || player::run(handle, player_receiver))
-                .map_err(|error| error.to_string())?;
-            #[cfg(windows)]
-            host.player_worker.lock().expect("player worker lock poisoned").replace(worker);
-            #[cfg(not(windows))]
-            drop(worker);
-        }
-    }
+    if playback { start_player(app)?; }
     let token = format!(
         "{}{}",
         uuid::Uuid::new_v4().simple(),
@@ -415,6 +422,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                             let _ = host.player.send(player::Request::Observe);
                         }
                         Ok(SidecarMessage::Playback { command }) => {
+                            if operating_mode::remote_selected(&handle) { continue; }
                             let _ = host.player.send(player::Request::Command(command));
                         }
                         Ok(SidecarMessage::Readiness { nonce }) => {
@@ -565,9 +573,9 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                         "Media server exited: {:?}",
                         payload.code
                     ))));
-                    let _ = host
-                        .player
-                        .send(player::Request::Command(protocol::PlaybackCommand::Stop));
+                    if !operating_mode::remote_selected(&handle) {
+                        let _ = host.player.send(player::Request::Command(protocol::PlaybackCommand::Stop));
+                    }
                     host.child.lock().expect("sidecar lock poisoned").take();
                     host.child_exited.send_replace(true);
                     if host.local_running.load(Ordering::Relaxed)
@@ -628,6 +636,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             connection_info,
+            operating_mode::set_native_receiver,
+            native_receiver::native_receiver_begin,
+            native_receiver::native_receiver_request,
+            native_receiver::native_receiver_renew,
+            native_receiver::native_receiver_command,
+            native_receiver::native_receiver_report,
+            native_receiver::native_receiver_end,
             set_video_rect,
             choose_media,
             choose_folder,
@@ -656,6 +671,7 @@ pub fn run() {
             let (player_sender, player_receiver) = mpsc::channel();
             let (connection, _) = watch::channel(None);
             let (child_exited, _) = watch::channel(false);
+            app.manage(native_receiver::Receiver::default());
             app.manage(Host {
                 #[cfg(windows)]
                 player_worker: Mutex::new(None),
@@ -679,6 +695,7 @@ pub fn run() {
                 quit_confirmed: AtomicBool::new(false),
                 child_exited,
             });
+            native_receiver::watch(app.handle().clone());
             if desktop_update::running(app.handle()) {
                 tauri::async_runtime::spawn(desktop_update::run(
                     app.handle().clone(),

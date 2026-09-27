@@ -490,3 +490,12 @@ test("a disconnected browser removed from target discovery is not named as the C
   await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: unavailable }}><PlayerPage /></ShellProviders>));
   expect(screen.getByText("Player not running on the selected playback output")).toBeInTheDocument();
 });
+
+test("enrolled native playback keeps the native video stage instead of browser video", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const receiver = { ...state, targetId: "receiver", targets: [{ id: "receiver", name: "Desktop", kind: "endpoint" as const, backend: "native" as const, connected: true }] };
+  await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: receiver, nativeHost: true, localHost: false, nativeReceiver: true, rendererTargetId: "receiver" }}><PlayerPage /></ShellProviders>));
+  expect(screen.getByLabelText("Video playback")).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Player" })).not.toHaveAttribute("data-browser-video");
+  expect(screen.getByRole("region", { name: "Player" })).not.toHaveAttribute("data-artwork-stage");
+});

@@ -25,8 +25,8 @@ import { Onboarding } from "./Onboarding";
 import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 
-export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
+export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean; nativeReceiver?: boolean };
+type Device = Choice & { setNativeReceiver: (enabled: boolean) => Promise<boolean>; pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -111,6 +111,13 @@ export function NativeModeGate({ children }: PropsWithChildren) {
         setChoice(next);
         return true;
       } catch (reason) { setError(message(reason)); return false; }
+      finally { busy.current = false; setPending(false); }
+    },
+    setNativeReceiver: async enabled => {
+      if (busy.current) return false;
+      busy.current = true; setPending(true); setError(null);
+      try { setChoice(await invoke<Choice>("set_native_receiver", { enabled })); return true; }
+      catch (reason) { setError(message(reason)); return false; }
       finally { busy.current = false; setPending(false); }
     },
     retry: () => setAttempt(value => value + 1),

@@ -19,6 +19,8 @@ pub struct Choice {
     targets: Vec<String>,
     #[serde(default)]
     local_setup_complete: bool,
+    #[serde(default)]
+    native_receiver: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Deserialize, Serialize)]
@@ -31,7 +33,7 @@ pub enum Mode {
 pub struct Modes {
     path: PathBuf,
     choice: Mutex<Choice>,
-    operation: tokio::sync::Mutex<()>,
+    pub(crate) operation: tokio::sync::Mutex<()>,
     last_input: Mutex<Instant>,
 }
 
@@ -57,6 +59,7 @@ impl Modes {
         choice.targets.retain(|target| target != address);
         if choice.address.as_deref() == Some(address) {
             choice.address = None;
+            choice.native_receiver = false;
             if choice.mode == Some(Mode::Remote) {
                 choice.mode = None;
             }
@@ -441,13 +444,17 @@ pub async fn select_playback_device(
         )?
         .origin()
         .ascii_serialization();
+        crate::native_receiver::revoke(&app, None).await?;
         stop_local(&app, confirm_interrupt).await?;
+        if choice.address.as_deref() != Some(&address) { choice.native_receiver = false; }
         choice.mode = Some(mode);
         choice.address = Some(address);
         // Remember the deliberate choice even when the target is unavailable. Never fall back to local.
         modes.save(choice.clone())?;
         *modes.last_input.lock().expect("input lock poisoned") = Instant::now();
     } else {
+        crate::native_receiver::revoke(&app, None).await?;
+        choice.native_receiver = false;
         stop_local(&app, true).await?;
         crate::start_local(&app)?;
         choice.mode = Some(mode);
@@ -465,6 +472,7 @@ pub async fn forget_playback_device(
     trusted(&window)?;
     let modes = app.state::<Modes>();
     let _guard = modes.operation.lock().await;
+    if modes.current().address.as_deref() == Some(&address) { crate::native_receiver::revoke(&app, None).await?; }
     modes.forget(&address)
 }
 
@@ -690,6 +698,7 @@ mod tests {
                 address: Some("http://living-room:4100".into()),
                 targets: vec!["http://living-room:4100".into(), "http://kitchen:4100".into()],
                 local_setup_complete: true,
+                native_receiver: true,
             }).unwrap();
             let choice = modes.forget("http://kitchen:4100").unwrap();
             assert!(choice.mode == Some(mode));
@@ -700,6 +709,7 @@ mod tests {
             assert!(choice.address.is_none());
             assert!(choice.mode == if mode == Mode::Remote { None } else { Some(Mode::Local) });
             assert!(choice.targets.is_empty());
+            assert!(!choice.native_receiver);
             assert!(choice.local_setup_complete);
             std::fs::remove_file(path).unwrap();
         }
@@ -716,11 +726,13 @@ mod tests {
                 address: Some("http://192.168.1.10:4100".into()),
                 targets: vec!["http://192.168.1.10:4100".into()],
                 local_setup_complete: true,
+                native_receiver: true,
             })
             .unwrap();
         let remembered = Modes::load(path.clone()).unwrap().current();
         assert!(remembered.mode == Some(Mode::Remote));
         assert!(remembered.local_setup_complete);
+        assert!(remembered.native_receiver);
         assert_eq!(remembered.targets, vec!["http://192.168.1.10:4100"]);
         assert_eq!(
             remembered.address.as_deref(),
@@ -737,7 +749,28 @@ mod tests {
         let remembered = Modes::load(path.clone()).unwrap().current();
         assert!(remembered.mode == Some(Mode::Local));
         assert!(remembered.local_setup_complete);
+        assert!(!remembered.native_receiver);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), saved);
         std::fs::remove_file(path).unwrap();
     }
+}
+
+
+pub(crate) fn receiver_authority(app: &tauri::AppHandle, origin: &str) -> Result<(), String> {
+    let choice = app.state::<Modes>().current();
+    if choice.mode != Some(Mode::Remote) || !choice.native_receiver || choice.address.as_deref() != Some(origin) {
+        return Err("Enable this receiver for the selected Couch first.".into());
+    }
+    Ok(())
+}
+#[tauri::command]
+pub async fn set_native_receiver(window: tauri::WebviewWindow, app: tauri::AppHandle, enabled: bool) -> Result<Choice, String> {
+    trusted(&window)?;
+    let modes = app.state::<Modes>();
+    let _operation = modes.operation.lock().await;
+    let mut choice = modes.current();
+    if choice.mode != Some(Mode::Remote) || choice.address.is_none() { return Err("Choose another Couch first.".into()); }
+    crate::native_receiver::revoke(&app, None).await?;
+    choice.native_receiver = enabled;
+    modes.save(choice)
 }

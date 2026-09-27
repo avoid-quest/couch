@@ -6,6 +6,13 @@
   "permissions": [
     "core:default",
     "allow-connection-info",
+    "allow-set-native-receiver",
+    "allow-native-receiver-begin",
+    "allow-native-receiver-request",
+    "allow-native-receiver-renew",
+    "allow-native-receiver-command",
+    "allow-native-receiver-report",
+    "allow-native-receiver-end",
     "allow-set-video-rect",
     "allow-choose-media",
     "allow-choose-folder",

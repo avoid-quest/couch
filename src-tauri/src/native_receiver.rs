@@ -1,0 +1,183 @@
+use std::{sync::Mutex, time::{Duration, Instant}};
+use tauri::{Emitter, Manager};
+use crate::{player, protocol::{PlaybackCommand, PlayerState}, Host};
+
+const LEASE: Duration = Duration::from_secs(10);
+const CHALLENGE: Duration = Duration::from_secs(1);
+#[derive(Default)]
+struct Lease {
+    generation: Option<String>,
+    pending: Option<(String, Instant)>,
+    deadline: Option<Instant>,
+}
+impl Lease {
+    fn valid(&self, generation: &str, now: Instant) -> bool {
+        self.generation.as_deref() == Some(generation) && self.deadline.is_some_and(|deadline| now < deadline)
+    }
+    fn request(&mut self, generation: &str, now: Instant) -> Result<String, String> {
+        if self.generation.as_deref() != Some(generation) || self.deadline.is_some_and(|deadline| now >= deadline) { return Err("Native receiver expired.".into()); }
+        let nonce = uuid::Uuid::new_v4().to_string();
+        self.pending = Some((nonce.clone(), now));
+        Ok(nonce)
+    }
+    fn renew(&mut self, generation: &str, nonce: &str, now: Instant) -> Result<(), String> {
+        if self.generation.as_deref() != Some(generation) || self.deadline.is_some_and(|deadline| now >= deadline) { return Err("Native receiver expired.".into()); }
+        let Some((expected, requested)) = self.pending.as_ref() else { return Err("No receiver renewal is pending.".into()); };
+        if expected != nonce || now.duration_since(*requested) > CHALLENGE { return Err("Native receiver renewal expired.".into()); }
+        self.deadline = Some(*requested + LEASE);
+        self.pending = None;
+        Ok(())
+    }
+    fn expired(&self, now: Instant) -> bool {
+        self.generation.is_some() && self.deadline.or_else(|| self.pending.as_ref().map(|(_, at)| *at + CHALLENGE)).is_some_and(|deadline| now >= deadline)
+    }
+}
+#[derive(Default)]
+pub struct Receiver { lease: Mutex<Lease>, operation: Mutex<()> }
+
+pub fn valid(app: &tauri::AppHandle, generation: &str) -> bool {
+    app.state::<Receiver>().lease.lock().unwrap().valid(generation, Instant::now())
+}
+pub fn active(app: &tauri::AppHandle) -> bool {
+    let receiver = app.state::<Receiver>();
+    let lease = receiver.lease.lock().unwrap();
+    lease.generation.as_ref().is_some_and(|generation| lease.valid(generation, Instant::now()))
+}
+pub fn report(app: &tauri::AppHandle, state: &PlayerState) {
+    let receiver = app.state::<Receiver>();
+    let lease = receiver.lease.lock().unwrap();
+    if let Some(generation) = lease.generation.as_ref().filter(|generation| lease.valid(generation, Instant::now())) {
+        let _ = app.emit_to("main", "native-receiver-player", serde_json::json!({ "generation": generation, "state": state }));
+    }
+}
+// Called off the UI and player threads. Silence is mandatory before authority changes.
+fn stop(app: &tauri::AppHandle) {
+    let host = app.state::<Host>();
+    if host.workers.lock().unwrap().is_some() { return; }
+    let (sender, mut reply) = tokio::sync::oneshot::channel();
+    if host.player.send(player::Request::Stop(sender)).is_err() { std::process::exit(1); }
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match reply.try_recv() {
+            Ok(Ok(())) => return,
+            Ok(Err(_)) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => std::process::exit(1),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {},
+        }
+        if Instant::now() >= deadline { std::process::exit(1); }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+pub async fn revoke(app: &tauri::AppHandle, generation: Option<String>) -> Result<(), String> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let receiver = app.state::<Receiver>();
+        let _operation = receiver.operation.lock().unwrap();
+        let mut lease = receiver.lease.lock().unwrap();
+        if generation.as_ref().is_some_and(|generation| lease.generation.as_ref() != Some(generation)) { return; }
+        let existed = lease.generation.is_some();
+        *lease = Lease::default();
+        drop(lease);
+        if existed { stop(&app); }
+    }).await.map_err(|error| error.to_string())
+}
+pub fn watch(app: tauri::AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(50));
+        let shutting_down = app.state::<Host>().shutting_down.load(std::sync::atomic::Ordering::Relaxed);
+        let receiver = app.state::<Receiver>();
+        let Ok(_operation) = receiver.operation.try_lock() else { continue; };
+        let mut lease = receiver.lease.lock().unwrap();
+        if shutting_down && lease.generation.is_none() { return; }
+        if !lease.expired(Instant::now()) && !shutting_down { continue; }
+        *lease = Lease::default();
+        drop(lease);
+        stop(&app);
+    });
+}
+#[derive(serde::Serialize)]
+pub struct Started { generation: String, nonce: String }
+#[tauri::command]
+pub async fn native_receiver_begin(window: tauri::WebviewWindow, app: tauri::AppHandle, origin: String) -> Result<Started, String> {
+    crate::operating_mode::trusted(&window)?;
+    let modes = app.state::<crate::operating_mode::Modes>();
+    let _mode = modes.operation.lock().await;
+    crate::operating_mode::receiver_authority(&app, &origin)?;
+    crate::start_player(&app)?;
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let app = handle;
+        let receiver = app.state::<Receiver>();
+        let _operation = receiver.operation.lock().unwrap();
+        *receiver.lease.lock().unwrap() = Lease::default();
+        stop(&app);
+        let generation = uuid::Uuid::new_v4().to_string();
+        let mut lease = receiver.lease.lock().unwrap();
+        lease.generation = Some(generation.clone());
+        let nonce = lease.request(&generation, Instant::now())?;
+        Ok(Started { generation, nonce })
+    }).await.map_err(|error| error.to_string())?
+}
+#[tauri::command]
+pub fn native_receiver_request(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<String, String> {
+    crate::operating_mode::trusted(&window)?;
+    app.state::<Receiver>().lease.lock().unwrap().request(&generation, Instant::now())
+}
+#[tauri::command]
+pub fn native_receiver_renew(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, nonce: String) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    app.state::<Receiver>().lease.lock().unwrap().renew(&generation, &nonce, Instant::now())?;
+    app.state::<Host>().player.send(player::Request::RemoteObserve(generation)).map_err(|error| error.to_string())
+}
+#[tauri::command]
+pub fn native_receiver_command(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, command: PlaybackCommand) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    if !valid(&app, &generation) { return Err("Native receiver expired.".into()); }
+    app.state::<Host>().player.send(player::Request::RemoteCommand { generation, command }).map_err(|error| error.to_string())
+}
+#[tauri::command]
+pub fn native_receiver_report(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    if !valid(&app, &generation) { return Err("Native receiver expired.".into()); }
+    app.state::<Host>().player.send(player::Request::RemoteObserve(generation)).map_err(|error| error.to_string())
+}
+#[tauri::command]
+pub async fn native_receiver_end(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    revoke(&app, Some(generation)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn renewal_uses_request_time_and_rejects_delayed_or_replayed_nonce() {
+        let now = Instant::now();
+        let mut lease = Lease { generation: Some("one".into()), ..Lease::default() };
+        let nonce = lease.request("one", now).unwrap();
+        assert!(lease.renew("one", &nonce, now + Duration::from_millis(500)).is_ok());
+        assert_eq!(lease.deadline, Some(now + LEASE));
+        assert!(lease.renew("one", &nonce, now).is_err());
+        let next = lease.request("one", now + Duration::from_secs(2)).unwrap();
+        assert!(lease.renew("one", &next, now + Duration::from_secs(4)).is_err());
+        assert!(lease.expired(now + LEASE));
+        assert!(!lease.valid("one", now + LEASE));
+    }
+    #[test]
+    fn initial_challenge_expires_without_permitting_playback() {
+        let now = Instant::now();
+        let mut lease = Lease { generation: Some("one".into()), ..Lease::default() };
+        let nonce = lease.request("one", now).unwrap();
+        assert!(!lease.valid("one", now));
+        assert!(lease.expired(now + CHALLENGE));
+        assert!(lease.renew("one", &nonce, now + CHALLENGE + Duration::from_millis(1)).is_err());
+    }
+    #[test]
+    fn revoked_generation_rejects_queued_commands_and_renewals() {
+        let now = Instant::now();
+        let mut lease = Lease { generation: Some("new".into()), deadline: Some(now + LEASE), ..Lease::default() };
+        assert!(!lease.valid("old", now));
+        assert!(lease.request("old", now).is_err());
+        lease = Lease::default();
+        assert!(!lease.valid("new", now));
+    }
+}

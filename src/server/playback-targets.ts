@@ -1,7 +1,7 @@
 import type { BrowserMediaCapabilities, PlaybackCommand, PlaybackTarget, PlayerState, SessionState } from "../shared/protocol";
 import type { createSession, PlaybackDestination } from "./session";
 
-type Endpoint = { target: PlaybackTarget; send: (command: PlaybackCommand) => void; player: PlayerState; attempts: Set<string>; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
+type Endpoint = { target: PlaybackTarget; send: (command: PlaybackCommand) => void; player: PlayerState; attempts: Set<string>; capabilities?: BrowserMediaCapabilities; authorize?: () => void; receiver?: { unsafeUntil: number; timer?: ReturnType<typeof setTimeout> } };
 type Waiter = { endpoint: Endpoint; accept: (player: PlayerState) => boolean; resolve: (player: PlayerState) => void; reject: (error: Error) => void };
 const idle = (volume = 100): PlayerState => ({ playbackId: null, status: "idle", position: 0, duration: null, volume, seekable: false, error: null });
 
@@ -11,23 +11,33 @@ export function browserCompatible(command: Extract<PlaybackCommand, { type: "loa
 }
 
 // The connection owns the endpoint. IDs in incoming observations never grant authority.
-export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, session: () => ReturnType<typeof createSession>, options: { timeout?: number; observeNative?: () => void } = {}) {
+export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, session: () => ReturnType<typeof createSession>, options: { timeout?: number; observeNative?: () => void; recoveringReceiver?: boolean; now?: () => number } = {}) {
   const timeout = options.timeout ?? 8_000;
+  const now = options.now ?? (() => performance.now());
+  // Native watchdog: 10s lease + 2s enforced shutdown, with a 500ms margin.
+  const receiverFence = 12_500;
+  const recoveryUntil = options.recoveringReceiver ? now() + receiverFence : 0;
   const native: Endpoint | undefined = nativeSend ? { target: { id: "native", name: "Couch TV", kind: "endpoint", backend: "native", connected: false }, send: nativeSend, player: idle(), attempts: new Set() } : undefined;
   const endpoints = new Map<string, Endpoint>(native ? [["native", native]] : []);
   const waiters = new Set<Waiter>();
   let assigned = native;
   let busy = false;
   let closed = false;
-  const deliveryFor = (endpoint: Endpoint): PlaybackDestination => ({ backend: endpoint.target.backend, capabilities: endpoint.capabilities, authorize: () => {
+  const deliveryFor = (endpoint: Endpoint): PlaybackDestination => ({ backend: endpoint.target.backend, remote: !!endpoint.receiver, capabilities: endpoint.capabilities, authorize: () => {
     if (closed || !endpoint.target.connected) throw new Error("The playback device disconnected.");
     endpoint.authorize?.();
   } });
   const changed = (handoff: SessionState["handoff"] = session().state.handoff ?? null) => { if (!closed) session().updateTargets(assigned?.target.id, [...endpoints.values()].map(endpoint => ({ ...endpoint.target })), handoff); };
   const send = (endpoint: Endpoint, command: PlaybackCommand) => {
     if (closed || !endpoint.target.connected) throw new Error("That playback device disconnected.");
+    if (endpoint.receiver && (command.type === "audioOutput" || command.type === "audioPause" || command.type === "addSubtitle" && !/^https?:\/\//i.test(command.source))) throw new Error("This command belongs to the Core's own player.");
     if (command.type === "load") {
+      if (now() < recoveryUntil) throw new Error("Waiting for native receivers to stop after Core restarted. Try again in a few seconds.");
       if (endpoint.target.backend === "browser") browserCompatible(command);
+      if (endpoint.receiver) {
+        if (![command.source, ...(command.audioSource ? [command.audioSource] : []), ...command.subtitles?.map(subtitle => subtitle.source) ?? []].every(source => /^https?:\/\//i.test(source))) throw new Error("This source is only accessible on the Core's own player.");
+        command = { ...command, audioOutput: undefined, preferences: command.preferences ? { ...command.preferences, audioDelay: 0 } : undefined };
+      }
       endpoint.attempts = new Set([command.playbackId]);
     }
     if (command.type === "prepare") endpoint.attempts = new Set([command.playbackId, ...(command.next ? [command.next.playbackId] : [])]);
@@ -51,8 +61,9 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
     if (endpoint === assigned) session().observe(player);
   };
   const disconnect = (endpoint: Endpoint) => {
-    if (closed) return;
+    if (closed || !endpoint.target.connected) return;
     endpoint.target.connected = false;
+    if (endpoint.receiver) clearTimeout(endpoint.receiver.timer);
     for (const waiter of [...waiters]) if (waiter.endpoint === endpoint) waiter.reject(new Error("The playback device disconnected."));
     if (endpoint === assigned) session().rendererDisconnected();
     changed();
@@ -62,10 +73,12 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
     close() {
       closed = true;
       for (const waiter of [...waiters]) waiter.reject(new Error("Couch is shutting down."));
+      for (const endpoint of endpoints.values()) if (endpoint.receiver) clearTimeout(endpoint.receiver.timer);
       for (const endpoint of endpoints.values()) try { endpoint.send({ type: "stop" }); } catch { /* Closing sockets also stops browser renderers. */ }
     },
     get busy() { return busy; },
     get nativeAssigned() { return !!native && assigned === native; },
+    get nativeRenderer() { return assigned?.target.backend === "native"; },
     get destination() { return assigned ? deliveryFor(assigned) : undefined; },
     send(command: PlaybackCommand) {
       if (!assigned) throw new Error("Choose a playback output.");
@@ -80,10 +93,29 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
       observe(native, player);
     },
     register(name: string, sendCommand: Endpoint["send"], capabilities?: BrowserMediaCapabilities, authorize?: () => void) {
-      const id = crypto.randomUUID();
+      const id: string = crypto.randomUUID();
       const endpoint: Endpoint = { target: { id, name, kind: "endpoint", backend: "browser", connected: true }, send: sendCommand, player: idle(), attempts: new Set(), capabilities, authorize };
       endpoints.set(id, endpoint); changed();
       return { id, observe: (player: PlayerState) => { if (endpoints.get(id) === endpoint) observe(endpoint, player); }, close: () => { if (endpoints.delete(id)) disconnect(endpoint); } };
+    },
+    registerReceiver(controllerId: string, name: string, sendCommand: Endpoint["send"], authorize: () => void, expired: () => void) {
+      const id = `receiver-${controllerId}`;
+      const previous = endpoints.get(id);
+      if (previous?.target.connected) throw new Error("This native receiver is already connected.");
+      // The trusted native begin operation confirms local shutdown before enrolling.
+      if (previous?.receiver) previous.receiver.unsafeUntil = 0;
+      const endpoint: Endpoint = { target: { id, name, kind: "endpoint", backend: "native", connected: true }, send: sendCommand, player: idle(), attempts: new Set(), authorize, receiver: { unsafeUntil: 0 } };
+      endpoints.set(id, endpoint);
+      const renew = () => {
+        if (closed || endpoints.get(id) !== endpoint || !endpoint.target.connected) throw new Error("The receiver connection changed.");
+        authorize();
+        clearTimeout(endpoint.receiver!.timer);
+        endpoint.receiver!.unsafeUntil = now() + receiverFence;
+        endpoint.receiver!.timer = setTimeout(() => { disconnect(endpoint); expired(); }, 10_500);
+        endpoint.receiver!.timer.unref?.();
+      };
+      renew(); changed();
+      return { id, renew, observe: (player: PlayerState) => { if (endpoints.get(id) === endpoint) observe(endpoint, player); }, close: () => { if (endpoints.get(id) === endpoint) disconnect(endpoint); } };
     },
     async move(targetId: string, authorize = () => {}) {
       if (closed) throw new Error("Couch is shutting down.");
@@ -93,6 +125,7 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
       if (destination === assigned) return;
       if (session().state.player.status === "error") throw new Error("Stop the failed playback attempt before selecting another output.");
       const source = assigned;
+      if (now() < recoveryUntil || source?.receiver && !source.target.connected && now() < source.receiver.unsafeUntil) throw new Error("The native receiver is stopping. Try again in a few seconds.");
       const original = session().state.player;
       const paused = session().handoffPaused;
       if (!source || !original.playbackId || !["playing", "paused", "unavailable"].includes(original.status)) {
@@ -133,6 +166,7 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
         }
         authorize();
         sourcePaused = true;
+        if (source.receiver && !source.target.connected && now() < source.receiver.unsafeUntil) throw new Error("The native receiver disconnected while playback was moving. Wait for it to stop before retrying.");
         const checkpoint = source.target.connected
           ? await wait(source, { type: "pause", playbackId: original.playbackId, paused: true }, player => player.playbackId === original.playbackId && player.status === "paused")
           : original;

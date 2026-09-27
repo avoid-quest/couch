@@ -115,3 +115,9 @@ in their existing issues. Target controls shipped as draft PR #617.
 origin/trusted-peer admission, separate pairing opt-in and host-token isolation.
 A real Caddy fixture verifies TLS discovery; private-CA browser trust limits are
 recorded. Jellyfin browser delivery is draft [PR #618](https://github.com/avoid-quest/couch/pull/618).
+
+[Native receivers](issues/05-core-and-receivers.md) now enroll explicitly from the
+existing desktop/TV window, use stable paired identity and native-enforced leases,
+and keep installation maintenance separate. Real Linux libmpv playback and watchdog
+silence passed in an exploratory fixture; final clean-revision qualification and
+checkpoint restoration remain. HTTPS proxy access is draft [PR #619](https://github.com/avoid-quest/couch/pull/619).

@@ -15,6 +15,8 @@ use crate::Host;
 
 pub enum Request {
     Command(PlaybackCommand),
+    RemoteCommand { generation: String, command: PlaybackCommand },
+    RemoteObserve(String),
     Layout,
     Observe,
     Diagnostics(String),
@@ -73,11 +75,23 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
     let mut reported = None;
     loop {
         let request = receiver.recv_timeout(Duration::from_millis(250));
+        let request = match request {
+            Ok(Request::RemoteCommand { generation, command }) => {
+                if !crate::native_receiver::valid(&app, &generation) { continue; }
+                Ok(Request::Command(command))
+            }
+            Ok(Request::RemoteObserve(generation)) => {
+                if !crate::native_receiver::valid(&app, &generation) { continue; }
+                Ok(Request::Observe)
+            }
+            other => other,
+        };
         let force = matches!(
             request,
             Ok(Request::Observe | Request::Command(PlaybackCommand::Stop))
         );
         let result = match request {
+            Ok(Request::RemoteCommand { .. } | Request::RemoteObserve(_)) => unreachable!(),
             Ok(Request::Readiness { nonce, deadline }) => {
                 let ok = player.readiness(&app, deadline).is_ok();
                 let build = serde_json::from_str::<serde_json::Value>(
@@ -143,7 +157,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             player.state.error = Some(error);
         }
         if force || reported.as_ref() != Some(&player.state) {
-            app.state::<Host>().report(&player.state);
+            app.state::<Host>().report(&app, &player.state);
             reported = Some(player.state.clone());
         }
     }
