@@ -82,7 +82,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
     }
     const owner = claims.get(endpoint.target.id);
     if (owner && !owner.closed && endpoint === owner.assigned) owner.session().observe(player);
-    for (const [binding, observers] of memberObservers) if (!binding.closed && binding.assigned?.target.kind === "group" && binding.assigned.target.members?.some(member => member.joined && member.deviceId === endpoint.target.id))
+    for (const [binding, observers] of memberObservers) if (!binding.closed)
       for (const observer of observers) observer(endpoint.target.id, player);
   };
   const disconnect = (endpoint: Endpoint) => {
@@ -92,7 +92,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
     for (const waiter of [...waiters]) if (waiter.endpoint === endpoint) waiter.reject(new Error("The playback device disconnected."));
     const owner = claims.get(endpoint.target.id);
     if (owner && !owner.closed && endpoint === owner.assigned) owner.session().rendererDisconnected();
-    for (const [binding, observers] of memberObservers) if (!binding.closed && binding.assigned?.target.kind === "group" && binding.assigned.target.members?.some(member => member.joined && member.deviceId === endpoint.target.id))
+    for (const [binding, observers] of memberObservers) if (!binding.closed)
       for (const observer of observers) observer(endpoint.target.id, { ...endpoint.player, status: "unavailable", error: "The video device disconnected." });
     changed();
   };

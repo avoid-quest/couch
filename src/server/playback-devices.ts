@@ -126,7 +126,7 @@ export function createPlaybackDevices(options: Options) {
         if (screen) try { runtime.targets.sendMember(screen, { type: "stop", playbackOwner: runtime.id }); } catch {}
         if (!current.stopping) current.playbackId = undefined;
       } else if (screen && current.video && current.playbackId && "playbackId" in command && command.playbackId === current.playbackId) {
-        if (command.type === "track" && command.kind === "subtitle" || ["pause", "seek", "speed", "subtitleDelay", "addSubtitle"].includes(command.type))
+        if (command.type === "track" && command.kind === "subtitle" || ["subtitleDelay", "addSubtitle"].includes(command.type))
           runtime.targets.sendMember(screen, { ...command, playbackOwner: runtime.id });
         if (command.type === "track" && command.kind === "subtitle" || command.type === "subtitleDelay" || command.type === "addSubtitle") return;
       }
