@@ -51,6 +51,7 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "restoreRemoved": return id(value.token);
     case "play": return id(value.entryId) && (value.fromStart === undefined || typeof value.fromStart === "boolean");
     case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));
+    case "selectTarget": return id(value.targetId);
     case "pause": return id(value.playbackId) && typeof value.paused === "boolean";
     case "seek": return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
     case "mute": return typeof value.muted === "boolean";

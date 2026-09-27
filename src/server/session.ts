@@ -11,8 +11,12 @@ import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
 type SessionOptions = {
   admitted?: () => boolean;
+  transferBusy?: () => boolean;
+  validateCommand?: (command: PlaybackCommand) => void;
+  nativeTarget?: () => boolean;
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean) => MediaSource | Promise<MediaSource>;
   activatePrepared?: (playbackId: string, previous: PlayerState) => void;
   deactivate?: () => void;
@@ -27,6 +31,9 @@ type SessionOptions = {
 export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState, clock?: PlaybackClock) => void, options: SessionOptions = {}) {
   const removedEntries = new Map<string, { entry: QueueEntry; index: number; queueIds: string[]; currentEntryId: string | null; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   let desiredVolume = store.volume;
+  let nativeSystemAudio: SessionState["systemAudio"];
+  const nativeTarget = () => options.nativeTarget?.() ?? true;
+  const assertNotMoving = () => { if (options.transferBusy?.()) throw new Error("Playback is moving. Wait for it to finish."); };
   let audioInterrupted = false;
   let resolution: AbortController | null = null;
   let qualityResolution: AbortController | null = null;
@@ -50,6 +57,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const radioRetry = createRadioRetry(options.now);
   const activeProfile = store.activeProfile();
   const state: SessionState = {
+    sessionId: store.installationId(),
     queue: store.queue,
     currentEntryId: null,
     presentationId: null,
@@ -61,7 +69,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     administratorClaimed: store.administratorExists(),
     preferences: store.playbackPreferences(activeProfile.id),
     autoplay: { enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false, contextTitle: continuation?.title ?? null, next: continuation?.entries[0] ?? null },
-    player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The Couch app isn't connected." },
+    player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: nativeTarget() ? "The Couch app isn't connected." : "Choose a playback output." },
   };
   let published: Omit<SessionState, "player"> | undefined;
   let publishedPlayer: string | undefined;
@@ -203,13 +211,15 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const available = () => {
     assertAdmitted();
-    if (state.player.status === "unavailable") throw new Error("The Couch app isn't connected.");
+    assertNotMoving();
+    if (state.player.status === "unavailable") throw new Error(state.player.error || "The playback device isn't connected.");
   };
   const currentPlayback = (playbackId: string) => {
     available();
     if (playbackId !== state.player.playbackId) throw new Error("The playing item changed. Use the current state and try again.");
   };
   const send = (command: PlaybackCommand) => {
+    options.validateCommand?.(command);
     try { sendPlayer(command); } catch {
       playIntent++;
       cancelContinuation();
@@ -233,7 +243,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const refreshPreparation = () => {
     if (audioInterrupted) { if (prepared && !prepared.sent) cancelPreparation(); return; }
     const next = state.currentEntryId ? nextCandidate() : undefined;
-    if (!admitted() || !audioOnly || !next || !/^(library|jellyfin):/.test(next.source) || activePlayIntent !== playIntent || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
+    if (options.transferBusy?.() || !nativeTarget() || !admitted() || !audioOnly || !next || !/^(library|jellyfin):/.test(next.source) || activePlayIntent !== playIntent || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
       cancelPreparation();
       return;
     }
@@ -315,7 +325,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       webRetried = true;
       pendingPause = recovery.paused;
       progress.replaceTransport(previous.playbackId, playbackId);
-      send({ type: "load", playbackId, ...media, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
+      send({ type: "load", playbackId, ...media, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
         preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...(previous.replayGain !== undefined ? { replayGain: previous.replayGain } : {}), ...state.preferences!.device } });
       broadcast();
     }).catch(failed);
@@ -347,7 +357,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue, context?: PlaybackContinuation | null, preserveContext = false) => {
     authorize();
     available();
-    options.prepareAudio?.();
+    if (nativeTarget()) options.prepareAudio?.();
     audioInterrupted = false;
     const entry = proposedQueue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
@@ -412,7 +422,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy);
-        send({ type: "load", playbackId, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
+        send({ type: "load", playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
         broadcast();
       };
@@ -439,7 +449,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (!current()) throw new Error("Quality change canceled because playback changed.");
       authorize();
       if (fresh.audioOnly || fresh.radio) throw new Error("This source has no video quality to change.");
-      const audioOutput = options.prepareAudio?.();
+      const audioOutput = nativeTarget() ? options.prepareAudio?.() : undefined;
       const previous = state.player;
       const paused = pendingPause ?? previous.status === "paused";
       const position = pendingSeek?.playbackId === previous.playbackId ? pendingSeek.position : previous.position;
@@ -543,14 +553,16 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
 
   return {
     updateSystemAudio(audio: import("../shared/sound").SoundRouteState) {
-      state.systemAudio = audio;
-      if (audio.volume !== null) state.player.volume = audio.volume;
+      nativeSystemAudio = audio;
+      state.systemAudio = nativeTarget() ? audio : undefined;
+      if (nativeTarget() && audio.volume !== null) state.player.volume = audio.volume;
       if (admitted()) invalidate("sound"); else broadcast();
     },
     saveAudioDelay(delay: number) {
+      assertNotMoving();
       store.saveAudioDelay(delay);
       state.preferences = { ...state.preferences!, device: { audioDelay: delay } };
-      if (state.player.playbackId && ["loading", "playing", "paused"].includes(state.player.status)) send({ type: "audioDelay", playbackId: state.player.playbackId, delay });
+      if (nativeTarget() && state.player.playbackId && ["loading", "playing", "paused"].includes(state.player.status)) send({ type: "audioDelay", playbackId: state.player.playbackId, delay });
       broadcast();
     },
     audioLost(error: string) {
@@ -580,10 +592,47 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       state.activity = { id: crypto.randomUUID(), actor, text };
       try { broadcast(); } finally { state.activity = undefined; }
     },
+    updateTargets(targetId: string | undefined, targets: NonNullable<SessionState["targets"]>, handoff: SessionState["handoff"]) {
+      state.systemAudio = nativeTarget() ? nativeSystemAudio : undefined;
+      state.targetId = targetId; state.targets = targets; state.handoff = handoff; broadcast();
+    },
+    selectIdleTarget(player: PlayerState) { state.player = { ...player, ...(options.systemAudio && nativeTarget() ? { volume: nativeSystemAudio?.volume ?? player.volume } : {}), playbackId: null, status: "idle", error: null }; broadcast(); },
+    get handoffPaused() { return pendingPause ?? state.player.status !== "playing"; },
+    async prepareHandoff(browser: boolean): Promise<{ command: Extract<PlaybackCommand, { type: "load" }>; delivery: HandoffDelivery }> {
+      const entry = state.queue.find(entry => entry.id === state.currentEntryId);
+      if (!entry || !state.player.playbackId) throw new Error("The playing item changed.");
+      // Jellyfin's session-bound access and local paths need scoped browser delivery first.
+      if (browser && /^(jellyfin|library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
+      cancelPreparation(); qualityResolution?.abort();
+      const playbackId = crypto.randomUUID();
+      const media = await (options.resolveSource?.(entry, playbackId, AbortSignal.timeout(15_000), false, false, true) ?? { source: entry.source });
+      const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
+      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, paused: true,
+        ...(!browser && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
+        startPosition: entry.live || media.radio ? undefined : state.player.position,
+        preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser ? 0 : state.preferences!.device.audioDelay } } };
+    },
+    commitHandoff(player: PlayerState, delivery: HandoffDelivery) {
+      const previous = { expiry, webRetried, audioOnly, subtitleWarning };
+      ({ expiry, webRetried, audioOnly, subtitleWarning } = delivery);
+      activePlayIntent = playIntent;
+      webRecovery = null; state.webRetry = null;
+      progress.replaceTransport(state.player.playbackId, player.playbackId!);
+      state.player = { ...player, ...(options.systemAudio && nativeTarget() ? { volume: nativeSystemAudio?.volume ?? player.volume } : {}) }; pendingPause = null; pendingSeek = null;
+      persistProgress(() => progress.observe(player)); broadcast();
+      return previous;
+    },
+    rendererDisconnected() {
+      persistProgress(progress.checkpoint);
+      playIntent++; resolution?.abort(); qualityResolution?.abort(); cancelRadioRetry(); cancelContinuation();
+      state.player = { ...state.player, status: "unavailable", error: "The playback device disconnected. Move playback to a connected device to resume." }; broadcast();
+    },
+    handoffFailed(error: string) { state.player = { ...state.player, status: "error", error }; broadcast(); },
     get state() { return structuredClone(state); },
     enrichEntry,
     loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize = () => {}, playedBy?: PlaybackActor, placement?: "next", contextTitle = "Playlist") {
       assertAdmitted();
+      assertNotMoving();
       authorize();
       if (mode === "play") {
         available();
@@ -664,6 +713,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     removeProfile(id: string, expectedName: string) {
       assertAdmitted();
+      assertNotMoving();
       if (["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop playback before removing a watching profile. Pausing keeps the current profile.", 409);
       const preferences = id === state.activeProfile.id ? store.playbackPreferences("household") : state.preferences;
       const profile = store.removeProfile(id, expectedName);
@@ -682,6 +732,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     selectProfile(id: string) {
       assertAdmitted();
+      assertNotMoving();
       if (["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop playback before selecting another watching profile.", 409);
       finishProgress(false, true);
       const preferences = store.playbackPreferences(id);
@@ -697,6 +748,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
       assertAdmitted();
+      assertNotMoving();
       if (changes.clearResume && progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before clearing its resume position.", 409);
       store.editSharedProgress(state.activeProfile.id, mediaId, changes, item);
       progress.discard(mediaId);
@@ -704,6 +756,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     removeHistory(mediaId: string) {
       assertAdmitted();
+      assertNotMoving();
       if (progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before removing it from history.", 409);
       const removed = store.takeSharedProgress(mediaId);
       if (!removed.length) throw new ViewingError("History item not found.", 404);
@@ -713,14 +766,17 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     restoreProgress(removed: import("./store").ProgressSnapshot, expected: import("./store").ProgressSnapshot = []) {
       assertAdmitted();
+      assertNotMoving();
       if (progress.mediaId === removed[0]?.mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before restoring its history.", 409);
       store.restoreSharedProgress(removed, expected);
       invalidate("library", "progress");
     },
     command(action: Action, authorize = () => {}, playedBy?: PlaybackActor) {
       assertAdmitted();
+      assertNotMoving();
       authorize();
       switch (action.type) {
+        case "selectTarget": throw new Error("Select a target through the connected coordinator.");
         case "enqueue":
           if (action.playNow) available();
           if (state.queue.length >= 500) throw new Error(QUEUE_FULL);
@@ -793,6 +849,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         }
         case "audioDelay":
+          if (!nativeTarget()) throw new Error("Audio delay is not supported in the browser yet.");
           currentPlayback(action.playbackId);
           store.saveAudioDelay(action.delay);
           state.preferences = { ...state.preferences!, device: { audioDelay: action.delay } };
@@ -801,7 +858,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         case "pause":
           currentPlayback(action.playbackId);
-          if (!action.paused) { options.prepareAudio?.(); audioInterrupted = false; state.player.error = null; }
+          if (!action.paused) { if (nativeTarget()) options.prepareAudio?.(); audioInterrupted = false; state.player.error = null; }
           pendingPause = action.paused;
           if (state.webRetry) {
             state.webRetry = { paused: action.paused };
@@ -834,8 +891,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         case "mute": throw new Error("Mute isn't available on this Couch.");
         case "volume":
-          store.saveVolume(action.volume);
-          desiredVolume = action.volume;
+          if (nativeTarget()) { store.saveVolume(action.volume); desiredVolume = action.volume; }
           if (state.player.status === "unavailable") {
             state.player.volume = desiredVolume;
             broadcast();
@@ -882,6 +938,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         }
         return;
       }
+      if (state.player.status === "unavailable" && nativeTarget() && player.status === "idle" && player.playbackId === null) state.player.playbackId = null;
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const wasUnavailable = state.player.status === "unavailable";
       // libmpv can report EOF after an interrupted HTTP range response. An early
@@ -889,7 +946,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       const earlyEnd = player.status === "ended" && player.duration !== null && player.position + 2 < player.duration;
       if (earlyEnd && webRetried) player = { ...player, status: "error" };
       const ended = player.status === "ended" && state.player.status !== "ended";
-      if ((player.status === "error" || earlyEnd) && recoverWeb(player)) return;
+      if (!options.transferBusy?.() && (player.status === "error" || earlyEnd) && recoverWeb(player)) return;
       if (["playing", "paused"].includes(player.status)) {
         if (pendingSeek?.playbackId === player.playbackId && Math.abs(player.position - pendingSeek.position) <= 2
           && (pendingSeek.position < pendingSeek.from ? player.position < pendingSeek.from : pendingSeek.position > pendingSeek.from ? player.position > pendingSeek.from : true)) pendingSeek = null;
@@ -898,7 +955,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       }
       if (player.status === "error" && webRetried) player = { ...player, error: "Stream recovery failed after one attempt. Play the track to try again." };
       if (["error", "unavailable", "idle", "ended"].includes(player.status)) state.webRetry = null;
-      if ((player.status === "error" || ended) && isRadio(state.queue.find(entry => entry.id === state.currentEntryId))) {
+      if (!options.transferBusy?.() && (player.status === "error" || ended) && isRadio(state.queue.find(entry => entry.id === state.currentEntryId))) {
         options.observe?.(player);
         failRadio(player.error || "The radio stream disconnected.");
         return;
@@ -913,13 +970,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       // Live streams keep growing mpv's demuxer-cache duration. Suppress their
       // clock publications, but still publish any other Session change.
       const suppressClock = (isRadio(current) || current?.live === true) && ["playing", "paused"].includes(player.status);
-      state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
+      state.player = { ...player, ...(options.systemAudio && nativeTarget() ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
       try { progress.observe(player); }
       catch { state.progressError = STORAGE_ERROR("your progress"); }
       options.observe?.(state.player);
-      if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
+      if (nativeTarget() && wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
       broadcast(true, suppressClock);
-      if (ended) {
+      if (ended && !options.transferBusy?.()) {
         const manual = state.queue[state.queue.findIndex(entry => entry.id === state.currentEntryId) + 1];
         try {
           if (manual || !earlyEnd) {

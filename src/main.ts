@@ -13,7 +13,7 @@ import { join } from "node:path";
 import frontend, { assets } from "./frontend";
 import { createNativeDiagnostics } from "./server/diagnostics-native";
 import { createHub, type Hub } from "./server/hub";
-import type { HostMessage, SidecarMessage } from "./shared/protocol";
+import type { HostMessage, PlaybackCommand, SidecarMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
 import { runMaintenanceMode } from "./server/maintenance-mode";
 
@@ -85,9 +85,10 @@ hub = createHub({
   // Tauri and browser development use Vite HMR; Bun serves remote pages.
   development: false,
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
-  sendPlayer(command) {
-    if (native) send({ type: "playback", command });
-  },
+  ...(native ? {
+    observePlayer: () => send({ type: "observe" }),
+    sendPlayer: (command: PlaybackCommand) => send({ type: "playback", command }),
+  } : {}),
 });
 
 if (native) {
@@ -101,7 +102,7 @@ if (native) {
 } else {
   console.error(`Couch: ${hub.urls.join(" · ")}`);
   console.error(`Pairing code: ${hub.pairingCode}`);
-  console.error("Start the desktop app for native playback. Browser clients control that player.");
+  console.error("Pair a browser and choose Playback output to play here, or start the desktop app for Couch TV.");
 }
 
 let closing = false;

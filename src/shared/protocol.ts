@@ -24,12 +24,14 @@ export type PlayerState = {
   playbackId: string | null;
   status: "unavailable" | "idle" | "loading" | "playing" | "paused" | "ended" | "error";
   buffering?: boolean;
+  requiresGesture?: boolean;
   position: number;
   duration: number | null;
   volume: number;
   seekable: boolean;
   error: string | null;
   tracks?: MediaTrack[];
+  audioTracksKnown?: boolean;
   chapters?: Chapter[];
   speed?: number;
   audioDelay?: number;
@@ -40,6 +42,10 @@ export type PlayerState = {
 };
 
 export type SessionState = {
+  sessionId?: string;
+  targetId?: string;
+  targets?: PlaybackTarget[];
+  handoff?: { targetId: string } | null;
   queue: QueueEntry[];
   autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
@@ -66,6 +72,7 @@ export type SessionState = {
 };
 
 export type Action =
+  | { type: "selectTarget"; targetId: string }
   | { type: "navigate"; key: NavigationKey }
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
   | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
@@ -97,6 +104,8 @@ export type Action =
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
+  | { type: "rendererRegistered"; targetId: string; sessionId: string }
+  | { type: "rendererCommand"; sessionId: string; command: PlaybackCommand }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
@@ -117,6 +126,10 @@ export type PlaybackCommand =
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "stop" };
+
+// A backend-managed group has one timeline and one observation writer.
+export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser"; connected: boolean };
+export type RendererMessage = { type: "registerRenderer" } | { type: "rendererObservation"; sessionId: string; state: PlayerState };
 
 export type ConnectionInfo = {
   origin: string;

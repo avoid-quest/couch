@@ -1,6 +1,7 @@
 import type { PlayerState } from "./protocol";
 
 export type ConnectionDetails = {
+  capabilities?: { browserPlayback: boolean; nativePlayback: boolean };
   lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; desktopRemoteUi?: 1; desktopClientProtocol?: number; playbackClock?: 1; tvPresentation?: boolean };
 
 export type Controller = {

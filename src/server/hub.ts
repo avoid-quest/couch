@@ -17,6 +17,8 @@ import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
 import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
+import { browserCompatible, createPlaybackTargets } from "./playback-targets";
+import { parseRendererMessage } from "./renderer-validation";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
@@ -60,6 +62,7 @@ import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
 type HubOptions = {
+  observePlayer?: () => void;
   hostname?: string;
   managedLan?: boolean;
   onAddresses?: (urls: string[]) => void;
@@ -69,7 +72,7 @@ type HubOptions = {
   pairingCode?: string;
   remoteControlEnabled?: boolean;
   adminRecoveryCode?: string;
-  sendPlayer: (command: PlaybackCommand) => void;
+  sendPlayer?: (command: PlaybackCommand) => void;
   restart?: (confirmInterrupt: boolean) => Promise<unknown>;
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
@@ -98,7 +101,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
   return url.origin;
 };
-type SocketData = { playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type SocketData = { renderer?: ReturnType<ReturnType<typeof createPlaybackTargets>["register"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
@@ -109,6 +112,7 @@ export function createHub(options: HubOptions) {
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
+  const sessionId = store.installationId();
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Bun.Server<SocketData>>> | undefined;
@@ -143,7 +147,8 @@ export function createHub(options: HubOptions) {
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const session = createSession(store, options.sendPlayer, (state, clock) => {
+  const targets = createPlaybackTargets(options.sendPlayer, () => session, { observeNative: options.observePlayer });
+  const session = createSession(store, targets.send, (state, clock) => {
     idle.playback(state.player.status, !!state.radioRetry);
     radioProgramme?.observe(state);
     sound?.interrupt();
@@ -160,10 +165,16 @@ export function createHub(options: HubOptions) {
       }
     }
   }, {
-    admitted, systemAudio,
+    admitted, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned,
+    validateCommand: command => {
+      if (targets.nativeAssigned) return;
+      if (command.type === "load") browserCompatible(command);
+      if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported in the browser yet.");
+    },
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
+      if (!targets.nativeAssigned && /^(jellyfin|library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
@@ -259,9 +270,9 @@ export function createHub(options: HubOptions) {
   const updateDirectory = join(dirname(options.databasePath), "updates");
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
-    active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
-    pin: output => options.sendPlayer({ type: "audioOutput", output }),
-    lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
+    active: () => targets.nativeAssigned && ["loading", "playing", "paused"].includes(session.state.player.status),
+    pin: output => options.sendPlayer?.({ type: "audioOutput", output }),
+    lost: error => { if (targets.nativeAssigned) session.audioLost(error); }, changed: value => session.updateSystemAudio(value),
     ...(macAudio ? { backend: macAudio.routing, subscribe: macAudio.subscribe, platform: "mac" as const } : {}),
     ...(windowsAudio ? { backend: windowsAudio.routing, subscribe: windowsAudio.subscribe, platform: "windows" as const, setSystemDefault: false } : {}),
   });
@@ -446,7 +457,7 @@ export function createHub(options: HubOptions) {
       ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer }, ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
@@ -615,16 +626,30 @@ export function createHub(options: HubOptions) {
         if (socket.data.trusted) socket.subscribe("navigation");
         socket.send(JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
       },
-      close(socket) { sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
+      close(socket) { socket.data.renderer?.close(); sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
       async message(socket, message) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
-        idle.activity();
-        if (socket.data.controllerId) store.touchController(socket.data.controllerId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
         if (typeof message !== "string") { socket.close(1003, "JSON text messages required."); return; }
         let command;
-        try { command = parseCommand(message, socket.data.trusted); } catch {
+        try {
+          const renderer = parseRendererMessage(JSON.parse(message));
+          if (renderer) {
+            if (renderer.type === "registerRenderer") {
+              socket.data.renderer ??= targets.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, command => {
+                socket.data.authorize();
+                if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
+              });
+              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
+            } else if (socket.data.renderer && renderer.sessionId === sessionId) socket.data.renderer.observe(renderer.state);
+            else throw new Error("Unregistered renderer.");
+            return;
+          }
+          command = parseCommand(message, socket.data.trusted);
+          idle.activity();
+          if (socket.data.controllerId) store.touchController(socket.data.controllerId);
+        } catch {
           socket.close(1008, "Invalid command or unsupported media source.");
           return;
         }
@@ -635,10 +660,13 @@ export function createHub(options: HubOptions) {
           const authorize = socket.data.authorize;
           const action = command.action;
           const before = session.state;
+          if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
           const enqueued = enqueueMedia(action, authorize, playedBy);
           if (enqueued) {
             await enqueued;
             if (closed) return;
+          } else if (action.type === "selectTarget") {
+            await targets.move(action.targetId, authorize);
           } else if (action.type === "navigate") {
             const listeners = [server, ...lan?.servers ?? []];
             if (!listeners.some(listener => listener.subscriberCount("navigation"))) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
@@ -646,10 +674,10 @@ export function createHub(options: HubOptions) {
             for (const listener of listeners) listener.publish("navigation", navigation);
           } else {
             if (action.type === "remove") inspections.get(action.entryId)?.abort();
-            if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
-            else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
+            if (targets.nativeAssigned && soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
+            else if (targets.nativeAssigned && soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
-              if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
+              if (targets.nativeAssigned && soundRouting && action.type === "pause" && !action.paused) options.sendPlayer?.({ type: "audioOutput", output: soundRouting.prepare() });
               await session.command(action, authorize, playedBy);
             }
           }
@@ -712,6 +740,7 @@ export function createHub(options: HubOptions) {
     let progressError: unknown;
     try { if (requiredProgress) session.quiesce(); else session.close(); }
     catch (error) { progressError = error; }
+    targets.close();
     const toolsStopped = toolHealth.close();
     sound?.close();
     soundRouting?.close();
@@ -734,8 +763,9 @@ export function createHub(options: HubOptions) {
     if (failed?.status === "rejected") throw failed.reason;
   })();
 
+  targets.publish();
   return {
-    server, session, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
+    server, session: { ...session, get state() { return session.state; }, observe: targets.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
     prepareRestart: () => {
       if (!admitted()) throw new Error("Already updating or restarting.");

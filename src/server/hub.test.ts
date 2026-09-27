@@ -140,7 +140,7 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
   peer.close();
   const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
-  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, desktopRemoteUi: 1, desktopClientProtocol: 1, playbackClock: 1, tvPresentation: false });
+  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, capabilities: { browserPlayback: true, nativePlayback: true }, desktopRemoteUi: 1, desktopClientProtocol: 1, playbackClock: 1, tvPresentation: false });
   for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
@@ -1966,4 +1966,76 @@ test("trusted provider list metadata survives intake, playback and history witho
     expect((await response.json()).items[0]).toMatchObject({ title: "Track", subtitle: item.subtitle, description: item.description, sourceLabel: "Bandcamp", thumbnail: item.thumbnail, position: 25, duration: 200 });
     expect(hub.session.state.queue[0]).toMatchObject({ subtitle: item.subtitle, description: item.description });
   } finally { list.mockRestore(); resolve.mockRestore(); }
+});
+
+test("browser registration is socket-owned, delivery is private, and unassigned observations cannot change progress", async () => {
+  const { hub, commands } = fixture(); hub.session.observe(idle);
+  const renderer = new Peer(hub, await pair(hub)), other = new Peer(hub, await pair(hub));
+  await Promise.all([renderer.ready(), other.ready()]);
+  renderer.socket.send(JSON.stringify({ type: "registerRenderer" }));
+  const registered = await renderer.waitFor(message => message.type === "rendererRegistered");
+  if (registered.type !== "rendererRegistered") throw new Error("Missing renderer");
+  expect(await renderer.command({ type: "selectTarget", targetId: registered.targetId })).toMatchObject({ ok: true });
+  expect(await other.command({ type: "enqueue", entry: { id: "remote", title: "Remote", source: "https://example.org/audio.mp3" }, playNow: true })).toMatchObject({ ok: true });
+  const load = await renderer.waitFor(message => message.type === "rendererCommand" && message.command.type === "load");
+  if (load.type !== "rendererCommand" || load.command.type !== "load") throw new Error("Missing load");
+  expect(other.messages.some(message => message.type === "rendererCommand")).toBe(false);
+  expect(commands.some(command => command.type === "load")).toBe(false);
+  const observation = { ...idle, playbackId: load.command.playbackId, status: "playing", position: 12, duration: 100, seekable: true };
+  renderer.socket.send(JSON.stringify({ type: "rendererObservation", sessionId: registered.sessionId, state: observation }));
+  await other.waitFor(message => message.type === "state" && message.state.player.position === 12);
+  other.socket.send(JSON.stringify({ type: "registerRenderer" }));
+  await other.waitFor(message => message.type === "rendererRegistered");
+  other.socket.send(JSON.stringify({ type: "rendererObservation", sessionId: registered.sessionId, targetId: registered.targetId, state: { ...observation, position: 90 } }));
+  await other.command({ type: "volume", volume: 21 });
+  expect(hub.session.state.player.position).toBe(12);
+  await other.close();
+  expect(hub.session.state.player.status).toBe("playing");
+  const watcher = new Peer(hub, await pair(hub)); await watcher.ready();
+  await renderer.close();
+  await watcher.waitFor(message => message.type === "state" && message.state.player.status === "unavailable");
+  expect(hub.session.state.player).toMatchObject({ status: "unavailable", position: 12 });
+  expect(commands.some(command => command.type === "load")).toBe(false);
+});
+
+test("unregistered observations and invalid browser state cannot impersonate the native host", async () => {
+  const { hub } = fixture(); hub.session.observe(idle);
+  const renderer = new Peer(hub, await pair(hub)); await renderer.ready();
+  const closed = new Promise<number>(resolve => renderer.socket.addEventListener("close", event => resolve(event.code), { once: true }));
+  renderer.socket.send(JSON.stringify({ type: "rendererObservation", sessionId: hub.session.state.sessionId, state: { ...idle, status: "playing" } }));
+  expect(await closed).toBe(1008);
+  expect(hub.session.state.player.status).toBe("idle");
+});
+
+test("Core without a native player advertises browser playback and waits for an explicit output", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-core-only-")); roots.push(directory);
+  const hub = createHub({ hostname: "127.0.0.1", port: 0, databasePath: join(directory, "state.sqlite"), hostToken, pairingCode: "123456" }); hubs.push(hub);
+  expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ capabilities: { browserPlayback: true, nativePlayback: false } });
+  expect(hub.session.state).toMatchObject({ targets: [], player: { status: "unavailable", error: "Choose a playback output." } });
+  hub.session.observe(idle);
+  expect(hub.session.state.targets).toEqual([]);
+  const browser = new Peer(hub, await pair(hub)); await browser.ready();
+  browser.socket.send(JSON.stringify({ type: "registerRenderer" }));
+  const registered = await browser.waitFor(message => message.type === "rendererRegistered");
+  if (registered.type !== "rendererRegistered") throw new Error("Missing renderer");
+  expect(hub.session.state.targetId).toBeUndefined();
+  expect(hub.session.state.targets?.map(target => target.backend)).toEqual(["browser"]);
+  expect(browser.messages.some(message => message.type === "rendererCommand")).toBe(false);
+  expect(await browser.command({ type: "enqueue", entry: { id: "unassigned", title: "Remote audio", source: "https://example.org/audio.mp3" }, playNow: true })).toMatchObject({ ok: false, error: "Choose a playback output." });
+  expect(await browser.command({ type: "selectTarget", targetId: "native" })).toMatchObject({ ok: false });
+  expect(await browser.command({ type: "selectTarget", targetId: registered.targetId })).toMatchObject({ ok: true });
+  expect(await browser.command({ type: "enqueue", entry: { id: "direct", title: "Remote audio", source: "https://example.org/audio.mp3" }, playNow: true })).toMatchObject({ ok: true });
+  const load = await browser.waitFor(message => message.type === "rendererCommand" && message.command.type === "load");
+  if (load.type !== "rendererCommand" || load.command.type !== "load") throw new Error("Missing browser load");
+  browser.socket.send(JSON.stringify({ type: "rendererObservation", sessionId: registered.sessionId, state: { ...idle, playbackId: load.command.playbackId, status: "playing", position: 8 } }));
+  await browser.waitFor(message => message.type === "state" && message.state.player.position === 8);
+  expect(hub.session.state).toMatchObject({ targetId: registered.targetId, currentEntryId: "direct", player: { status: "playing" } });
+});
+
+test("a native playback channel advertises the native target independently of browser rendering", async () => {
+  const { hub } = fixture();
+  expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ capabilities: { browserPlayback: true, nativePlayback: true } });
+  expect(hub.session.state.targets).toEqual([{ id: "native", name: "Couch TV", kind: "endpoint", backend: "native", connected: false }]);
+  hub.session.observe(idle);
+  expect(hub.session.state).toMatchObject({ targetId: "native", targets: [{ id: "native", connected: true }], player: { status: "idle" } });
 });
