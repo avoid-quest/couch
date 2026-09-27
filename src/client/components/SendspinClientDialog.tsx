@@ -93,7 +93,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
               const id = prepared.clientId;
               const afterJoin = afterJoinAtGesture.current;
               if (!afterJoin) setError("Shared audio isn't ready in this client. Leave and try again.");
-              else void Promise.resolve().then(() => afterJoin(id)).then(() => { if (current()) setSharedReady(true); }, () => { if (current()) setError("Couldn't add this device to shared audio. Leave and try again."); });
+              else void Promise.resolve().then(() => afterJoin(id)).then(() => { if (current()) setSharedReady(true); }, reason => { if (current()) setError(reason instanceof Error ? reason.message : "Couldn't add this device to shared audio. Leave and try again."); });
             }
           }
         } },

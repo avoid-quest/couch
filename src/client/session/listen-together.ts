@@ -20,7 +20,7 @@ export async function listenTogether(clientId: string, deviceId: string | null, 
   const playback = current();
   if (playback.player.tracks?.some(track => track.kind === "video")) throw new Error("Listening together supports audio. Use Move for video.");
   const source = playback.targetId && playback.targetId !== group.id && playback.targetId !== deviceId && playback.currentEntryId
-    ? group.members.find(member => (member as typeof member & { deviceId?: string }).deviceId === playback.targetId && member.connected) : undefined;
+    ? group.members.find(member => member.deviceId === playback.targetId && member.connected) : undefined;
   if (playback.currentEntryId && playback.targetId && playback.targetId !== group.id && playback.targetId !== deviceId && !source)
     throw new Error("Choose Listen together on the device currently playing first, then add this device.");
   const previous = group.members.filter(member => member.joined).map(member => member.id);
