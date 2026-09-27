@@ -5,12 +5,13 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
-import { acknowledgeFrontend, ApiError } from "../api/client";
+import { acknowledgeFrontend, apiSend, ApiError } from "../api/client";
 import { applyTvNavigation } from "../navigation";
 import { isNativeHost, isTvPresentation } from "./native-context";
 import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
+import { listenTogether } from "./listen-together";
 import { useInterfaceSize } from "../interface-size";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
@@ -107,7 +108,6 @@ export function SessionGate({ children }: PropsWithChildren) {
   const [hostAttempt, setHostAttempt] = useState(0);
   const [booting, setBooting] = useState(localHost);
   const [error, setError] = useState<string | null>(null);
-  const [sendspinActive, setSendspinActive] = useState(false);
   const [linkedPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
   const videoQualityPreference = useVideoQualityPreference();
 
@@ -120,13 +120,20 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver, !sendspinActive, localHost ? "household" : "personal");
-  const sendspinDisabledReason = nativeHost && (device?.mode !== "remote" || nativeReceiver)
-    ? "Choose Another Couch and disable playback on this computer before joining Sendspin." : null;
-  const sendspin = useSendspinClient({ credentials, allowed: !sendspinDisabledReason, setActive: setSendspinActive, canActivate: () => {
-    const current = readObservation();
-    return connected && !current?.handoff && !(rendererTargetId && current?.targetId === rendererTargetId && current.player.playbackId && !["idle", "ended", "error", "unavailable"].includes(current.player.status));
-  } });
+  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver, true, localHost ? "household" : "personal");
+  const localDeviceId = rendererTargetId ?? (localHost ? "native" : null);
+  const sendspinDisabledReason = null;
+  const sendspin = useSendspinClient({
+    credentials, allowed: true, rendererTargetId: localDeviceId,
+    canEnableHosting: identity?.authority === "host" || identity?.authority === "administrator",
+    canActivate: () => connected && !readObservation()?.handoff,
+    afterJoin: clientId => listenTogether(clientId, localDeviceId, readObservation, command),
+    beforeLeave: async clientId => {
+      if (!credentials || !connected) return;
+      try { await apiSend(credentials, "/api/sendspin/leave", { clientId }); }
+      catch (reason) { if (reason instanceof ApiError && reason.status !== 401 && reason.status !== 503) throw reason; }
+    },
+  });
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
