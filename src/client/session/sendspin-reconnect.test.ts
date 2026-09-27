@@ -14,7 +14,8 @@ async function until(check: () => boolean, label: string) {
 async function fixture(admit: boolean) {
   const keys = new Map<string, string>();
   let admitted = false, admissions = 0;
-  const host = createSendspin({ host: "127.0.0.1", port: 0, name: "Reconnect fixture" }, { identity: Identity.generate().privateB64u, lookupPsk: id => keys.get(id) ?? null, changed: target => { const connected = !!target.members?.some(member => member.connected); if (connected && !admitted) admissions++; admitted = connected; }, observe: () => {} });
+  let host: ReturnType<typeof createSendspin>;
+  host = createSendspin({ host: "127.0.0.1", port: 0, name: "Reconnect fixture" }, { identity: Identity.generate().privateB64u, lookupPsk: id => keys.get(id) ?? null, devicesChanged: () => { const connected = host.devices.length > 0; if (connected && !admitted) admissions++; admitted = connected; } });
   cleanups.push(() => host.close());
   await until(() => !!host.port, "host listener");
   const storageValues = new Map<string, string>();

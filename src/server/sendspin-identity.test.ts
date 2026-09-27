@@ -123,6 +123,8 @@ test("legacy enrollments stay unverified while qualified provenance survives reo
     expect(store.softwareOutputQualified(managedId)).toBe(true);
     expect(store.deviceId(managedId)).toBe("browser-owner");
     expect(store.enroll("owner", managedId).softwareOutputQualified).toBe(true);
+    expect(() => store.enroll("owner", managedId, "browser-other")).toThrow("another device");
+    expect(store.deviceId(managedId)).toBe("browser-owner");
     store.revoke("owner");
     expect(store.softwareOutputQualified(managedId)).toBe(false);
     expect(store.deviceId(managedId)).toBeNull();

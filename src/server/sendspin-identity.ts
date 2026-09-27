@@ -35,6 +35,7 @@ export function openSendspinIdentity(databasePath: string) {
       return db.transaction(() => {
         const existing = db.query<{ owner: string; psk: string; softwareOutputQualified: number; deviceId: string | null }, [string]>("SELECT owner, psk, softwareOutputQualified, deviceId FROM sendspin_enrollment WHERE clientId = ?").get(clientId);
         if (existing && existing.owner !== ownerControllerId) throw new Error("This Sendspin client belongs to another controller.");
+        if (existing?.deviceId && deviceId && existing.deviceId !== deviceId) throw new Error("This Sendspin client belongs to another device.");
         const psk = existing?.psk ?? randomBytes(32).toString("base64url");
         if (!existing) db.query("INSERT INTO sendspin_enrollment (clientId, owner, psk, softwareOutputQualified, deviceId) VALUES (?, ?, ?, ?, ?)").run(clientId, ownerControllerId, psk, Number(!!deviceId), deviceId ?? null);
         else if (deviceId) db.query("UPDATE sendspin_enrollment SET softwareOutputQualified = 1, deviceId = ? WHERE clientId = ?").run(deviceId, clientId);
