@@ -9,7 +9,7 @@ type Waiter = { binding: Binding; endpoint: Endpoint; accept: (player: PlayerSta
 const idle = (volume = 100): PlayerState => ({ playbackId: null, status: "idle", position: 0, duration: null, volume, seekable: false, error: null });
 
 export function browserCompatible(command: Extract<PlaybackCommand, { type: "load" }>) {
-  if (!/^https?:\/\//i.test(command.source) || command.headers && Object.keys(command.headers).length || command.audioSource || command.segment || command.subtitles?.length)
+  if (!/^https?:\/\//i.test(command.source) || command.headers && Object.keys(command.headers).length || command.audioSource && !command.videoOnly && command.sourceType !== "hls" || command.segment || command.subtitles?.length)
     throw new Error("This source needs media delivery that this browser does not support yet. Keep playing it on Couch TV.");
 }
 

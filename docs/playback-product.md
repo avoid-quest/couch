@@ -80,6 +80,11 @@ requires no JSON, environment variables, protocol enrollment or role coordinatio
 Core coordinates ordinary media intent, authorization and library access; selected
 clients fetch and decode supported media. Preserve sources and native behavior, direct
 browser audio/video, maintained HLS/DASH clients, tracks, quality limits and live/DVR.
+Existing Internet sources—including YouTube, Twitch, StreamingCommunity, Bandcamp,
+RaiPlay, radio and IPTV—must also play with several devices selected. Choosing
+devices must not disable a source that Couch already supports. Source delivery and
+browser-compatible rendition selection belong inside playback, without extra setup.
+Jellyfin and local files are excluded from the current source-qualification pass.
 Sendspin is the synchronized-audio adapter, with protocol/crypto/synchronization kept in
 maintained dependencies. Optional external audio-server connections live in device
 settings. Core audio hosting can be disabled explicitly; its default operation needs

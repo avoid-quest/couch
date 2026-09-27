@@ -210,8 +210,8 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
         if (closed || uncertain || intent !== intentGeneration) return;
         if (command.type === "stop") { load = undefined; state = idle(); observe(); return; }
         if (command.type === "load") {
-          load = command; const duration = (command as Load).duration;
-          state = { ...idle(), playbackId: command.playbackId, position: command.startPosition ?? 0, duration: duration && duration > 0 ? duration : null, seekable: !!duration && duration > 0 && !command.radio, live: !!command.radio, speed: command.preferences?.speed ?? 1, audioTracksKnown: false, tracks: [{ id: "sendspin-audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }], status: command.paused ? "paused" : "loading" };
+          load = command; const duration = command.live ? undefined : command.duration;
+          state = { ...idle(), playbackId: command.playbackId, position: command.startPosition ?? 0, duration: duration && duration > 0 ? duration : null, seekable: !!duration && duration > 0 && !command.radio, live: !!command.radio || !!command.live, speed: command.preferences?.speed ?? 1, audioTracksKnown: false, tracks: [{ id: "sendspin-audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }], status: command.paused ? "paused" : "loading" };
           if (command.paused) await preparePaused(); else start();
         } else {
           if (command.type === "seek") state = { ...state, position: command.position };

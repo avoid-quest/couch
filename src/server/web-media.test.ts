@@ -115,11 +115,16 @@ test("inherits base headers before comparing the split streams", async () => {
   expect(await resolve(page)).toEqual({ source: "https://video.example/movie.webm", audioSource: "https://audio.example/music.webm", headers: { "x-playback-token": "shared-token" } });
 });
 
-test("opens audio-only and HLS sources and gives DASH manifests to the native demuxer", async () => {
-  for (const info of [{ url: "https://cdn.example/music.mp3", vcodec: "none", acodec: "mp3", protocol: "https" }, { url: "https://cdn.example/live.m3u8", protocol: "m3u8_native" }]) {
+test("marks extracted audio-only media even when its URL has no file extension", async () => {
+  for (const info of [{ url: "https://cdn.example/music.mp3", vcodec: "none", acodec: "mp3", protocol: "https" }, { url: "https://t4.bcbits.com/stream/id/mp3-128/123", vcodec: "none", acodec: "mp3", protocol: "https" }]) {
     const { resolve } = await fixture(output(info));
-    expect(await resolve(page)).toEqual({ source: info.url });
+    expect(await resolve(page)).toEqual({ source: info.url, audioOnly: true });
   }
+});
+
+test("opens HLS sources and gives DASH manifests to the native demuxer", async () => {
+  const hls = { url: "https://cdn.example/live.m3u8", protocol: "m3u8_native" };
+  expect(await (await fixture(output(hls))).resolve(page)).toEqual({ source: hls.url });
   const manifest = "https://cdn.example/manifest.mpd";
   const { resolve } = await fixture(output({ requested_formats: [
     { url: "https://cdn.example/fragments/", manifest_url: manifest, vcodec: "av1", acodec: "none", protocol: "http_dash_segments" },
@@ -142,7 +147,7 @@ test("carries DASH height limits separately from public metadata regardless of r
     expect(await inspect(page)).toEqual({ title: "DASH movie" });
   }
   const audio = await fixture(output(streams[0]));
-  expect(await audio.resolve(page, undefined, "480p")).toEqual({ source: manifest });
+  expect(await audio.resolve(page, undefined, "480p")).toEqual({ source: manifest, audioOnly: true });
 });
 
 test("DASH caps do not depend on extractor stream numbering and direct sources need no native cap", async () => {

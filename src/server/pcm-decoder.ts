@@ -60,7 +60,7 @@ export function createPcmDecoder(command: Load, options: { position: number; spe
       // The paused socket provides bounded OS/Readable backpressure on every platform.
       worker.child = Bun.spawn({ cmd: [options.ffmpeg ?? process.env.COUCH_FFMPEG ?? "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
         "-protocol_whitelist", "http,https,tcp,tls,crypto", "-rw_timeout", "10000000", ...(headers ? ["-headers", headers] : []),
-        ...(!!command.duration && command.duration > 0 && !command.radio && start > 0 ? ["-ss", String(start)] : []), "-i", source, "-map", "0:a:0", "-vn", "-sn", "-dn", "-af", filters,
+        ...(!!command.duration && command.duration > 0 && !command.radio && !command.live && start > 0 ? ["-ss", String(start)] : []), "-i", source, "-map", "0:a:0", "-vn", "-sn", "-dn", "-af", filters,
         "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", "-f", "s16le", `tcp://127.0.0.1:${port}`], stdin: "ignore", stdout: "ignore", stderr: "ignore", signal: cancellation.signal, killSignal: "SIGKILL" });
       void worker.child.exited.then(code => { resolveExit(code); if (!worker.reader) rejectReader(new Error("The audio decoder failed.")); });
     } catch { resolveExit(1); rejectReader(new Error("Could not start the audio decoder.")); }

@@ -1,9 +1,10 @@
 import { streamingCommunityLink } from "./streamingcommunity";
-import type { VideoQuality } from "../shared/protocol";
+import type { BrowserMediaCapabilities, VideoQuality } from "../shared/protocol";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
-export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; maxVideoHeight?: number; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { source: string; sourceType?: "hls" | "dash"; audioOnly?: boolean; audioSource?: string; headers?: Record<string, string>; maxVideoHeight?: number; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaDestination = { browser?: boolean; videoOnly?: boolean; capabilities?: BrowserMediaCapabilities };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -68,7 +69,7 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
   return metadata;
 }
 
-function parseMedia(info: Metadata, quality: VideoQuality): WebMediaSource {
+function parseMedia(info: Metadata, quality: VideoQuality, destination: WebMediaDestination): WebMediaSource {
   if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
   if (!Array.isArray(selected) || !selected.length || selected.length > 2 || !selected.every(object)) throw new Error("The website returned an unsupported combination of media streams.");
@@ -92,10 +93,22 @@ function parseMedia(info: Metadata, quality: VideoQuality): WebMediaSource {
   // DASH manifests contain every representation; the native demuxer applies this cap.
   const maxVideoHeight = video?.protocol === "http_dash_segments" && quality !== "best" ? Number(quality.slice(0, -1)) : undefined;
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(Object.keys(sharedHeaders).length ? { headers: sharedHeaders } : {}), ...(maxVideoHeight !== undefined ? { maxVideoHeight } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  const audioOnly = selected.length === 1 && selected[0]!.vcodec === "none" && typeof selected[0]!.acodec === "string" && selected[0]!.acodec !== "none";
+  const protocol = video?.protocol ?? selected[0]!.protocol;
+  const sourceType = destination.browser ? protocol === "m3u8" || protocol === "m3u8_native" ? "hls" : protocol === "http_dash_segments" ? "dash" : undefined : undefined;
+  // These extractor defaults are already sent by browsers or were verified
+  // unnecessary for direct provider playback. Other headers still fail closed.
+  const deliveryHeaders = destination.browser ? Object.fromEntries(Object.entries(sharedHeaders).filter(([name]) => !["user-agent", "accept", "accept-language", "sec-fetch-mode"].includes(name))) : sharedHeaders;
+  return { source, ...(sourceType ? { sourceType } : {}), ...(audioOnly ? { audioOnly } : {}), ...(audioSource ? { audioSource } : {}), ...(Object.keys(deliveryHeaders).length ? { headers: deliveryHeaders } : {}), ...(maxVideoHeight !== undefined ? { maxVideoHeight } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
-function formatSelector(quality: VideoQuality): string {
+function formatSelector(quality: VideoQuality, destination: WebMediaDestination): string {
+  if (destination.browser) {
+    const cap = quality === "best" ? "" : `[height<=?${quality === "auto" ? "1080" : quality.slice(0, -1)}]`;
+    const picture = `bv*${cap}[vcodec^=avc1]+ba/bv*${cap}+ba`;
+    if (destination.videoOnly) return `${picture}/b${cap}`;
+    return `b${cap}[vcodec^=avc1][acodec^=mp4a]/b${cap}/${picture}`;
+  }
   if (quality === "best") return "bv*+ba/b";
   if (!["1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
   const filter = `[height<=?${quality.slice(0, -1)}]`;
@@ -103,16 +116,16 @@ function formatSelector(quality: VideoQuality): string {
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, destination: WebMediaDestination = {}): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const plugin = streamingCommunityLink(source, streamingCommunityOrigin) ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
     const sort = quality === "auto" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"))
       ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", source], { ...options, signal, plugin });
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality, destination), ...sort, "--", source], { ...options, signal, plugin });
     const info = parseInfo(output);
-    const media = parseMedia(info, selectedQuality);
+    const media = parseMedia(info, selectedQuality, destination);
     const transport = new URL(media.source);
     const at = Number(transport.searchParams.get("ts")) * 1000;
     // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
@@ -126,7 +139,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;
-        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin);
+        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, destination);
         const replacement = new URL(fresh.source);
         if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
         return fresh;

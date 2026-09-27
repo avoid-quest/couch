@@ -2,7 +2,7 @@ import { isAdaptiveSource, loadDashLibrary, manifestTracks, type DashPlayer } fr
 import type { MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
 
 // One lazy element per authenticated connection; route components never own it.
-export function createBrowserRenderer(report: (state: PlayerState) => void, importDash = loadDashLibrary) {
+export function createBrowserRenderer(report: (state: PlayerState) => void, importDash = loadDashLibrary, importHls = async (video: HTMLVideoElement) => (await import("./browser-hls")).createHlsPlayer(video)) {
   let media: HTMLVideoElement | null = null;
   let teardown: Promise<unknown> | null = null;
   let fatal = false;
@@ -93,10 +93,11 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
         video.dataset.playbackOwner = command.videoOnly ? command.playbackOwner ?? "" : "";
         video.muted = !!command.videoOnly;
         try { const saved = Number(localStorage.getItem("couch.browser-volume") ?? volume); if (Number.isFinite(saved)) video.volume = volume = Math.min(1, Math.max(0, saved)); } catch { /* Storage is optional. */ }
-        load = command; dash = isAdaptiveSource(command.source); fatal = false; failure = null; requiresGesture = false; initializing = true; initialSeek = false; buffering = false;
+        load = command; dash = isAdaptiveSource(command.source, command.sourceType); fatal = false; failure = null; requiresGesture = false; initializing = true; initialSeek = false; buffering = false;
         dashSpeed = command.preferences?.speed ?? 1;
         let dashReady = !dash;
         let player: DashPlayer | null = null;
+        let manifestUrl: string | undefined;
         let setup: Promise<void> | null = null;
         let cancelled = false;
         const current = () => load === command && !cancelled;
@@ -125,7 +126,7 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
           applyDashSpeed = () => {};
           adaptive = null;
           if (setup) {
-            const pending = setup.then(async () => { await player?.destroy(); });
+            const pending = setup.then(async () => { await player?.destroy(); if (manifestUrl) URL.revokeObjectURL(manifestUrl); });
             teardown = pending.catch(() => {}).then(() => { if (teardown === settled) teardown = null; });
             const settled = teardown;
           }
@@ -134,7 +135,7 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
         const fail = (code: unknown) => {
           if (!current()) return;
           fatal = true; initializing = false; buffering = false;
-          failure = `This browser cannot play ${/\.m3u8(?:$|[?#])/i.test(command.source) ? "HLS" : "DASH"} (${typeof code === "number" ? code : "unsupported"}). Try Couch TV.`;
+          failure = `This browser cannot play ${command.sourceType === "hls" || /\.m3u8(?:$|[?#])/i.test(command.source) ? "HLS" : "DASH"} (${typeof code === "number" ? code : "unsupported"}). Try Couch TV.`;
           cleanup();
           video.pause(); emit();
         };
@@ -144,11 +145,16 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
           video.removeAttribute("src");
           video.load();
           setup = (async () => {
-            const library = await importDash();
-            if (!current()) return;
-            library.polyfill.installAll();
-            if (!library.Player.isBrowserSupported()) { fail("unsupported"); return; }
-            player = new library.Player();
+            if (command.sourceType === "hls" || /\.m3u8(?:$|[?#])/i.test(command.source)) {
+              player = await importHls(video);
+              if (!current()) { await player.destroy(); return; }
+            } else {
+              const library = await importDash();
+              if (!current()) return;
+              library.polyfill.installAll();
+              if (!library.Player.isBrowserSupported()) { fail("unsupported"); return; }
+              player = new library.Player();
+            }
             player.addEventListener("error", event => { if (event.detail?.severity === 2) fail(event.detail.code); });
             for (const event of ["trackschanged", "audiotrackschanged", "adaptation", "variantchanged", "textchanged", "manifestupdated"]) player.addEventListener(event, notify);
             player.configure({
@@ -161,7 +167,12 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
             await player.attach(video);
             if (!current()) return;
             initialSeek = true;
-            void player.load(command.source, command.goLive || command.radio ? undefined : command.startPosition).then(() => {
+            if (command.sourceType === "hls" && command.audioSource && !command.videoOnly) {
+              const playlist = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="couch",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI=${JSON.stringify(command.audioSource)}\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,AUDIO="couch"\n${command.source}\n`;
+              manifestUrl = URL.createObjectURL(new Blob([playlist], { type: "application/vnd.apple.mpegurl" }));
+            }
+            const mimeType = command.sourceType === "hls" ? "application/vnd.apple.mpegurl" : command.sourceType === "dash" ? "application/dash+xml" : undefined;
+            void player.load(manifestUrl ?? command.source, command.goLive || command.radio ? undefined : command.startPosition, mimeType).then(() => {
               if (!current() || fatal) return;
               adaptive = { player: player!, tracks: manifestTracks(player!) };
               if (command.preferences?.subtitles !== "auto") player!.selectTextTrack(null);

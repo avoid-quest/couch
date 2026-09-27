@@ -2,7 +2,8 @@ import type shaka from "shaka-player";
 import type { MediaTrack } from "../../shared/protocol";
 
 // The adapter is imported only for a selected public HTTP(S) manifest.
-export const isAdaptiveSource = (source: string) => {
+export const isAdaptiveSource = (source: string, sourceType?: "hls" | "dash") => {
+  if (sourceType) return true;
   try { const url = new URL(source); return /^https?:$/.test(url.protocol) && /\.(mpd|m3u8)$/i.test(url.pathname); } catch { return false; }
 };
 

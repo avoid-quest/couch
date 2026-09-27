@@ -101,7 +101,7 @@ export function createPlaybackDevices(options: Options) {
     if (!audio) return;
     if (audio.playbackId === null && binding.video?.playbackId) return;
     const video = binding.video?.playbackId === audio.playbackId ? binding.video : undefined;
-    binding.endpoint.observe({ ...audio, ...(video ? { duration: video.duration ?? audio.duration, seekable: audio.seekable && video.seekable, live: video.live ?? audio.live, seekRange: video.seekRange ?? audio.seekRange,
+    binding.endpoint.observe({ ...audio, ...(video ? { duration: audio.live ? null : video.duration ?? audio.duration, seekable: audio.seekable && video.seekable, live: video.live ?? audio.live, seekRange: video.seekRange ?? audio.seekRange,
       tracks: [...(audio.tracks ?? []), ...(video.tracks?.filter(track => track.kind !== "audio") ?? [])], chapters: video.chapters, subtitleDelay: video.subtitleDelay, subtitleError: video.subtitleError } : {}) });
   };
   const decorate = (binding: GroupBinding, target: Parameters<GroupBinding["endpoint"]["update"]>[0]) => ({ ...target, members: [...target.members ?? [], ...(binding.screen ? [{ id: `video:${binding.screen}`, deviceId: binding.screen, name: options.name(binding.screen) ?? "Video screen", connected: true, volume: 0, muted: true, joined: true }] : [])] });
@@ -124,7 +124,7 @@ export function createPlaybackDevices(options: Options) {
           if (!screen) throw new Error("Choose a connected screen with Sendspin audio for shared video playback.");
           const audio = { ...command, playbackOwner: runtime.id };
           validateSendspinLoad(audio);
-          const video = { ...command, videoOnly: true, playbackOwner: runtime.id, paused: true, audioOutput: undefined };
+          const video = { ...command, videoOnly: true, playbackOwner: runtime.id, paused: true, audioOutput: undefined, audioSource: undefined };
           if (registry.targets.find(target => target.id === screen)?.backend === "browser") browserCompatible(video);
           void runtime.targets.waitMember(screen, video, state => state.playbackId === command.playbackId && state.status === "paused").then(state => {
             if (current.playbackId !== command.playbackId) return;
@@ -332,12 +332,13 @@ export function createPlaybackDevices(options: Options) {
   };
   return {
     snapshot,
+    videoTarget: (runtime: Runtime) => registry.targets.find(target => target.id === groups.get(runtime.id)?.screen),
     hasVideoScreen: (runtime: Runtime) => !!groups.get(runtime.id)?.screen && runtime.session.state.targetId === `sendspin:${runtime.id}`,
     validateLoad(runtime: Runtime, command: Extract<PlaybackCommand, { type: "load" }>) {
       if (!videoSource(command)) return validateSendspinLoad(command);
       const screen = groups.get(runtime.id)?.screen;
       if (!screen || !assigned(runtime).includes(screen) || !registry.targets.some(target => target.id === screen && target.connected)) throw new Error("Choose a connected screen with Sendspin audio for shared video playback.");
-      const video = { ...command, videoOnly: true, playbackOwner: runtime.id };
+      const video = { ...command, videoOnly: true, playbackOwner: runtime.id, audioSource: undefined };
       if (registry.targets.find(target => target.id === screen)?.backend === "browser") browserCompatible(video);
       validateSendspinLoad({ ...command, playbackOwner: runtime.id });
     },

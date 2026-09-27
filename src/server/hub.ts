@@ -246,7 +246,10 @@ export function createHub(options: HubOptions) {
       resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing, destination = targets.destination) => {
         const browser = destination?.backend === "browser";
         if ((browser || destination?.remote) && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on the Core's own player only.");
-        if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
+        if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin(), {
+          browser: browser || destination?.backend === "sendspin" && devices.videoTarget(runtime)?.backend === "browser",
+          videoOnly: destination?.backend === "sendspin", capabilities: destination?.capabilities,
+        });
         if (entry.source.startsWith("jellyfin:")) {
           if (browser) throw new Error("Open Jellyfin directly on this device.");
           return playback.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing || destination?.remote ? media : subtitles.prepare(media, playbackId, signal));

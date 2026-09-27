@@ -311,7 +311,7 @@ for (const extension of ["mpd", "m3u8"]) test(`public ${extension} tracks retain
   fixture.player.selectTextTrack = track => { text.forEach(candidate => { candidate.active = candidate === track; }); fixture.event("textchanged"); };
   const states: PlayerState[] = [];
   let imports = 0;
-  const renderer = createBrowserRenderer(state => states.push(state), async () => { imports++; return fixture.library; });
+  const renderer = createBrowserRenderer(state => states.push(state), async () => { imports++; return fixture.library; }, async () => { imports++; return fixture.player; });
   renderer.report();
   expect(imports).toBe(0);
   expect(document.querySelector("video")).toBeNull();
@@ -350,7 +350,7 @@ test.each([false, true])("manifest live range follows DVR updates, clamps seeks 
   fixture.player.seekRange = () => range;
   fixture.player.isLive = () => true;
   const states: PlayerState[] = [];
-  const renderer = createBrowserRenderer(state => states.push(state), async () => fixture.library);
+  const renderer = createBrowserRenderer(state => states.push(state), async () => fixture.library, async () => fixture.player);
   renderer.command({ type: "load", playbackId: "live", source: "https://media.example/live.m3u8", paused: true, radio });
   const video = document.querySelector("video")!;
   Object.defineProperty(video, "readyState", { configurable: true, value: 2 });
@@ -375,7 +375,7 @@ test("public HLS failures retain their format and stale load failures cannot rep
   let reject!: (error: unknown) => void;
   fixture.player.load = () => new Promise((_resolve, fail) => { reject = fail; });
   const states: PlayerState[] = [];
-  const renderer = createBrowserRenderer(state => states.push(state), async () => fixture.library);
+  const renderer = createBrowserRenderer(state => states.push(state), async () => fixture.library, async () => fixture.player);
   renderer.command({ type: "load", playbackId: "hls", source: "https://media.example/live.m3u8", paused: true });
   await Bun.sleep(0);
   fixture.error(3016);

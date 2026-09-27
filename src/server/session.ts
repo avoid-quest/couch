@@ -10,7 +10,7 @@ import { UPDATING_PAUSED, RECORDINGS_UNSUPPORTED, QUEUE_FULL, STORAGE_ERROR, PLA
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; source: string; sourceType?: "hls" | "dash"; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
 export type PlaybackDestination = { backend: "native" | "browser" | "sendspin"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type SessionOptions = {
@@ -407,7 +407,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       const commit = (media: MediaSource) => {
         if (generation !== playPreflightGeneration || controller.signal.aborted || intent !== playIntent || currentPlaybackId !== state.player.playbackId || profileId !== state.activeProfile.id || queue !== state.queue || !options.preflightLoad?.()) throw new Error(PLAY_CANCELED);
         authorize();
-        options.validateCommand?.({ type: "load", playbackId, ...media, duration: entry.duration, ...(isRadio(entry) ? { radio: true } : {}), preferences: { ...state.preferences!.profile, ...state.preferences!.device, audioDelay: 0 } });
+        options.validateCommand?.({ type: "load", playbackId, ...media, duration: entry.duration, live: media.metadata?.live ?? entry.live, ...(isRadio(entry) ? { radio: true } : {}), preferences: { ...state.preferences!.profile, ...state.preferences!.device, audioDelay: 0 } });
         return play(entryId, fromStart, retry, authorize, goLive, playedBy, selectedEntryIds, proposedQueue, context, preserveContext, { media, playbackId, controller });
       };
       try {
@@ -479,9 +479,9 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
         const currentEntry = state.queue.find(candidate => candidate.id === entry.id)!;
         const mediaId = playbackMediaId(currentEntry);
         const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
-        if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
+        if (!currentEntry.live && media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy);
-        send({ type: "load", audioOnly: sourceAudioOnly, playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, duration: currentEntry.duration, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
+        send({ type: "load", audioOnly: sourceAudioOnly, playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, duration: currentEntry.duration, live: currentEntry.live, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
         broadcast();
       };
@@ -716,7 +716,8 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       catch (error) { options.releaseHandoff?.(playbackId); throw error; }
       finally { clearTimeout(timeout); if (handoffResolution === controller) handoffResolution = null; }
       const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
-      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, audioOnly: media.audioOnly, playbackId, duration: state.player.duration ?? media.metadata?.duration ?? entry.duration, paused: true,
+      const live = media.metadata?.live ?? entry.live ?? state.player.live;
+      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, audioOnly: media.audioOnly, playbackId, live, duration: live ? undefined : state.player.duration ?? media.metadata?.duration ?? entry.duration, paused: true,
         ...(!browser && !destination.remote && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
         startPosition: entry.live || state.player.live || media.radio ? undefined : state.player.position,
         preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser || destination.remote ? 0 : state.preferences!.device.audioDelay } } };
