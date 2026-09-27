@@ -34,6 +34,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
   const core = new SendspinCore();
   core.configureServer({ name: config.name });
   const members = new Map<string, Member>();
+  const activeStreams = new Set<string>();
   const selected = new Set(options.initialMembers ?? []);
   if (selected.size > maxMembers || [...selected].some(id => !/^[\w-]{43}$/.test(id))) throw new Error("Invalid Sendspin members.");
   for (const id of selected) members.set(id, { id, name: "Sendspin player", connected: false, joined: true, volume: 100, muted: false });
@@ -41,7 +42,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
   let closed = false, listening = false, recovering = true, uncertain = false;
   let state = idle(), load: Load | undefined, generation = 0, intentGeneration = 0, queued = 0;
   let tail = Promise.resolve(), loop = Promise.resolve();
-  let decoder: ReturnType<typeof createPcmDecoder> | undefined, cancellation: AbortController | undefined;
+  let decoder: ReturnType<typeof createPcmDecoder> | undefined, cancellation: AbortController | undefined, prepared: Uint8Array | undefined;
   let startedUs = 0, startPosition = 0, sentSeconds = 0, progressAt = 0;
   const joined = () => [...members.values()].filter(member => member.joined);
   const connected = () => listening && !recovering && !uncertain && joined().length > 0 && joined().every(member => member.connected);
@@ -56,7 +57,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
   };
   const position = () => state.status === "playing" && startedUs ? Math.min(state.duration ?? Infinity, startPosition + Math.min(sentSeconds, Math.max(0, (serverNowUs() - startedUs) / 1e6)) * (state.speed ?? 1)) : state.position;
   const cancel = () => { state = { ...state, position: position() }; generation++; cancellation?.abort(); };
-  const clear = () => { for (const member of joined()) { core.sendStreamClear(member.id); core.sendStreamEnd(member.id); core.sendGroupUpdate(member.id, PlaybackStateType.STOPPED, "sendspin-group", config.name); } };
+  const clear = () => { for (const member of joined()) { if (activeStreams.delete(member.id)) core.sendStreamEnd(member.id); core.sendGroupUpdate(member.id, PlaybackStateType.STOPPED, "sendspin-group", config.name); } };
   const fail = (message: string) => {
     if (closed || uncertain) return;
     cancel(); uncertain = true; clear();
@@ -89,7 +90,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
       onIdentified: session => { update(session); core.sendControllerState(id, { supported_commands: options.control ? [MediaCommand.PLAY, MediaCommand.PAUSE, MediaCommand.STOP, MediaCommand.NEXT] : [], volume: state.volume, muted: false, repeat: RepeatMode.OFF, shuffle: false }); },
       onGroupCommand: (_session, command) => { if (options.control && ["play", "pause", "stop", "next"].includes(command.command)) void Promise.resolve().then(() => options.control!(id, command.command as "play" | "pause" | "stop" | "next")).catch(() => {}); },
       onPlayerState: (session, updateState) => update(session, updateState.volume, updateState.muted),
-      onDisconnected: () => { const member = members.get(id); if (member) member.connected = false; if (selected.has(id) && load) fail("A Sendspin member disconnected. Buffered output is uncertain until reconnect."); publish(); },
+      onDisconnected: () => { activeStreams.delete(id); const member = members.get(id); if (member) member.connected = false; if (selected.has(id) && load) fail("A Sendspin member disconnected. Buffered output is uncertain until reconnect."); publish(); },
       onFormatChanged: () => { if (selected.has(id) && load) fail("A Sendspin member changed audio format."); },
     });
     return { psk, pskId: pskIdFor(psk), category: PskCategory.LONG_TERM };
@@ -110,19 +111,32 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
   server.on("error", () => fail("Sendspin could not listen on the configured address."));
   server.on("listening", () => { listening = true; void delay(sendspinDrainMs).then(() => { if (!closed) { recovering = false; publish(); observe(); } }); });
   publish();
-  const retire = async () => { cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; startedUs = 0; await delay(sendspinDrainMs); };
+  const retire = async () => { cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; prepared = undefined; startedUs = 0; await delay(sendspinDrainMs); };
+  const openDecoder = () => {
+    if (!load) throw new Error("No Sendspin source is loaded.");
+    cancellation = new AbortController();
+    return decoder = createPcmDecoder(load, { position: state.position, speed: state.speed ?? 1, ffmpeg: config.ffmpeg, signal: cancellation.signal });
+  };
+  const preparePaused = async () => {
+    const epoch = generation, active = openDecoder();
+    state = { ...state, status: "loading", error: null }; observe();
+    const pcm = await active.read();
+    if (epoch !== generation || closed) return;
+    if (!pcm.length) throw new Error("The audio source has no decodable samples.");
+    prepared = pcm;
+    state = { ...state, status: "paused" }; observe();
+  };
   const start = () => {
     if (!load) return;
     const command = load, epoch = generation, speed = state.speed ?? 1;
-    cancellation = new AbortController();
-    const active = createPcmDecoder(command, { position: state.position, speed, ffmpeg: config.ffmpeg, signal: cancellation.signal });
-    decoder = active;
+    const active = decoder ?? openDecoder();
     startPosition = state.position; sentSeconds = 0; startedUs = 0;
     state = { ...state, status: "loading", error: null }; observe();
     loop = (async () => {
       try {
         while (epoch === generation && !closed) {
-          const pcm = await active.read();
+          const pcm = prepared ?? await active.read();
+          prepared = undefined;
           if (epoch !== generation || closed) return;
           if (!pcm.length) {
             const remaining = Math.max(0, (startedUs + sentSeconds * 1e6 - serverNowUs()) / 1000);
@@ -132,7 +146,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
           }
           if (!startedUs) {
             startedUs = serverNowUs() + leadUs;
-            for (const member of joined()) { core.sendStreamStart(member.id, { codec: AudioCodec.PCM, sampleRate: 48000, channels: 2, bitDepth: 16 }); core.sendGroupUpdate(member.id, PlaybackStateType.PLAYING, "sendspin-group", config.name); }
+            for (const member of joined()) { core.sendStreamStart(member.id, { codec: AudioCodec.PCM, sampleRate: 48000, channels: 2, bitDepth: 16 }); activeStreams.add(member.id); core.sendGroupUpdate(member.id, PlaybackStateType.PLAYING, "sendspin-group", config.name); }
           }
           const timestampUs = Math.round(startedUs + sentSeconds * 1e6);
           await delay(Math.max(0, (timestampUs - serverNowUs() - leadUs) / 1000), undefined, { signal: cancellation!.signal });
@@ -183,17 +197,17 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
       void enqueue(async () => {
         if (intent !== intentGeneration) return;
         const previousStatus = state.status;
-        await retire();
+        if (!(command.type === "pause" && !command.paused && previousStatus === "paused" && prepared)) await retire();
         if (closed || uncertain || intent !== intentGeneration) return;
         if (command.type === "stop") { load = undefined; state = idle(); observe(); return; }
         if (command.type === "load") {
           load = command; const duration = (command as Load).duration;
           state = { ...idle(), playbackId: command.playbackId, position: command.startPosition ?? 0, duration: duration && duration > 0 ? duration : null, seekable: !!duration && duration > 0 && !command.radio, live: !!command.radio, speed: command.preferences?.speed ?? 1, audioTracksKnown: false, tracks: [{ id: "sendspin-audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }], status: command.paused ? "paused" : "loading" };
-          if (command.paused) observe(); else start();
+          if (command.paused) await preparePaused(); else start();
         } else {
           if (command.type === "seek") state = { ...state, position: command.position };
           if (command.type === "speed") state = { ...state, speed: command.speed };
-          if (command.type === "pause" ? command.paused : previousStatus === "paused") { state = { ...state, status: "paused" }; observe(); } else start();
+          if (command.type === "pause" ? command.paused : previousStatus === "paused") await preparePaused(); else start();
         }
       }).catch(() => fail("Sendspin could not complete the playback command."));
     },
@@ -208,10 +222,11 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
         selected.clear(); for (const id of ids) selected.add(id);
         for (const member of members.values()) member.joined = selected.has(member.id);
         options.membersChanged?.([...selected]); publish();
-        if (!ids.length) { load = undefined; state = idle(); observe(); } else if (resume && intent === intentGeneration) start(); else observe();
+        if (!ids.length) { load = undefined; state = idle(); observe(); } else if (resume && intent === intentGeneration) start(); else if (load) await preparePaused(); else observe();
       });
     },
     setMemberVolume,
+    refresh() { publish(); },
     disconnectAll() { intentGeneration++; fail("Sendspin remote access was disabled. Reconnect explicitly before playback."); for (const socket of sockets) socket.terminate(); },
     disconnectClient(id: string) { for (const socket of sockets) if (core.getSessionBySocket(socket)?.getClientId() === id) socket.terminate(); },
     async reconnect() { await enqueue(async () => { recovering = true; publish(); await retire(); if (closed) return; load = undefined; state = idle(); uncertain = false; recovering = false; publish(); observe(); }); },

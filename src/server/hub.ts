@@ -44,7 +44,7 @@ import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
 import { createForLater, type ForLaterPlaybackContext } from "./for-later";
 import { createPlaylists, type PlaylistPlaybackContext } from "./playlists";
-import { ControllerError, createControllers, settingField } from "./controllers";
+import { ControllerError, createControllers, settingField, settingFields } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
 import { createDiagnostics } from "./diagnostics";
 import type { NativeDiagnostics } from "../shared/diagnostics";
@@ -659,11 +659,14 @@ export function createHub(options: HubOptions) {
           const configuration = { available: true, url: address.href, name: options.sendspin.name, serverId: sendspinIdentity.serverId };
           if (request.method === "GET") return cors(request, json(configuration));
           if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
-          const clientId = await settingField(request, "clientId");
+          const { clientId, rendererTargetId } = await settingFields(request, ["clientId", "rendererTargetId"]);
           const current = identity();
           if (!current || !admitted()) throw new ControllerError("Pair this remote first.", 401);
           if (typeof clientId !== "string") throw new ControllerError("Choose a Sendspin client identity.");
-          const enrollment = sendspinIdentity.enroll(current.controller?.id ?? "host", clientId);
+          // A live, same-owner Couch renderer qualifies software transfer only; it cannot attest a speaker's acoustic state.
+          if (rendererTargetId !== undefined && (typeof rendererTargetId !== "string" || ![...sockets].some(socket => socket.data.renderer?.id === rendererTargetId && !socket.data.receiver && socket.data.controllerId === (current.controller?.id ?? null) && socket.data.trusted === trusted))) throw new ControllerError("Connect this Couch renderer before qualifying its Sendspin output.");
+          const enrollment = sendspinIdentity.enroll(current.controller?.id ?? "host", clientId, rendererTargetId !== undefined);
+          sendspin.refresh();
           return cors(request, json({ ...configuration, ...enrollment }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Sendspin enrollment failed." }, error instanceof ControllerError ? error.status : 400)); }
       }
@@ -964,7 +967,7 @@ export function createHub(options: HubOptions) {
   if (options.sendspin && sendspinIdentity) {
     const target = registry.registerGroup({ id: "sendspin-group", name: options.sendspin.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => sendspin!.send(command));
     sendspin = createSendspin(options.sendspin, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() ? sendspinIdentity.lookup(clientId) : null,
-      isQualified: clientId => options.sendspin?.qualifiedClientIds?.includes(clientId) ?? false,
+      isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!options.sendspin?.qualifiedClientIds?.includes(clientId),
       initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: target.update, observe: target.observe,
       control: async (clientId, command) => {
         const owner = sendspinIdentity.owner(clientId);

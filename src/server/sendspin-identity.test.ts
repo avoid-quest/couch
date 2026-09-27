@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Identity } from "@sonn-audio/node-sendspin";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,4 +106,24 @@ test("member validation preserves the previous selection on invalid replacement"
       expect(store.members()).toEqual(members.slice(0, 32));
     }
   } finally { store.close(); }
+});
+
+test("legacy enrollments stay unverified while qualified provenance survives reopen and is removed on revocation", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-sendspin-legacy-")), path = join(directory, "couch.sqlite");
+  const legacyId = Identity.generate().peerId, managedId = Identity.generate().peerId;
+  const db = new Database(path);
+  db.run("CREATE TABLE sendspin_enrollment (clientId TEXT PRIMARY KEY, owner TEXT NOT NULL, psk TEXT NOT NULL)");
+  db.query("INSERT INTO sendspin_enrollment VALUES (?, ?, ?)").run(legacyId, "owner", "psk");
+  db.close();
+  let store = openSendspinIdentity(path);
+  try {
+    expect(store.softwareOutputQualified(legacyId)).toBe(false);
+    expect(store.enroll("owner", managedId, true).softwareOutputQualified).toBe(true);
+    store.close(); store = openSendspinIdentity(path);
+    expect(store.softwareOutputQualified(managedId)).toBe(true);
+    expect(store.enroll("owner", managedId).softwareOutputQualified).toBe(true);
+    store.revoke("owner");
+    expect(store.softwareOutputQualified(managedId)).toBe(false);
+    expect(store.softwareOutputQualified(legacyId)).toBe(false);
+  } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
 });

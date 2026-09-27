@@ -30,6 +30,22 @@ test("Sendspin validates optional host configuration", () => {
   for (const publicUrl of ["http://example.org", "wss://user:secret@example.org", "wss://example.org/sendspin?secret=1"]) expect(() => validateSendspinConfig({ host: "127.0.0.1", port: 1, name: "Rooms", publicUrl })).toThrow();
 });
 
+test("paused readiness waits for decoded PCM and failed preparation never reports paused", async () => {
+  const f = fixture(); await until(() => !!f.host.port, "listener");
+  const client = await f.client(); await until(() => f.target.members?.some(member => member.id === client.clientId && member.connected) === true, "authenticated player"); await f.host.setMembers([client.clientId]); await until(() => f.target.connected, "joined");
+  const audio = Buffer.alloc(44 + 192000); audio.write("RIFF"); audio.writeUInt32LE(audio.length - 8, 4); audio.write("WAVEfmt ", 8); audio.writeUInt32LE(16, 16); audio.writeUInt16LE(1, 20); audio.writeUInt16LE(2, 22); audio.writeUInt32LE(48000, 24); audio.writeUInt32LE(192000, 28); audio.writeUInt16LE(4, 32); audio.writeUInt16LE(16, 34); audio.write("data", 36); audio.writeUInt32LE(audio.length - 44, 40);
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const http = Bun.serve({ port: 0, async fetch(request) { if (new URL(request.url).pathname === "/good.wav") { await pending; return new Response(audio, { headers: { "Content-Type": "audio/wav" } }); } return new Response("bad media"); } });
+  cleanups.push(async () => { release(); await http.stop(true); });
+  f.host.send({ type: "load", playbackId: "good", source: `http://127.0.0.1:${http.port}/good.wav`, paused: true, duration: 1 } as any);
+  await until(() => f.player.playbackId === "good" && f.player.status === "loading", "paused decoder is preparing");
+  release(); await until(() => f.player.status === "paused", "decoded paused readiness");
+  f.host.send({ type: "load", playbackId: "bad", source: `http://127.0.0.1:${http.port}/bad.wav`, paused: true, duration: 1 } as any);
+  await until(() => f.player.status === "unavailable", "bad source rejected");
+  expect(f.player.status).not.toBe("paused");
+}, 15000);
+
 test("official encrypted JS authenticates, refuses unknown/wrong credentials and plaintext, observes volume and revocation", async () => {
   const f = fixture(); await until(() => !!f.host.port, "listener");
   const good = await f.client(); await until(() => f.target.members?.length === 1 && !!f.target.members[0]?.connected, "authenticated player");

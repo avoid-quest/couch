@@ -9,7 +9,7 @@ import { openSendspinIdentity } from "./sendspin-identity";
 const hostToken = "sendspin-hub-host-token-123456789012345678901234";
 const cleanup: (() => unknown | Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
-type Enrollment = { available: boolean; url: string; name: string; serverId: string; psk: string };
+type Enrollment = { available: boolean; url: string; name: string; serverId: string; psk: string; softwareOutputQualified: boolean };
 function fixture(enabled = true, publicUrl?: string) {
   const directory = mkdtempSync(join(tmpdir(), "sendspin-hub-")), databasePath = join(directory, "state.sqlite");
   cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
@@ -90,6 +90,33 @@ test("a configured secure public URL is returned without exposing enrollment sec
   const response = await api(hub, token);
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ available: true, url: "wss://rooms.example/sendspin", name: "Rooms", serverId: expect.any(String) });
+});
+
+test("only an authenticated controller's live Couch renderer qualifies its enrolled software output", async () => {
+  const { hub, databasePath } = fixture(), owner = await pair(hub), other = await pair(hub), managed = identity(), external = identity();
+  const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
+  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=1`, { headers: { Origin: hub.origin } });
+  cleanup.push(() => socket.close());
+  const messages: any[] = [];
+  socket.addEventListener("message", event => messages.push(JSON.parse(String(event.data))));
+  await until(() => messages.some(message => message.type === "state"));
+  socket.send(JSON.stringify({ type: "registerRenderer" }));
+  await until(() => messages.some(message => message.type === "rendererRegistered"));
+  const rendererTargetId = messages.find(message => message.type === "rendererRegistered").targetId as string;
+  expect((await enroll(hub, owner, external.clientId)).softwareOutputQualified).toBe(false);
+  expect((await api(hub, other, undefined, "POST", { clientId: managed.clientId, rendererTargetId })).status).toBe(400);
+  expect((await api(hub, owner, undefined, "POST", { clientId: managed.clientId, rendererTargetId: "other" })).status).toBe(400);
+  const qualified = await enroll(hub, owner, managed.clientId);
+  expect(qualified.softwareOutputQualified).toBe(false);
+  const response = await api(hub, owner, undefined, "POST", { clientId: managed.clientId, rendererTargetId });
+  expect(response.status).toBe(200);
+  expect((await response.json()).softwareOutputQualified).toBe(true);
+  const saved = openSendspinIdentity(databasePath);
+  try { expect(saved.softwareOutputQualified(managed.clientId)).toBe(true); expect(saved.softwareOutputQualified(external.clientId)).toBe(false); }
+  finally { saved.close(); }
+  socket.close();
+  await until(() => socket.readyState === WebSocket.CLOSED);
+  expect((await api(hub, owner, undefined, "POST", { clientId: external.clientId, rendererTargetId })).status).toBe(400);
 });
 
 test("controller revocation deletes its PSK and disconnects only its Noise client, while disabling remotes disconnects all", async () => {
