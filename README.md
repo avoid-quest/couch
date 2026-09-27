@@ -100,7 +100,8 @@ search, playing now and adding next.
 Run `bun install` from the repository root, then `bun run web:dev`.
 `bun run web:build` builds the site; `bun run web:deploy` publishes it to
 Cloudflare Workers at `couch.avoid.quest` with Wrangler authenticated.
-The download page reads per-platform Stable and Preview feeds at runtime.
+The worker fills the download page from the per-platform Stable and Preview
+feeds on each request, with Cloudflare caching feed answers for a minute.
 `apps/web/src/releases.json` holds the last publicly verified release as a
 fallback. The hosted publication check in `scripts/hosted-site.ts` updates
 that file for each verified format before a reviewed site deployment.

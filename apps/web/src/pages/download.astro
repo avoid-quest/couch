@@ -5,13 +5,16 @@ import { catalog, formats } from "../release-catalog";
 import type { Channel, PackageFormat } from "../../../../scripts/hosted-policy";
 
 const releases = catalog();
+const deb = releases.preview.deb ?? releases.stable.deb;
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
 const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
-  dmg: { name: "Mac", target: "Apple Silicon · macOS 26 or later · DMG", note: "Drag Couch to Applications. Ad-hoc signing may require manual approval in macOS Privacy & Security, including after an update." },
-  nsis: { name: "Windows", target: "x86_64 · Windows 11 · per-user NSIS", note: "Play on this computer or connect to another Couch. Installed Windows checks remain in progress." },
-  appimage: { name: "Linux", target: "x86_64 · AppImage", note: "Save in a writable location, allow execution, then open it. A compatible glibc and FUSE 2 are needed. Wider Linux installed checks remain open." },
-  deb: { name: "Debian TV", target: "Debian 13 · x86_64 · X11 · DEB", note: "The retained package for Debian desktop and dedicated TV setups." },
+  dmg: { name: "Mac", target: "Apple Silicon, macOS 26 or later", note: "Drag Couch to Applications. macOS may ask you to allow it in Privacy & Security." },
+  nsis: { name: "Windows", target: "x86_64, Windows 11", note: "Installs for your user only." },
+  appimage: { name: "Linux", target: "x86_64 AppImage", note: "Make it executable, then open it. Needs FUSE 2." },
+  deb: { name: "Debian TV", target: "Debian 13, x86_64, X11", note: "For Debian desktops and dedicated TVs." },
 };
+const primary = buttonVariants();
+const secondary = buttonVariants({ variant: "outline" });
 ---
 <!doctype html>
 <html lang="en" class="dark">
@@ -19,106 +22,84 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <title>Download Couch</title>
-    <meta name="description" content="Download Couch Preview for Mac, Windows and Linux." />
+    <meta name="description" content="Download Couch for Mac, Windows and Linux." />
     <link rel="canonical" href={new URL("/download", Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
-    <main class="downloads">
+    <main data-primary={primary}>
       <nav aria-label="Home"><a href="/"><img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" />couch.avoid.quest</a></nav>
-      <header>
-        <h1>Download Couch</h1>
-        <p class="intro">One app for local playback and remote control where each mode is supported. Choose <strong>This computer</strong> or connect to another Couch when you open it.</p>
-        <p class="muted">These are published downloads. Installed playback, update and permission checks are still in progress across desktop platforms.</p>
-      </header>
+      <h1>Download Couch</h1>
+      <p class="intro">When you open it, choose <strong>This computer</strong> or connect to another Couch.</p>
 
-      {channels.map(channel => <section aria-label={channel === "preview" ? "Preview downloads" : "Stable downloads"} data-channel={channel} hidden={Object.keys(releases[channel]).length === 0}>
-        <h2>{channel === "preview" ? "Preview" : "Stable"}</h2>
-        <div class="download-rows">
+      {channels.map(channel => <section aria-labelledby={channel} data-channel={channel} hidden={Object.keys(releases[channel]).length === 0}>
+        <h2 id={channel}>{channel === "preview" ? "Preview" : "Stable"}</h2>
+        <ul>
           {formats.map(format => {
             const item = releases[channel][format];
-            return <article data-format={format} hidden={!item}>
-              <h3>{labels[format].name}</h3>
-              <p class="target">{labels[format].target}</p>
-              <a class={buttonVariants()} href={item?.url} data-download>{channel === "preview" ? "Download Preview" : "Download Stable"}</a>
-              <p class="version" data-version>{item ? item.version + " · " + item.filename : ""}</p>
-              <p class="muted">{labels[format].note}</p>
-            </article>;
+            return <li data-format={format} hidden={!item}>
+              <div>
+                <h3>{labels[format].name}</h3>
+                <p>{labels[format].target}</p>
+                <p>{labels[format].note}</p>
+              </div>
+              <span data-version>{item?.version}</span>
+              <a class={secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}>Download</a>
+            </li>;
           })}
-        </div>
+        </ul>
       </section>)}
-      <p id="no-releases" hidden>Downloads are temporarily unavailable. Try again later.</p>
+      <p id="no-releases" hidden={formats.some(format => releases.stable[format] || releases.preview[format])}>Downloads are unavailable right now. Try again later.</p>
 
-      <section aria-labelledby="install">
-        <h2 id="install">Install and update</h2>
-        <p>Mac: open the DMG and drag Couch to Applications. Windows: run the NSIS installer for your user. Linux AppImage: save it in a writable location, mark it executable and run it. No developer tools are needed.</p>
-        <p>OS trust prompts and local network permission are separate from Couch's signed update verification. Approve access only if you want this computer to serve or control another Couch.</p>
-        <p>Couch checks its own Stable or Preview channel. Manual updates are the default; automatic updates are optional when idle. Couch Preview .12 needs a manual reinstall of .13 to enroll the new updater key. Reinstall in the same location to keep Couch data and pairing. Do not install an older version as a repair.</p>
-      </section>
-
-      <section aria-labelledby="tv">
-        <details>
-          <summary id="tv">Using a dedicated Debian TV?</summary>
-          <p>After downloading the Debian package, open a terminal in its folder and run:</p>
-          <pre><code id="deb-command">sudo apt install ./Couch_0.2.0-preview.13_amd64.deb</code></pre>
-          <p>Then run <code>sudo couch-setup --tv</code>. This sets up a dedicated Couch account, automatic sign-in and TV power settings. Your admin account stays available. Reboot to enter the Couch session.</p>
-          <p>On first use, choose <strong>This computer</strong>, allow remote control, and pair your phone using the code on screen. Migrating an existing Couch TV keeps its data and paired devices.</p>
-        </details>
-      </section>
-      <footer>Dependency licenses and notices are included in each package.</footer>
+      <details>
+        <summary>Install and update</summary>
+        <p>Couch checks for updates on its own channel. Installing them automatically when idle is optional.</p>
+        <p>Reinstall in the same place to keep your data and pairing. Don't install an older version as a repair.</p>
+      </details>
+      <details id="tv" hidden={!deb}>
+        <summary>Set up a dedicated Debian TV</summary>
+        <p>In the folder with the package, run:</p>
+        <pre><code id="deb-command">sudo apt install ./{deb?.filename}</code></pre>
+        <p>Then run <code>sudo couch-setup --tv</code> and reboot. Couch gets its own account with automatic sign-in; your admin account stays. Pair your phone with the code on screen.</p>
+      </details>
+      <footer>Dependency licenses and notices come with each package.</footer>
     </main>
   </body>
 </html>
 <script>
-  type Release = { version: string; url: string; filename: string };
-  type Catalog = Record<"stable" | "preview", Record<string, Release>>;
-  const result: Catalog | null = await fetch("/api/releases").then(response => response.ok ? response.json() : null).catch(() => null);
-  if (result) {
-    for (const channel of ["stable", "preview"] as const) {
-      const section = document.querySelector<HTMLElement>('section[data-channel="' + channel + '"]');
-      if (!section) continue;
-      section.hidden = Object.keys(result[channel] ?? {}).length === 0;
-      for (const article of section.querySelectorAll<HTMLElement>("article[data-format]")) {
-        const item = result[channel]?.[article.dataset.format ?? ""];
-        article.hidden = !item;
-        if (!item) continue;
-        const link = article.querySelector<HTMLAnchorElement>("a[data-download]");
-        const version = article.querySelector<HTMLElement>("[data-version]");
-        if (link) link.href = item.url;
-        if (version) version.textContent = item.version + " · " + item.filename;
-      }
-    }
-    const empty = document.getElementById("no-releases");
-    if (empty) empty.hidden = Object.keys(result.stable ?? {}).length + Object.keys(result.preview ?? {}).length > 0;
-    const deb = result.preview?.deb ?? result.stable?.deb;
-    const command = document.getElementById("deb-command");
-    if (command && deb) command.textContent = "sudo apt install ./" + deb.filename;
-    const tv = document.getElementById("tv")?.closest("section");
-    if (tv) tv.hidden = !deb;
+  // Put this computer's download first. The worker fills in the current releases before the page arrives.
+  const main = document.querySelector("main")!;
+  const ua = navigator.userAgent;
+  const mine = /iPhone|iPad|Android/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1) ? null : /Mac/.test(ua) ? "dmg" : /Win/.test(ua) ? "nsis" : /Linux/.test(ua) ? "appimage" : null;
+  for (const row of document.querySelectorAll<HTMLElement>(`li[data-format="${mine}"]`)) {
+    row.parentElement!.prepend(row);
+    row.querySelector("a")!.className = main.dataset.primary!;
   }
 </script>
 <style>
-  .downloads { display: block; position: static; max-width: 56rem; margin: auto; padding: 2rem var(--gutter) 3rem; }
-  [hidden] { display: none !important; }
-  nav, .target, .version, .muted, footer { color: var(--muted-foreground); }
-  nav { font-size: .875rem; }
-  nav a { display: inline-flex; align-items: center; gap: .5rem; }
-  nav img { width: 1.5rem; height: 1.5rem; }
-  header { margin: 3rem 0; }
-  h1 { position: static; font-size: 1.5rem; font-weight: 600; line-height: 2rem; letter-spacing: -.025em; margin: 0 0 1rem; }
-  .intro { font-size: .875rem; }
-  section { border-top: 1px solid var(--border); padding: 1.5rem 0; }
+  main { max-width: 48rem; margin: auto; padding: 2rem var(--gutter) 4rem; }
+  nav a { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: var(--muted-foreground); }
+  nav a:hover { color: var(--foreground); }
+  h1 { margin: 3rem 0 .5rem; font-size: 1.5rem; font-weight: 600; line-height: 2rem; letter-spacing: -.025em; }
+  .intro { font-size: .875rem; color: var(--muted-foreground); }
+  section { margin-top: 3rem; }
   h2, summary { font-size: 1rem; font-weight: 500; }
+  ul { margin-top: 1rem; }
+  li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.5rem; padding-block: 1.25rem; border-top: 1px solid var(--border); }
+  li:last-child { border-bottom: 1px solid var(--border); }
   h3 { font-size: 1rem; font-weight: 500; }
-  .download-rows { margin-top: 1rem; }
-  article { border-top: 1px solid var(--border); padding-block: 1.5rem; }
-  article a { margin-top: .75rem; }
-  article a:hover { text-decoration: none; }
+  li p, [data-version] { font-size: .875rem; }
+  li p, [data-version], footer { color: var(--muted-foreground); }
+  li p + p { margin-top: .25rem; }
+  details { margin-top: 1.5rem; }
+  details + details { margin-top: .75rem; }
   summary { cursor: pointer; }
-  p { font-size: .875rem; line-height: 1.65; margin: .75rem 0; }
-  .target, .muted { font-size: .875rem; }
-  .version, footer { font-size: .75rem; }
-  pre { overflow-x: auto; margin: .75rem 0; padding-block: 1rem; border-top: 1px solid var(--border); font-size: .875rem; }
-  footer { margin-top: 1.5rem; }
+  details p { margin-top: .75rem; max-width: 60ch; font-size: .875rem; line-height: 1.6; color: var(--muted-foreground); }
+  pre { overflow-x: auto; margin-top: .75rem; padding-block: 1rem; border-top: 1px solid var(--border); font-size: .875rem; }
+  footer { margin-top: 3rem; font-size: .75rem; }
+  @media (max-width: 40rem) {
+    li { grid-template-columns: 1fr auto; }
+    li [data-version] { display: none; }
+  }
 </style>
