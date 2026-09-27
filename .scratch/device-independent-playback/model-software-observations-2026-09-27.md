@@ -108,3 +108,26 @@ smoke reached real libmpv pixels and restart, then failed an obsolete idle-check
 expectation, now aligned with resumable intent. The Mac full gate failed a PCM
 readiness race; its existing check now waits for paused decoder readiness before
 resuming. Failed receipts remain preserved and are not passing gates.
+
+## Mixer build d9a04e7c — fade build and remaining readiness failure
+
+The Mac core/build/native gate passed on the clean d9a04e7c revision. Its Linux
+journey passed compiled browser playback and real native pixels/restart, then
+exposed a pairing-route defect: a native app selecting a loopback library saw
+local setup. The route now respects the explicitly selected remote library. The
+retained journey uses the automatic device name and checks that it survives restart.
+The next Linux run (274519dd) passed that path and exposed a local-version dialog
+blocked by the absent updater endpoint in an unpackaged build. That 404 now permits
+the read-only version screen; verification mismatches still block maintenance.
+
+At 21:41:40 UTC, paused browser HLS at 392.1 s / 1.5× failed to move to mbp:
+the destination did not confirm readiness. The source remained paused. Existing
+diagnostics do not identify the failing readiness command, so its cause remains
+unknown. A later attempt at 21:50:01 did not reach a HLS handoff; the native window
+switched to its local library at 21:50:37. This is not evidence of a renderer crash.
+The Output panel misleadingly displayed an audio-permission prompt for this
+single-device move, although the server requests that gesture only for shared
+audio. The picker now follows that same scope.
+
+The rebuilt Core includes the 10 ms stream-start fade. No physical pop retest or
+successful built native-video presentation check has yet followed these changes.
