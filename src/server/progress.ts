@@ -1,6 +1,6 @@
 import type { HistoryItem } from "../shared/library";
 import type { PlaybackActor, PlayerState, QueueEntry } from "../shared/protocol";
-import type { Store } from "./store";
+import type { SessionStore } from "./session-store";
 
 export class ViewingError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -22,7 +22,7 @@ type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem
 // Only native observations may change position. Commands merely request a checkpoint.
 // committed(final) runs after each durable write; final marks the end of a
 // viewing (stop or EOF) rather than a periodic checkpoint during playback.
-export function createProgress(store: Store, committed: (final: boolean) => void, now = Date.now) {
+export function createProgress(store: SessionStore, committed: (final: boolean) => void, now = Date.now) {
   let active: ActiveProgress | null = null;
   let pending: ActiveProgress[] = [];
   const snapshot = (progress: ActiveProgress) => JSON.stringify([progress.item.position, progress.item.duration, progress.item.watched]);

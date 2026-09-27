@@ -1,7 +1,7 @@
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { HistoryItem } from "../shared/library";
 import type { QueueEntry } from "../shared/protocol";
-import type { Store } from "./store";
+import type { SessionStore } from "./session-store";
 import { streamingCommunityList, streamingCommunityWatchContext } from "./streamingcommunity";
 
 export type ProviderMetadata = Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
@@ -32,7 +32,7 @@ export async function resolveProviderMetadata(url: string, signal: AbortSignal, 
 }
 
 export function createProviderMetadata({ store, cachedItem, resolve = resolveProviderMetadata, onChange }: {
-  store: Store; cachedItem: (url: string) => ProviderItem | undefined;
+  store: SessionStore; cachedItem: (url: string) => ProviderItem | undefined;
   resolve?: typeof resolveProviderMetadata; onChange: () => void;
 }) {
   const shutdown = new AbortController();
@@ -70,12 +70,12 @@ export function createProviderMetadata({ store, cachedItem, resolve = resolvePro
   };
   return {
     cached, load,
-    refreshHistory(items: HistoryItem[]) {
+    refreshHistory(items: HistoryItem[], viewingStore: SessionStore = store, changed: () => void = onChange) {
       for (const item of items.filter(item => !item.watched && item.position > 0)) {
-        const entry = store.historySource(item.mediaId);
+        const entry = viewingStore.historySource(item.mediaId);
         if (!entry || !entry.source.startsWith("web:")) continue;
         void load(entry.source.slice(4)).then(metadata => {
-          if (!shutdown.signal.aborted && Object.keys(metadata).length && store.enrichHistorySource(item.mediaId, entry.source, metadata)) onChange();
+          if (!shutdown.signal.aborted && Object.keys(metadata).length && viewingStore.enrichHistorySource(item.mediaId, entry.source, metadata)) changed();
         }).catch(() => {});
       }
     },

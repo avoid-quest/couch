@@ -1,5 +1,5 @@
 import type { Action, BrowserMediaCapabilities, Domain, PlaybackActor,ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
-import type { Store } from "./store";
+import type { SessionStore } from "./session-store";
 import { createProgress, playbackMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
 import { playbackDefault } from "../shared/playback-default";
@@ -14,6 +14,7 @@ export type MediaSource = { audioOnly?: boolean; source: string; headers?: Recor
 type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
 export type PlaybackDestination = { backend: "native" | "browser" | "snapcast"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type SessionOptions = {
+  sessionId?: string;
   admitted?: () => boolean;
   transferBusy?: () => boolean;
   validateCommand?: (command: PlaybackCommand) => void;
@@ -32,7 +33,7 @@ type SessionOptions = {
   resolveContinuation?: (entry: QueueEntry, signal: AbortSignal) => PlaybackContinuation | null | Promise<PlaybackContinuation | null>;
 };
 
-export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState, clock?: PlaybackClock) => void, options: SessionOptions = {}) {
+export function createSession(store: SessionStore, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState, clock?: PlaybackClock) => void, options: SessionOptions = {}) {
   const removedEntries = new Map<string, { entry: QueueEntry; index: number; queueIds: string[]; currentEntryId: string | null; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   let desiredVolume = store.volume;
   let nativeSystemAudio: SessionState["systemAudio"];
@@ -64,7 +65,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const restoredEntry = savedCheckpoint && store.queue.find(entry => entry.id === savedCheckpoint.entryId && entry.source === savedCheckpoint.source);
   let restoredCheckpoint = !!restoredEntry;
   const state: SessionState = {
-    sessionId: store.installationId(),
+    sessionId: options.sessionId ?? store.installationId(),
     queue: store.queue,
     currentEntryId: restoredEntry ? restoredEntry.id : null,
     presentationId: restoredEntry ? savedCheckpoint!.presentationId ?? null : null,
