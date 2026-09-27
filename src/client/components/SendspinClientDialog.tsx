@@ -34,6 +34,15 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
   const afterJoinAtGesture = useRef(options.afterJoin);
   const phaseRef = useRef(phase); phaseRef.current = phase;
   const externalRef = useRef(external); externalRef.current = external;
+  // Retired credentials cannot authorize a group leave. Disconnect locally and
+  // fence late SDK callbacks; the server removes membership on disconnect.
+  const retire = useCallback(() => {
+    ++generation.current;
+    const previous = client.current; client.current = null;
+    afterJoinAtGesture.current = undefined;
+    closing.current = closing.current.catch(() => {}).then(() => previous?.disconnect());
+    setClientId(null); setSharedReady(false); setPhase("idle"); setState(null); setEverConnected(false); setPin(null); setServer(null); setExternal(false);
+  }, []);
   const leave = useCallback(async () => {
     const previous = client.current;
     const previousPhase = phaseRef.current;
@@ -47,8 +56,8 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
     if (generation.current !== attempt) return;
     client.current = null; afterJoinAtGesture.current = undefined; setClientId(null); setSharedReady(false); setPhase("idle"); setState(null); setEverConnected(false); setPin(null); setServer(null); setExternal(false);
   }, []);
-  useEffect(() => () => { void leave(); }, [options.credentials?.origin, options.credentials?.token, leave]);
-  useEffect(() => { if (!options.allowed && client.current) void leave(); }, [options.allowed, leave]);
+  useEffect(() => () => retire(), [options.credentials?.origin, options.credentials?.token, retire]);
+  useEffect(() => { if (!options.allowed && phase !== "idle") retire(); }, [options.allowed, phase, retire]);
 
   const prepare = useCallback(async (destination: "couch" | "external", address: string, name: string) => {
     if (phase !== "idle" || !latest.current.allowed || !latest.current.canActivate()) return;

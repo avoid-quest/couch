@@ -194,7 +194,7 @@ test("switching native targets clears the old clock before another host sends it
   await pairWith("123456");
   await act(async () => retired({ data: JSON.stringify({ type: "state", state }) } as MessageEvent<string>));
   expect(clock.position).toBe(0);
-  await act(async () => Socket.instances.at(-1)!.emit({ type: "state", state: { ...state, player: { ...state.player, playbackId: "remote-playback", position: 15 } } }));
+  await act(async () => Socket.instances.at(-1)!.emit({ type: "state", state: { ...state, sessionMode: "personal", player: { ...state.player, playbackId: "remote-playback", position: 15 } } }));
   expect(clock).toEqual({ playbackId: "remote-playback", position: 15, duration: 600 });
 });
 

@@ -93,6 +93,8 @@ async function mount(path = "/find") {
   const settings = createRoute({ getParentRoute: () => base, path: "/settings/sources", component: () => <Page settings /> });
   const router = createRouter({ routeTree: base.addChildren([find, settings]), history: createMemoryHistory({ initialEntries: [path] }) });
   await act(async () => { await router.load(); render(<RouterProvider router={router} />); });
+  // Clock scenarios intentionally observe the shared household playback.
+  await act(async () => gate.selectSession("household"));
   await act(async () => sockets.at(-1)!.emit({ type: "state", state: snapshot }));
   if (path === "/settings/sources") await waitFor(() => expect(screen.getAllByText("Not set up")).toHaveLength(3));
   return router;

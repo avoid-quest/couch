@@ -227,6 +227,25 @@ test("changing Core cancels preparation without enrolling or connecting", async 
   expect(renderer.connectFromGesture).not.toHaveBeenCalled();
 });
 
+test("changing Core retires a connected SDK without calling the new Core's leave callback", async () => {
+  spyOn(globalThis, "fetch").mockImplementation((async (_url, init) => Response.json(init?.method === "POST"
+    ? { url: "ws://core.local/sendspin", serverId: "server", psk: "private", name: "Couch" }
+    : { available: true, url: "ws://core.local/sendspin", serverId: "server", name: "Couch" })) as typeof fetch);
+  const view = render(<Probe />);
+  await act(async () => client.prepare("couch", "", "Kitchen"));
+  await act(async () => client.join());
+  await act(async () => callbacks.state(playback(true)));
+  expect(client.sharedReady).toBe(true);
+  connection = { origin: "http://other.local", token: "other" };
+  beforeLeave.mockRejectedValue(new Error("Old Core rejected new credentials"));
+  await act(async () => view.rerender(<Probe />));
+  expect(beforeLeave).not.toHaveBeenCalled();
+  expect(renderer.disconnect).toHaveBeenCalledTimes(1);
+  expect(client.phase).toBe("idle");
+  await act(async () => callbacks.state(playback(true)));
+  expect(client.connected).toBe(false);
+});
+
 test("SDK preparation errors do not expose server secrets", async () => {
   renderer.preload.mockRejectedValue(new Error("wss://private-server/?token=secret"));
   render(<Probe />);

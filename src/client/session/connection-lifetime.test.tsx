@@ -40,9 +40,9 @@ class Socket {
 }
 
 const history = (name: string) => Response.json({ items: [{ mediaId: "library:movie", title: name, libraryItemId: "movie", position: 0, duration: null, watched: false, lastPlayedAt: 1 }] });
-async function connected() {
+async function connected(mode: "household" | "personal" = "household") {
   await waitFor(() => expect(sockets.at(-1)?.readyState).toBe(1));
-  await act(async () => sockets.at(-1)!.emit({ type: "state", state }));
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, sessionMode: mode } }));
   await waitFor(() => expect(gate.connected).toBe(true));
 }
 async function mount() {
@@ -60,12 +60,16 @@ async function mount() {
   }
   // The gate must own a separate query cache for each connection.
   await act(async () => { renderWithQueryClient(<SessionGate><Probe /></SessionGate>, createTestQueryClient()); });
+  expect(gate.sessionMode).toBe("personal");
+  // These cache-lifetime scenarios exercise the household view explicitly.
+  await act(async () => gate.selectSession("household"));
 }
 async function pair() {
   const { requestPairing } = await import("../sections/shell/PairForm");
   const count = sockets.length;
   await act(async () => gate.savePairing(await requestPairing(gate.pairingOrigin, "123456", "Memory remote")));
   await waitFor(() => expect(sockets.length).toBeGreaterThan(count));
+  await act(async () => gate.selectSession("household"));
   await connected();
 }
 
@@ -293,7 +297,7 @@ test("changing session mode retires history cache and scopes replacement HTTP re
   await act(async () => gate.selectSession("personal"));
   expect(client).not.toBe(householdClient);
   expect(screen.queryByText("Old household")).toBeNull();
-  await connected();
+  await connected("personal");
   expect(await screen.findByText("Private history")).toBeInTheDocument();
   expect(requests.filter(request => request.path === "/api/progress/history").at(-1)?.mode).toBe("personal");
   await act(async () => { oldRead.resolve(history("Late household")); });
@@ -305,7 +309,8 @@ test("relative seeking clamps to the observed DVR window without a duration", as
   const peer = sockets.at(-1)!;
   await act(async () => peer.emit({ type: "state", state: { ...state, player: { ...state.player, playbackId: "live", status: "playing", position: 125, duration: null, seekable: true, live: true, seekRange: { start: 120, end: 180 } } } }));
   for (const [seconds, position] of [[-10, 120], [100, 180]]) {
-    const done = gate.seekBy(seconds!);
+    let done!: Promise<boolean>;
+    await act(async () => { done = gate.seekBy(seconds!); });
     const message = peer.sent.at(-1)!;
     expect(message.action).toEqual({ type: "seek", playbackId: "live", position });
     await act(async () => { peer.emit({ type: "result", requestId: message.requestId, ok: true }); await done; });
