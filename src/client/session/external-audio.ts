@@ -1,0 +1,94 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ApiCredentials } from "@/api/client";
+import { createSendspinRenderer, sendspinReconnectStopped, type SendspinRendererState } from "./sendspin-renderer";
+import { clientDeviceName } from "./device-name";
+import { isNativeHost } from "./native-context";
+
+type Phase = "idle" | "preparing" | "ready" | "joining" | "joined" | "leaving";
+
+/** A separate, user-supplied audio server; Couch playback uses useDeviceAudio. */
+export function useSendspinClient(options: { credentials: ApiCredentials | null; allowed: boolean; canActivate: () => boolean; borrow?: () => Promise<() => Promise<void>> }) {
+  const latest = useRef(options); latest.current = options;
+  const client = useRef<ReturnType<typeof createSendspinRenderer> | null>(null);
+  const generation = useRef(0);
+  const release = useRef<(() => Promise<void>) | null>(null);
+  const closing = useRef(Promise.resolve());
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [state, setState] = useState<SendspinRendererState | null>(null);
+  const [everConnected, setEverConnected] = useState(false);
+  const [pin, setPin] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [server, setServer] = useState<string | null>(null);
+  const retire = useCallback(() => {
+    ++generation.current;
+    const previous = client.current; client.current = null;
+    const returnDevice = release.current; release.current = null;
+    closing.current = closing.current.then(async () => { await previous?.disconnect(); await returnDevice?.(); });
+    void closing.current.catch(() => {});
+    setPhase("idle"); setState(null); setEverConnected(false); setPin(null); setServer(null);
+  }, []);
+  useEffect(() => () => retire(), [options.credentials?.origin, options.credentials?.token, retire]);
+  useEffect(() => { if (!options.allowed && phase !== "idle") retire(); }, [options.allowed, phase, retire]);
+
+  const prepare = useCallback(async (address: string, name: string) => {
+    if (phase !== "idle" || !latest.current.allowed || !latest.current.canActivate()) return;
+    const attempt = ++generation.current;
+    const current = () => attempt === generation.current;
+    setPhase("preparing"); setError(null); setPin(null); setEverConnected(false);
+    let prepared: ReturnType<typeof createSendspinRenderer> | null = null;
+    try {
+      await closing.current;
+      const url = new URL(address.trim());
+      if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol) || url.username || url.password || url.hash) throw new Error("Enter an HTTP or WebSocket server address without credentials.");
+      if (!current()) return;
+      const returnDevice = await latest.current.borrow?.();
+      if (!current()) { await returnDevice?.(); return; }
+      release.current = returnDevice ?? null;
+      prepared = createSendspinRenderer({ url: url.href, name: name.trim() || clientDeviceName() }, {
+        state: value => { if (current()) {
+          setState(value);
+          if (value.connected) {
+            setEverConnected(true);
+            if (!isNativeHost()) try { localStorage.setItem("couch.browser-volume", String(value.volume / 100)); } catch { /* Storage is optional. */ }
+          }
+        } },
+        error: reason => { if (current()) setError(reason.message === sendspinReconnectStopped ? sendspinReconnectStopped : "Sendspin couldn't connect or continue playback. Leave and try again."); },
+        pairingPin: value => { if (current()) setPin(value); },
+      });
+      await prepared.preload();
+      if (!current()) { await prepared.disconnect(); return; }
+      if (!latest.current.allowed) { await prepared.disconnect(); const returnDevice = release.current; release.current = null; await returnDevice?.(); setPhase("idle"); return; }
+      client.current = prepared; setServer(url.host); setPhase("ready");
+    } catch (reason) {
+      await prepared?.disconnect();
+      if (current()) { const returnDevice = release.current; release.current = null; await returnDevice?.(); }
+      if (current()) { setError(reason instanceof Error ? reason.message : "Couldn't prepare Sendspin. Check the server address and try again."); setPhase("idle"); }
+    }
+  }, [phase]);
+  const join = useCallback(() => {
+    if (phase !== "ready" || !client.current) return;
+    const attempt = generation.current;
+    let browserVolume: number | null = null;
+    if (!isNativeHost()) try { const value = localStorage.getItem("couch.browser-volume"); const stored = Number(value); if (value !== null && Number.isFinite(stored) && stored >= 0 && stored <= 1) browserVolume = stored * 100; } catch { /* Storage is optional. */ }
+    const connecting = client.current.connectFromGesture();
+    if (browserVolume !== null) client.current.setVolume(browserVolume);
+    setPhase("joining"); setError(null);
+    void connecting.then(() => { if (attempt === generation.current) setPhase("joined"); }, () => {
+      if (attempt === generation.current) { setError("Couldn't join Sendspin. Leave and try again."); setPhase("ready"); }
+    });
+  }, [phase]);
+  const leave = useCallback(async () => {
+    if (!client.current) { retire(); return; }
+    setPhase("leaving");
+    const previous = client.current;
+    const attempt = ++generation.current;
+    const returnDevice = release.current;
+    closing.current = closing.current.catch(() => {}).then(async () => { await previous.disconnect(); await returnDevice?.(); });
+    try { await closing.current; if (generation.current === attempt) { client.current = null; release.current = null; setPhase("idle"); setState(null); setEverConnected(false); setPin(null); setServer(null); } }
+    catch { if (generation.current === attempt) { setError("Couldn't disconnect from audio server. Try again."); setPhase("joined"); } }
+  }, []);
+  return useMemo(() => ({ phase, state, everConnected, pin, error, server, prepare, join, leave,
+    volume: (value: number) => client.current?.setVolume(value), mute: (value: boolean) => client.current?.setMuted(value),
+    transport: (value: "play" | "pause") => client.current?.transport(value), pair: () => client.current?.openPairingWindow(),
+  }), [phase, state, everConnected, pin, error, server, prepare, join, leave]);
+}

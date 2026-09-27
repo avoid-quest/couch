@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager};
 use crate::protocol::{
     ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlaybackSegment, PlayerState, ReplayGainMode, TrackKind, VideoRect,
 };
-use crate::Host;
+use crate::{Host, RendererOwner};
 
 pub enum Request {
     Command(PlaybackCommand),
@@ -75,14 +75,32 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
     let mut reported = None;
     loop {
         let request = receiver.recv_timeout(Duration::from_millis(250));
+        let remote_stop = match &request {
+            Ok(Request::RemoteCommand { generation, command: PlaybackCommand::Stop }) => Some(generation.clone()),
+            _ => None,
+        };
+        let host = app.state::<Host>();
+        let owner = host.renderer_owner.lock().expect("renderer owner lock poisoned");
+        let audio = host.audio_output.lock().expect("audio output lock poisoned").as_ref().map(|lease| lease.authority.clone());
         let request = match request {
             Ok(Request::RemoteCommand { generation, command }) => {
-                if !crate::native_receiver::valid(&app, &generation) { continue; }
+                if !crate::native_receiver::valid(&app, &generation) || *owner != RendererOwner::Remote(generation.clone()) { continue; }
+                if audio.as_ref().is_some_and(|authority| !authority.permits(&RendererOwner::Remote(generation.clone()))) { continue; }
                 Ok(Request::Command(command))
             }
             Ok(Request::RemoteObserve(generation)) => {
-                if !crate::native_receiver::valid(&app, &generation) { continue; }
+                if !crate::native_receiver::valid(&app, &generation) || *owner != RendererOwner::Remote(generation) { continue; }
                 Ok(Request::Observe)
+            }
+            Ok(Request::Command(command)) if *owner != RendererOwner::LocalCore => {
+                log::warn!("Ignored a local Core command while this computer's player belongs to another source");
+                let _ = command;
+                continue;
+            }
+            Ok(Request::Command(command)) if audio.as_ref().is_some_and(|authority| !authority.permits(&RendererOwner::LocalCore)) => {
+                log::warn!("Ignored a local Core command while this computer is playing audio from another source");
+                let _ = command;
+                continue;
             }
             other => other,
         };
@@ -119,6 +137,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             }
             Ok(Request::Stop(reply)) => {
                 let result = player.command(&app, PlaybackCommand::Stop);
+                *host.player_state.lock().expect("player state lock poisoned") = player.state.clone();
                 let _ = reply.send(result);
                 continue;
             }
@@ -156,9 +175,16 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             player.state.now_playing = None;
             player.state.error = Some(error);
         }
+        *host.player_state.lock().expect("player state lock poisoned") = player.state.clone();
+        drop(owner);
         if force || reported.as_ref() != Some(&player.state) {
             app.state::<Host>().report(&app, &player.state);
             reported = Some(player.state.clone());
+        }
+        if let Some(generation) = remote_stop {
+            if player.state.status == "idle" {
+                app.state::<Host>().release_renderer(&app, &RendererOwner::Remote(generation));
+            }
         }
     }
 }

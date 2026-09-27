@@ -1,6 +1,6 @@
 use std::{sync::Mutex, time::{Duration, Instant}};
 use tauri::{Emitter, Manager};
-use crate::{player, protocol::{PlaybackCommand, PlayerState}, Host};
+use crate::{player, protocol::{PlaybackCommand, PlayerState}, AudioAuthority, Host, RendererOwner};
 
 const LEASE: Duration = Duration::from_secs(10);
 const CHALLENGE: Duration = Duration::from_secs(1);
@@ -33,7 +33,7 @@ impl Lease {
     }
 }
 #[derive(Default)]
-pub struct Receiver { lease: Mutex<Lease>, operation: Mutex<()> }
+pub struct Receiver { lease: Mutex<Lease>, audio: Mutex<Option<(String, Instant, bool)>>, operation: Mutex<()> }
 
 pub fn valid(app: &tauri::AppHandle, generation: &str) -> bool {
     app.state::<Receiver>().lease.lock().unwrap().valid(generation, Instant::now())
@@ -43,10 +43,15 @@ pub fn active(app: &tauri::AppHandle) -> bool {
     let lease = receiver.lease.lock().unwrap();
     lease.generation.as_ref().is_some_and(|generation| lease.valid(generation, Instant::now()))
 }
-pub fn report(app: &tauri::AppHandle, state: &PlayerState) {
+fn current_generation(app: &tauri::AppHandle) -> Option<String> {
     let receiver = app.state::<Receiver>();
     let lease = receiver.lease.lock().unwrap();
-    if let Some(generation) = lease.generation.as_ref().filter(|generation| lease.valid(generation, Instant::now())) {
+    lease.generation.as_ref().filter(|generation| lease.valid(generation, Instant::now())).cloned()
+}
+pub fn report(app: &tauri::AppHandle, expected: &str, state: &PlayerState) {
+    let receiver = app.state::<Receiver>();
+    let lease = receiver.lease.lock().unwrap();
+    if let Some(generation) = lease.generation.as_ref().filter(|generation| generation.as_str() == expected && lease.valid(generation, Instant::now())) {
         let _ = app.emit_to("main", "native-receiver-player", serde_json::json!({ "generation": generation, "state": state }));
     }
 }
@@ -74,10 +79,15 @@ pub async fn revoke(app: &tauri::AppHandle, generation: Option<String>) -> Resul
         let _operation = receiver.operation.lock().unwrap();
         let mut lease = receiver.lease.lock().unwrap();
         if generation.as_ref().is_some_and(|generation| lease.generation.as_ref() != Some(generation)) { return; }
-        let existed = lease.generation.is_some();
+        let old = lease.generation.clone();
         *lease = Lease::default();
         drop(lease);
-        if existed { stop(&app); }
+        if let Some(old) = old {
+            if *app.state::<Host>().renderer_owner.lock().unwrap() == RendererOwner::Remote(old.clone()) {
+                stop(&app);
+                app.state::<Host>().release_renderer(&app, &RendererOwner::Remote(old));
+            }
+        }
     }).await.map_err(|error| error.to_string())
 }
 pub fn watch(app: tauri::AppHandle) {
@@ -87,11 +97,30 @@ pub fn watch(app: tauri::AppHandle) {
         let receiver = app.state::<Receiver>();
         let Ok(_operation) = receiver.operation.try_lock() else { continue; };
         let mut lease = receiver.lease.lock().unwrap();
-        if shutting_down && lease.generation.is_none() { return; }
-        if !lease.expired(Instant::now()) && !shutting_down { continue; }
-        *lease = Lease::default();
+        let expired = lease.expired(Instant::now()) || shutting_down;
+        let old = if expired { lease.generation.take() } else { None };
+        if expired { *lease = Lease::default(); }
         drop(lease);
-        stop(&app);
+        if let Some(old) = old {
+            if *app.state::<Host>().renderer_owner.lock().unwrap() == RendererOwner::Remote(old.clone()) {
+                stop(&app);
+                app.state::<Host>().release_renderer(&app, &RendererOwner::Remote(old));
+            }
+        }
+        let expired_audio = {
+            let mut audio = receiver.audio.lock().unwrap();
+            if let Some((generation, deadline, revoked)) = audio.as_mut() {
+                if !*revoked && (shutting_down || Instant::now() >= *deadline) {
+                    *revoked = true;
+                    Some(generation.clone())
+                } else { None }
+            } else { None }
+        };
+        if let Some(generation) = expired_audio {
+            // Keep the output reserved until the WebView confirms that its SDK stopped.
+            let _ = app.emit_to("main", "native-audio-revoked", generation);
+        }
+        if shutting_down { return; }
     });
 }
 #[derive(serde::Serialize)]
@@ -108,8 +137,14 @@ pub async fn native_receiver_begin(window: tauri::WebviewWindow, app: tauri::App
         let app = handle;
         let receiver = app.state::<Receiver>();
         let _operation = receiver.operation.lock().unwrap();
+        let previous = receiver.lease.lock().unwrap().generation.take();
         *receiver.lease.lock().unwrap() = Lease::default();
-        stop(&app);
+        if let Some(previous) = previous {
+            if *app.state::<Host>().renderer_owner.lock().unwrap() == RendererOwner::Remote(previous.clone()) {
+                stop(&app);
+                app.state::<Host>().release_renderer(&app, &RendererOwner::Remote(previous));
+            }
+        }
         let generation = uuid::Uuid::new_v4().to_string();
         let mut lease = receiver.lease.lock().unwrap();
         lease.generation = Some(generation.clone());
@@ -126,24 +161,91 @@ pub fn native_receiver_request(window: tauri::WebviewWindow, app: tauri::AppHand
 pub fn native_receiver_renew(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, nonce: String) -> Result<(), String> {
     crate::operating_mode::trusted(&window)?;
     app.state::<Receiver>().lease.lock().unwrap().renew(&generation, &nonce, Instant::now())?;
-    app.state::<Host>().player.send(player::Request::RemoteObserve(generation)).map_err(|error| error.to_string())
+    observe(&app, generation)
 }
 #[tauri::command]
 pub fn native_receiver_command(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, command: PlaybackCommand) -> Result<(), String> {
     crate::operating_mode::trusted(&window)?;
     if !valid(&app, &generation) { return Err("Native receiver expired.".into()); }
+    if matches!(command, PlaybackCommand::Prepare { .. } | PlaybackCommand::Load { .. }) {
+        app.state::<Host>().claim_remote(&generation)?;
+    }
+    if *app.state::<Host>().renderer_owner.lock().unwrap() != RendererOwner::Remote(generation.clone()) {
+        if matches!(command, PlaybackCommand::Stop) { report(&app, &generation, &PlayerState::default()); return Ok(()); }
+        return Err("This computer's player is already in use.".into());
+    }
     app.state::<Host>().player.send(player::Request::RemoteCommand { generation, command }).map_err(|error| error.to_string())
 }
 #[tauri::command]
 pub fn native_receiver_report(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<(), String> {
     crate::operating_mode::trusted(&window)?;
     if !valid(&app, &generation) { return Err("Native receiver expired.".into()); }
-    app.state::<Host>().player.send(player::Request::RemoteObserve(generation)).map_err(|error| error.to_string())
+    observe(&app, generation)
+}
+
+fn observe(app: &tauri::AppHandle, generation: String) -> Result<(), String> {
+    if *app.state::<Host>().renderer_owner.lock().unwrap() == RendererOwner::Remote(generation.clone()) {
+        app.state::<Host>().player.send(player::Request::RemoteObserve(generation)).map_err(|error| error.to_string())
+    } else {
+        report(app, &generation, &PlayerState::default());
+        Ok(())
+    }
 }
 #[tauri::command]
 pub async fn native_receiver_end(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<(), String> {
     crate::operating_mode::trusted(&window)?;
     revoke(&app, Some(generation)).await
+}
+
+#[tauri::command]
+pub fn native_audio_begin(window: tauri::WebviewWindow, app: tauri::AppHandle, managed: Option<bool>, retiring_playback_id: Option<String>) -> Result<StartedAudio, String> {
+    crate::operating_mode::trusted(&window)?;
+    let receiver = app.state::<Receiver>();
+    let _operation = receiver.operation.lock().unwrap();
+    let generation = uuid::Uuid::new_v4().to_string();
+    let authority = if managed.unwrap_or(false) {
+        if crate::operating_mode::remote_selected(&app) {
+            AudioAuthority::Remote(current_generation(&app).ok_or("This computer is not connected as a playback device.")?)
+        } else {
+            AudioAuthority::LocalCore
+        }
+    } else {
+        AudioAuthority::External
+    };
+    app.state::<Host>().claim_audio(&generation, authority, retiring_playback_id.as_deref())?;
+    *receiver.audio.lock().unwrap() = Some((generation.clone(), Instant::now() + LEASE, false));
+    Ok(StartedAudio { generation })
+}
+
+#[derive(serde::Serialize)]
+pub struct StartedAudio { generation: String }
+
+#[tauri::command]
+pub fn native_audio_renew(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    let receiver = app.state::<Receiver>();
+    let mut audio = receiver.audio.lock().unwrap();
+    if let Some((current, deadline, revoked)) = audio.as_mut() {
+        if current == &generation && !*revoked && Instant::now() < *deadline {
+            *deadline = Instant::now() + LEASE;
+            return Ok(());
+        }
+    }
+    Err("This computer's audio lease expired.".into())
+}
+
+#[tauri::command]
+pub fn native_audio_end(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    let receiver = app.state::<Receiver>();
+    let _operation = receiver.operation.lock().unwrap();
+    let mut audio = receiver.audio.lock().unwrap();
+    if audio.as_ref().is_some_and(|(current, _, _)| current == &generation) {
+        *audio = None;
+        drop(audio);
+        app.state::<Host>().release_audio(&app, &generation);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

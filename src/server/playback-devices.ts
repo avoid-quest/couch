@@ -21,6 +21,7 @@ type Options = {
   name: (deviceId: string) => string | undefined;
   ready: (deviceId: string) => boolean;
   activate: (deviceId: string) => Promise<void>;
+  reserve: (deviceId: string, playbackId: string, acquire: boolean, retiringPlaybackId?: string) => Promise<void>;
   localVolume?: (volume: number, muted: boolean, authorize: () => void) => Promise<unknown>;
   localLevel?: () => { volume: number | null; muted: boolean };
 };
@@ -31,6 +32,13 @@ export function createPlaybackDevices(options: Options) {
   const { registry, catalog } = options;
   const groups = new Map<string, GroupBinding>();
   const mutedDevices = new Map<string, number>();
+  const leases = new Map<string, Set<string>>();
+  const lease = async (playbackId: string, id: string, acquire: boolean, retiringPlaybackId?: string) => {
+    await options.reserve(id, playbackId, acquire, retiringPlaybackId);
+    const held = leases.get(playbackId) ?? new Set<string>();
+    if (acquire) held.add(id); else held.delete(id);
+    if (held.size) leases.set(playbackId, held); else leases.delete(playbackId);
+  };
   let tail = Promise.resolve();
   let changing = false;
   const assigned = (runtime: Runtime) => catalog.get(runtime.id)?.deviceIds ?? [];
@@ -146,7 +154,10 @@ export function createPlaybackDevices(options: Options) {
       },
       changed: target => {
         const selected = new Set(target.members?.filter(member => member.joined).map(member => member.id));
-        endpoint.update(decorate(binding, { ...target, members: host.devices.map(audio => ({ ...audio, joined: selected.has(audio.id) })) }));
+    const newlyAcquired: string[] = [];
+    const previousBinding = groups.get(runtime.id);
+    const previous = previousBinding?.group;
+    const oldScreen = previousBinding?.screen;
         options.changed();
       },
     });
@@ -194,6 +205,9 @@ export function createPlaybackDevices(options: Options) {
     const oldScreen = previousBinding?.screen;
     const oldMembers = previous ? [...previous.members] : [];
     const oldDevices = assigned(runtime);
+    const groupRequested = shared || !!ids[0]?.startsWith("audio-");
+    const managed = groupRequested ? ids.filter(id => !!options.host()?.devices.find(audio => deviceId(audio) === id)?.deviceId) : [];
+    const retiring = new Map(managed.map(id => [id, [runtime, ...occupied].some(owner => owner.session.state.targetId === id) ? registry.deviceState(id)?.playbackId ?? undefined : undefined]));
     try {
     // Replacing a busy device can interrupt it. Preserve its owner for recovery if preparation fails.
     for (const other of occupied) {
@@ -212,12 +226,14 @@ export function createPlaybackDevices(options: Options) {
         const screenTaken = !!oldScreen && ids.includes(oldScreen);
         const members = [...group.members];
         const remaining = members.filter(clientId => { const audio = options.host()?.devices.find(device => device.id === clientId); return audio && !ids.includes(deviceId(audio)); });
-        restore.push(async () => { binding.screen = oldScreen; group.refresh(); await group.setMembers(members); await resume(group.id); });
+        const retiredLeases = before.filter(id => ids.includes(id) && leases.get(other.id)?.has(id));
+        restore.push(async () => { for (const id of retiredLeases) await lease(other.id, id, true); binding.screen = oldScreen; group.refresh(); await group.setMembers(members); await resume(group.id); });
         if (screenTaken && active(other) && !other.session.audioOnly || !remaining.length) await other.targets.detach(guard, screenTaken);
         binding.screen = screenTaken ? undefined : oldScreen;
         group.refresh();
         if (other.session.state.targetId === group.id) await other.targets.control(group.id, () => group.setMembers(remaining), remaining);
         else await group.setMembers(remaining);
+        for (const id of retiredLeases) await lease(other.id, id, false);
         commit(other, before.filter(id => !ids.includes(id)));
       } else {
         const target = other.session.state.targetId;
@@ -228,10 +244,22 @@ export function createPlaybackDevices(options: Options) {
         commit(other, before.filter(id => !ids.includes(id)));
       }
     }
+    for (const id of managed) {
+      const hadLease = !!leases.get(runtime.id)?.has(id) && oldMembers.some(clientId => options.host()?.devices.some(audio => audio.id === clientId && deviceId(audio) === id));
+      await lease(runtime.id, id, true, retiring.get(id));
+      if (!hadLease) newlyAcquired.push(id);
+    }
+    guard();
     if (!ids.length) {
       await runtime.targets.detach(guard, true);
       await previous?.setMembers([]);
-    } else if (shared || ids[0]!.startsWith("audio-")) {
+    } else if (groupRequested) {
+      const group = groupFor(runtime);
+      const clients = ids.map(id => options.host()!.devices.find(audio => deviceId(audio) === id)!.id);
+      const initialLevels = Object.fromEntries(clients.map((clientId, index) => [clientId, ids[index] === "native" && options.localVolume ? { volume: 100, muted: false } : { volume: options.host()?.devices.find(audio => audio.id === clientId)?.deviceId ? toSendspinVolume(requested[index]!.volume) : requested[index]!.volume, muted: requested[index]!.muted }]));
+      await runtime.targets.control(group.id, () => group.setMembers(clients, initialLevels), clients);
+      guard();
+      await runtime.targets.move(group.id, guard, { takeover: true });
       const group = groupFor(runtime), before = [...group.members];
       const binding = groups.get(runtime.id)!;
       if (oldScreen && oldScreen !== screen && runtime.session.state.targetId === group.id && active(runtime) && !runtime.session.audioOnly) {
@@ -262,14 +290,26 @@ export function createPlaybackDevices(options: Options) {
       await runtime.targets.move(ids[0]!, guard, { takeover: true });
       if (previous && runtime.session.state.targetId !== previous.id) await previous.setMembers([]);
     }
+    for (const id of [...leases.get(runtime.id) ?? []]) if (!managed.includes(id)) await lease(runtime.id, id, false);
     commit(runtime, ids);
     } catch (error) {
       // A failed move keeps uncertain outputs claimed; restoration then refuses to duplicate them.
       const group = groups.get(runtime.id)?.group;
+<<<<<<< HEAD
       if (group && runtime.session.state.targetId !== group.id) await group.setMembers(oldMembers).catch(() => {});
       if (previousBinding) { previousBinding.screen = oldScreen; previousBinding.group.refresh(); }
       if (oldDevices.length === 1 && runtime.session.state.targetId === "checkpoint") await runtime.targets.move(oldDevices[0]!, guard, { takeover: true }).catch(() => {});
       else if (oldDevices.length > 1 && previous && runtime.session.state.targetId === "checkpoint") await runtime.targets.move(previous.id, guard, { takeover: true }).catch(() => {});
+=======
+      let retired = true;
+      if (group && JSON.stringify(group.members) !== JSON.stringify(oldMembers)) {
+        try { await group.setMembers(oldMembers); } catch { retired = false; }
+      }
+      if (retired) for (const id of newlyAcquired.reverse()) {
+        if (group?.members.some(clientId => options.host()?.devices.some(audio => audio.id === clientId && deviceId(audio) === id))) continue;
+        await lease(runtime.id, id, false).catch(() => {});
+      }
+>>>>>>> 16a04d13 (Keep library, renderer and audio lifetimes independent)
       for (const undo of restore.reverse()) await undo().catch(() => {});
       commit(runtime, oldDevices);
       throw error;

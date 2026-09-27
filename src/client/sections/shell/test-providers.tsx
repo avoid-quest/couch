@@ -1,3 +1,4 @@
+import { useSendspinClient } from "@/session/external-audio";
 import { useState, type ReactNode } from "react";
 import { createTestQueryClient } from "@/testing/react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,6 +11,8 @@ import { ShellContext } from "./shell-context";
 // contexts; the query client lives as long as the rendered tree.
 export function ShellProviders({ value, children }: { value: unknown; children: ReactNode }) {
   const [client] = useState(() => createTestQueryClient());
+  const externalAudio = useSendspinClient({ credentials: null, allowed: false, canActivate: () => false });
+  const gate = { externalAudio, ...value as object };
   const clock = (value as { state?: { player: PlaybackClock } }).state?.player ?? emptyPlaybackClock;
-  return <PlaybackClockContext.Provider value={clock}><QueryClientProvider client={client}><SessionGateContext.Provider value={value as never}><ShellContext.Provider value={value as never}>{children}</ShellContext.Provider></SessionGateContext.Provider></QueryClientProvider></PlaybackClockContext.Provider>;
+  return <PlaybackClockContext.Provider value={clock}><QueryClientProvider client={client}><SessionGateContext.Provider value={gate as never}><ShellContext.Provider value={value as never}>{children}</ShellContext.Provider></SessionGateContext.Provider></QueryClientProvider></PlaybackClockContext.Provider>;
 }

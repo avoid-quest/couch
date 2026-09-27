@@ -1,6 +1,7 @@
 import { setupUiTests, act, render } from "@/testing/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { loadedBuild } from "../../shared/build";
+import { desktopClientProtocol } from "../../shared/desktop-protocol";
 import type { ClientMessage, ServerMessage, SessionState } from "../../shared/protocol";
 import type { Credentials, useSession } from "./session";
 
@@ -20,7 +21,7 @@ let view: ReturnType<typeof render>, session: ReturnType<typeof useSession>;
 let mount: (next?: Credentials | null, protocol?: number) => Promise<void>;
 let now: number, unavailable: boolean, installation: string, identityStatus: number, buildMismatch: boolean;
 let discovery: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
-const details = () => Response.json({ name: "Couch", installationId: installation, urls: [credentials.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol: 1 });
+const details = () => Response.json({ name: "Couch", installationId: installation, urls: [credentials.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol });
 
 class Socket {
   static OPEN = 1;
@@ -199,7 +200,7 @@ test("healthy sockets and ordinary or slow provider commands survive every wake 
 test.each(["pairing-required", "connection-rejected", "build-mismatch", "protocol-mismatch"] as const)("wake does not bypass %s", async expected => {
   identityStatus = expected === "connection-rejected" ? 403 : 200;
   buildMismatch = expected === "build-mismatch";
-  await mount(expected === "pairing-required" ? null : credentials, expected === "protocol-mismatch" ? 2 : undefined);
+  await mount(expected === "pairing-required" ? null : credentials, expected === "protocol-mismatch" ? desktopClientProtocol + 1 : undefined);
   expect(session.status).toBe(expected);
   const before = requests.length;
   await act(async () => burst());

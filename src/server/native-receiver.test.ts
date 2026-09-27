@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage } from "../shared/protocol";
+import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createHub, type Hub } from "./hub";
 import { createPlaybackTargets } from "./playback-targets";
 import { createSession } from "./session";
@@ -21,7 +22,7 @@ class Peer {
   listeners = new Set<() => void>();
   renderer?: Extract<ServerMessage, { type: "rendererRegistered" }>;
   constructor(hub: Hub, token: string) {
-    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=1`, { headers: { Origin: hub.origin } });
+    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=${desktopClientProtocol}`, { headers: { Origin: hub.origin } });
     this.socket.addEventListener("message", event => { this.messages.push(JSON.parse(String(event.data))); for (const listener of this.listeners) listener(); });
     cleanup.push(() => this.close());
   }

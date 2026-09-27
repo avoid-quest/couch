@@ -118,7 +118,7 @@ if (native) {
 } else {
   console.error(`Couch: ${hub.urls.join(" · ")}`);
   console.error(`Pairing code: ${hub.pairingCode}`);
-  console.error("Pair a browser and choose Playback output to play here, or start the desktop app for Couch TV.");
+  console.error("Open Couch in a browser to pair and play, or use the desktop app.");
 }
 
 let closing = false;

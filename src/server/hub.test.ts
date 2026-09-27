@@ -8,6 +8,7 @@ import type { RadioPlaylist, RadioStation } from "../shared/radio";
 import { createHub, type Hub } from "./hub";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
+import { desktopClientProtocol } from "../shared/desktop-protocol";
 import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
 import * as youtubeModule from "./providers/youtube";
@@ -140,7 +141,7 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
   peer.close();
   const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
-  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, capabilities: { browserPlayback: true, nativePlayback: true, restart: false }, desktopRemoteUi: 1, desktopClientProtocol: 1, playbackClock: 1, tvPresentation: false });
+  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, capabilities: { browserPlayback: true, nativePlayback: true, restart: false }, desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: false });
   for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
@@ -423,7 +424,7 @@ class Peer {
   private listeners = new Set<() => void>();
 
   constructor(hub: Hub, token: string, playbackClock = false) {
-    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${encodeURIComponent(token)}&clientProtocol=1${playbackClock ? "&playbackClock=1" : ""}`, { headers: { Origin: hub.origin } });
+    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${encodeURIComponent(token)}&clientProtocol=${desktopClientProtocol}${playbackClock ? "&playbackClock=1" : ""}`, { headers: { Origin: hub.origin } });
     this.socket.addEventListener("message", event => {
       this.messages.push(JSON.parse(String(event.data)) as ServerMessage);
       for (const listener of this.listeners) listener();
@@ -1202,12 +1203,12 @@ test("a paired desktop client can use a different build revision with the same p
     for (const [version, revision] of [["1", "a".repeat(40)], ["3", "b".repeat(40)]]) {
       Object.assign(buildInfo, { packaged: true, version, revision, dataFormat: 1 });
       expect(buildKey(buildInfo)).not.toBe(clientBuild);
-      expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ desktopRemoteUi: 1, desktopClientProtocol: 1 });
+      expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ desktopRemoteUi: 1, desktopClientProtocol });
       const address = `${hub.origin}/api/ws?token=${token}&build=${encodeURIComponent(clientBuild)}`;
       expect((await fetch(address, { headers: { Origin: hub.origin } })).status).toBe(409);
-      for (const clientProtocol of ["0", "2"]) expect((await fetch(`${address}&clientProtocol=${clientProtocol}`, { headers: { Origin: "http://tauri.localhost" } })).status).toBe(409);
-      expect((await fetch(`${hub.origin}/api/ws?token=bad&clientProtocol=1&build=${encodeURIComponent(clientBuild)}`, { headers: { Origin: "http://tauri.localhost" } })).status).toBe(401);
-      const socket = new BunWebSocket(`${address.replace("http", "ws")}&clientProtocol=1`, { headers: { Origin: "http://tauri.localhost" } });
+      for (const clientProtocol of ["0", String(desktopClientProtocol + 1)]) expect((await fetch(`${address}&clientProtocol=${clientProtocol}`, { headers: { Origin: "http://tauri.localhost" } })).status).toBe(409);
+      expect((await fetch(`${hub.origin}/api/ws?token=bad&clientProtocol=${desktopClientProtocol}&build=${encodeURIComponent(clientBuild)}`, { headers: { Origin: "http://tauri.localhost" } })).status).toBe(401);
+      const socket = new BunWebSocket(`${address.replace("http", "ws")}&clientProtocol=${desktopClientProtocol}`, { headers: { Origin: "http://tauri.localhost" } });
       try { await new Promise<void>((resolve, reject) => { socket.onmessage = () => resolve(); socket.onerror = () => reject(new Error("Compatible desktop client was rejected")); }); }
       finally { socket.close(); }
     }
@@ -1887,7 +1888,7 @@ test.each([10, 500])("40 observations use bounded clocks with %s queue entries w
   const now = spyOn(Date, "now").mockReturnValue(1_000);
   try {
     const { hub } = fixture();
-    expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ desktopClientProtocol: 1, playbackClock: 1 });
+    expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ desktopClientProtocol, playbackClock: 1 });
     hub.session.observe(idle);
     hub.session.loadQueue(Array.from({ length: count }, (_, index) => ({ id: `item-${index}`, title: `Track ${index}`, source: `https://media.example/${index}` })), "replace");
     hub.session.command({ type: "play", entryId: hub.session.state.queue[0]!.id });

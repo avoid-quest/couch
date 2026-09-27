@@ -8,8 +8,8 @@ import { applyTvNavigation } from "@/navigation";
 setupUiTests();
 let invoke: Mock<typeof core.invoke>, request: ReturnType<typeof spyOn>;
 let choice = { mode: null as "local" | "remote" | null, address: null as string | null, targets: [] as string[], localSetupComplete: false };
-let interruption: string | null = null;
 let connectionError: string | null = null;
+let localOutputBusy = false;
 const button = (label: string) => screen.getByRole("button", { name: label });
 
 let user: ReturnType<typeof userEvent.setup>;
@@ -18,11 +18,11 @@ beforeEach(() => {
   user = userEvent.setup();
   testWindow.happyDOM.setURL("http://tauri.localhost");
   Object.assign(window, { __COUCH_NATIVE_HOST__: true });
-  choice = { mode: null, address: null, targets: [] as string[], localSetupComplete: false }; interruption = null; connectionError = null;
+  choice = { mode: null, address: null, targets: [] as string[], localSetupComplete: false }; connectionError = null; localOutputBusy = false;
   invoke = spyOn(core, "invoke").mockImplementation(async <T,>(command: string, args?: core.InvokeArgs): Promise<T> => {
     const options = args as { mode: "local" | "remote"; address?: string; confirmInterrupt?: boolean };
     if (command === "select_playback_device") {
-      if (options.mode === "remote" && interruption && !options.confirmInterrupt) throw `confirmation-required:${interruption}`;
+      if (localOutputBusy && choice.mode && (choice.mode !== options.mode || options.mode === "remote" && choice.address !== options.address) && !options.confirmInterrupt) throw "confirmation-required:local-device";
       choice = { ...choice, mode: options.mode, address: options.address ?? choice.address, targets: [...new Set([...choice.targets, ...(options.address ? [options.address] : [])])] };
     }
     if (command === "forget_playback_device") choice = { ...choice, targets: choice.targets.filter(target => target !== options.address), ...(choice.address === options.address ? { address: null, mode: choice.mode === "remote" ? null : choice.mode } : {}) };
@@ -169,23 +169,28 @@ test("TV remote input cannot open or select a playback device, but local clicks 
   expect(choice.mode).toBe("remote");
 });
 
-test("sharing-only interruption needs a deliberate confirmation and preserves the selected address", async () => {
-  spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(0, 0, 100, 30)] as unknown as DOMRectList);
+test("switching libraries preserves this computer's hosting and selected address", async () => {
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
-  interruption = "sharing";
   await render();
   await user.click(button("Couch on this computer"));
   await user.click(screen.getByRole("radio", { name: "http://192.168.1.10:4100" }));
-  expect(screen.getByText(/Remotes can't reach this computer/)).toBeInTheDocument();
-  expect(screen.queryByText(/Playback here stops/)).toBeNull();
-  const confirm = button("Stop and switch");
-  await act(async () => { confirm.focus(); applyTvNavigation("select"); });
-  expect(choice.mode).toBe("local");
-  expect(invoke).not.toHaveBeenCalledWith("select_playback_device", { mode: "remote", address: "http://192.168.1.10:4100", confirmInterrupt: true });
-  await user.click(confirm);
   expect(choice.mode).toBe("remote");
   expect(choice.address).toBe("http://192.168.1.10:4100");
-  expect(invoke).toHaveBeenCalledWith("select_playback_device", { mode: "remote", address: "http://192.168.1.10:4100", confirmInterrupt: true });
+  expect(screen.queryByText(/Stop and switch/)).toBeNull();
+  expect(invoke).toHaveBeenCalledWith("select_playback_device", { mode: "remote", address: "http://192.168.1.10:4100", confirmInterrupt: false });
+});
+
+test("leaving a remote library asks before stopping playback on this device", async () => {
+  choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
+  localOutputBusy = true;
+  await render();
+  await user.click(button("Connected to 192.168.1.10:4100"));
+  await user.click(screen.getByRole("radio", { name: "This computer" }));
+  expect(screen.getByText("Playback on this device will stop. Other devices keep playing.")).toBeInTheDocument();
+  expect(choice.mode).toBe("remote");
+  await user.click(button("Stop and switch"));
+  expect(choice.mode).toBe("local");
+  expect(invoke).toHaveBeenCalledWith("select_playback_device", { mode: "local", address: null, confirmInterrupt: true });
 });
 
 test("local first use records private choice after the host saves it", async () => {

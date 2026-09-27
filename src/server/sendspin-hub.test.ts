@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadSendspinClientIdentity, SendspinCore } from "@sendspin/sendspin-js";
+import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createHub, type Hub } from "./hub";
 import { openSendspinIdentity } from "./sendspin-identity";
 
@@ -64,7 +65,7 @@ test("Sendspin discovery requires authentication and reports disabled hosting wi
 test("official JS identities enroll idempotently, reject ownership collisions, and retain Core identity across restart", async () => {
   const f = fixture(), owner = await pair(f.hub), other = await pair(f.hub), id = identity();
   const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-  const socket = new Socket(`${f.hub.origin.replace("http:", "ws:")}/api/ws?token=${other}&clientProtocol=1`, { headers: { Origin: f.hub.origin } });
+  const socket = new Socket(`${f.hub.origin.replace("http:", "ws:")}/api/ws?token=${other}&clientProtocol=${desktopClientProtocol}`, { headers: { Origin: f.hub.origin } });
   const messages: string[] = [];
   socket.addEventListener("message", event => messages.push(String(event.data)));
   cleanup.push(() => socket.close());
@@ -96,7 +97,7 @@ test("a configured secure public URL is returned without exposing enrollment sec
 test("only an authenticated controller's live Couch renderer qualifies its enrolled software output", async () => {
   const { hub, databasePath } = fixture(), owner = await pair(hub), other = await pair(hub), managed = identity(), external = identity();
   const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=1`, { headers: { Origin: hub.origin } });
+  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=${desktopClientProtocol}`, { headers: { Origin: hub.origin } });
   cleanup.push(() => socket.close());
   const messages: any[] = [];
   socket.addEventListener("message", event => messages.push(JSON.parse(String(event.data))));
@@ -127,7 +128,7 @@ test("only an authenticated controller's live Couch renderer qualifies its enrol
 test("native receiver and trusted local native target can associate their own SDK output", async () => {
   const { hub } = fixture(undefined, true), owner = await pair(hub), remote = identity(), local = identity();
   const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=1`, { headers: { Origin: hub.origin } });
+  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=${desktopClientProtocol}`, { headers: { Origin: hub.origin } });
   cleanup.push(() => socket.close());
   const messages: any[] = [];
   socket.addEventListener("message", event => messages.push(JSON.parse(String(event.data))));

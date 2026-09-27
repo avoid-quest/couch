@@ -39,6 +39,11 @@ struct Host {
     player_worker: Mutex<Option<std::thread::JoinHandle<()>>>,
     data_dir: std::path::PathBuf,
     local_running: AtomicBool,
+    switching_library: AtomicBool,
+    renderer_owner: Mutex<RendererOwner>,
+    audio_output: Mutex<Option<AudioOutputLease>>,
+    player_state: Mutex<PlayerState>,
+    local_volume: Mutex<f64>,
     workers: Mutex<
         Option<(
             mpsc::Receiver<player::Request>,
@@ -68,10 +73,74 @@ struct Host {
     child_exited: watch::Sender<bool>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RendererOwner {
+    LocalCore,
+    Remote(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum AudioAuthority {
+    External,
+    LocalCore,
+    Remote(String),
+}
+
+#[derive(Clone, Debug)]
+struct AudioOutputLease {
+    generation: String,
+    authority: AudioAuthority,
+}
+
+impl AudioAuthority {
+    fn permits(&self, owner: &RendererOwner) -> bool {
+        match (self, owner) {
+            (Self::LocalCore, RendererOwner::LocalCore) => true,
+            (Self::Remote(expected), RendererOwner::Remote(current)) => expected == current,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod audio_authority_tests {
+    use super::*;
+
+    #[test]
+    fn managed_audio_allows_only_its_cores_decoder_and_external_audio_allows_none() {
+        let local = RendererOwner::LocalCore;
+        let one = RendererOwner::Remote("one".into());
+        let two = RendererOwner::Remote("two".into());
+        assert!(AudioAuthority::LocalCore.permits(&local));
+        assert!(!AudioAuthority::LocalCore.permits(&one));
+        assert!(AudioAuthority::Remote("one".into()).permits(&one));
+        assert!(!AudioAuthority::Remote("one".into()).permits(&two));
+        assert!(!AudioAuthority::Remote("one".into()).permits(&local));
+        assert!(!AudioAuthority::External.permits(&local));
+        assert!(!AudioAuthority::External.permits(&one));
+    }
+}
+
 impl Host {
     fn report(&self, app: &tauri::AppHandle, state: &PlayerState) {
-        if operating_mode::remote_selected(app) { native_receiver::report(app, state); return; }
-        self.report_message(serde_json::json!({ "type": "player", "state": state }));
+        *self.player_state.lock().expect("player state lock poisoned") = state.clone();
+        match self.renderer_owner.lock().expect("renderer owner lock poisoned").clone() {
+            RendererOwner::LocalCore => {
+                *self.local_volume.lock().expect("local volume lock poisoned") = state.volume;
+                if state.status == "idle" && self.audio_output.lock().expect("audio output lock poisoned").as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::LocalCore)) {
+                    self.report_unavailable("This computer is playing shared audio.");
+                } else {
+                    self.report_message(serde_json::json!({ "type": "player", "state": state }));
+                }
+            }
+            RendererOwner::Remote(generation) => native_receiver::report(app, &generation, state),
+        }
+        if state.status == "idle"
+            && *self.renderer_owner.lock().expect("renderer owner lock poisoned") == RendererOwner::LocalCore
+            && self.audio_output.lock().expect("audio output lock poisoned").is_none()
+        {
+            let _ = app.emit_to("main", "native-output-available", ());
+        }
     }
 
     fn report_message(&self, message: serde_json::Value) {
@@ -86,6 +155,90 @@ impl Host {
                 log::error!("Cannot report playback: {error}");
             }
         }
+    }
+
+    fn idle(&self) -> bool {
+        let state = self.player_state.lock().expect("player state lock poisoned");
+        state.playback_id.is_none() && state.status == "idle"
+    }
+
+    fn report_unavailable(&self, reason: &str) {
+        self.report_message(serde_json::json!({ "type": "player", "state": PlayerState { status: "unavailable", error: Some(reason.to_owned()), ..PlayerState::default() } }));
+    }
+
+    fn claim_remote(&self, generation: &str) -> Result<bool, String> {
+        let mut owner = self.renderer_owner.lock().expect("renderer owner lock poisoned");
+        if self.switching_library.load(Ordering::SeqCst) { return Err("Wait for this computer to finish switching libraries.".into()); }
+        if self.audio_output.lock().expect("audio output lock poisoned").as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::Remote(generation.to_owned()))) {
+            return Err("This computer is playing audio from another library.".into());
+        }
+        match &*owner {
+            RendererOwner::Remote(current) if current == generation => return Ok(false),
+            RendererOwner::LocalCore if self.idle() => *owner = RendererOwner::Remote(generation.to_owned()),
+            RendererOwner::LocalCore => return Err("This computer is already playing from its own library.".into()),
+            _ => return Err("This computer's player is already in use.".into()),
+        }
+        drop(owner);
+        self.report_unavailable("This computer is playing another library.");
+        Ok(true)
+    }
+
+    fn claim_audio(&self, generation: &str, authority: AudioAuthority, retiring_playback_id: Option<&str>) -> Result<(), String> {
+        let owner = self.renderer_owner.lock().expect("renderer owner lock poisoned");
+        if self.switching_library.load(Ordering::SeqCst) { return Err("Wait for this computer to finish switching libraries.".into()); }
+        let state = self.player_state.lock().expect("player state lock poisoned");
+        let idle = state.playback_id.is_none() && state.status == "idle";
+        let same_authority = authority.permits(&owner);
+        let retiring = same_authority && matches!(state.status, "playing" | "paused") && retiring_playback_id.is_some_and(|id| state.playback_id.as_deref() == Some(id));
+        let idle_for_authority = idle && match (&*owner, &authority) {
+            (RendererOwner::LocalCore, _) => true,
+            (RendererOwner::Remote(current), AudioAuthority::Remote(requested)) => current == requested,
+            _ => false,
+        };
+        if !idle_for_authority && !retiring {
+            return Err("This computer's player is already in use.".into());
+        }
+        let mut output = self.audio_output.lock().expect("audio output lock poisoned");
+        if output.is_some() { return Err("This computer's audio is already in use.".into()); }
+        *output = Some(AudioOutputLease { generation: generation.to_owned(), authority: authority.clone() });
+        drop(output);
+        drop(state);
+        if idle_for_authority && *owner == RendererOwner::LocalCore && authority != AudioAuthority::LocalCore {
+            self.report_unavailable("This computer is playing audio from another library.");
+        }
+        Ok(())
+    }
+
+    fn release_renderer(&self, app: &tauri::AppHandle, expected: &RendererOwner) {
+        let mut owner = self.renderer_owner.lock().expect("renderer owner lock poisoned");
+        if &*owner != expected { return; }
+        *owner = RendererOwner::LocalCore;
+        drop(owner);
+        let state = PlayerState { volume: *self.local_volume.lock().expect("local volume lock poisoned"), ..PlayerState::default() };
+        *self.player_state.lock().expect("player state lock poisoned") = state.clone();
+        if self.audio_output.lock().expect("audio output lock poisoned").as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::LocalCore)) {
+            self.report_unavailable("This computer is playing shared audio.");
+        } else {
+            self.report_message(serde_json::json!({ "type": "player", "state": state }));
+        }
+        if self.audio_output.lock().expect("audio output lock poisoned").is_none() {
+            let _ = app.emit_to("main", "native-output-available", ());
+        }
+    }
+
+    fn release_audio(&self, app: &tauri::AppHandle, generation: &str) {
+        let owner = self.renderer_owner.lock().expect("renderer owner lock poisoned");
+        let mut output = self.audio_output.lock().expect("audio output lock poisoned");
+        if output.as_ref().is_none_or(|lease| lease.generation != generation) { return; }
+        *output = None;
+        drop(output);
+        let available = *owner == RendererOwner::LocalCore && self.idle();
+        if available {
+            let state = PlayerState { volume: *self.local_volume.lock().expect("local volume lock poisoned"), ..PlayerState::default() };
+            self.report_message(serde_json::json!({ "type": "player", "state": state }));
+        }
+        drop(owner);
+        if available { let _ = app.emit_to("main", "native-output-available", ()); }
     }
 }
 
@@ -422,7 +575,6 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                             let _ = host.player.send(player::Request::Observe);
                         }
                         Ok(SidecarMessage::Playback { command }) => {
-                            if operating_mode::remote_selected(&handle) { continue; }
                             let _ = host.player.send(player::Request::Command(command));
                         }
                         Ok(SidecarMessage::Readiness { nonce }) => {
@@ -573,7 +725,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                         "Media server exited: {:?}",
                         payload.code
                     ))));
-                    if !operating_mode::remote_selected(&handle) {
+                    if host.local_running.load(Ordering::Relaxed) {
                         let _ = host.player.send(player::Request::Command(protocol::PlaybackCommand::Stop));
                     }
                     host.child.lock().expect("sidecar lock poisoned").take();
@@ -642,6 +794,9 @@ pub fn run() {
             native_receiver::native_receiver_command,
             native_receiver::native_receiver_report,
             native_receiver::native_receiver_end,
+            native_receiver::native_audio_begin,
+            native_receiver::native_audio_renew,
+            native_receiver::native_audio_end,
             set_video_rect,
             choose_media,
             choose_folder,
@@ -676,6 +831,11 @@ pub fn run() {
                 player_worker: Mutex::new(None),
                 data_dir: data_dir.clone(),
                 local_running: AtomicBool::new(false),
+                switching_library: AtomicBool::new(false),
+                renderer_owner: Mutex::new(RendererOwner::LocalCore),
+                audio_output: Mutex::new(None),
+                player_state: Mutex::new(PlayerState::default()),
+                local_volume: Mutex::new(PlayerState::default().volume),
                 workers: Mutex::new(Some((player_receiver, display_receiver))),
                 bluetooth: bluetooth::Bluetooth::default(),
                 connection,

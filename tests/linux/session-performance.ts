@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Action, PlayerState, ServerMessage, SessionState } from '../../src/shared/protocol';
+import { desktopClientProtocol } from '../../src/shared/desktop-protocol';
 
 const idle: PlayerState = { playbackId: null, status: 'idle', position: 0, duration: null, volume: 80, seekable: false, error: null };
 const until = async (check: () => boolean, label: string) => {
@@ -63,7 +64,7 @@ if (process.argv[2] === '--core-fixture') {
     results = new Map<string, (message: Extract<ServerMessage, { type: "result" }>) => void>();
     constructor(token: string, readonly renderer = false, personal = false) {
       const WS = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-      this.socket = new WS(`${origin.replace('http:', 'ws:')}/api/ws?token=${token}&clientProtocol=1&playbackClock=1${personal ? "&session=personal" : ""}`, { headers: { Origin: origin } });
+      this.socket = new WS(`${origin.replace('http:', 'ws:')}/api/ws?token=${token}&clientProtocol=${desktopClientProtocol}&playbackClock=1${personal ? "&session=personal" : ""}`, { headers: { Origin: origin } });
       this.socket.onmessage = event => {
         const text = String(event.data), message = JSON.parse(text) as ServerMessage;
         const counter = this.traffic[message.type] ??= { messages: 0, bytes: 0 };

@@ -7,6 +7,7 @@ import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
+import { SendspinClientDialog } from "@/components/SendspinClientDialog";
 import { PairingDialog } from "@/components/PairingDialog";
 import { DeviceRecovery, LocalSharingPrompt, LocalUpdateAction, PlaybackDevice, useLocalSetupPending, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
@@ -72,6 +73,7 @@ function useShellValue() {
     if (section === "Now" && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
   }, [section, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [audioServerOpen, setAudioServerOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
   const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
   const installationId = credentials?.installationId ?? details?.installationId;
@@ -190,7 +192,7 @@ function useShellValue() {
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
-    openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
+    audioServerOpen, setAudioServerOpen, openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
     remoteOpen, pairingOpen, setupSource, sourcesOpen,
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
@@ -213,7 +215,7 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><DetailFocusRestoration /><NativeMediaBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  return <ShellErrorBoundary><DetailFocusRestoration /><NativeMediaBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome><SendspinClientDialog open={shell.audioServerOpen} onOpenChange={shell.setAudioServerOpen} /></ShellContext.Provider></ShellErrorBoundary>;
 }
 
 function NativeMediaBridge() { useNativeMediaSession(); return null; }
@@ -275,7 +277,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
   const gate = useSessionGate() as ReturnType<typeof useSessionGate> & { audioActivationRequired?: boolean; activateDeviceAudio?: () => Promise<boolean> };
-  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled, audioActivationRequired, activateDeviceAudio } = gate;
+  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled, audioActivationRequired, activateDeviceAudio, externalAudio } = gate;
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
@@ -307,6 +309,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const installationName = state?.installationName ?? details?.name;
   const audioPrompt = paired && connected && audioActivationRequired && activateDeviceAudio && <Alert><AlertDescription>Enable audio on this device to continue playback.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => { void activateDeviceAudio(); }}>Enable audio</Button></AlertAction></Alert>;
 
+  const audioConnection = externalAudio?.server && <Alert><AlertDescription>This device · {externalAudio.server}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => shell.setAudioServerOpen(true)}>Audio controls</Button><Button variant="ghost" size="sm" onClick={() => { void externalAudio.leave(); }}>Disconnect</Button></AlertAction></Alert>;
+
   if (setupPending) return <div className="app-shell flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
   return (
@@ -332,8 +336,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
               <DigitalClock className="ml-2 max-sm:hidden" />
             </div>
           </header>
-          {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{audioPrompt}{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
-          {onPlayer && (audioPrompt || error) && <div className="fixed inset-x-0 top-0 z-40 grid gap-3 bg-background px-(--gutter) py-3">{audioPrompt}{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
+          {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{audioPrompt}{audioConnection}{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
+          {onPlayer && (audioPrompt || audioConnection || error) && <div className="fixed inset-x-0 top-0 z-40 grid gap-3 bg-background px-(--gutter) py-3">{audioPrompt}{audioConnection}{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
           {!paired ? <PairingPage /> : <>
             {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>

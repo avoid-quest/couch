@@ -180,6 +180,7 @@ export function createHub(options: HubOptions) {
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
+  const pendingAudioOutputs = new Map<string, { socket: ServerWebSocket<SocketData>; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => invalidateAll("jellyfin") });
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => {
@@ -369,11 +370,28 @@ export function createHub(options: HubOptions) {
     return runtime;
   };
   const audioSocket = (deviceId: string) => [...sockets].find(socket => socket.data.renderer?.id === deviceId || deviceId === "native" && socket.data.trusted);
+  const reserveAudioOutput = (deviceId: string, playbackId: string, acquire: boolean, retiringPlaybackId?: string) => {
+    const socket = audioSocket(deviceId);
+    if (!socket) {
+      if (!acquire) return Promise.resolve(); // A disconnected client releases its own output.
+      throw new Error("Open Couch on this device before adding it.");
+    }
+    socket.data.authorize();
+    const requestId = crypto.randomUUID();
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { pendingAudioOutputs.delete(requestId); reject(new Error("This device did not confirm audio output. Keep Couch open there and try again.")); }, 5000);
+      pendingAudioOutputs.set(requestId, { socket, resolve, reject, timer });
+      if (!socket.send(JSON.stringify({ type: "deviceAudioOutput", requestId, playbackId, acquire, ...(retiringPlaybackId ? { retiringPlaybackId } : {}) } satisfies ServerMessage))) {
+        clearTimeout(timer); pendingAudioOutputs.delete(requestId); reject(new Error("The audio device disconnected. Open Couch there and try again."));
+      }
+    });
+  };
   const devices = createPlaybackDevices({
     registry, catalog: playbackCatalog, runtimes: () => [...runtimes.values()], host: () => sendspin,
     changed: publishPlaybacks,
     name: id => id === "native" ? store.installationName() : store.controller(id.replace(/^(browser|receiver)-/, ""))?.name,
     ready: deviceId => !!audioSocket(deviceId)?.data.audioReady,
+    reserve: reserveAudioOutput,
     activate: async deviceId => {
       const socket = audioSocket(deviceId);
       if (!socket) throw new Error("Open Couch on this device before adding it.");
@@ -897,7 +915,7 @@ export function createHub(options: HubOptions) {
         if (socket.data.trusted) socket.subscribe("navigation");
         socket.send(JSON.stringify({ type: "state", state: snapshot(socket.data.runtime) } satisfies ServerMessage));
       },
-      close(socket) { socket.data.renderer?.close(); sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
+      close(socket) { for (const [id, pending] of pendingAudioOutputs) if (pending.socket === socket) { clearTimeout(pending.timer); pendingAudioOutputs.delete(id); pending.reject(new Error("The audio device disconnected. Open Couch there and try again.")); } socket.data.renderer?.close(); sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
       async message(socket, message) {
         const runtime = socket.data.runtime;
         const { session, targets, id: sessionId } = runtime;
@@ -908,6 +926,13 @@ export function createHub(options: HubOptions) {
         let command;
         try {
           const value = JSON.parse(message);
+          if (value?.type === "deviceAudioOutputResult") {
+            const pending = typeof value.requestId === "string" ? pendingAudioOutputs.get(value.requestId) : undefined;
+            if (!pending || pending.socket !== socket || value.error !== undefined && (typeof value.error !== "string" || value.error.length > 500)) throw new Error("Invalid audio output response.");
+            clearTimeout(pending.timer); pendingAudioOutputs.delete(value.requestId);
+            if (value.error) pending.reject(new Error(value.error)); else pending.resolve();
+            return;
+          }
           if (value?.type === "selectPlayback" || value?.type === "selectSession") {
             const selection = value.type === "selectPlayback" ? value.playbackId : value.mode;
             if (typeof selection !== "string") throw new Error("Invalid playback selection.");
@@ -946,7 +971,7 @@ export function createHub(options: HubOptions) {
               const targetId = socket.data.controllerId ? `browser-${socket.data.controllerId}` : undefined;
               if (!targetId || !registry.targets.some(target => target.id === targetId)) socket.data.renderer ??= registry.register(playbackActor(socket.data.controllerId)?.name ?? "Couch browser", sendRenderer, renderer.capabilities, socket.data.authorize, targetId);
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer?.id ?? targetId!, sessionId: socket.data.rendererSessionId!, attached: !!socket.data.renderer } satisfies ServerMessage));
-            } else if (socket.data.renderer && renderer.sessionId === socket.data.rendererSessionId) socket.data.renderer.observe(renderer.state);
+            } else if (renderer.type === "rendererObservation" && socket.data.renderer && renderer.sessionId === socket.data.rendererSessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");
             return;
           }

@@ -70,6 +70,23 @@ test("IPC failure revokes playback and asks the connection to recover", async ()
   expect(h.ipc).toHaveBeenLastCalledWith("native_receiver_end", { generation: "one" });
 });
 
+test("busy local output reports the attempted playback without revoking receiver control", async () => {
+  const h = harness(); await flush();
+  h.ipc.mockImplementation((async (name: string) => {
+    if (name === "native_receiver_command") throw new Error("This computer is already playing from its own library.");
+  }) as typeof core.invoke);
+  h.renderer.command({ type: "prepare", playbackId: "remote-attempt" }); await flush();
+  expect(h.observe).toHaveBeenCalledWith(expect.objectContaining({ playbackId: "remote-attempt", status: "error", error: "This computer is already playing from its own library." }));
+  expect(h.error).not.toHaveBeenCalled();
+  expect(h.ipc.mock.calls.some(([name]) => name === "native_receiver_end")).toBe(false);
+});
+
+test("failed initial receiver begin leaves playback control to the socket", async () => {
+  const h = harness(Promise.reject(new Error("Output unavailable"))); await flush();
+  expect(h.error).toHaveBeenCalledWith(false);
+  expect(h.ready).not.toHaveBeenCalled();
+});
+
 test("a listener resolving after close is removed without beginning a receiver", async () => {
   const listener = deferred<() => void>();
   const unsubscribe = mock(() => {});

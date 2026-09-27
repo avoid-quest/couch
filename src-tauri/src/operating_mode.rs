@@ -1,4 +1,4 @@
-use crate::{player, Host};
+use crate::{player, Host, RendererOwner};
 use serde::{Deserialize, Serialize};
 use std::{
     net::{IpAddr, SocketAddr, ToSocketAddrs},
@@ -336,8 +336,10 @@ pub(crate) async fn quit_interruption(
     app: &tauri::AppHandle,
 ) -> Result<Option<&'static str>, String> {
     let host = app.state::<Host>();
+    let local_audio = !matches!(*host.renderer_owner.lock().expect("renderer owner lock poisoned"), RendererOwner::LocalCore)
+        || host.audio_output.lock().expect("audio output lock poisoned").is_some();
     if !host.local_running.load(Ordering::Relaxed) {
-        return Ok(None);
+        return Ok(local_audio.then_some("playback"));
     }
     let connection = host
         .connection
@@ -355,7 +357,12 @@ pub(crate) async fn quit_interruption(
         .json()
         .await
         .map_err(error)?;
-    interruption(&details)
+    let core = interruption(&details)?;
+    Ok(match (local_audio, core) {
+        (true, Some("sharing")) => Some("playback,sharing"),
+        (true, _) => Some("playback"),
+        (_, reason) => reason,
+    })
 }
 
 async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String> {
@@ -462,6 +469,18 @@ pub async fn select_playback_device(
     let modes = app.state::<Modes>();
     let _guard = modes.operation.lock().await;
     let mut choice = modes.current();
+    let host = app.state::<Host>();
+    let output_active = {
+        let owner = host.renderer_owner.lock().expect("renderer owner lock poisoned");
+        host.switching_library.store(true, Ordering::SeqCst);
+        !matches!(*owner, RendererOwner::LocalCore)
+            || host.audio_output.lock().expect("audio output lock poisoned").is_some()
+    };
+    struct Switching<'a>(&'a std::sync::atomic::AtomicBool);
+    impl Drop for Switching<'_> {
+        fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); }
+    }
+    let _switching = Switching(&host.switching_library);
     if mode == Mode::Remote {
         let address = target(
             address
@@ -470,8 +489,11 @@ pub async fn select_playback_device(
         )?
         .origin()
         .ascii_serialization();
+        if choice.mode == Some(Mode::Remote) && choice.address.as_deref() == Some(&address) { return Ok(choice); }
+        if output_active && !confirm_interrupt {
+            return Err("confirmation-required:local-device".into());
+        }
         crate::native_receiver::revoke(&app, None).await?;
-        stop_local(&app, confirm_interrupt).await?;
         if choice.address.as_deref() != Some(&address) { choice.native_receiver = false; }
         choice.mode = Some(mode);
         choice.address = Some(address);
@@ -479,9 +501,14 @@ pub async fn select_playback_device(
         modes.save(choice.clone())?;
         *modes.last_input.lock().expect("input lock poisoned") = Instant::now();
     } else {
+        if choice.mode == Some(Mode::Remote) && output_active && !confirm_interrupt {
+            return Err("confirmation-required:local-device".into());
+        }
         crate::native_receiver::revoke(&app, None).await?;
         choice.native_receiver = false;
-        stop_local(&app, true).await?;
+        if !app.state::<Host>().local_running.load(Ordering::Relaxed) {
+            stop_local(&app, true).await?;
+        }
         crate::start_local(&app)?;
         choice.mode = Some(mode);
         modes.save(choice.clone())?;
@@ -514,7 +541,15 @@ pub async fn retry_playback_device(
     match choice.mode {
         Some(Mode::Local) => crate::start_local(&app),
         Some(Mode::Remote) => {
-            crate::start_coordinator(&app, false)?;
+            if choice.local_setup_complete {
+                if !app.state::<Host>().local_running.load(Ordering::Relaxed)
+                    && app.state::<Host>().child.lock().expect("sidecar lock poisoned").is_some() {
+                    stop_local(&app, true).await?;
+                }
+                crate::start_local(&app)?;
+            } else {
+                crate::start_coordinator(&app, false)?;
+            }
             check_lan_address(&target(choice.address.as_deref().ok_or("Choose another Couch's address.")?)?).await
         }
         None => Ok(()),

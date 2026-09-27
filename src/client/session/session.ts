@@ -1,4 +1,5 @@
 import { createNativeRenderer } from "./native-renderer";
+import { listen } from "@tauri-apps/api/event";
 import { createBrowserRenderer } from "./browser-renderer";
 import { browserMediaCapabilities } from "./browser-capabilities";
 import { isNativeHost } from "./native-context";
@@ -13,6 +14,7 @@ export type ClientPlayerState = Omit<SessionState["player"], "position" | "durat
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
 export type Credentials = { origin: string; token: string; installationId?: string };
+export type DeviceAudioOutputRequest = Extract<ServerMessage, { type: "deviceAudioOutput" }>;
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "sharing-disabled" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
@@ -22,7 +24,8 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true) {
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true, onDeviceAudioOutput?: (request: DeviceAudioOutputRequest) => Promise<void>) {
+  const outputHandler = useRef(onDeviceAudioOutput); outputHandler.current = onDeviceAudioOutput;
   const [selection, setSelection] = useState<{ owner: Credentials | null; playbackId: string }>({ owner: credentials, playbackId: "default" });
   const playbackId = sameCredentials(selection.owner, credentials) ? selection.playbackId : "default";
   const currentPlayback = useRef(playbackId);
@@ -73,6 +76,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let authenticate = !!credentials;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let handshake: ReturnType<typeof setTimeout> | undefined;
+    let unlistenOutput: (() => void) | undefined;
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -160,6 +164,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       let nativeNonce: string | null = null;
       let nativeRegistered = false;
       let rendererBaseline = false;
+      let native: ReturnType<typeof createNativeRenderer> | null = null;
       const registerNative = () => {
         if (!nativeRegistered && rendererBaseline && nativeNonce && isCurrent() && connection.readyState === WebSocket.OPEN) {
           nativeRegistered = true;
@@ -167,22 +172,41 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         }
       };
       const observe = (state: SessionState["player"]) => { if (isCurrent() && attached && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); };
-      const native = rendererEnabled && isNativeHost() && nativeReceiver && desktopProtocol ? createNativeRenderer(observe, {
-        origin,
-        ready: nonce => { nativeNonce = nonce; registerNative(); },
-        lease: nonce => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "nativeLease", nonce })); },
-        error: () => { if (isCurrent()) connection.close(); },
-      }) : null;
-      const rendering = native ?? (rendererEnabled && browserPlayback && !isNativeHost() ? createBrowserRenderer(observe) : null);
+      let rendering: ReturnType<typeof createBrowserRenderer> | ReturnType<typeof createNativeRenderer> | null = rendererEnabled && browserPlayback && !isNativeHost() ? createBrowserRenderer(observe) : null;
       renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
 
       const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
+      const startNative = () => {
+        if (native || !isCurrent() || connection.readyState !== WebSocket.OPEN) return;
+        native = createNativeRenderer(observe, {
+          origin,
+          ready: nonce => { nativeNonce = nonce; registerNative(); },
+          lease: nonce => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "nativeLease", nonce })); },
+          error: () => {
+            if (!isCurrent()) return;
+            native = null; rendering = null; renderer.current = null; nativeNonce = null;
+            // A local lease before Core registration has no remote output to
+            // revoke; once registered, a lease failure must fence that output.
+            if (nativeRegistered || attached) connection.close();
+          },
+        });
+        rendering = native;
+        renderer.current = native;
+      };
+      if (rendererEnabled && isNativeHost() && nativeReceiver && desktopProtocol) {
+        startNative();
+        try {
+          void listen("native-output-available", () => startNative()).then(stop => {
+            if (!isCurrent()) stop(); else unlistenOutput = stop;
+          }).catch(() => { /* Control remains available without an output retry event. */ });
+        } catch { /* Control remains available without an output retry event. */ }
+      }
       handshake = setTimeout(() => connection.close(), 8_000);
 
       connection.onopen = () => {
-        if (isCurrent()) setStatus("syncing");
+        if (isCurrent()) { setStatus("syncing"); if (rendererEnabled && isNativeHost() && nativeReceiver && desktopProtocol) startNative(); }
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -221,6 +245,17 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setStatus("connected");
         } else if (message.type === "audioActivationRequired") {
           setAudioActivationRequired(true);
+        } else if (message.type === "deviceAudioOutput") {
+          const request = message;
+          const answer = (error?: string) => {
+            if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "deviceAudioOutputResult", requestId: request.requestId, ...(error ? { error } : {}) }));
+          };
+          if (!attached && !trustedLocal) answer("Audio is unavailable on this device.");
+          else if (!outputHandler.current) answer("Audio output is not ready on this device.");
+          else {
+            const handler = outputHandler.current;
+            void Promise.resolve().then(() => { if (isCurrent()) return handler(request); }).then(() => answer(), reason => answer(reason instanceof Error ? reason.message : String(reason)));
+          }
         } else if (message.type === "clock") {
           if (!playbackClock || !(message.playbackId === null || typeof message.playbackId === "string")
             || typeof message.position !== "number" || !Number.isFinite(message.position)
@@ -250,6 +285,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         // Retire the socket now, not only on effect cleanup or replacement.
         // Captured callbacks from a closed/revoked connection must stay stale.
         socket.current = null;
+        unlistenOutput?.(); unlistenOutput = undefined;
         rendering?.close(); setRendererTargetId(null); setRendererAttached(false); setRendererSocket(null); setAudioActivationRequired(false);
         socketCredentials.current = null;
         clearTimeout(handshake);
@@ -286,6 +322,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       rejectPending();
       renderer.current?.close(); renderer.current = null;
       socket.current?.close();
+      unlistenOutput?.();
       socket.current = null;
       socketCredentials.current = null;
     };

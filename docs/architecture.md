@@ -29,12 +29,13 @@ The implementation currently uses these seams:
 | `src/server/hub.ts` | Authenticated HTTP/WebSocket selection, routing and source access. |
 | `src/client/session/session.ts`, `session-context.tsx` | Window selection and connection above route lifetime; renderer registration stays attached while the window selects another Playback. |
 | `src/main.ts`, `src-tauri/src/player.rs` | Optional Core process and native libmpv command/observation path. |
+| `src-tauri/src/native_receiver.rs`, `src/client/session/device-audio.ts` | Native renderer and audio reservations, independent of the window's selected Playback. |
 
 The `PlaybackRecord` ID is the stable identity. Library pairing grants playback
 control; administrator permission is separate. The record's `owner` records default
 and migration provenance, and its `storageKey` chooses existing per-Playback state.
 The `playback_defaults` row is a
-client convenience pointer; creating another Playback changes that pointer without
+client convenience pointer; successfully assigning a new Playback changes that pointer without
 mutating an earlier queue. Legacy `household`/`personal` request selectors and
 `personal:<client-id>` stores are migration aliases, not product modes. Preserve
 existing SQLite files, checkpoints, queue occurrences, progress and pairings when
@@ -76,6 +77,21 @@ tracks and original decoder indices.
 Before replacing media in shared audio, Core resolves and validates the candidate
 without changing the current queue or stopping its producer. A capability failure
 returns an actionable playback error through both command and HTTP entry points.
+
+The native window can browse another Library while this installation's Core keeps
+running. Core ownership of libmpv is independent of the selected Library: enrollment
+alone does not claim or stop it. Before adding a native Device to Sendspin, its owning
+client reserves the machine's audio output. That reservation permits the same Core's
+verified direct/audio handoff and blocks another Core from starting competing output.
+Expiry fences the output until the SDK disconnects and acknowledges release. Closing
+or changing the controlled Playback does not retire the SDK. Switching Libraries while
+this window supplies audio or remote native playback requires an explicit stop-and-switch
+action; other Devices continue. A persistent audio client spanning several Libraries
+is not implemented.
+
+An independent Core process needs no window. The desktop-bundled Core still has the
+application's lifetime: explicit Quit stops it. Installing and managing an independent
+background Core through the desktop UI remains unimplemented.
 
 Ordinary selected clients fetch and decode supported media; control-only clients
 fetch no media. Native playback retains its provider paths. The browser uses direct

@@ -118,6 +118,7 @@ export type PlaybackSelectionMessage = { type: "selectPlayback"; playbackId: str
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage = { type: "audioActivationRequired" }
+  | { type: "deviceAudioOutput"; requestId: string; playbackId: string; acquire: boolean; retiringPlaybackId?: string }
   | { type: "nativeLease"; nonce: string }
   | { type: "rendererRegistered"; targetId: string; sessionId: string; attached?: boolean }
   | { type: "rendererCommand"; sessionId: string; command: PlaybackCommand }
@@ -151,6 +152,7 @@ export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "gro
   members?: { id: string; deviceId?: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
 export type RendererMessage = { type: "deviceAudioReady"; ready: boolean }
+  | { type: "deviceAudioOutputResult"; requestId: string; error?: string }
   | { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }
   | { type: "registerNativeRenderer"; nonce: string }
   | { type: "nativeLease"; nonce: string }

@@ -18,7 +18,8 @@ function Probe({ token = "paired" }: { token?: string }) {
   return null;
 }
 function DialogProbe() {
-  return <ShellProviders value={{ credentials: { origin: "http://core.local", token: "paired" }, connected: true, identity: { controller: { id: "one", name: "Couch browser", role: "controller" } } }}><SendspinClientDialog open onOpenChange={() => {}} /></ShellProviders>;
+  const externalAudio = useSendspinClient({ credentials: { origin: "http://core.local", token: "paired" }, allowed: true, canActivate: () => true });
+  return <ShellProviders value={{ externalAudio, credentials: { origin: "http://core.local", token: "paired" }, connected: true, identity: { controller: { id: "one", name: "Couch browser", role: "controller" } } }}><SendspinClientDialog open onOpenChange={() => {}} /></ShellProviders>;
 }
 const playback = (connected: boolean): adapter.SendspinRendererState => ({ connected, isPlaying: false, volume: 100, muted: false, metadata: undefined, group: {}, supportedCommands: [] });
 beforeEach(() => {
@@ -33,7 +34,7 @@ test("other audio server reuses the device name without a name prompt", async ()
   await user.type(screen.getByRole("textbox", { name: "Server address" }), "wss://music.local/sendspin");
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(adapter.createSendspinRenderer).toHaveBeenCalledWith(expect.objectContaining({ name: "Couch browser" }), expect.anything());
-  await user.click(screen.getByRole("button", { name: "Join" }));
+  await user.click(screen.getByRole("button", { name: "Connect" }));
   expect(renderer.connectFromGesture).toHaveBeenCalledTimes(1);
 });
 

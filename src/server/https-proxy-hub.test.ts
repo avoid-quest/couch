@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ServerMessage } from "../shared/protocol";
+import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createHub, type Hub } from "./hub";
 
 const origin = "https://couch.home.arpa", hostToken = "https-proxy-host-token-123456789012345678901";
@@ -31,7 +32,7 @@ class Peer {
   messages: ServerMessage[] = [];
   listeners = new Set<() => void>();
   constructor(hub: Hub, token: string) {
-    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=1`, { headers: forwarded });
+    this.socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=${desktopClientProtocol}`, { headers: forwarded });
     this.socket.addEventListener("message", event => { this.messages.push(JSON.parse(String(event.data))); for (const listener of this.listeners) listener(); });
     cleanup.push(() => this.close());
   }
@@ -80,7 +81,7 @@ test("local HTTPS pairing authenticates controller HTTP and renderer registratio
 
 test("the private host token cannot authenticate through the trusted proxy", async () => {
   const hub = fixture();
-  for (const path of ["/api/controllers/me", `/api/ws?token=${hostToken}&clientProtocol=1`]) expect((await request(hub, path, { proxied: true, token: hostToken })).status).toBe(401);
+  for (const path of ["/api/controllers/me", `/api/ws?token=${hostToken}&clientProtocol=${desktopClientProtocol}`]) expect((await request(hub, path, { proxied: true, token: hostToken })).status).toBe(401);
   expect((await request(hub, "/api/controllers/me", { token: hostToken })).status).toBe(200);
 });
 

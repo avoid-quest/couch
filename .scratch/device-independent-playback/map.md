@@ -17,7 +17,8 @@ are superseded by assigning audio Devices to an individual Playback.
 
 A row is **PARTIAL** when a built-app journey covers some of it; it stays open until
 the complete capability has been observed. A test, simulated peer or screenshot alone
-does not complete a row.
+does not complete a row. The [software observations](model-software-observations-2026-09-27.md)
+record the earlier setup paths and their limitations.
 Record build revision, source, client/Device, steps, observed media/state, failure
 and recovery, and measured timing/resources where relevant. Separate actual device
 observations, software-output results and unavailable physical checks.

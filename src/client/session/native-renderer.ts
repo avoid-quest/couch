@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { PlaybackCommand, PlayerState } from "../../shared/protocol";
 
-type Options = { origin: string; ready: (nonce: string) => void; lease: (nonce: string) => void; error: () => void };
+type Options = { origin: string; ready: (nonce: string) => void; lease: (nonce: string) => void; error: (active: boolean) => void };
+const outputOccupied = new Set(["This computer is already playing from its own library.", "This computer's player is already in use.", "This computer is playing audio from another library."]);
 
 // The native watchdog owns lease expiry. Only a Core acknowledgement renews it.
 export function createNativeRenderer(observe: (state: PlayerState) => void, options: Options) {
@@ -13,7 +14,7 @@ export function createNativeRenderer(observe: (state: PlayerState) => void, opti
   let renewal: ReturnType<typeof setInterval> | undefined;
   let queue = Promise.resolve();
   const startup = setTimeout(() => fail(), 8_000);
-  const fail = () => { if (!disposed) { close(); options.error(); } };
+  const fail = () => { if (!disposed) { const active = generation !== null; close(); options.error(active); } };
   const enqueue = (operation: (generation: string) => Promise<void>) => {
     queue = queue.then(async () => {
       if (disposed || generation === null) return;
@@ -53,7 +54,17 @@ export function createNativeRenderer(observe: (state: PlayerState) => void, opti
         }), 2_000);
       });
     },
-    command(command: PlaybackCommand) { enqueue(async generation => { await invoke("native_receiver_command", { generation, command }); }); },
+    command(command: PlaybackCommand) { enqueue(async generation => {
+      try { await invoke("native_receiver_command", { generation, command }); }
+      catch (reason) {
+        const message = reason instanceof Error ? reason.message : String(reason);
+        if ((command.type === "prepare" || command.type === "load") && outputOccupied.has(message)) {
+          observe({ playbackId: command.playbackId, status: "error", position: 0, duration: null, volume: 100, seekable: false, error: message });
+          return;
+        }
+        throw reason;
+      }
+    }); },
     report() { enqueue(async generation => { await invoke("native_receiver_report", { generation }); }); },
     play() {},
     close,

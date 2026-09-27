@@ -4,6 +4,7 @@ import * as core from "@tauri-apps/api/core";
 import * as events from "@tauri-apps/api/event";
 import * as nativeRenderer from "./native-renderer";
 import type { ServerMessage } from "../../shared/protocol";
+import { desktopClientProtocol } from "../../shared/desktop-protocol";
 
 setupUiTests();
 
@@ -18,7 +19,7 @@ let device: NonNullable<ReturnType<typeof import("../sections/shell/PlaybackDevi
 let clock: import("./playback-clock").PlaybackClock;
 let installation = "remote-installation";
 let remoteRole: "controller" | "administrator" = "controller";
-let remoteProtocol = 1;
+let remoteProtocol = desktopClientProtocol;
 let remoteSharing = true;
 let mode: "local" | "remote" | null = "local";
 let invokeSpy: ReturnType<typeof spyOn>;
@@ -59,7 +60,7 @@ beforeEach(async () => {
   spyOn(nativeRenderer, "createNativeRenderer").mockImplementation(() => ({ renew() {}, command() {}, report() {}, play() {}, close() {} }));
   installation = "remote-installation";
   remoteRole = "controller";
-  remoteProtocol = 1;
+  remoteProtocol = desktopClientProtocol;
   remoteSharing = true;
   mode = "local";
   testWindow.happyDOM.setURL("http://tauri.localhost");
@@ -67,7 +68,7 @@ beforeEach(async () => {
   requests.length = Socket.instances.length = 0;
   globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   invokeSpy = spyOn(core, "invoke").mockImplementation(async <T,>(command: string, args?: core.InvokeArgs): Promise<T> => {
-    if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== 1) throw new Error("incompatible desktop client protocol");
+    if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== desktopClientProtocol) throw new Error("incompatible desktop client protocol");
     if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true, nativeReceiver: false } as T;
     if (command === "select_playback_device") { mode = (args as { mode: typeof mode }).mode; return { mode, address: remote, targets: [remote], localSetupComplete: true, nativeReceiver: false } as T; }
     if (command === "forget_playback_device") { mode = null; return { mode, address: null, targets: [], localSetupComplete: true } as T; }
@@ -79,7 +80,7 @@ beforeEach(async () => {
     const url = String(input), authorization = new Headers(init?.headers).get("Authorization");
     requests.push({ url, authorization });
     const selected = new URL(url);
-    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: selected.origin === local || remoteSharing, desktopClientProtocol: selected.origin === local ? 1 : remoteProtocol });
+    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: selected.origin === local || remoteSharing, desktopClientProtocol: selected.origin === local ? desktopClientProtocol : remoteProtocol });
     if (selected.pathname === "/api/controllers/me") return Response.json(selected.origin === local ? { authority: "host", controller: null, claimAvailable: false } : { authority: remoteRole, controller: { id: "paired", name: "Desktop client", role: remoteRole }, claimAvailable: false });
     if (selected.pathname === "/api/pair") return Response.json({ token: "remote-pairing", installationId: installation });
     if (selected.pathname === "/api/maintenance/frontend" || selected.pathname === "/api/activity") return new Response(null, { status: 204 });
@@ -96,7 +97,7 @@ test("switching playback targets never sends local owner credentials to a select
   await pairWith("123456");
   expect(Socket.instances.at(-1)?.url.origin).toBe("ws://192.168.1.20:4100");
   expect(Socket.instances.at(-1)?.url.searchParams.get("token")).toBe("remote-pairing");
-  expect(Socket.instances.at(-1)?.url.searchParams.get("clientProtocol")).toBe("1");
+  expect(Socket.instances.at(-1)?.url.searchParams.get("clientProtocol")).toBe(String(desktopClientProtocol));
   expect(Socket.instances.at(-1)?.url.searchParams.has("build")).toBe(false);
   expect(requests.filter(request => request.url.startsWith(remote) && request.authorization !== null).every(request => request.authorization === "Bearer remote-pairing")).toBe(true);
   expect(JSON.parse(localStorage.getItem(`couch.pairing:${remote}`)!)).toEqual({ token: "remote-pairing", installationId: installation });
@@ -151,10 +152,10 @@ test("a restart reloads the selected host and its paired authority", async () =>
 });
 
 test("Retry reconnects the bundled session after an incompatible host upgrades", async () => {
-  remoteProtocol = 2;
+  remoteProtocol = desktopClientProtocol + 1;
   await act(async () => { await device.choose("remote", remote); });
   expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: protocol-mismatch");
-  remoteProtocol = 1;
+  remoteProtocol = desktopClientProtocol;
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
   await waitFor(() => expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: pairing-required"));
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();

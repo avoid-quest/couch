@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../shared/protocol";
+import { desktopClientProtocol } from "../shared/desktop-protocol";
 import * as sessionModule from "./session";
 import * as storeModule from "./store";
 import { createHub, type Hub } from "./hub";
@@ -42,7 +43,7 @@ class Peer {
   player = { ...idle };
   holdEcho?: PlaybackCommand["type"];
   constructor(hub: Hub, token: string, playback = "default") {
-    this.socket = new BunSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=1&playback=${encodeURIComponent(playback)}`, { headers: { Origin: hub.origin } });
+    this.socket = new BunSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&clientProtocol=${desktopClientProtocol}&playback=${encodeURIComponent(playback)}`, { headers: { Origin: hub.origin } });
     this.socket.addEventListener("message", event => {
       const message = JSON.parse(String(event.data)) as ServerMessage;
       this.messages.push(message);
