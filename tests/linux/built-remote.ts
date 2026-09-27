@@ -130,7 +130,16 @@ try {
   const { ui } = remote;
   assert.equal(await ui.execute("return location.origin"), origin);
   assert.equal(await ui.execute("return !!window.__TAURI_INTERNALS__"), false);
+  await ui.button("Output");
+  await ui.button("Control", '[aria-label="Other playbacks"]');
   await ui.section("Now");
+  await ui.waitFor("browser shows the selected host playback's queue", () => ui.execute("return !!document.querySelector('[aria-label=\"Play Built remote fixture\"]')"));
+  const nativeDevice = latest?.devices?.find(device => device.id === "native");
+  assert.ok(nativeDevice?.connected, "The native output is available in Output");
+  await ui.button("Output");
+  await ui.click(`[aria-label="Devices"] [role="switch"][aria-label="${nativeDevice.name} output"]`);
+  await until("browser selects the native device through Output", () => latest?.deviceIds?.includes("native") === true);
+  await ui.button("Close", '[data-slot="sheet-content"]');
   await assertResponsive(ui, "Phone Up next");
   await ui.button(`Play ${entry.title}`);
   await until("browser Play reaches the coordinator and its native pipe", () => latest?.currentEntryId === entry.id && latest.player.status === "playing" && commands.some(command => command.type === "load" && command.source === entry.source));

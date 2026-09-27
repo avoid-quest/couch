@@ -189,14 +189,14 @@ native = await open("0", unavailable);
 try {
   await until("unavailable selected host exposes Try again", () => role(native.session, '//button[normalize-space(.)="Try again"]'), 30_000);
   await until("unavailable selected host exposes Use this computer", () => role(native.session, '//button[normalize-space(.)="Use this computer"]'));
-  assert.equal(await health(), false, "remote selection does not start a local playback host");
+  await until("remote recovery retains this computer's Core", health, 30_000);
   const window = await windowId();
   await closeWindow(window);
   await until("remote recovery Close minimizes", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Iconic"));
   const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: unavailable, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
   assert.equal(await second.exited, 0);
   await until("launcher restores remote recovery", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Normal") && await role(native.session, '//button[normalize-space(.)="Use this computer"]'));
-  assert.equal(await health(), false, "remote recovery never creates a local playback host");
+  assert.equal(await health(), true, "remote recovery keeps this computer's Core available");
 } finally { await closeDriver(native); }
 
 const selectedHost = "http://127.0.0.1:4201";
@@ -216,9 +216,8 @@ try {
   await writeFile(`${selected}/operating-mode.json`, JSON.stringify({ mode: "remote", address: selectedHost, targets: [selectedHost], localSetupComplete: true }));
   native = await open("0", selected);
   try {
-    await until("selected remote uses the bundled Couch window", () => role(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]'), 30_000);
+    await until("selected library uses the bundled Couch window", () => role(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]'), 30_000);
     assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "WebDriver exposes one app window");
-    assert.equal((await request(`/session/${native.session}/elements`, { using: "xpath", value: '//header[.//button[.//span[starts-with(normalize-space(.),"Playing on ")]]]' }) as unknown[]).length, 1, "Couch shows one app header");
     assert.equal(await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$").catch(() => ""), "", "No second remote OS window exists");
     const selectedWindow = await windowId();
     await command("xdotool", "windowmove", selectedWindow, "280", "180");
@@ -247,7 +246,7 @@ try {
     remoteHost.kill();
     await remoteHost.exited;
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"Offline. Reconnecting")]'), 30_000);
-    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
+    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]');
     await click(native.session, '//button[normalize-space(.)="Update Couch on this computer"]');
     await until("local updater loads while selected host is offline", () => role(native.session, `//div[@role="dialog"]//*[normalize-space(.)="${process.env.COUCH_SOURCE_REVISION}"]`), 30_000);
     await command("xdotool", "key", "Escape");
@@ -255,20 +254,23 @@ try {
     remoteHost = startSelectedHost();
     await until("selected host restarts", hostHealth, 30_000);
     await until("selected host recovery clears the offline notice", async () => !await role(native.session, '//*[@role="status" and contains(normalize-space(.),"Offline. Reconnecting")]'), 30_000);
-    assert.equal(await health(), false, "selected remote creates no local playback host");
-    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
+    assert.equal(await health(), true, "selected library keeps this computer's Core available");
+    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]');
     await click(native.session, '//button[@role="radio" and @aria-label="This computer"]');
-    await until("remote to local starts this computer", health, 30_000);
-    await click(native.session, '//button[normalize-space(.)="Playing here"]');
+    await until("local library is selected in the same window", () => role(native.session, '//button[.//span[normalize-space(.)="Couch on this computer"]]'), 30_000);
+    assert.equal(await health(), true, "switching libraries keeps this computer's Core available");
+    await click(native.session, '//button[.//span[normalize-space(.)="Couch on this computer"]]');
     await click(native.session, '//button[@role="radio" and @aria-label="http://127.0.0.1:4201"]');
-    await click(native.session, '//button[normalize-space(.)="Stop and switch"]');
-    await until("local to remote stops this computer", async () => !await health(), 30_000);
+    await until("remote library selection completes", async () => await role(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]') || await role(native.session, '//button[normalize-space(.)="Stop and switch"]'), 30_000);
+    if (await role(native.session, '//button[normalize-space(.)="Stop and switch"]')) await click(native.session, '//button[normalize-space(.)="Stop and switch"]');
+    await until("remote library is selected in the same window", () => role(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]'), 30_000);
+    assert.equal(await health(), true, "switching back to the remote library keeps this computer's Core available");
     await until("local to remote restores the paired shell", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
     assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "Switching keeps one OS window");
-    await until("remote-mode coordinator starts beside selected host", async () => (await processIds("couch-server")).length === 2, 30_000);
+    await until("local Core runs beside selected host", async () => (await processIds("couch-server")).length === 2, 30_000);
     const appPid = await processIds("couch"), hostPid = await processIds("couch-server");
     assert.equal(appPid.length, 1);
-    assert.equal(hostPid.length, 2, "selected host and remote-mode coordinator each have one process");
+    assert.equal(hostPid.length, 2, "selected host and this computer's Core each have one process");
     assert.ok(hostPid.includes(String(remoteHost.pid)));
     const mainWindow = await windowId();
     await closeWindow(mainWindow);
@@ -281,10 +283,10 @@ try {
     assert.deepEqual(await processIds("couch"), appPid);
     assert.deepEqual(await processIds("couch-server"), hostPid);
     await quitShortcut(mainWindow);
-    await until("remote-mode Quit closes app but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
+    await until("Quit closes this computer's Core but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
     await closeDriver(native);
     native = await open("0", selected);
-    await until("full relaunch retains the selected playback address", () => role(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]'), 30_000);
+    await until("full relaunch retains the selected library", () => role(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]'), 30_000);
     assert.equal(await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }), paired, "native pairing data survives full app restart");
     const restoredIdentity = await selectedIdentity();
     assert.equal(restoredIdentity.authority, "administrator", "selected host authority survives app restart");
@@ -292,7 +294,7 @@ try {
     await click(native.session, '//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Settings"]');
     await click(native.session, '//nav[@aria-label="Settings pages"]//a[normalize-space(.)="Updates"]');
     await until("restarted administrator sees selected-host update target", () => role(native.session, `//section[@aria-label="Settings"]//*[normalize-space(.)="${process.env.COUCH_SOURCE_REVISION}"]`));
-    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
+    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Connected to ")]]');
     await until("local update access stays separate after relaunch", () => role(native.session, '//button[normalize-space(.)="Update Couch on this computer"]'));
   } finally { await closeDriver(native); }
 } finally { remoteHost.kill(); await remoteHost.exited; }

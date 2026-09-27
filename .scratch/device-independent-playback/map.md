@@ -38,10 +38,11 @@ observations, software-output results and unavailable physical checks.
 | Sources and efficiency | Real supported native/provider/direct browser/HLS/DASH/live-DVR sources, audio/subtitle tracks and quality limits, with actionable capability failures; measure startup, seek, Move, cleanup, decoders and traffic. | PARTIAL — Sygma and Mux HLS observed, shared producer exited after Move. One native radio reopen stayed Loading; DASH/provider/track/quality coverage remains open. |
 | Physical audio | Measure speaker timing and output behavior on actual available devices. Software PCM/SDK evidence remains labeled separately. | PENDING |
 
-Implementation is in progress on the playback-model stack layer. Current code has a
-Playback catalog/default pointer and per-Playback Sendspin producers, with assignment
-behind `createPlaybackDevices`. The observations above are from build `33390923` and earlier recorded builds;
-subsequent fixes require a new built-app check. Migration, failure behavior, complete
+Implementation includes the Playback catalog, per-Playback Sendspin producers,
+the native output reservation and Library lifetime fixes, and one Output mixer.
+Device assignment stays behind `createPlaybackDevices`. Observations above are from
+build `33390923` and earlier recorded builds; subsequent fixes need a new built-app
+check. Migration, failure behavior, complete
 source coverage and physical measurements still require acceptance evidence. Follow
 [`docs/ci.md`](../../docs/ci.md) for relevant checks and `act` before dispatching
 workflow or packaging changes; do not merge or release here.
