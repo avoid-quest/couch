@@ -175,7 +175,7 @@ function useShellValue() {
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   // Terse, stable labels for the header's screen-reader status and the Play on popover.
   const statusLabel = booting ? "Starting" : {
-    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
+    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
   }[status];
 
   return {
@@ -223,6 +223,7 @@ function ConnectionStatus() {
     <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
   </>;
   if (status === "protocol-mismatch") return <Alert variant="destructive"><AlertDescription>{localHost ? PROTOCOL_MISMATCH : `Update this remote or ${name} so both run the same version.`}</AlertDescription>{recovery && <div className="flex flex-wrap gap-1 pt-1">{recovery}</div>}</Alert>;
+  if (status === "sharing-disabled") return <StatusLine actions={recovery}>Turn on Allow remote control on {name}.</StatusLine>;
   if (status === "connection-rejected") return <Alert variant="destructive"><AlertDescription>{name} refused this address. Open Couch at the address it shows.</AlertDescription></Alert>;
   if (status === "build-mismatch") return <StatusLine actions={<Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button>}>{name} was updated.</StatusLine>;
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
@@ -243,7 +244,7 @@ function PairingPage() {
   const name = deviceName(details?.name);
   return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Remotes → Pair a remote, then enter the code shown there.`}>
     {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This remote was removed. Pair again."}</AlertDescription></Alert>}
-    {status !== "protocol-mismatch" && <PairForm />}
+    {status !== "protocol-mismatch" && status !== "sharing-disabled" && <PairForm />}
   </Onboarding>;
 }
 

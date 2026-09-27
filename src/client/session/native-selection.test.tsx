@@ -18,6 +18,7 @@ let clock: import("./playback-clock").PlaybackClock;
 let installation = "remote-installation";
 let remoteRole: "controller" | "administrator" = "controller";
 let remoteProtocol = 1;
+let remoteSharing = true;
 let mode: "local" | "remote" | null = "local";
 let invokeSpy: ReturnType<typeof spyOn>;
 
@@ -57,6 +58,7 @@ beforeEach(async () => {
   installation = "remote-installation";
   remoteRole = "controller";
   remoteProtocol = 1;
+  remoteSharing = true;
   mode = "local";
   testWindow.happyDOM.setURL("http://tauri.localhost");
   Object.assign(window, { __COUCH_NATIVE_HOST__: true });
@@ -75,7 +77,7 @@ beforeEach(async () => {
     const url = String(input), authorization = new Headers(init?.headers).get("Authorization");
     requests.push({ url, authorization });
     const selected = new URL(url);
-    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol: selected.origin === local ? 1 : remoteProtocol });
+    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: selected.origin === local || remoteSharing, desktopClientProtocol: selected.origin === local ? 1 : remoteProtocol });
     if (selected.pathname === "/api/controllers/me") return Response.json(selected.origin === local ? { authority: "host", controller: null, claimAvailable: false } : { authority: remoteRole, controller: { id: "paired", name: "Desktop client", role: remoteRole }, claimAvailable: false });
     if (selected.pathname === "/api/pair") return Response.json({ token: "remote-pairing", installationId: installation });
     if (selected.pathname === "/api/maintenance/frontend" || selected.pathname === "/api/activity") return new Response(null, { status: 204 });
@@ -154,6 +156,27 @@ test("Retry reconnects the bundled session after an incompatible host upgrades",
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
   await waitFor(() => expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: pairing-required"));
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+});
+
+test("disabled remote control is reported by webview discovery before sending a pairing", async () => {
+  remoteSharing = false;
+  await act(async () => { await device.choose("remote", remote); });
+  expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: sharing-disabled");
+  expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization === null)).toBe(true);
+  remoteSharing = true;
+  await act(async () => gate.reconnect());
+  await waitFor(() => expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: pairing-required"));
+});
+
+test("disabled remote control does not send a saved pairing", async () => {
+  await act(async () => { await device.choose("remote", remote); });
+  await pairWith("123456");
+  requests.length = 0;
+  remoteSharing = false;
+  await act(async () => gate.reconnect());
+  expect(screen.getByRole("status", { name: "Session" }).textContent).toContain("remote: sharing-disabled");
+  expect(requests.some(request => request.url === `${remote}/api/connection`)).toBe(true);
+  expect(requests.every(request => request.authorization === null)).toBe(true);
 });
 
 

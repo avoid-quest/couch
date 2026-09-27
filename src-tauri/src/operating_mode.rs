@@ -8,7 +8,6 @@ use std::{
 };
 use tauri::{Manager, Url};
 
-const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
 const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -275,48 +274,16 @@ fn connection_client() -> reqwest::ClientBuilder {
         .redirect(reqwest::redirect::Policy::none())
 }
 
-async fn preflight(url: &Url) -> Result<(), String> {
+async fn check_lan_address(url: &Url) -> Result<(), String> {
+    // WebKit owns HTTP reachability; native DNS only enforces the LAN address policy.
     let resolve_url = url.clone();
-    let addresses = tokio::time::timeout(
+    tokio::time::timeout(
         Duration::from_secs(4),
         tauri::async_runtime::spawn_blocking(move || addresses(&resolve_url)),
     )
     .await
     .map_err(|_| "Finding that Couch timed out.")?
     .map_err(error)??;
-    let client = connection_client()
-        .timeout(Duration::from_secs(5))
-        .resolve_to_addrs(url.host_str().ok_or("Missing host")?, &addresses)
-        .build()
-        .map_err(error)?;
-    let mut response = client
-        .get(url.join("/api/connection").map_err(error)?)
-        .send()
-        .await
-        .map_err(|_| {
-            "Cannot reach that Couch. Check its current address and Allow remote control setting."
-        })?;
-    if !response.status().is_success() {
-        return Err(
-            "That Couch is unavailable or redirected the request. Use its current LAN address."
-                .into(),
-        );
-    }
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(error)? {
-        if body.len() + chunk.len() > 64 * 1024 {
-            return Err("That address did not return a supported Couch connection.".into());
-        }
-        body.extend_from_slice(&chunk);
-    }
-    let value: serde_json::Value = serde_json::from_slice(&body)
-        .map_err(|_| "That address did not return a Couch connection.")?;
-    if value["desktopClientProtocol"].as_u64() != Some(DESKTOP_CLIENT_PROTOCOL) {
-        return Err("Couch versions don't match. Update Couch on both computers, then try again or choose another address.".into());
-    }
-    if value["remoteControlEnabled"] == false {
-        return Err("Remote control is off. Turn on Allow remotes on that Couch, then try again.".into());
-    }
     Ok(())
 }
 
@@ -514,7 +481,7 @@ pub async fn retry_playback_device(
         Some(Mode::Local) => crate::start_local(&app),
         Some(Mode::Remote) => {
             crate::start_coordinator(&app, false)?;
-            preflight(&target(choice.address.as_deref().ok_or("Choose another Couch's address.")?)?).await
+            check_lan_address(&target(choice.address.as_deref().ok_or("Choose another Couch's address.")?)?).await
         }
         None => Ok(()),
     }
@@ -539,6 +506,17 @@ pub async fn complete_local_setup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn remote_address_does_not_require_a_native_http_connection() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        drop(listener);
+        assert!(
+            check_lan_address(&url).await.is_ok(),
+            "the webview owns remote reachability"
+        );
+    }
 
     #[test]
     fn remote_install_waits_for_recent_input_in_a_visible_focused_window() {
@@ -680,72 +658,6 @@ mod tests {
             Some("sharing")
         );
         assert!(interruption(&serde_json::json!({})).is_err());
-    }
-
-    #[tokio::test]
-    async fn entry_check_rejects_unsupported_ui_redirects_and_disabled_sharing() {
-        const ISOLATED: &str = "COUCH_TEST_MODE_TLS_ISOLATED";
-        if std::env::var_os(ISOLATED).is_none() {
-            // Updater tests install a process-wide provider and can hide missing mode initialization.
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "operating_mode::tests::entry_check_rejects_unsupported_ui_redirects_and_disabled_sharing", "--nocapture"])
-                .env(ISOLATED, "1")
-                .output().unwrap();
-            assert!(
-                output.status.success(),
-                "{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            return;
-        }
-        assert!(rustls::crypto::CryptoProvider::get_default().is_none());
-        async fn response(status: &str, body: &str) -> Result<(), String> {
-            use std::io::{Read, Write};
-            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
-            let response = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nLocation: http://8.8.8.8/\r\nConnection: close\r\n\r\n{body}", body.len());
-            let server = std::thread::spawn(move || {
-                let (mut stream, _) = listener.accept().unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                let mut request = [0; 4096];
-                let size = stream.read(&mut request).unwrap();
-                assert!(!String::from_utf8_lossy(&request[..size])
-                    .to_ascii_lowercase()
-                    .contains("authorization:"));
-                stream.write_all(response.as_bytes()).unwrap();
-            });
-            let result = preflight(&url).await;
-            server.join().unwrap();
-            result
-        }
-        assert!(response(
-            "200 OK",
-            r#"{"desktopClientProtocol":1,"remoteControlEnabled":true}"#
-        )
-        .await
-        .is_ok());
-        assert!(response("200 OK", r#"{"desktopClientProtocol":2}"#)
-            .await
-            .unwrap_err()
-            .contains("Couch versions don't match"));
-        assert!(response("200 OK", r#"{}"#)
-            .await
-            .unwrap_err()
-            .contains("Couch versions don't match"));
-        assert!(response(
-            "200 OK",
-            r#"{"desktopClientProtocol":1,"remoteControlEnabled":false}"#
-        )
-        .await
-        .unwrap_err()
-        .contains("Remote control is off"));
-        assert!(response("302 Found", "")
-            .await
-            .unwrap_err()
-            .contains("redirected"));
     }
 
     #[test]
