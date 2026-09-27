@@ -5,18 +5,21 @@ import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { isNativeHost } from "./native-context";
 import { createSendspinRenderer } from "./sendspin-renderer";
 import { fromSendspinVolume, toSendspinVolume } from "../../shared/audio-volume";
+import type { PlayerState } from "../../shared/protocol";
+import { followBrowserVideo, followNativeVideo } from "./video-audio-clock";
 
 type Hosting = { available: boolean; url?: string; serverId?: string };
 type Enrollment = { url: string; serverId: string; psk: string };
 type OutputLease = { playbackId: string; generation: string | null; renewal?: ReturnType<typeof setInterval> };
 
 /** Register quietly; native autoplay prepares audio, while browsers unlock on Play. */
-export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, onReady }: {
+export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, onReady, videoPlaybackOwner }: {
   credentials: (ApiCredentials & { installationId?: string }) | null;
   rendererTargetId: string | null;
   enabled: boolean;
   name: string;
   onReady: (ready: boolean) => void;
+  videoPlaybackOwner?: string;
 }) {
   const latestReady = useRef(onReady); latestReady.current = onReady;
   const latestName = useRef(name); latestName.current = name;
@@ -146,6 +149,44 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
     };
   }, [credentials?.origin, credentials?.token, credentials?.installationId, rendererTargetId, enabled, ready, restart, withLease]);
 
+  useEffect(() => {
+    if (!videoPlaybackOwner || !enabled || !connected) return;
+    const held = lease.current, active = client.current;
+    if (!held || held.playbackId !== videoPlaybackOwner || !active) return;
+    const readClock = () => {
+      const clock = active.audioClock;
+      return lease.current === held && client.current === active && clock?.groupId === `sendspin:${videoPlaybackOwner}` ? clock : null;
+    };
+    if (!isNativeHost()) {
+      const video = document.getElementById("couch-browser-video");
+      if (video instanceof HTMLVideoElement) return followBrowserVideo(video, () => video.dataset.playbackOwner === videoPlaybackOwner ? readClock() : null);
+      return;
+    }
+    if (!held.generation) return;
+    let disposed = false;
+    let observed: PlayerState | null = null;
+    let observedAt = 0;
+    let polling = false;
+    const authority = { generation: held.generation, playbackOwner: held.playbackId };
+    const poll = async () => {
+      if (polling || disposed) return;
+      polling = true;
+      try {
+        const next = await invoke<PlayerState | null>("native_video_state", authority);
+        if (!disposed) { observed = next; observedAt = performance.now(); }
+      } catch { if (!disposed) observed = null; }
+      finally { polling = false; }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 200);
+    const stop = followNativeVideo(() => observed ? { ...observed,
+      position: observed.position + (observed.status === "playing" ? (performance.now() - observedAt) / 1000 * (observed.speed ?? 1) : 0),
+    } : { playbackId: null, status: "idle", position: 0, duration: null }, command => {
+      if (!disposed && lease.current === held) return invoke("native_video_command", { ...authority, command });
+    }, readClock);
+    return () => { disposed = true; clearInterval(timer); stop(); };
+  }, [videoPlaybackOwner, enabled, connected]);
+
   const activateFromGesture = useCallback(() => {
     const active = client.current;
     if (!active || !connectedRef.current) return Promise.resolve(false);
@@ -167,7 +208,7 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
       if (held?.playbackId === playbackId) return;
       if (held) throw new Error("This device is already playing another playback.");
       if (!isNativeHost()) { lease.current = { playbackId, generation: null }; return; }
-      const started = await invoke<{ generation: string }>("native_audio_begin", { managed: true, ...(retiringPlaybackId ? { retiringPlaybackId } : {}) });
+      const started = await invoke<{ generation: string }>("native_audio_begin", { managed: true, playbackOwner: playbackId, ...(retiringPlaybackId ? { retiringPlaybackId } : {}) });
       if (attempt !== generation.current) {
         // Effect cleanup disconnects the SDK before ending this late lease.
         lease.current = { playbackId, generation: started.generation };

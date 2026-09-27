@@ -38,6 +38,9 @@ pub enum TrackKind {
 pub struct NativeOpenRequest {
     #[serde(default)]
     pub audio_output: Option<String>,
+    /// Decode and present video without opening any audio output.
+    #[serde(default)]
+    pub video_only: bool,
     /// Protocol and adapter version are required by protocol 1. They remain
     /// optional while deserializing so legacy JavaScript receives a deliberate
     /// protocol error instead of a generic invalid-payload rejection.

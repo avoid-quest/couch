@@ -17,6 +17,8 @@ pub enum Request {
     Command(PlaybackCommand),
     RemoteCommand { generation: String, command: PlaybackCommand },
     RemoteObserve(String),
+    VideoState { generation: String, playback_owner: String, reply: tokio::sync::oneshot::Sender<Option<PlayerState>> },
+    VideoCommand { generation: String, playback_owner: String, command: PlaybackCommand, reply: tokio::sync::oneshot::Sender<Result<(), String>> },
     Layout,
     Observe,
     Diagnostics(String),
@@ -42,6 +44,25 @@ const RECONCILE_STARTED_LOAD: &str = "Native load started after its reply wait. 
 
 fn is_rejected_control(command: &PlaybackCommand) -> bool {
     !matches!(command, PlaybackCommand::Load { .. } | PlaybackCommand::Stop)
+}
+
+fn load_permitted(command: &PlaybackCommand, lease: Option<&crate::AudioOutputLease>) -> bool {
+    match command {
+        PlaybackCommand::Load { playback_owner, video_only, .. } => match lease {
+            Some(lease) => lease.permits_load(playback_owner.as_deref(), *video_only),
+            None => !video_only,
+        },
+        _ => true,
+    }
+}
+
+fn video_authorized(app: &AppHandle, owner: &RendererOwner, lease: Option<&crate::AudioOutputLease>, player: &Player, generation: &str, playback_owner: &str) -> bool {
+    player.video_only && player.playback_owner.as_deref() == Some(playback_owner) && player.state.playback_id.is_some() && lease.is_some_and(|lease| {
+        lease.generation == generation && lease.playback_owner.as_deref() == Some(playback_owner) && lease.authority.permits(owner)
+    }) && match owner {
+        RendererOwner::LocalCore => true,
+        RendererOwner::Remote(receiver) => crate::native_receiver::valid(app, receiver),
+    }
 }
 
 enum CommandError {
@@ -85,12 +106,39 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
         };
         let host = app.state::<Host>();
         let owner = host.renderer_owner.lock().expect("renderer owner lock poisoned");
-        let audio = host.audio_output.lock().expect("audio output lock poisoned").as_ref().map(|lease| lease.authority.clone());
+        let audio = host.audio_output.lock().expect("audio output lock poisoned").clone();
         let request = match request {
+            Ok(Request::VideoState { generation, playback_owner, reply }) => {
+                let state = video_authorized(&app, &owner, audio.as_ref(), &player, &generation, &playback_owner)
+                    .then(|| player.state.clone());
+                let _ = reply.send(state);
+                continue;
+            }
+            Ok(Request::VideoCommand { generation, playback_owner, command, reply }) => {
+                let playback_id = match &command {
+                    PlaybackCommand::Pause { playback_id, .. } | PlaybackCommand::Seek { playback_id, .. } | PlaybackCommand::Speed { playback_id, .. } => Some(playback_id.as_str()),
+                    _ => None,
+                };
+                let result = if !video_authorized(&app, &owner, audio.as_ref(), &player, &generation, &playback_owner)
+                    || playback_id != player.state.playback_id.as_deref() {
+                    Err("This silent video playback is no longer active.".into())
+                } else {
+                    player.command(&app, command)
+                };
+                if result.is_ok() {
+                    *host.player_state.lock().expect("player state lock poisoned") = player.state.clone();
+                    drop(owner);
+                    host.report(&app, &player.state);
+                    reported = Some(player.state.clone());
+                }
+                let _ = reply.send(result);
+                continue;
+            }
             Ok(Request::RemoteCommand { generation, command }) => {
                 let idle_volume = matches!(command, PlaybackCommand::Volume { .. }) && *owner == RendererOwner::LocalCore && host.idle();
                 if !crate::native_receiver::valid(&app, &generation) || (*owner != RendererOwner::Remote(generation.clone()) && !idle_volume) { continue; }
-                if audio.as_ref().is_some_and(|authority| !authority.permits(&RendererOwner::Remote(generation.clone()))) { continue; }
+                if audio.as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::Remote(generation.clone()))) { continue; }
+                if !load_permitted(&command, audio.as_ref()) { continue; }
                 Ok(Request::Command(command))
             }
             Ok(Request::RemoteObserve(generation)) => {
@@ -102,9 +150,13 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                 let _ = command;
                 continue;
             }
-            Ok(Request::Command(command)) if audio.as_ref().is_some_and(|authority| !authority.permits(&RendererOwner::LocalCore)) => {
+            Ok(Request::Command(command)) if audio.as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::LocalCore)) => {
                 log::warn!("Ignored a local Core command while this computer is playing audio from another source");
                 let _ = command;
+                continue;
+            }
+            Ok(Request::Command(command)) if !load_permitted(&command, audio.as_ref()) => {
+                log::warn!("Ignored a native load that could use another playback's audio output");
                 continue;
             }
             other => other,
@@ -114,7 +166,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             Ok(Request::Observe | Request::Command(PlaybackCommand::Stop))
         );
         let result = match request {
-            Ok(Request::RemoteCommand { .. } | Request::RemoteObserve(_)) => unreachable!(),
+            Ok(Request::RemoteCommand { .. } | Request::RemoteObserve(_) | Request::VideoState { .. } | Request::VideoCommand { .. }) => unreachable!(),
             Ok(Request::Readiness { nonce, deadline }) => {
                 let ok = player.readiness(&app, deadline).is_ok();
                 let build = serde_json::from_str::<serde_json::Value>(
@@ -235,6 +287,8 @@ struct Player {
     rect: VideoRect,
     segment: Option<PlaybackSegment>,
     session_key: Option<String>,
+    playback_owner: Option<String>,
+    video_only: bool,
 }
 
 impl Player {
@@ -257,6 +311,7 @@ impl Player {
     fn command(&mut self, app: &AppHandle, command: PlaybackCommand) -> Result<(), String> {
         match command {
             PlaybackCommand::Prepare { playback_id, next } => {
+                if self.video_only { return Ok(()); }
                 self.prepare(app, playback_id, next)?;
                 Ok(())
             }
@@ -264,6 +319,8 @@ impl Player {
             PlaybackCommand::AudioPause => self.control(app, "audioPause", 0.0, -1),
             PlaybackCommand::Load {
                 audio_output,
+                playback_owner,
+                video_only,
                 playback_id,
                 source,
                 headers,
@@ -279,6 +336,8 @@ impl Player {
                 event_start,
             } => {
                 self.segment = segment;
+                self.playback_owner = playback_owner;
+                self.video_only = video_only;
                 self.reconciling_started_load = false;
                 self.session_key = Some(playback_id.clone());
                 let start_position = segment.map(|bounds| bounds.absolute(start_position.filter(|position| *position < bounds.duration()).unwrap_or(0.0))).or(start_position);
@@ -294,6 +353,7 @@ impl Player {
                     &headers,
                     audio_source.as_deref(),
                     audio_output.as_deref(),
+                    video_only,
                     max_video_height,
                     start_position,
                     paused,
@@ -354,6 +414,7 @@ impl Player {
                 index,
             } => {
                 if self.state.playback_id.as_deref() == Some(&playback_id) {
+                    if self.video_only && kind == TrackKind::Audio { return Err("Audio selection belongs to the shared audio producer.".into()); }
                     if kind == TrackKind::Subtitle && index == -1 {
                         self.control(app, "subtitlesOff", 0.0, -1)?;
                     } else if matches!(kind, TrackKind::Audio | TrackKind::Subtitle)
@@ -404,6 +465,8 @@ impl Player {
             }
             PlaybackCommand::Stop => {
                 self.segment = None;
+                self.playback_owner = None;
+                self.video_only = false;
                 self.reconciling_started_load = false;
                 let result = self.close(app);
                 if result.is_ok() {
@@ -444,6 +507,7 @@ impl Player {
         headers: &BTreeMap<String, String>,
         audio_source: Option<&str>,
         audio_output: Option<&str>,
+        video_only: bool,
         max_video_height: Option<u16>,
         start_position: Option<f64>,
         paused: bool,
@@ -463,6 +527,7 @@ impl Player {
             "headers": headers,
             "audioUri": audio_source,
             "audioOutput": audio_output,
+            "videoOnly": video_only,
             "maxVideoHeight": max_video_height,
             "startPosition": start_position,
             "endPosition": self.segment.map(|bounds| bounds.end),
@@ -719,6 +784,7 @@ impl Player {
         _: &BTreeMap<String, String>,
         _: Option<&str>,
         _: Option<&str>,
+        _: bool,
         _: Option<u16>,
         _: Option<f64>,
         _: bool,

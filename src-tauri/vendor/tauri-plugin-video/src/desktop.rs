@@ -1917,6 +1917,7 @@ mod linux_mpv {
         player.start_seen = false;
         player.radio = payload.radio;
         crate::mpv_tracks::reset(&player.mpv, payload.max_video_height)?;
+        player.mpv.set_property("aid", if payload.video_only { "no" } else { "auto" }).map_err(mpv_error)?;
         crate::mpv_subtitles::reset(&player.mpv, &payload.preferences)?;
         player.replay_gain.reset(&player.mpv, payload.preferences.replay_gain)?;
         player.pending_subtitles.clone_from(&payload.subtitles);

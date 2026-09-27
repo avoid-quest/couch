@@ -318,7 +318,7 @@ test.each([false, true])("native receiver registration waits for begin and basel
   expect(sockets.at(-1)!.readyState).toBe(Socket.OPEN);
 });
 
-test("native video follows a new committed owner, but initial and manual playback views stay put", async () => {
+test("native video presents a committed move after local playback selection", async () => {
   spyOn(nativeContext, "isNativeHost").mockReturnValue(true);
   nativeReceiver = true; desktopProtocol = currentDesktopProtocol;
   let observe!: (state: SessionState["player"]) => void;
@@ -332,9 +332,11 @@ test("native video follows a new committed owner, but initial and manual playbac
   const view = (sessionId: string, owner?: string): SessionState => ({ ...state, sessionId, devices: [{ ...device, playbackId: owner }], deviceIds: [], playbacks: owner ? [{ id: owner, title: "Movie", status: "paused", deviceIds: [device.id] }] : [] });
   await act(async () => peer.emit({ type: "state", state: view("household", "old") }));
   await act(async () => peer.emit({ type: "rendererRegistered", sessionId: "household", targetId: device.id }));
+  expect(peer.sent.at(-1) as unknown).toEqual({ type: "selectPlayback", playbackId: "old" });
+  await act(async () => peer.emit({ type: "state", state: view("old", "old") }));
   await act(async () => observe({ ...state.player, playbackId: "old-transport", status: "paused", tracks: [{ id: "video", index: 0, kind: "video", label: "", language: "", selected: true }] }));
-  await act(async () => peer.emit({ type: "state", state: view("household", "old") }));
-  expect((peer.sent as unknown as Array<{ type: string }>).filter(message => message.type === "selectPlayback")).toEqual([]);
+  await act(async () => peer.emit({ type: "state", state: view("old", "old") }));
+  expect(session.presentNativeVideo).toBeNull();
 
   await act(async () => session.selectPlayback("manual"));
   await act(async () => peer.emit({ type: "state", state: view("manual", "old") }));
@@ -350,6 +352,30 @@ test("native video follows a new committed owner, but initial and manual playbac
   await act(async () => peer.emit({ type: "state", state: view("manual", "new") }));
   expect(session.playbackId).toBe("manual");
   expect(session.presentNativeVideo).toBeNull();
+});
+
+test("a participating device follows its playback while explicit remote control stays selected until assignment changes", async () => {
+  const peer = sockets[0]!;
+  const view = (sessionId: string, assigned: string): SessionState => ({ ...state, sessionId,
+    devices: [{ id: "speaker", name: "Speaker", connected: true, volume: 50, muted: false, audio: true, playbackId: assigned }],
+    playbacks: [{ id: assigned, title: "Shared", status: "playing", deviceIds: ["speaker"] }],
+    deviceIds: sessionId === assigned ? ["speaker"] : [] });
+  await act(async () => peer.emit({ type: "rendererRegistered", sessionId: "household", targetId: "speaker" }));
+  await act(async () => peer.emit({ type: "state", state: view("household", "shared") }));
+  expect(peer.sent.at(-1) as unknown).toEqual({ type: "selectPlayback", playbackId: "shared" });
+  await act(async () => peer.emit({ type: "state", state: view("shared", "shared") }));
+  expect(session.state?.sessionId).toBe("shared");
+  expect(session.scopedCredentials?.playbackId).toBe("shared");
+
+  await act(async () => session.selectPlayback("elsewhere"));
+  await act(async () => peer.emit({ type: "state", state: view("elsewhere", "shared") }));
+  expect(session.playbackId).toBe("elsewhere");
+  expect((peer.sent as unknown as Array<{ type: string }>).filter(message => message.type === "selectPlayback")).toHaveLength(2);
+
+  await act(async () => peer.emit({ type: "state", state: view("elsewhere", "new-shared") }));
+  expect(peer.sent.at(-1) as unknown).toEqual({ type: "selectPlayback", playbackId: "new-shared" });
+  await act(async () => peer.emit({ type: "state", state: view("new-shared", "new-shared") }));
+  expect(session.scopedCredentials?.playbackId).toBe("new-shared");
 });
 
 test("initial native output failure keeps control connected and retries only when output becomes available", async () => {

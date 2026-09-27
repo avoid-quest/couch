@@ -22,9 +22,9 @@ const viewKey = "couch.playback-view";
 function rememberedPlayback(credentials: Credentials | null) {
   try {
     const saved = JSON.parse(sessionStorage.getItem(viewKey) ?? "null");
-    if (credentials && sameCredentials(saved?.owner, credentials) && typeof saved?.playbackId === "string") return saved.playbackId as string;
+    if (credentials && sameCredentials(saved?.owner, credentials) && typeof saved?.playbackId === "string") return { playbackId: saved.playbackId as string, explicit: saved.explicit === true };
   } catch { /* Storage is optional; a fresh window selects its default. */ }
-  return "default";
+  return { playbackId: "default", explicit: false };
 }
 
 // getRandomValues also works on the plain HTTP origins used by LAN remotes.
@@ -34,8 +34,9 @@ export function createId() {
 
 export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true, onDeviceAudioOutput?: (request: DeviceAudioOutputRequest) => Promise<void>) {
   const outputHandler = useRef(onDeviceAudioOutput); outputHandler.current = onDeviceAudioOutput;
-  const [selection, setSelection] = useState(() => ({ owner: credentials, playbackId: rememberedPlayback(credentials) }));
-  const playbackId = sameCredentials(selection.owner, credentials) ? selection.playbackId : rememberedPlayback(credentials);
+  const [selection, setSelection] = useState(() => ({ owner: credentials, ...rememberedPlayback(credentials) }));
+  const selected = sameCredentials(selection.owner, credentials) ? selection : rememberedPlayback(credentials);
+  const playbackId = selected.playbackId;
   const currentPlayback = useRef(playbackId);
   currentPlayback.current = playbackId;
   const [ownerPlayback, setOwnerPlayback] = useState<string | null>(null);
@@ -65,6 +66,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [nativeVideo, setNativeVideo] = useState<string | null>(null);
   const [presentNativeVideo, setPresentNativeVideo] = useState<{ owner: string; transport: string } | null>(null);
   const committedNativeOwner = useRef<{ target: string; owner: string | null; video: string | null } | null>(null);
+  const localAssignment = useRef<{ credentials: Credentials; target: string; playbackId: string | null } | null>(null);
 
   useEffect(() => {
     setRendererTargetId(null);
@@ -415,26 +417,39 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, [credentials?.origin, credentials?.token, credentials?.installationId, playbackId]);
 
-  const selectPlayback = useCallback((id: string, presentation?: { owner: string; transport: string }) => {
+  const selectPlayback = useCallback((id: string, explicit = true) => {
     if (!id) return;
-    if (id === currentPlayback.current) { if (presentation) setPresentNativeVideo(presentation); return; }
-    ready.current = false;
-    currentPlayback.current = id;
-    observation.current = null;
-    setState(null);
-    setOwnerPlayback(null);
-    setClock(emptyPlaybackClock);
-    setAudioActivationRequired(false);
-    setPresentNativeVideo(presentation ?? null);
-    for (const request of pending.current.values()) {
-      clearTimeout(request.timer);
-      request.reject(new Error("Playback selection changed."));
+    if (id === currentPlayback.current) {
+      if (!explicit) return;
+    } else {
+      ready.current = false;
+      currentPlayback.current = id;
+      observation.current = null;
+      setState(null);
+      setOwnerPlayback(null);
+      setClock(emptyPlaybackClock);
+      setAudioActivationRequired(false);
+      setPresentNativeVideo(null);
+      for (const request of pending.current.values()) {
+        clearTimeout(request.timer);
+        request.reject(new Error("Playback selection changed."));
+      }
+      pending.current.clear();
+      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "selectPlayback", playbackId: id }));
     }
-    pending.current.clear();
-    if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "selectPlayback", playbackId: id }));
-    try { sessionStorage.setItem(viewKey, JSON.stringify({ owner: credentials, playbackId: id })); } catch { /* Selection still works until this window reloads. */ }
-    setSelection({ owner: credentials, playbackId: id });
+    try { sessionStorage.setItem(viewKey, JSON.stringify({ owner: credentials, playbackId: id, explicit })); } catch { /* Selection still works until this window reloads. */ }
+    setSelection({ owner: credentials, playbackId: id, explicit });
   }, [credentials]);
+
+  useEffect(() => {
+    const target = trustedLocal ? "native" : rendererTargetId;
+    if (!credentials || !target || !state?.playbacks) return;
+    const assigned = state.playbacks.find(playback => playback.deviceIds.includes(target))?.id ?? null;
+    const previous = localAssignment.current;
+    const first = !previous || !sameCredentials(previous.credentials, credentials);
+    localAssignment.current = { credentials, target, playbackId: assigned };
+    if (assigned && (first ? !selected.explicit : previous.target !== target || previous.playbackId !== assigned)) selectPlayback(assigned, false);
+  }, [credentials, rendererTargetId, trustedLocal, state, selected.explicit, selectPlayback]);
 
   useEffect(() => {
     if (!nativeReceiver || !rendererAttached || !rendererTargetId || !state?.devices) { committedNativeOwner.current = null; return; }
@@ -443,10 +458,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     if (!previous || previous.target !== rendererTargetId) { committedNativeOwner.current = { target: rendererTargetId, owner, video: nativeVideo }; return; }
     if (owner === previous.owner) return;
     committedNativeOwner.current = { target: rendererTargetId, owner, video: nativeVideo };
-    // The renderer can prepare video before assignment. Follow only a later,
-    // committed owner change backed by a new local video observation.
-    if (owner && nativeVideo && nativeVideo !== previous.video) selectPlayback(owner, { owner, transport: nativeVideo });
-  }, [nativeReceiver, rendererAttached, rendererTargetId, state, nativeVideo, selectPlayback]);
+    // Present only a committed video move; control selection follows all local assignments above.
+    if (owner && nativeVideo && nativeVideo !== previous.video) setPresentNativeVideo({ owner, transport: nativeVideo });
+  }, [nativeReceiver, rendererAttached, rendererTargetId, state, nativeVideo]);
 
   const setDeviceAudioReady = useCallback((audioReady: boolean) => {
     const connection = rendererSocket;

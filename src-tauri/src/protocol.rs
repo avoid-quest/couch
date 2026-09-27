@@ -77,6 +77,10 @@ pub enum PlaybackCommand {
     Load {
         #[serde(default)]
         audio_output: Option<String>,
+        #[serde(default)]
+        playback_owner: Option<String>,
+        #[serde(default)]
+        video_only: bool,
         playback_id: String,
         source: String,
         #[serde(default)]

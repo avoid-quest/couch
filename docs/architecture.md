@@ -43,6 +43,10 @@ migrating. Restored intent stays resumable without claiming hardware or autoplay
 The browser profile stores credentials per origin; a different origin/profile needs
 its own pairing. The window's selected Playback is retained in session storage for
 refresh, scoped to the same credentials; changing that view never assigns a Device.
+On attachment and assignment changes, a participating client follows its Device's
+Playback. An explicit remote-control choice remains until the next local assignment
+change. Joining adds this Device atomically to the chosen Playback and then selects
+its controls; there is no primary controller.
 
 ## Assignment and media
 
@@ -53,9 +57,12 @@ audio devices are implementation choices behind that same assignment. One Playba
 can use several synchronized audio Devices; multiple Playbacks get separate Sendspin
 timelines. Device ownership is global so a Device cannot silently join competing
 Playbacks. The serialized `sendspin:<playback-id>` target is internal and never a
-user-facing destination. Removing down to one direct-capable Device moves the
-current item back to its ordinary player, so the next video has no lingering
-audio-only backend. Standalone audio-only endpoints retain their Sendspin adapter.
+user-facing destination. For video, the same assignment retains one silent picture
+renderer and uses Sendspin for sound on the selected Devices. The selected picture
+Device is published with the Playback so other audio participants show controls and
+media information rather than an empty video surface. Removing down to one
+direct-capable Device returns to ordinary playback after the audio output drains.
+Standalone audio-only endpoints retain their Sendspin adapter.
 
 The registry fences late observations by authenticated connection and playback
 attempt. Moving prepares the destination paused, checks compatible tracks and seek,
@@ -82,8 +89,12 @@ returns an actionable playback error through both command and HTTP entry points.
 The native window can browse another Library while this installation's Core keeps
 running. Core ownership of libmpv is independent of the selected Library: enrollment
 alone does not claim or stop it. Before adding a native Device to Sendspin, its owning
-client reserves the machine's audio output. That reservation permits the same Core's
-verified direct/audio handoff and blocks another Core from starting competing output.
+client reserves the machine's audio output. The reservation carries the durable
+Playback owner. It permits silent video for that exact owner and blocks a competing
+audible decoder. Native video loads use mpv's `aid=no`; ordinary loads restore audio
+only after the shared output is released. The local Sendspin clock feeds the maintained
+`timingsrc` media synchronizer through browser and native observation adapters.
+Readiness still comes from the actual renderer, separately from clock following.
 Expiry fences the output until the SDK disconnects and acknowledges release. Closing
 or changing the controlled Playback does not retire the SDK. Switching Libraries while
 this window supplies audio or remote native playback requires an explicit stop-and-switch

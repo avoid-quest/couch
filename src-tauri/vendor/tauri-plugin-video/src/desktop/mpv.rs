@@ -320,6 +320,7 @@ fn validate_open(request: &NativeOpenRequest) -> Result<()> {
 
 fn configure_media(mpv: &Mpv, request: &NativeOpenRequest) -> Result<()> {
     crate::mpv_tracks::reset(mpv, request.max_video_height)?;
+    mpv.set_property("aid", if request.video_only { "no" } else { "auto" }).map_err(mpv_error)?;
     crate::mpv_radio::NetworkDefaults::read(mpv)?.configure(mpv, request.radio)?;
     crate::mpv_iptv::LiveStartDefaults::read(mpv)?.configure(
         mpv,
@@ -471,6 +472,7 @@ impl<R: Runtime> Worker<R> {
             next: None,
             cue: request.end_position.is_some(),
             can_prepare_next: request.audio_uri.is_none()
+                && !request.video_only
                 && request.max_video_height.is_none()
                 && !request.radio
                 && !request.go_live

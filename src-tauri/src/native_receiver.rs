@@ -167,6 +167,15 @@ pub fn native_receiver_renew(window: tauri::WebviewWindow, app: tauri::AppHandle
 pub fn native_receiver_command(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, command: PlaybackCommand) -> Result<(), String> {
     crate::operating_mode::trusted(&window)?;
     if !valid(&app, &generation) { return Err("Native receiver expired.".into()); }
+    if let PlaybackCommand::Load { playback_owner, video_only, .. } = &command {
+        if let Some(lease) = app.state::<Host>().audio_output.lock().unwrap().as_ref() {
+            if !lease.permits_load(playback_owner.as_deref(), *video_only) {
+                return Err("This computer's audio belongs to another playback.".into());
+            }
+        } else if *video_only {
+            return Err("Silent video requires this playback's audio reservation.".into());
+        }
+    }
     if matches!(command, PlaybackCommand::Prepare { .. } | PlaybackCommand::Load { .. }) {
         app.state::<Host>().claim_remote(&generation)?;
     }
@@ -201,7 +210,7 @@ pub async fn native_receiver_end(window: tauri::WebviewWindow, app: tauri::AppHa
 }
 
 #[tauri::command]
-pub fn native_audio_begin(window: tauri::WebviewWindow, app: tauri::AppHandle, managed: Option<bool>, retiring_playback_id: Option<String>) -> Result<StartedAudio, String> {
+pub fn native_audio_begin(window: tauri::WebviewWindow, app: tauri::AppHandle, managed: Option<bool>, playback_owner: Option<String>, retiring_playback_id: Option<String>) -> Result<StartedAudio, String> {
     crate::operating_mode::trusted(&window)?;
     let receiver = app.state::<Receiver>();
     let _operation = receiver.operation.lock().unwrap();
@@ -215,7 +224,7 @@ pub fn native_audio_begin(window: tauri::WebviewWindow, app: tauri::AppHandle, m
     } else {
         AudioAuthority::External
     };
-    app.state::<Host>().claim_audio(&generation, authority, retiring_playback_id.as_deref())?;
+    app.state::<Host>().claim_audio(&generation, authority, playback_owner.as_deref(), retiring_playback_id.as_deref())?;
     *receiver.audio.lock().unwrap() = Some((generation.clone(), Instant::now() + LEASE, false));
     Ok(StartedAudio { generation })
 }
@@ -249,6 +258,22 @@ pub fn native_audio_end(window: tauri::WebviewWindow, app: tauri::AppHandle, gen
         app.state::<Host>().release_audio(&app, &generation);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn native_video_state(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, playback_owner: String) -> Result<Option<PlayerState>, String> {
+    crate::operating_mode::trusted(&window)?;
+    let (reply, result) = tokio::sync::oneshot::channel();
+    app.state::<Host>().player.send(player::Request::VideoState { generation, playback_owner, reply }).map_err(|error| error.to_string())?;
+    tokio::time::timeout(Duration::from_secs(2), result).await.map_err(|_| "Native video did not respond.".to_string())?.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn native_video_command(window: tauri::WebviewWindow, app: tauri::AppHandle, generation: String, playback_owner: String, command: PlaybackCommand) -> Result<(), String> {
+    crate::operating_mode::trusted(&window)?;
+    let (reply, result) = tokio::sync::oneshot::channel();
+    app.state::<Host>().player.send(player::Request::VideoCommand { generation, playback_owner, command, reply }).map_err(|error| error.to_string())?;
+    tokio::time::timeout(Duration::from_secs(2), result).await.map_err(|_| "Native video did not respond.".to_string())?.map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]

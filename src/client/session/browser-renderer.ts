@@ -78,6 +78,8 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
         cleanup();
         const video = element();
         video.pause();
+        video.dataset.playbackOwner = command.videoOnly ? command.playbackOwner ?? "" : "";
+        video.muted = !!command.videoOnly;
         try { const saved = Number(localStorage.getItem("couch.browser-volume") ?? volume); if (Number.isFinite(saved)) video.volume = volume = Math.min(1, Math.max(0, saved)); } catch { /* Storage is optional. */ }
         load = command; dash = isAdaptiveSource(command.source); fatal = false; failure = null; requiresGesture = false; initializing = true; initialSeek = false; buffering = false;
         dashSpeed = command.preferences?.speed ?? 1;
@@ -138,6 +140,7 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
             player.addEventListener("error", event => { if (event.detail?.severity === 2) fail(event.detail.code); });
             for (const event of ["trackschanged", "audiotrackschanged", "adaptation", "variantchanged", "textchanged", "manifestupdated"]) player.addEventListener(event, notify);
             player.configure({
+              ...(command.videoOnly ? { manifest: { disableAudio: true } } : {}),
               ...(command.preferences?.audioLanguage ? { preferredAudio: [{ language: command.preferences.audioLanguage }] } : {}),
               preferredText: command.preferences?.subtitles === "auto" && command.preferences.subtitleLanguage ? [{ language: command.preferences.subtitleLanguage }] : [],
               accessibility: { handleForcedSubtitlesAutomatically: false },

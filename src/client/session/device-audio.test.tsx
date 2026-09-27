@@ -23,7 +23,7 @@ beforeEach(() => {
   spyOn(adapter, "createSendspinRenderer").mockImplementation((config, callbacks) => {
     const instance = { config, callbacks, connect: mock(async () => {}), unlock: mock(async () => {}), disconnect: mock(async () => {}) };
     clients.push(instance);
-    return { clientId: "sdk-client", preload: async () => {}, setEnrollment: () => {}, connect: instance.connect,
+    return { clientId: "sdk-client", audioClock: null, preload: async () => {}, setEnrollment: () => {}, connect: instance.connect,
       unlockFromGesture: instance.unlock, connectFromGesture: instance.connect, disconnect: instance.disconnect,
       setVolume: () => {}, setMuted: () => {}, transport: () => false, openPairingWindow: () => {} };
   });

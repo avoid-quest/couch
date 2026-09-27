@@ -66,6 +66,7 @@ export type SessionGateValue = SessionBag & {
   deviceAudio: ReturnType<typeof useDeviceAudio>;
   externalAudio: ReturnType<typeof useSendspinClient>;
   assignDevices: (deviceIds: string[], takeover?: boolean) => Promise<boolean>;
+  joinPlayback: (playbackId: string) => Promise<boolean>;
   newPlayback: (deviceId: string) => Promise<boolean>;
   activateDeviceAudio: () => Promise<boolean>;
   setDeviceVolume: (deviceId: string, volume: number, muted: boolean) => Promise<boolean>;
@@ -135,8 +136,12 @@ export function SessionGate({ children }: PropsWithChildren) {
     else await output.release(request.playbackId);
   });
   const localDeviceId = rendererTargetId ?? (localHost ? "native" : null);
+  const videoAssignment = useRef<{ credentials: Credentials | null; owner?: string }>({ credentials: null });
+  if (videoAssignment.current.credentials !== credentials) videoAssignment.current = { credentials };
+  if (state?.playbacks) videoAssignment.current.owner = state.playbacks.find(playback => playback.videoDeviceId === localDeviceId)?.id;
   const deviceAudio = useDeviceAudio({ credentials, rendererTargetId: localDeviceId, enabled: !externalOutput && (rendererAttached || localHost && connected) && !!credentials && !pairingRequired,
-    name: clientDeviceName(identity?.controller?.name), onReady: setDeviceAudioReady });
+    name: clientDeviceName(identity?.controller?.name), onReady: setDeviceAudioReady,
+    videoPlaybackOwner: videoAssignment.current.owner });
   deviceAudioRef.current = deviceAudio;
   const externalAudio = useSendspinClient({ credentials, allowed: !!credentials && !pairingRequired, canActivate: () => connected, borrow: async () => {
     const snapshot = readObservation();
@@ -303,16 +308,31 @@ export function SessionGate({ children }: PropsWithChildren) {
     catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
   }, [command, localDeviceId, activateDeviceAudio]);
 
+  const joinPlayback = useCallback(async (id: string) => {
+    const owner = credentials;
+    if (!owner || !localDeviceId || !id) return false;
+    const current = () => owner.origin === currentCredentials.current?.origin && owner.token === currentCredentials.current?.token && owner.installationId === currentCredentials.current?.installationId;
+    setError(null);
+    void activateDeviceAudio();
+    try {
+      await apiSend(owner, `/api/playbacks/${encodeURIComponent(id)}/join`, { deviceId: localDeviceId });
+      if (!current()) return false;
+      selectPlayback(id);
+      return true;
+    } catch (reason) { if (current()) setError(errorText(reason)); return false; }
+  }, [credentials, localDeviceId, activateDeviceAudio, selectPlayback]);
+
   const newPlayback = useCallback(async (deviceId: string) => {
     const owner = currentCredentials.current;
     if (!owner) return false;
+    const current = () => owner.origin === currentCredentials.current?.origin && owner.token === currentCredentials.current?.token && owner.installationId === currentCredentials.current?.installationId;
     if (deviceId === localDeviceId) void activateDeviceAudio();
     try {
       const created = await apiSend<{ id: string }>(owner, "/api/playbacks", { deviceId });
-      if (owner !== currentCredentials.current || !created.id) return false;
+      if (!current() || !created.id) return false;
       selectPlayback(created.id);
       return true;
-    } catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
+    } catch (reason) { if (current()) setError(errorText(reason)); return false; }
   }, [localDeviceId, activateDeviceAudio, selectPlayback]);
 
   const setDeviceVolume = useCallback(async (deviceId: string, volume: number, muted: boolean) => {
@@ -392,10 +412,10 @@ export function SessionGate({ children }: PropsWithChildren) {
   const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
   const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
-    deviceAudio, externalAudio, assignDevices, newPlayback, activateDeviceAudio, setDeviceVolume,
+    deviceAudio, externalAudio, assignDevices, joinPlayback, newPlayback, activateDeviceAudio, setDeviceVolume,
     playbackId, selectPlayback, presentNativeVideo, scopedCredentials, rendererTargetId: localDeviceId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, queryClient, nativeHost, localHost, nativeReceiver, tvPresentation, credentials: scopedCredentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [deviceAudio, externalAudio, assignDevices, newPlayback, activateDeviceAudio, setDeviceVolume, playbackId, selectPlayback, presentNativeVideo, scopedCredentials, localDeviceId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  }), [deviceAudio, externalAudio, assignDevices, joinPlayback, newPlayback, activateDeviceAudio, setDeviceVolume, playbackId, selectPlayback, presentNativeVideo, scopedCredentials, localDeviceId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

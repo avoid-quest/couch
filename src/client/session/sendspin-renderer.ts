@@ -105,6 +105,12 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
   };
   return {
     get clientId() { return clientId; },
+    get audioClock() {
+      if (!player?.isConnected || !player.timeSyncInfo.synced) return null;
+      const progress = player.trackProgress;
+      const groupId = lastState?.group.group_id;
+      return progress && groupId ? { groupId, positionMs: progress.positionMs, playbackSpeed: progress.playbackSpeed } : null;
+    },
     preload() {
       return loading ??= (options.loadLibrary ?? (() => import("@sendspin/sendspin-js")))().then(loaded => {
         if (disposed) return;

@@ -8,6 +8,7 @@ setupUiTests();
 let client: ReturnType<typeof useSendspinClient>;
 let callbacks: Parameters<typeof adapter.createSendspinRenderer>[1];
 const renderer = {
+  audioClock: null,
   clientId: "sdk-client", preload: mock(async () => {}), setEnrollment: mock(() => {}),
   connect: mock(async () => {}), unlockFromGesture: mock(async () => {}),
   connectFromGesture: mock(async () => {}), disconnect: mock(async () => {}),

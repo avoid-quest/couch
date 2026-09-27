@@ -89,6 +89,13 @@ enum AudioAuthority {
 struct AudioOutputLease {
     generation: String,
     authority: AudioAuthority,
+    playback_owner: Option<String>,
+}
+
+impl AudioOutputLease {
+    fn permits_load(&self, playback_owner: Option<&str>, video_only: bool) -> bool {
+        video_only && playback_owner.is_some() && playback_owner == self.playback_owner.as_deref()
+    }
 }
 
 impl AudioAuthority {
@@ -181,7 +188,10 @@ impl Host {
         Ok(true)
     }
 
-    fn claim_audio(&self, generation: &str, authority: AudioAuthority, retiring_playback_id: Option<&str>) -> Result<(), String> {
+    fn claim_audio(&self, generation: &str, authority: AudioAuthority, playback_owner: Option<&str>, retiring_playback_id: Option<&str>) -> Result<(), String> {
+        if authority != AudioAuthority::External && playback_owner.is_none_or(str::is_empty) {
+            return Err("The audio reservation has no playback owner.".into());
+        }
         let owner = self.renderer_owner.lock().expect("renderer owner lock poisoned");
         if self.switching_library.load(Ordering::SeqCst) { return Err("Wait for this computer to finish switching libraries.".into()); }
         let state = self.player_state.lock().expect("player state lock poisoned");
@@ -198,7 +208,7 @@ impl Host {
         }
         let mut output = self.audio_output.lock().expect("audio output lock poisoned");
         if output.is_some() { return Err("This computer's audio is already in use.".into()); }
-        *output = Some(AudioOutputLease { generation: generation.to_owned(), authority: authority.clone() });
+        *output = Some(AudioOutputLease { generation: generation.to_owned(), authority: authority.clone(), playback_owner: playback_owner.map(str::to_owned) });
         drop(output);
         drop(state);
         if idle_for_authority && *owner == RendererOwner::LocalCore && authority != AudioAuthority::LocalCore {
@@ -795,6 +805,8 @@ pub fn run() {
             native_receiver::native_audio_begin,
             native_receiver::native_audio_renew,
             native_receiver::native_audio_end,
+            native_receiver::native_video_state,
+            native_receiver::native_video_command,
             set_video_rect,
             choose_media,
             choose_folder,
