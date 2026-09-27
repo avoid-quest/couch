@@ -9,7 +9,7 @@ export type ClientPlayerState = Omit<SessionState["player"], "position" | "durat
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
 export type Credentials = { origin: string; token: string; installationId?: string };
-export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
+export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "sharing-disabled" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
@@ -74,13 +74,14 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       let playbackClock = false;
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
-        const response = await fetch(`${origin}/api/connection`, { signal });
+        const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
         if (!response.ok) throw new Error("Server unavailable");
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
         playbackClock = next.playbackClock === 1;
         setConnectionDetails({ origin, details: next });
         if (desktopProtocol && next.desktopClientProtocol !== desktopProtocol) { setStatus("protocol-mismatch"); setState(null); setIdentity(null); return; }
+        if (desktopProtocol && next.remoteControlEnabled === false) { setStatus("sharing-disabled"); setState(null); setIdentity(null); retry = setTimeout(() => void connect(), 5_000); return; }
         if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
         if (authenticate && credentials) {
           const asset = buildKey(loadedBuild);
@@ -244,7 +245,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     const controller = new AbortController();
     void (async () => {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
-      const discovery = await fetch(`${credentials.origin}/api/connection`, { signal });
+      const discovery = await fetch(`${credentials.origin}/api/connection`, { signal, redirect: "error" });
       if (!discovery.ok) return;
       const next = await discovery.json() as ConnectionDetails;
       if (controller.signal.aborted || !sameCredentials(credentials, currentCredentials.current)) return;
@@ -292,5 +293,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }
