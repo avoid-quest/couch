@@ -108,21 +108,21 @@ export function HomePage() {
     return true;
   };
 
-  const { pausable, transportReady, active: transportActive } = playbackCapabilities(state, connected);
+  const { pausable, resumable, transportReady, active: transportActive } = playbackCapabilities(state, connected);
   const paused = player?.status === "paused";
   const live = !!(current?.live || current?.kind === "radio");
   const playingArt = programme?.playbackId === player?.playbackId && programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : current && art(current);
   const playingStatus = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
-    : [sourceLabel(current.source), paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
+    : [sourceLabel(current.source), resumable ? "Ready to resume" : paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
 
   const rows: Record<HomeRowId, ReactNode> = {
     now: current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}
         detail={!live && length ? <span className="flex items-center gap-3 text-sm tabular-nums text-muted-foreground"><Progress value={(playbackClock.position ?? 0) / length * 100} aria-label="Playback progress" className="h-1 max-w-xs flex-1 rounded-none bg-muted [&_[data-slot=progress-indicator]]:bg-foreground" />{formatDuration(playbackClock.position ?? 0)} / {formatDuration(length)}</span> : undefined}>
         <Button data-page-first onClick={() => shell.changeSection("Now")}>Open player</Button>
-        <Button variant="ghost" disabled={!connected || (pausable ? !transportReady : !transportActive)} onClick={() => { if (!pausable) void run({ type: "stop" }); else if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>
-          {!pausable ? <Square aria-hidden="true" className="fill-current" /> : paused ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}{!pausable ? "Stop" : paused ? "Play" : "Pause"}
+        <Button variant="ghost" disabled={!connected || (resumable ? false : pausable ? !transportReady : !transportActive)} onClick={() => { if (resumable) { if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: false }); else void run({ type: "play", entryId: current.id }); } else if (!pausable) void run({ type: "stop" }); else if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>
+          {!pausable && !resumable ? <Square aria-hidden="true" className="fill-current" /> : paused || resumable ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}{!pausable && !resumable ? "Stop" : paused || resumable ? "Play" : "Pause"}
         </Button>
       </Feature>
     </HomeRow>,

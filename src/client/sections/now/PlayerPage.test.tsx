@@ -487,6 +487,7 @@ test("unavailable browser playback names its renderer even in the local native s
   expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
   const reconnected = { ...unavailable, devices: unavailable.devices.map(device => ({ ...device, connected: true })) };
   await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: reconnected }}><PlayerPage /></ShellProviders>));
+  expect(screen.getByText("Press Play to resume on Kitchen phone")).toBeInTheDocument();
   await userEvent.setup().click(screen.getByRole("button", { name: "Play" }));
   expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: false }]);
 });

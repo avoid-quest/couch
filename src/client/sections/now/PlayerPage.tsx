@@ -65,7 +65,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
   useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus(); }, [queueOpen]);
-  const { transportReady, pausable } = playbackCapabilities(state, connected);
+  const { transportReady, pausable, resumable } = playbackCapabilities(state, connected);
   const couchName = deviceName(state?.installationName);
   const name = selectedDevices.join(", ") || couchName;
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
@@ -141,7 +141,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.source.startsWith("file:") || current?.source.startsWith("library:") ? "The file is missing from its folder." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
-  const status = !current ? null : unavailable ? { title: selectedDevices.length ? `Player not running on ${name}` : deviceIds.length ? "Player not running on the selected device" : "Choose devices to resume playback", detail: "Browsing and Up next still work." }
+  const status = !current ? null : unavailable ? { title: resumable ? `Press Play to resume on ${selectedDevices.join(", ") || name}` : selectedDevices.length ? `Player not running on ${selectedDevices.join(", ")}` : deviceIds.length ? "Player not running on the selected device" : "Choose devices to resume playback", detail: resumable ? "" : "Browsing and Up next still work." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }
     : retry ? { title: `Reconnecting to ${current.title}`, detail: `Retrying in ${retrySeconds} s (${retry.attempt} of ${retry.maximum})`, busy: true }
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }

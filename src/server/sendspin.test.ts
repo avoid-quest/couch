@@ -85,7 +85,7 @@ test("real decoded PCM preserves queued stop/load, pause seek/speed and fences a
   await until(() => f.player.status === "paused", "paused after drain");
   f.playback.send({ type: "seek", playbackId: "tone", position: 3 });
   f.playback.send({ type: "speed", playbackId: "tone", speed: 1.25 });
-  await until(() => f.player.position === 3 && f.player.speed === 1.25, "queued paused seek and speed");
+  await until(() => f.player.status === "paused" && f.player.position === 3 && f.player.speed === 1.25, "queued paused seek and speed");
   frequencies.fill(0);
   f.playback.send({ type: "pause", playbackId: "tone", paused: false });
   await until(() => frequencies.every(hz => Math.abs(hz - 880) < 60), "both decoded880");

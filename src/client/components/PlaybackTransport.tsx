@@ -24,6 +24,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   return {
     available,
+    resumable: available && player?.status === "unavailable" && !!current,
     volume: devices.length ? devices.reduce((total, device) => total + device.volume, 0) / devices.length : player?.volume ?? 0,
     muted: devices.length ? devices.every(device => device.muted) : state?.systemAudio?.muted ?? false,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),

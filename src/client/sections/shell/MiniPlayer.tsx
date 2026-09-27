@@ -43,7 +43,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   if (!current) return null;
-  const { available, active, transportReady, nextReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
+  const { available, active, resumable, transportReady, nextReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
   const paused = player.status === "paused";
   const ended = player.status === "ended";
   const live = current.live || current.kind === "radio" || current.source.startsWith("radio:");
@@ -52,6 +52,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const status = !connected ? offline(state.installationName)
     : player.status === "error" ? `Can't play ${current.title}`
     : player.status === "loading" ? "Loading…"
+    : resumable ? "Ready to resume"
     : player.status === "unavailable" ? (state as typeof state & { deviceIds?: string[] })?.deviceIds?.length === 0 ? "Choose devices" : "Player unavailable"
     : player.status === "ended" ? "Finished"
     : player.status === "idle" ? "Ready to play"
@@ -72,7 +73,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
     </Button>
     <div className="grid min-w-0 justify-items-center">
       <div className="flex items-center gap-0.5" role="group" aria-label="Playback controls">
-        {pausable || ended ? <Button variant="ghost" size="icon" aria-label={ended ? "Replay" : paused ? "Play" : "Pause"} title={ended ? "Replay" : paused ? "Play" : "Pause"} disabled={ended ? !available : !transportReady} onClick={() => { if (ended) void run({ type: "play", entryId: current.id, fromStart: true }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>{ended ? <RotateCcw aria-hidden="true" className="size-5" /> : paused ? <Play aria-hidden="true" className="size-5 fill-current" /> : <Pause aria-hidden="true" className="size-5 fill-current" />}</Button>
+        {pausable || ended || resumable ? <Button variant="ghost" size="icon" aria-label={ended ? "Replay" : paused || resumable ? "Play" : "Pause"} title={ended ? "Replay" : paused || resumable ? "Play" : "Pause"} disabled={ended || resumable ? !available : !transportReady} onClick={() => { if (ended) void run({ type: "play", entryId: current.id, fromStart: true }); else if (resumable && !player.playbackId) void run({ type: "play", entryId: current.id }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: resumable ? false : !paused }); }}>{ended ? <RotateCcw aria-hidden="true" className="size-5" /> : paused || resumable ? <Play aria-hidden="true" className="size-5 fill-current" /> : <Pause aria-hidden="true" className="size-5 fill-current" />}</Button>
           : <Button variant="ghost" size="icon" aria-label="Stop" title="Stop" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="size-4 fill-current" /></Button>}
         {hasNext && <Button variant="ghost" size="icon" aria-label="Next" title="Next" disabled={!nextReady} onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="size-4 fill-current" /></Button>}
       </div>
