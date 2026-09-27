@@ -283,6 +283,8 @@ try {
     assert.deepEqual(await processIds("couch"), appPid);
     assert.deepEqual(await processIds("couch-server"), hostPid);
     await quitShortcut(mainWindow);
+    await until("remote-library Quit confirms this computer's active sharing", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "Quit Couch\\?").catch(() => "")).length > 0);
+    await command("xdotool", "key", "Return");
     await until("Quit closes this computer's Core but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
     await closeDriver(native);
     native = await open("0", selected);
