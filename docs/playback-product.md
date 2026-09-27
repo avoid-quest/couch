@@ -17,8 +17,9 @@ controlling it and the devices rendering it. Several playbacks can run concurren
 Every participating device controls the playback it is playing: media selection,
 queue, transport and membership are shared. Joining or being added to a playback
 updates those controls without changing the page being browsed. There is no primary
-controller. Output offers joining an existing playback directly, or controlling it
-without joining. An explicit remote-control choice remains until another choice or
+controller. Home's Now view shows ongoing playback and its devices. Opening one
+shows its player and queue without joining or starting a local decoder. Joining is
+a contextual action on that playback. The opened playback remains selected until another choice or
 a new local assignment. Opening Couch starts nothing and takes over nothing.
 Pairing authorizes playback control for that library; administration remains a
 separate permission. An independent device keeps its own playback. A client's
@@ -30,7 +31,8 @@ and device loudness. It handles these operations directly:
 
 - Play media on this device by default, or choose another available device.
 - Control an existing playback without changing its devices or fetching its media.
-- Move playback to a device while preserving the ongoing experience.
+- Move playback to a device, including an existing participant, while preserving the
+  ongoing experience and retiring the previous outputs.
 - Add or remove compatible audio devices from that same playback.
 - Watch video on one selected screen with its sound on all selected audio devices.
 - Start another playback on a device while other playbacks keep running.
