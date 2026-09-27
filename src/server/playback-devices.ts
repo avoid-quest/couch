@@ -103,7 +103,7 @@ export function createPlaybackDevices(options: Options) {
     guard();
     const state = snapshot(runtime);
     const requested = ids.map(id => { const device = state.devices.find(device => device.id === id); if (!device?.connected) throw new Error("That device is disconnected. Open Couch there and try again."); return device; });
-    const shared = ids.length > 1 || ids.length === 1 && runtime.session.state.targetId?.startsWith("sendspin:") && assigned(runtime).includes(ids[0]!);
+    const shared = ids.length > 1;
     if (shared && requested.some(device => !device.audio)) throw new Error("These devices cannot play audio together. Choose one device to move playback.");
     if (shared && runtime.session.state.player.playbackId && !runtime.session.audioOnly) throw new Error("Video plays on one screen. Choose a device to move it there.");
     const occupied = options.runtimes().filter(other => other !== runtime && assigned(other).some(id => ids.includes(id)));
