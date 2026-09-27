@@ -13,8 +13,8 @@ It can run without a local player. The standalone desktop bundles Core and its n
 player; a browser or an additional paired native client can connect to another Core.
 Browser, desktop and TV use the same application window/navigation/player model.
 Connecting a window to a Library, selecting a Playback in that window, and assigning
-Devices to the Playback are separate operations. Opening a window does none of the
-last two implicitly. Local hardware controls belong to the named machine; its
+Devices to the Playback are separate operations. Opening a window follows its
+existing assignment without starting media or changing any Device. Local hardware controls belong to the named machine; its
 installation maintenance stays local.
 
 The implementation currently uses these seams:
@@ -63,6 +63,10 @@ Device is published with the Playback so other audio participants show controls 
 media information rather than an empty video surface. Removing down to one
 direct-capable Device returns to ordinary playback after the audio output drains.
 Standalone audio-only endpoints retain their Sendspin adapter.
+
+Explicit assignment operations own the catalog's selected Devices. Transport
+membership and disconnect observations report availability; they never rewrite that
+selection. This preserves the intended devices through shutdown and reconnect.
 
 The registry fences late observations by authenticated connection and playback
 attempt. Moving prepares the destination paused, checks compatible tracks and seek,
@@ -126,8 +130,8 @@ SDK stop/clear and bounded drain are software-output evidence, not physical spea
 silence or measured acoustic synchronization.
 The client SDK has no stream-start fade option. The PCM adapter therefore applies
 a 10 ms fade to each new listener's first block, keeping its timestamp and every
-ongoing listener's samples unchanged. This is an audible-transition mitigation;
-the reported phone pop still needs physical confirmation on the rebuilt app.
+ongoing listener's samples unchanged. The user confirmed phone and Mac radio were
+audible without the earlier pop on build `7b6be47a`; this is not a timing measurement.
 
 ## Qualification still open
 
