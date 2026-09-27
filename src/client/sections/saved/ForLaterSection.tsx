@@ -14,7 +14,7 @@ import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dn
 import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
-import { apiSend } from "@/api/client";
+import { apiSend, type ApiCredentials } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
 
@@ -26,8 +26,7 @@ export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: s
 
 type Mode = "play" | "append" | "remove";
 
-export function ForLaterSection({ origin, token, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: {
-  origin: string; token: string; connected: boolean; canPlay: boolean;
+export function ForLaterSection({ origin, token, sessionMode, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: ApiCredentials & { connected: boolean; canPlay: boolean;
   /** Shown as the empty state's next step. */
   onFind?: () => void;
   /** A visible section title (Find). Saved titles the tab with its PageHeader. */
@@ -41,7 +40,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   const session = useOptionalSessionGate();
   const details = useDetailNavigation();
   const queryClient = useQueryClient();
-  const credentials = { origin, token };
+  const credentials = { origin, token, sessionMode };
   const refresh = () => queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
   const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery(credentials), enabled: connected });
   const reorder = useMutation({

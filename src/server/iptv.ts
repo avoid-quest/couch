@@ -9,6 +9,9 @@ import { ADMIN_ONLY } from "./messages";
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => ControllerIdentity | null;
+export type GuidePlaybackContext = Readonly<{
+  enqueue: (channel: GuideChannel, playNow: boolean, authorize: () => void, playedBy?: PlaybackActor) => void;
+}>;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
 const publicChannel = ({ streamUrl: _stream, logoUrl: _logo, ...channel }: PrivateChannel): GuideChannel => channel;
@@ -18,8 +21,9 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   fetch?: typeof fetch;
   onChange?: () => void;
   onSourcesChanged?: (channelIds: string[]) => void;
-  enqueue?: (channel: GuideChannel, playNow: boolean, authorize: () => void, playedBy?: PlaybackActor) => void;
+  enqueue?: GuidePlaybackContext["enqueue"];
 }) {
+  const playback = { enqueue };
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
@@ -169,7 +173,8 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         throw new GuideError("Couldn't check this channel's live playlist. Use Play.", 502);
       }
     },
-    async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
+    async handle(req: Request, identity: Identity, playedBy?: PlaybackActor, context?: GuidePlaybackContext): Promise<Response> {
+      const { enqueue } = context ?? playback;
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this remote first.", 401); return value; };
       const administrator = () => { if (caller().authority === "controller") throw new GuideError(ADMIN_ONLY, 403); };
       try {

@@ -19,7 +19,7 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 | Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. The compiled executable runs independently with the documented Linux systemd unit. |
 | Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. The bundled sidecar follows the standalone app; an independent Core can serve explicitly enrolled native receivers. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
-| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. A configured local Snapcast group receives paced PCM; Sendspin remains work. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. A configured Snapcast group receives bounded PCM; Snapcast owns synchronization. |
 
 Server capabilities and target capabilities are separate. Available behavior
 depends on permissions, enabled integrations/helpers, source access and the selected
@@ -43,15 +43,24 @@ selection must stay distinct. The serialized `clientOnly` artifact field remains
 
 ## Playback ownership and delivery
 
-The current implementation has one Core-owned household session. Core owns queue,
-intent, assignment and persisted progress; the assigned renderer supplies observed
-position and playback state. UI clients receive snapshots and compact playback
-clocks over the existing authenticated WebSocket. They do not each own a competing
-queue. Multiple simultaneous/private sessions are a later extension.
+Core owns the existing household session and an optional personal session for each
+paired controller. Personal queue, profiles, progress, continuation and checkpoints
+use a private playback store; library/configuration/scanners remain shared. The
+assigned renderer supplies observed position and playback state. Authenticated HTTP
+and WebSocket requests select household or the caller's own personal scope; private
+snapshots, clocks and playback notices stay within that scope. Watching profiles
+are preferences, not authentication identities.
+
+A single output registry reserves endpoints and group members before asynchronous
+operations. Independent playback starts in the caller's personal session. Moving
+playback retains that session's queue; joining a household group selects its existing
+timeline. An occupied destination requires explicit takeover and confirmed silence.
+Closing or revoking a personal session retires its resources without stopping other
+sessions. Restoring persisted sessions never automatically claims hardware.
 
 | Code | Boundary |
 | --- | --- |
-| `src/server/hub.ts`, `store.ts` | Authorization, integrations, persistence and protocol dispatch. |
+| `src/server/hub.ts`, `store.ts`, `session-store.ts` | Shared services, authenticated runtime selection and isolated playback persistence. |
 | `src/server/session.ts`, `progress.ts` | Queue policy, resolution, intent and progress continuity. |
 | `src/server/playback-targets.ts` | Optional native endpoint, socket-owned browser and paired native endpoints, assignment and handoff. |
 | `src/client/session/session.ts`, `browser-renderer.ts` | UI connection and browser rendering above route lifetime. |
@@ -98,10 +107,10 @@ Most sources are remote. Prefer provider-to-renderer delivery; Core does not nee
 to carry the media bytes to coordinate playback. Keep idle controllers inexpensive
 through lazy rendering and compact clock updates. Choose an existing compatible
 rendition before adding relay, remuxing or transcoding for a demonstrated need.
-The browser handles compatible direct HTTP(S) media and public DASH through a lazy
+The browser handles compatible direct HTTP(S) media and public DASH/HLS through a lazy
 Shaka adapter. Media fetch and decoding belong to the selected client; Core owns
-source references and playback intent. Alternate audio, subtitles and live/DVR
-capabilities are being added at this renderer boundary. An unsupported source stays
+source references and playback intent. Alternate audio and subtitles use the maintained track APIs; live playback starts
+at the live edge and seeks within the observed DVR range. An unsupported source stays
 explicitly unsupported until a client/provider-native path is available. The new
 Jellyfin browser relay/adaptation experiment was abandoned by user instruction;
 existing native provider integration remains compatible.
@@ -115,7 +124,11 @@ silence acknowledgement. Uncertain control/ingestion blocks transfer until a fre
 connection resets the backend; reconnect never autoplays. A durable marker also
 fences new playback for 750ms after Core restart. Removed speakers are assigned to
 an idle stream, and active foreign groups cannot be silently taken over. See
-[Snapcast configuration and limits](snapcast.md). Sendspin remains a separate adapter.
+[Snapcast configuration and limits](snapcast.md).
+
+Sendspin integration is being revised around Couch's existing TypeScript/Rust stack.
+The Python server-helper experiment is archived. Official JS/Rust libraries expose
+client roles; hosting a group and joining an existing group are separate capabilities.
 
 For client playback API questions, consult
 [browser delivery research](research/browser-media-delivery.md) selectively. Its relay

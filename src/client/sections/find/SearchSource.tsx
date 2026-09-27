@@ -61,7 +61,7 @@ export function SearchSource({ source, query, ...props }: Props & { source: Sour
     finally { if (!signal?.aborted) setPending(false); }
   }
   const blocked = (item: Result) => !props.connected || !item.available || loading || pending;
-  const save = (item: Result) => <SaveForLater origin={props.origin} token={props.token} connected={props.connected} reference={{ kind: source === "Library" ? "library" : "jellyfin", id: item.id }} title={item.title} />;
+  const save = (item: Result) => <SaveForLater {...props} reference={{ kind: source === "Library" ? "library" : "jellyfin", id: item.id }} title={item.title} />;
   useEffect(() => {
     const hits: SearchHit[] = items.map(item => ({ id: `${source}:${item.id}`, source: label, title: item.title, meta: [item.detail, label].filter(Boolean).join(" · "), description: item.plot ?? undefined, ...facet(item), position: item.position, artworkId: item.artworkId, video: item.video,
       primary: { label: item.position ? "Resume" : "Play", disabled: !props.canPlay || blocked(item), run: () => void enqueue(item, { playNow: true }) },

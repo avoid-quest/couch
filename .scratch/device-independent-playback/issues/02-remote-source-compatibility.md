@@ -26,3 +26,13 @@ Real browser playback can choose available audio/subtitles, handle finite/live s
 ranges correctly and recover/transfer without competing playback. Direct media bytes
 flow provider-to-client. Tests cover cleanup, stale attempts and idle controllers.
 The supported-source record distinguishes tested behavior from unsupported features.
+
+## Client implementation — 2026-09-27
+
+Public DASH/HLS now uses maintained browser track APIs with stable command indices,
+subtitle off, live-edge start and observed DVR bounds. The existing player timeline
+accepts a seek range with unknown duration. Real T3 browser checks covered alternate
+audio, active subtitle cues/off, seek/rate, route continuity, direct HLS requests and
+Stop cleanup. Receipts: `.artifacts/browser-manifest-proof`. Native caption contrast
+and footer overlap are recorded presentation limits. Provider authentication/CORS
+and codec restrictions remain explicit client/source constraints.

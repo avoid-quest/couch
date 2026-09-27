@@ -62,6 +62,91 @@ const player = (overrides: Partial<PlayerState> = {}): PlayerState => ({
 });
 
 describe("Jellyfin source", () => {
+  test("playback contexts isolate matching attempt IDs, preparation and closure", async () => {
+    const upstream = fixture(), jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "one")).source.slice(9);
+    const first = jellyfin.createPlayback(), second = jellyfin.createPlayback();
+    await Promise.all([first.resolve(reference, "shared", undefined, true), second.resolve(reference, "shared", undefined, true)]);
+    await first.observe(player({ playbackId: "shared", position: 10 }));
+    await second.observe(player({ playbackId: "shared", position: 20 }));
+    const canceled = new AbortController();
+    await Promise.all([first.resolve(reference, "next", canceled.signal, true, true), second.resolve(reference, "next", undefined, true, true)]);
+    canceled.abort();
+    first.activatePrepared("next");
+    second.activatePrepared("next");
+    await second.observe(player({ playbackId: "next", position: 30 }));
+    await first.close();
+    await first.close();
+    await expect(first.resolve(reference, "closed")).rejects.toThrow("playback is closed");
+    await second.observe(player({ playbackId: "next", position: 40, status: "paused" }));
+    const reports = upstream.requests.filter(request => request.path.startsWith("/Sessions/Playing"));
+    expect(reports.filter(request => request.path.endsWith("/Stopped")).map(request => request.body?.PositionTicks)).toEqual([200_000_000, 100_000_000]);
+    expect(reports.at(-1)).toMatchObject({ path: "/Sessions/Playing/Progress", body: { PositionTicks: 400_000_000 } });
+    expect((await jellyfin.getItem(itemId))?.id).toBe(itemId);
+    expect(upstream.requests.some(request => request.path === "/Sessions/Logout")).toBe(false);
+    await second.close();
+  });
+
+  test("a blocked report chain cannot stall another playback context", async () => {
+    const entered = Promise.withResolvers<void>(), blocked = Promise.withResolvers<void>();
+    let wait = true;
+    const upstream = fixture({ reportWait: async () => { if (wait) { wait = false; entered.resolve(); await blocked.promise; } } });
+    const jellyfin = source(); await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "one")).source.slice(9);
+    const first = jellyfin.createPlayback(), second = jellyfin.createPlayback();
+    await first.resolve(reference, "first", undefined, true);
+    const report = first.observe(player({ playbackId: "first", position: 11 }));
+    await entered.promise;
+    try {
+      await Promise.race([
+        (async () => { await second.resolve(reference, "second", undefined, true); await second.observe(player({ playbackId: "second", position: 22 })); await second.close(); })(),
+        Bun.sleep(500).then(() => { throw new Error("Independent playback was blocked by another reporter"); }),
+      ]);
+      expect(upstream.requests.filter(request => request.path.endsWith("/Stopped")).map(request => request.body?.PositionTicks)).toEqual([220_000_000]);
+    } finally { blocked.resolve(); await report; await first.close(); }
+  });
+
+  test("closing a resolving context cancels only its own generation", async () => {
+    const entered = Promise.withResolvers<void>(), blocked = Promise.withResolvers<void>();
+    let wait = true;
+    const upstream = fixture({ playbackWait: async () => { if (wait) { wait = false; entered.resolve(); await blocked.promise; } } });
+    const jellyfin = source(); await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "one")).source.slice(9);
+    const first = jellyfin.createPlayback(), second = jellyfin.createPlayback();
+    const resolving = first.resolve(reference, "first", undefined, true);
+    await entered.promise;
+    await first.close();
+    await second.resolve(reference, "second", undefined, true);
+    blocked.resolve();
+    await expect(resolving).rejects.toThrow("playing item changed");
+    await second.observe(player({ playbackId: "second", position: 22 }));
+    expect(upstream.requests.filter(request => request.path === "/Sessions/Playing")).toHaveLength(1);
+    await second.close();
+  });
+
+  for (const change of ["connect", "disconnect", "close"] as const) test(`${change} retires every playback context`, async () => {
+    const upstream = fixture(), jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "one")).source.slice(9);
+    const first = jellyfin.createPlayback(), second = jellyfin.createPlayback();
+    await Promise.all([first.resolve(reference, "first", undefined, true), second.resolve(reference, "second", undefined, true)]);
+    await first.observe(player({ playbackId: "first", position: 11 }));
+    await second.observe(player({ playbackId: "second", position: 22 }));
+    if (change === "connect") await jellyfin.connect(credentials(upstream.url));
+    else await jellyfin[change]();
+    await first.observe(player({ playbackId: "first", position: 33 }));
+    await second.observe(player({ playbackId: "second", position: 44 }));
+    expect(upstream.requests.filter(request => request.path.endsWith("/Stopped")).map(request => request.body?.PositionTicks).sort()).toEqual([110_000_000, 220_000_000]);
+    expect(upstream.requests.filter(request => request.path.endsWith("/Progress"))).toHaveLength(0);
+    if (change === "connect") {
+      await first.resolve(reference, "new", undefined, true);
+      await first.observe(player({ playbackId: "new" }));
+      expect(upstream.requests.filter(request => request.path === "/Sessions/Playing")).toHaveLength(3);
+    }
+    await first.close(); await second.close();
+  });
+
   test("handoff retains rollback attempts and stops each active report exactly once", async () => {
     const upstream = fixture();
     const jellyfin = source();

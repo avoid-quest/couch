@@ -15,6 +15,8 @@ type Options = {
   loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void;
   resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
+export type PlaylistPlaybackContext = Readonly<Pick<Options, "queue" | "upNext" | "loadQueue">>;
+
 type Row = Omit<SavedPlaylist, "entries" | "source"> & { entries: string; source: string | null };
 
 class PlaylistError extends Error {
@@ -115,6 +117,7 @@ function view(row: Row): SavedPlaylist {
 }
 
 export function createPlaylists({ databasePath, onChange, queue, upNext, loadQueue, resolveSource }: Options) {
+  const playback = { queue, upNext, loadQueue };
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -138,7 +141,8 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
   };
 
   return {
-    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
+    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor, context?: PlaylistPlaybackContext): Promise<Response> {
+      const { queue, upNext, loadQueue } = context ?? playback;
       const { pathname } = new URL(request.url);
       try {
         if (pathname === "/api/playlists") {

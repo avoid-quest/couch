@@ -37,18 +37,6 @@ Browser/TV direct playback still works without either backend installed.
 [Snapcast and Sendspin findings](../../../docs/research/multiroom-snapcast-sendspin.md).
 Arbitrary cross-backend groups and distributed TV lip-sync remain outside this issue.
 
-## Coordination check — 2026-09-27
-
-Issue 01's direct-media foundation is resolved; issue 02 is not a prerequisite for
-a group adapter. No `snapserver`, `snapclient`, `sendspin`, `sendspin-server` or
-`music-assistant` executable was found on the current PATH. Containers and remote
-installations were not inventoried. No real backend/version has been qualified.
-
-Continue at the existing playback-target command/observation boundary, adding one
-real backend's producer and timing ownership. Establish paused readiness, buffered
-progress, flush and confirmed silence before claiming handoff; do not add a group
-stub while the direct DASH increment proceeds in issue 02.
-
 ## Snapcast implementation — 2026-09-27
 
 Snapcast 0.35.0 now presents a real group through the existing output picker, with
@@ -66,6 +54,8 @@ returned to Chromium paused at 48.175 seconds/1.25×. The group sink recorded ze
 PCM after transfer. Full check: 1717 core tests passed, ten skipped, three clock
 tests passed, typecheck passed. Exact-revision backend qualification follows commit.
 
-Sendspin remains the next adapter. Its maintained SDK and two actual CLI clients
-have been qualified separately in ignored artifacts; no Couch Sendspin adapter is
-implemented yet. Physical speaker drift/latency remains unmeasured for both backends.
+Sendspin's Python helper was rejected by the user and removed on 2026-09-27.
+Preserve its archived commits and evidence; they are not an active implementation.
+Use Couch's existing TypeScript/Rust stack. The official SDKs provide client roles;
+resolve the hosting-versus-client boundary before writing the replacement.
+Physical speaker drift/latency remains unmeasured for both backends.

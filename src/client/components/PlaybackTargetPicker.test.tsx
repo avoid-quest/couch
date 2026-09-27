@@ -37,3 +37,23 @@ for (const connected of [true, false]) test(`group management stays reachable an
   await userEvent.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "Playback output" })).toHaveFocus();
 });
+
+for (const sessionMode of ["household", "personal"] as const) test(`session menu switches ${sessionMode} without queue commands`, async () => {
+  const selections: unknown[] = [], commands: unknown[] = [];
+  renderUI(<ShellProviders value={{ state, connected: true, rendererTargetId: "receiver", sessionMode, selectSession: (...args: unknown[]) => selections.push(args), run: async (action: unknown) => commands.push(action) }}><PlaybackTargetPicker /></ShellProviders>);
+  await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: sessionMode === "household" ? "Play independently here" : "Control household" }));
+  expect(selections).toEqual([sessionMode === "household" ? ["personal", true] : ["household"]]);
+  expect(commands).toEqual([]);
+});
+
+for (const sessionKind of ["household", "personal"] as const) test(`occupied ${sessionKind} group requires joining or explicit takeover`, async () => {
+  const selections: unknown[] = [], commands: unknown[] = [];
+  const group = { id: "group", name: "Downstairs", kind: "group", backend: "snapcast", connected: true, occupied: true, sessionKind };
+  renderUI(<ShellProviders value={{ state: { ...state, targets: [group] }, connected: true, sessionMode: "personal", selectSession: (...args: unknown[]) => selections.push(args), run: async (action: unknown) => commands.push(action) }}><PlaybackTargetPicker /></ShellProviders>);
+  await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
+  expect(screen.getByRole("menuitem", { name: "Continue on Downstairs" })).toHaveAttribute("aria-disabled", "true");
+  await userEvent.click(screen.getByRole("menuitem", { name: sessionKind === "household" ? "Join Downstairs" : "Take over Downstairs" }));
+  expect(selections).toEqual(sessionKind === "household" ? [["household"]] : []);
+  expect(commands).toEqual(sessionKind === "personal" ? [{ type: "selectTarget", targetId: "group", takeover: true }] : []);
+});

@@ -58,7 +58,7 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
   return <section ref={page} className="min-w-0 pb-8" aria-label="Saved">
     <Tabs value={tab} onValueChange={value => onTabChange(value as SavedTab)} orientation={wide ? "vertical" : "horizontal"} className="grid gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
       <div className="min-w-0">
-        <p className="mb-1 truncate text-xs text-muted-foreground md:px-2.5">Shared on {deviceName(state?.installationName)}</p>
+        <p className="mb-1 truncate text-xs text-muted-foreground md:px-2.5">{state?.sessionMode === "personal" ? "Your saved items on " : "Shared on "}{deviceName(state?.installationName)}</p>
         <TabsList variant="line" aria-label="Saved sections" className="h-auto w-full items-stretch justify-start gap-0 p-0 group-data-horizontal/tabs:h-auto group-data-horizontal/tabs:overflow-x-auto group-data-horizontal/tabs:border-b">
           {tabs.map(([value, label, count], index) => <TabsTrigger key={value} value={value} data-page-first={index === 0 || undefined}
             className="h-8 flex-none justify-start gap-1.5 px-2.5 py-0 font-normal touch:h-11 group-data-horizontal/tabs:rounded-none group-data-horizontal/tabs:after:bottom-0 group-data-vertical/tabs:text-foreground group-data-vertical/tabs:after:hidden group-data-vertical/tabs:hover:bg-muted dark:group-data-vertical/tabs:text-foreground">
@@ -71,14 +71,14 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
       <div className="min-w-0">
         <TabsContent value="later">
           <PageHeader title="For later" />
-          <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} />
+          <ForLaterSection {...credentials} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} />
         </TabsContent>
         <TabsContent value="channels">
           <PageHeader title="Channels & stations" />
-          <SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} />
+          <SavedFavorites {...credentials} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} />
         </TabsContent>
         <TabsContent value="lists">
-          <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} />
+          <SavedPlaylists {...credentials} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} />
         </TabsContent>
       </div>
     </Tabs>

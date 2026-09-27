@@ -45,6 +45,7 @@ export type PlayerState = {
 };
 
 export type SessionState = {
+  sessionMode?: "household" | "personal";
   sessionId?: string;
   targetId?: string;
   targets?: PlaybackTarget[];
@@ -75,7 +76,7 @@ export type SessionState = {
 };
 
 export type Action =
-  | { type: "selectTarget"; targetId: string }
+  | { type: "selectTarget"; targetId: string; takeover?: true }
   | { type: "groupReconnect"; targetId: string }
   | { type: "groupMembers"; targetId: string; memberIds: string[] }
   | { type: "groupVolume"; targetId: string; memberId: string; volume: number; muted: boolean }
@@ -137,6 +138,8 @@ export type PlaybackCommand =
 // A backend-managed group has one timeline and one observation writer.
 export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast"; connected: boolean;
   error?: string;
+  occupied?: boolean;
+  sessionKind?: "household" | "personal";
   handoffSafety?: "buffer-drain";
   members?: { id: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };

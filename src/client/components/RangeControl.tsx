@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
 
-export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = 1, pageFirst = false }: {
+export function RangeControl({ label, value, min = 0, max, disabled, onCommit, showValue = true, keyboardStep = 1, pageFirst = false }: {
   label: string;
   value: number;
+  min?: number;
   max: number;
   disabled: boolean;
   onCommit: (value: number) => Promise<boolean>;
@@ -17,10 +18,10 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
   const revision = useRef(0);
   const cancel = () => { keyboard.current = false; revision.current++; setDraft(null); };
   useEffect(() => { if (disabled) cancel(); }, [disabled]);
-  const current = Math.min(max, draft ?? value);
+  const current = Math.max(min, Math.min(max, draft ?? value));
   const commit = (next: number) => {
     const committed = ++revision.current;
-    void onCommit(next).then(
+    void onCommit(Math.max(min, Math.min(max, next))).then(
       accepted => { if (committed === revision.current && (!accepted || !keyboard.current)) setDraft(null); },
       () => { if (committed === revision.current) setDraft(null); },
     );
@@ -29,8 +30,8 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
     data-page-first={pageFirst || undefined}
     aria-label={label}
     aria-valuetext={showValue ? `${Math.round(current)} percent` : `${Math.floor(current / 60)} minutes ${Math.floor(current % 60)} seconds`}
-    min={0}
-    max={Math.max(1, max)}
+    min={min}
+    max={Math.max(min, max)}
     step={1}
     value={[current]}
     disabled={disabled}
@@ -40,7 +41,7 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
       if (keyboardStep !== 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault(); event.stopPropagation();
         keyboard.current = true;
-        const next = Math.max(0, Math.min(max, current + (event.key === "ArrowLeft" ? -keyboardStep : keyboardStep)));
+        const next = Math.max(min, Math.min(max, current + (event.key === "ArrowLeft" ? -keyboardStep : keyboardStep)));
         setDraft(next); commit(next);
       }
       if (label === "Playback position" && event.key === "ArrowDown") {

@@ -116,14 +116,14 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver);
+  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
   // detached client cannot populate the replacement client even if I/O ignores abort.
   // Local/loopback reachability comes from the session, not the browser's offline
   // indicator. Disconnected reads are disabled/cancelled below, never queued for replay.
-  const cacheOwner = [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id] as const;
+  const cacheOwner = [sessionMode, credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id] as const;
   const cacheRef = useRef<{ owner: typeof cacheOwner; id: number; client: QueryClient } | null>(null);
   if (!cacheRef.current || cacheRef.current.owner.some((value, index) => value !== cacheOwner[index])) cacheRef.current = { owner: cacheOwner, id: ++cacheSequence, client: new QueryClient({ defaultOptions: {
     queries: { networkMode: "always", retry: 1, refetchOnWindowFocus: false },
@@ -223,16 +223,16 @@ export function SessionGate({ children }: PropsWithChildren) {
     };
   }, []);
 
-  const currentCredentials = useRef(credentials);
+  const currentCredentials = useRef(scopedCredentials);
   const commandAttempt = useRef(0);
   const undoToast = useRef<string | number | null>(null);
-  currentCredentials.current = credentials;
+  currentCredentials.current = scopedCredentials;
 
   const dismissUndo = useCallback(() => {
     if (undoToast.current !== null) toast.dismiss(undoToast.current);
     undoToast.current = null;
   }, []);
-  useEffect(() => { dismissUndo(); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
+  useEffect(() => { dismissUndo(); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, sessionMode, dismissUndo]);
 
   const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration = 6_000) => {
     dismissUndo();
@@ -281,7 +281,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   const seekBy = useCallback((seconds: number) => {
     const player = readObservation()?.player;
     return player?.playbackId && player.seekable && ["playing", "paused"].includes(player.status)
-      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) })
+      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(player.seekRange?.start ?? 0, Math.min(player.seekRange?.end ?? player.duration ?? Infinity, player.position + seconds)) })
       : Promise.resolve(false);
   }, [readObservation, run]);
 
@@ -306,9 +306,9 @@ export function SessionGate({ children }: PropsWithChildren) {
   const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
   const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
-    rendererTargetId, playHere, queryClient, nativeHost, localHost, nativeReceiver, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
+    sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, nativeHost, localHost, nativeReceiver, tvPresentation, credentials: scopedCredentials, setCredentials, host, retryHost, booting, error: error ?? sessionSelectionError, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [rendererTargetId, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  }), [sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

@@ -1,3 +1,4 @@
+import type { ApiCredentials } from "@/api/client";
 import { searchSources, searchKinds, searchLengths, type SearchRouteState } from "../../search";
 import { memo, useMemo, useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -26,8 +27,7 @@ import { OpenFileButton } from "@/sections/now/OpenFileButton";
 
 type Source = "Library" | "Jellyfin";
 type Options = { playNow?: boolean; fromStart?: boolean; placement?: "next" };
-export type Props = {
-  origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean; canManageMetadata?: boolean;
+export type Props = ApiCredentials & { connected: boolean; canPlay: boolean; active: boolean; canManageMetadata?: boolean;
   defaultQuality?: VideoQuality;
   onCommand?: (action: Action) => Promise<boolean>;
   onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;

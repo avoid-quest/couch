@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PageHeader } from "@/components/PageHeader";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
-import { ApiError, apiSend } from "@/api/client";
+import { ApiError, apiSend, type ApiCredentials } from "@/api/client";
 import { playlistQuery, playlistsQuery } from "@/api/playlists";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { formatDuration } from "@/time-format";
@@ -26,14 +26,12 @@ const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
 type Write = { path: string; body: unknown; method?: string };
 
 /** Saved's Lists tab: lists kept from Up next or a source, and one list's detail. */
-export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }: {
-  origin: string;
-  token: string;
+export function SavedPlaylists({ origin, token, sessionMode, connected, canPlay, queueCount }: ApiCredentials & {
   connected: boolean;
   canPlay: boolean;
   queueCount: number;
 }) {
-  const credentials = { origin, token };
+  const credentials = { origin, token, sessionMode };
   const session = useOptionalSessionGate();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);

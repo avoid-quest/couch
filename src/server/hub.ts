@@ -5,7 +5,8 @@ import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
-import { randomInt } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { createHash, randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
 import { createUpdateIdle } from "./update-idle";
 import { createManualUpdate } from "./manual-update";
@@ -17,10 +18,11 @@ import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
 import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
-import { browserCompatible, createPlaybackTargets } from "./playback-targets";
+import { browserCompatible, createPlaybackTargetRegistry } from "./playback-targets";
 import { parseRendererMessage } from "./renderer-validation";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
+import { createSessionStore } from "./session-store";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
 import { createMediaFolders } from "./media-folders";
@@ -40,8 +42,8 @@ import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
-import { createForLater } from "./for-later";
-import { createPlaylists } from "./playlists";
+import { createForLater, type ForLaterPlaybackContext } from "./for-later";
+import { createPlaylists, type PlaylistPlaybackContext } from "./playlists";
 import { ControllerError, createControllers, settingField } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
 import { createDiagnostics } from "./diagnostics";
@@ -49,7 +51,7 @@ import type { NativeDiagnostics } from "../shared/diagnostics";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
 import { desktopClientProtocol } from "../shared/desktop-protocol";
-import { createGuide } from "./iptv";
+import { createGuide, type GuidePlaybackContext } from "./iptv";
 import { createRemoteAccess } from "./remote-access";
 
 import { createSoundRouting } from "./sound-routing";
@@ -105,7 +107,8 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
   return url.origin;
 };
-type SocketData = { renderer?: ReturnType<ReturnType<typeof createPlaybackTargets>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargets>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type Runtime = { id: string; mode: "household" | "personal"; owner: string | null; disposed: boolean; sourceGeneration: number; store: ReturnType<typeof createSessionStore>; privateStore?: ReturnType<typeof openStore>; session: ReturnType<typeof createSession>; targets: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["bind"]>; subtitles: ReturnType<typeof createSubtitles>; radioProgramme: ReturnType<typeof createRadioProgramme>; playback: ReturnType<ReturnType<typeof createJellyfin>["createPlayback"]>; catalog: ReturnType<typeof createCatalog> };
+type SocketData = { runtime: Runtime; renderer?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
@@ -120,6 +123,12 @@ export function createHub(options: HubOptions) {
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   if (options.snapcast) store.markBufferedOutputUsed();
   const sessionId = store.installationId();
+  const runtimes = new Map<string, Runtime>();
+  const playbackStates = new Map<string, { status: import("../shared/protocol").PlayerState["status"]; retry: boolean }>();
+  const retiring = new Set<Promise<void>>();
+  const invalidateAll = (...domains: Domain[]) => { for (const runtime of runtimes.values()) if (!runtime.disposed) runtime.session.invalidate(...domains); };
+  const topic = (runtime: Runtime, clock: boolean) => `${clock ? "session-clock" : "session"}:${runtime.id}`;
+  const snapshot = (runtime: Runtime) => ({ ...runtime.session.state, sessionMode: runtime.mode });
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Bun.Server<SocketData>>> | undefined;
@@ -135,6 +144,11 @@ export function createHub(options: HubOptions) {
   }
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
   const idle = createUpdateIdle(options.idleNow);
+  const updatePlaybackActivity = () => {
+    const activity = [...playbackStates.values()];
+    const active = activity.find(value => ["loading", "playing", "paused"].includes(value.status) || value.retry);
+    idle.playback(active?.status ?? playbackStates.get(sessionId)?.status ?? "unavailable", activity.some(value => value.retry));
+  };
   let closed = false;
   let restarting = false;
   const instanceId = crypto.randomUUID();
@@ -142,7 +156,7 @@ export function createHub(options: HubOptions) {
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
-  const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => invalidateAll("jellyfin") });
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => {
     const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
@@ -153,64 +167,99 @@ export function createHub(options: HubOptions) {
   const windowsAudio = process.platform === "win32" && options.nativeSound ? windowsSound(options.nativeSound) : null;
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
-  let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const targets = createPlaybackTargets(options.sendPlayer, () => session, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
-  const session = createSession(store, targets.send, (state, clock) => {
-    idle.playback(state.player.status, !!state.radioRetry);
-    radioProgramme?.observe(state);
-    sound?.interrupt();
-    if (state.player.error) diagnostics.log.add("Playback", state.player.error);
-    if (!closed) {
-      const listeners = [server, ...lan?.servers ?? []];
-      const legacy = listeners.some(listener => listener.subscriberCount("session"));
-      const modern = listeners.some(listener => listener.subscriberCount("session-clock"));
-      const full = legacy || modern && !clock ? JSON.stringify({ type: "state", state } satisfies ServerMessage) : null;
-      const compact = modern && clock ? JSON.stringify({ type: "clock", ...clock } satisfies ServerMessage) : null;
-      for (const listener of listeners) {
-        if (legacy) listener.publish("session", full!);
-        if (modern) listener.publish("session-clock", compact ?? full!);
+  const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
+  function createRuntime(owner: string | null): Runtime {
+    const mode = owner ? "personal" : "household";
+    const id = owner ? `personal:${owner}` : sessionId;
+    const existing = runtimes.get(id);
+    if (existing) return existing;
+    let privateStore: ReturnType<typeof openStore> | undefined;
+    if (owner) {
+      if (options.databasePath === ":memory:") privateStore = openStore(":memory:");
+      else {
+        const directory = join(dirname(options.databasePath), "sessions");
+        mkdirSync(directory, { recursive: true, mode: 0o700 });
+        privateStore = openStore(join(directory, `${createHash("sha256").update(`${sessionId}:${owner}`).digest("hex")}.sqlite`));
       }
     }
-  }, {
-    admitted, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned, nativeRenderer: () => targets.nativeRenderer,
-    validateCommand: command => {
-      if (targets.nativeRenderer) return;
-      if (command.type === "load" && targets.destination?.backend === "browser") browserCompatible(command);
-      if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported by the selected output.");
-    },
-    resolveContinuation: (entry, signal) => continuation(entry, signal),
-    ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
-    resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing, destination = targets.destination) => {
-      const browser = destination?.backend === "browser";
-      if ((browser || destination?.remote) && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on the Core's own player only.");
-      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
-      if (entry.source.startsWith("jellyfin:")) {
-        if (browser) throw new Error("Open Jellyfin directly on this device.");
-        return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing || destination?.remote ? media : subtitles.prepare(media, playbackId, signal));
+    const viewingStore = createSessionStore(store, privateStore ?? store);
+    const playback = jellyfin.createPlayback();
+    const targets = registry.bind(id, () => session, { defaultNative: !owner, kind: mode });
+    let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
+    const runtime = { id, mode, owner, disposed: false, sourceGeneration: 0, store: viewingStore, privateStore } as Runtime;
+    const session = createSession(viewingStore, targets.send, (state, clock) => {
+      playbackStates.set(id, { status: state.player.status, retry: !!state.radioRetry });
+      updatePlaybackActivity();
+      radioProgramme?.observe(state);
+      sound?.interrupt();
+      if (state.player.error) diagnostics.log.add("Playback", mode === "household" ? state.player.error : "Personal playback reported an error.");
+      if (!closed) {
+        const listeners = [server, ...lan?.servers ?? []];
+        const legacy = listeners.some(listener => listener.subscriberCount(`session:${id}`));
+        const modern = listeners.some(listener => listener.subscriberCount(`session-clock:${id}`));
+        const full = legacy || modern && !clock ? JSON.stringify({ type: "state", state: { ...state, sessionMode: mode } } satisfies ServerMessage) : null;
+        const compact = modern && clock ? JSON.stringify({ type: "clock", ...clock } satisfies ServerMessage) : null;
+        for (const listener of listeners) {
+          if (legacy) listener.publish(`session:${id}`, full!);
+          if (modern) listener.publish(`session-clock:${id}`, compact ?? full!);
+        }
       }
-      if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
-      if (entry.source.startsWith("recording:")) throw new Error(RECORDINGS_UNSUPPORTED);
-      if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
-      if (entry.source.startsWith("radio:")) {
-        const station = radio.getPlayable(entry.source.slice(6));
-        radioProgramme?.load(playbackId, entry.source, station.source);
-        return { ...station, radio: true };
-      }
-      // Older directory favorites were queued as direct URLs before radio had
-      // its own playback policy. Recognize their saved station on the next play.
-      if (radio.favorites().some(station => station.url === entry.source)) return { source: entry.source, radio: true };
-      return { source: entry.source };
-    },
-    deactivate: () => { void jellyfin.deactivate(); },
-    activatePrepared: (playbackId, previous) => jellyfin.activatePrepared(playbackId, previous),
-    activateHandoff: (playbackId, previous) => jellyfin.activatePrepared(playbackId, previous, true),
-    releaseHandoff: playbackId => { void jellyfin.release(playbackId); },
-    observe: player => { subtitles.observe(player); void jellyfin.observe(player); },
-    stopped: playbackId => subtitles.stopped(playbackId),
-  });
+    }, {
+      sessionId: id, admitted: () => admitted() && !runtime.disposed, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned, nativeRenderer: () => targets.nativeRenderer,
+      validateCommand: command => {
+        if (targets.nativeRenderer) return;
+        if (command.type === "load" && targets.destination?.backend === "browser") browserCompatible(command);
+        if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported by the selected output.");
+      },
+      resolveContinuation: (entry, signal) => continuation(entry, signal),
+      ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
+      resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing, destination = targets.destination) => {
+        const browser = destination?.backend === "browser";
+        if ((browser || destination?.remote) && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on the Core's own player only.");
+        if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
+        if (entry.source.startsWith("jellyfin:")) {
+          if (browser) throw new Error("Open Jellyfin directly on this device.");
+          return playback.resolve(entry.source.slice(9), playbackId, signal, mode === "personal" || fromStart, preparing).then(media => preparing || destination?.remote ? media : subtitles.prepare(media, playbackId, signal));
+        }
+        if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
+        if (entry.source.startsWith("recording:")) throw new Error(RECORDINGS_UNSUPPORTED);
+        if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
+        if (entry.source.startsWith("radio:")) {
+          const station = radio.getPlayable(entry.source.slice(6));
+          radioProgramme?.load(playbackId, entry.source, station.source);
+          return { ...station, radio: true };
+        }
+        // Older directory favorites were queued as direct URLs before radio had
+        // its own playback policy. Recognize their saved station on the next play.
+        if (radio.favorites().some(station => station.url === entry.source)) return { source: entry.source, radio: true };
+        return { source: entry.source };
+      },
+      deactivate: () => { void playback.deactivate(); },
+      activatePrepared: (playbackId, previous) => playback.activatePrepared(playbackId, previous),
+      activateHandoff: (playbackId, previous) => playback.activatePrepared(playbackId, previous, true),
+      releaseHandoff: playbackId => { void playback.release(playbackId); },
+      observe: player => { subtitles.observe(player); void playback.observe(player); },
+      stopped: playbackId => subtitles.stopped(playbackId),
+    });
+    const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
+    radioProgramme = createRadioProgramme({ station: radio.programmeStation, metadata: radio.metadata, publish: (playbackId, programme) => session.updateRadioProgramme(playbackId, programme) });
+    const catalog = createCatalog({ library, radio, jellyfin, viewing: { store: viewingStore, session, refreshHistory: items => metadata.refreshHistory(items, viewingStore, () => { if (!runtime.disposed) session.invalidate("progress"); }) } });
+    Object.assign(runtime, { session, targets, subtitles, radioProgramme, playback, catalog });
+    runtimes.set(id, runtime);
+    return runtime;
+  }
+  function stopSources(matches: (source: string) => boolean) {
+    for (const runtime of runtimes.values()) {
+      const state = runtime.session.state;
+      const source = state.queue.find(entry => entry.id === state.currentEntryId)?.source;
+      if (!source || !matches(source) || runtime.disposed) continue;
+      runtime.sourceGeneration++;
+      try { runtime.session.stopForSourceChange(); }
+      catch { diagnostics.log.add("Playback", "An output could not confirm the changed source stopped."); }
+    }
+  }
   let snapcast: ReturnType<typeof createSnapcast> | undefined;
-  const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
-  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlists"), queue: () => session.state.queue,
+  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidateAll("playlists"), queue: () => session.state.queue,
     upNext: () => {
       const current = session.state.queue.findIndex(entry => entry.id === session.state.currentEntryId);
       const cursor = current >= 0 ? current : session.state.queue.findIndex(entry => entry.id === session.state.queueCursorEntryId);
@@ -222,18 +271,15 @@ export function createHub(options: HubOptions) {
       return { name: page.title ?? "Playlist", entries: providerListEntries(page) };
     } });
   const folders = createMediaFolders();
-  const library = createLibrary({ folders, ffprobePath: buildInfo.packaged ? process.env.COUCH_FFPROBE ?? null : undefined, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
+  const library = createLibrary({ folders, ffprobePath: buildInfo.packaged ? process.env.COUCH_FFPROBE ?? null : undefined, databasePath: options.databasePath, onChange: () => { idle.activity(); invalidateAll("library"); } });
   const continuation = createContinuationResolver({ library, jellyfin });
-  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy, title) => { session.loadQueue(entries, mode, authorize, playedBy, undefined, title); } });
-  const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
-  radioProgramme = createRadioProgramme({ station: radio.programmeStation, metadata: radio.metadata, publish: (playbackId, programme) => session.updateRadioProgramme(playbackId, programme) });
+  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => invalidateAll("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy, title) => { session.loadQueue(entries, mode, authorize, playedBy, undefined, title); } });
+  const radio = createRadio({ databasePath: options.databasePath, onChange: () => invalidateAll("radio") });
   const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
-  const guide = createGuide({ databasePath: options.databasePath, onChange: () => session.invalidate("iptv"),
+  const guide = createGuide({ databasePath: options.databasePath, onChange: () => invalidateAll("iptv"),
     onSourcesChanged: channelIds => {
-      const state = session.state;
-      const current = state.queue.find(entry => entry.id === state.currentEntryId);
-      if (current && channelIds.some(id => current.source === `iptv:${id}`)) session.command({ type: "stop" });
+      stopSources(source => channelIds.some(id => source === `iptv:${id}`));
     },
     enqueue: (channel, playNow, authorize, playedBy) => {
       const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
@@ -241,10 +287,10 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => invalidateAll("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
   const forLater = createForLater({
     webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
-    databasePath: options.databasePath, onChange: () => session.invalidate("for-later"),
+    databasePath: options.databasePath, onChange: () => invalidateAll("for-later"),
     lookup: async reference => {
       if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
       if (reference.kind === "queue") {
@@ -271,28 +317,46 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry }, authorize, playedBy);
     },
   });
+  const metadata = createProviderMetadata({ store: createSessionStore(store), cachedItem: providers.cachedItem, onChange: () => invalidateAll("progress") });
+  const household = createRuntime(null);
+  const { session, targets } = household;
+  const nativeRuntime = () => [...runtimes.values()].find(runtime => !runtime.disposed && runtime.targets.nativeAssigned) ?? household;
+  const retire = (runtime: Runtime) => {
+    if (runtime.disposed) return;
+    try { runtime.session.command({ type: "stop" }); } catch { /* Disconnected endpoints are already fenced. */ }
+    runtime.session.close(); runtime.disposed = true;
+    runtime.subtitles.close(); runtime.radioProgramme.close();
+    for (const [key, inspection] of inspections) if (key.startsWith(`${runtime.id}:`)) { inspection.abort(); inspections.delete(key); }
+    const task = Promise.allSettled([runtime.targets.close(), runtime.playback.close()]).then(() => {
+      runtime.privateStore?.close(); runtime.privateStore = undefined;
+      runtimes.delete(runtime.id); playbackStates.delete(runtime.id); updatePlaybackActivity();
+    });
+    retiring.add(task); void task.finally(() => retiring.delete(task));
+  };
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
-    session.invalidate("controllers");
+    invalidateAll("controllers");
   }, onRevoke: id => {
+    const personal = runtimes.get(`personal:${id}`);
+    if (personal) retire(personal);
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
-      socket.unsubscribe(socket.data.playbackClock ? "session-clock" : "session");
+      socket.unsubscribe(topic(socket.data.runtime, socket.data.playbackClock));
       socket.close(4001, "This remote's access was revoked. Pair again.");
     }
   } });
   const updateDirectory = join(dirname(options.databasePath), "updates");
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
-    active: () => targets.nativeAssigned && ["loading", "playing", "paused"].includes(session.state.player.status),
+    active: () => { const runtime = nativeRuntime(); return runtime.targets.nativeAssigned && ["loading", "playing", "paused"].includes(runtime.session.state.player.status); },
     pin: output => options.sendPlayer?.({ type: "audioOutput", output }),
-    lost: error => { if (targets.nativeAssigned) session.audioLost(error); }, changed: value => session.updateSystemAudio(value),
+    lost: error => { const runtime = nativeRuntime(); if (runtime.targets.nativeAssigned) runtime.session.audioLost(error); }, changed: value => nativeRuntime().session.updateSystemAudio(value),
     ...(macAudio ? { backend: macAudio.routing, subscribe: macAudio.subscribe, platform: "mac" as const } : {}),
     ...(windowsAudio ? { backend: windowsAudio.routing, subscribe: windowsAudio.subscribe, platform: "windows" as const, setSystemDefault: false } : {}),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
   if (systemAudio && reconnectBluetooth) void options.nativeBluetooth?.({ op: "reconnect", owner: "boot", device: reconnectBluetooth }).catch(() => {});
-  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: systemAudio, idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop."), ...(macAudio ? { backend: macAudio.test, testAvailable: macAudio.canTest, platform: "mac" as const } : {}), ...(windowsAudio ? { backend: windowsAudio.test, testAvailable: false, platform: "windows" as const } : {}) });
+  sound = createSound({ routing: soundRouting, delay: { get: () => nativeRuntime().session.state.preferences!.device.audioDelay, set: delay => nativeRuntime().session.saveAudioDelay(delay) }, available: systemAudio, idle: () => admitted() && nativeRuntime().session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop."), ...(macAudio ? { backend: macAudio.test, testAvailable: macAudio.canTest, platform: "mac" as const } : {}), ...(windowsAudio ? { backend: windowsAudio.test, testAvailable: false, platform: "windows" as const } : {}) });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const updateWork = () => {
@@ -305,13 +369,10 @@ export function createHub(options: HubOptions) {
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),
   } : undefined);
   manual = options.updater ? createManualUpdate(options.updater, admitted, updates.candidateReady, updates.canRepair) : undefined;
-  const appearance = createAppearance(store, value => session.updateAppearance(value));
-  const metadata = createProviderMetadata({ store, cachedItem: providers.cachedItem, onChange: () => session.invalidate("progress") });
-  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session, refreshHistory: metadata.refreshHistory } });
+  const appearance = createAppearance(store, value => { for (const runtime of runtimes.values()) runtime.session.updateAppearance(value); });
   const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
-    const state = session.state;
-    if (state.queue.find(entry => entry.id === state.currentEntryId)?.source.startsWith("jellyfin:")) session.command({ type: "stop" });
-    session.invalidate("jellyfin");
+    stopSources(source => source.startsWith("jellyfin:"));
+    invalidateAll("jellyfin");
   } });
   const diagnostics = createDiagnostics({
     databasePath: options.databasePath,
@@ -359,7 +420,9 @@ export function createHub(options: HubOptions) {
   // Catalog intake stays private to the hub. Callers do not reserve, normalize
   // or apply play intent; Session alone owns queue order and playback. Already
   // normalized enqueue/transport commands still go directly to Session.
-  const enqueueMedia = (action: Action, authorize: () => void, playedBy?: PlaybackActor): Promise<void> | undefined => {
+  const enqueueMedia = (runtime: Runtime, action: Action, authorize: () => void, playedBy?: PlaybackActor): Promise<void> | undefined => {
+    const { session } = runtime;
+    const inspectionKey = (entryId: string) => `${runtime.id}:${entryId}`;
     type Intake = { entry: QueueEntry; fromStart?: boolean; inspectUrl?: string } | { entries: QueueEntry[]; title: string };
     const authorized = () => { if (closed) return false; authorize(); return true; };
     const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
@@ -413,7 +476,7 @@ export function createHub(options: HubOptions) {
         const mediaId = playbackMediaId(entry);
         if (mediaId && (entry.subtitle || entry.description || entry.thumbnail)) {
           const details = { ...(entry.subtitle ? { subtitle: entry.subtitle } : {}), ...(entry.description ? { description: entry.description } : {}), ...(entry.thumbnail ? { thumbnail: entry.thumbnail } : {}), ...(entry.collection ? { collection: entry.collection } : {}) };
-          try { if (store.enrichHistorySource(mediaId, entry.source, details)) session.invalidate("progress"); } catch { /* Optional catalogue refresh must not prevent playback. */ }
+          try { if (runtime.store.enrichHistorySource(mediaId, entry.source, details)) session.invalidate("progress"); } catch { /* Optional catalogue refresh must not prevent playback. */ }
         }
       }
       if ("entry" in prepared) {
@@ -428,11 +491,11 @@ export function createHub(options: HubOptions) {
         }
         if (inspectUrl) {
           const controller = new AbortController();
-          inspections.set(entry.id, controller);
+          inspections.set(inspectionKey(entry.id), controller);
           void inspectWebMedia(inspectUrl, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
             if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(entry.id, entry.source, metadata); }
           }).catch(() => {}).finally(() => {
-            if (inspections.get(entry.id) === controller) { inspections.delete(entry.id); idle.activity(); }
+            if (inspections.get(inspectionKey(entry.id)) === controller) { inspections.delete(inspectionKey(entry.id)); idle.activity(); }
           });
         }
       } else {
@@ -461,7 +524,7 @@ export function createHub(options: HubOptions) {
     if (response?.ok && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       const path = new URL(request.url).pathname;
       const domains = writes.find(([pattern]) => pattern.test(path))?.[1];
-      if (domains) session.invalidate(...domains);
+      if (domains) invalidateAll(...domains);
     }
     return response;
   };
@@ -494,7 +557,7 @@ export function createHub(options: HubOptions) {
           try {
             idle.activity();
             const token = store.pair("name" in body ? body.name : undefined);
-            session.invalidate("controllers");
+            invalidateAll("controllers");
             return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
           } catch (error) {
             return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this remote") }, error instanceof ControllerError ? error.status : 500);
@@ -506,7 +569,7 @@ export function createHub(options: HubOptions) {
       const url = new URL(request.url);
       const websocket = url.pathname === "/api/ws";
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
-      if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
+      if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Couch-Session", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
       const trusted = access(request) === "direct" && token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
       if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
@@ -519,6 +582,13 @@ export function createHub(options: HubOptions) {
       };
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
+      const selection = websocket ? url.searchParams.get("session") : request.headers.get("X-Couch-Session");
+      if (selection !== null && selection !== "household" && selection !== "personal") return cors(request, json({ error: "Choose a household or personal session." }, 400));
+      if (selection === "personal" && !caller.controller) return cors(request, json({ error: "Pair this device to use a personal session." }, 403));
+      const freshRuntime = selection === "personal" && !runtimes.has(`personal:${caller.controller!.id}`);
+      const runtime = selection === "personal" ? createRuntime(caller.controller!.id) : household;
+      const { session, targets, subtitles, catalog } = runtime;
+      if (freshRuntime) targets.publish();
       if (url.pathname === "/api/settings/sharing") {
         if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
         if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
@@ -531,10 +601,10 @@ export function createHub(options: HubOptions) {
           await lan?.setEnabled(enabled);
           store.saveRemoteControlEnabled(enabled);
           if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
-            socket.unsubscribe(socket.data.playbackClock ? "session-clock" : "session");
+            socket.unsubscribe(topic(socket.data.runtime, socket.data.playbackClock));
             socket.close(4003, "Remotes are off. Your pairing is remembered.");
           }
-          session.invalidate("controllers");
+          invalidateAll("controllers");
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
       }
@@ -605,11 +675,33 @@ export function createHub(options: HubOptions) {
         const currentIdentity = () => admitted() ? identity() : null;
         const authorize = () => {
           if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
-          if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
+          if (!identity() || runtime.disposed || runtime.owner && identity()?.controller?.id !== runtime.owner) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
         };
         if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
           ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
           : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: VERSION_MISMATCH }, 409));
+        const queueContext: PlaylistPlaybackContext = {
+          queue: () => session.state.queue,
+          upNext: () => { const state = session.state; const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId)); return state.queue.slice(cursor + 1); },
+          loadQueue: (entries, mode, authorize, actor, title) => session.loadQueue(entries, mode, authorize, actor, undefined, title),
+        };
+        const laterContext: ForLaterPlaybackContext = {
+          lookup: async reference => {
+            if (reference.kind === "queue") { const entry = session.state.queue.find(entry => entry.id === reference.id); if (!entry) throw new ControllerError("This item is no longer in the queue.", 404); return entry; }
+            if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
+            if (reference.kind !== "library") throw new ControllerError("Choose a library or queue item to save.");
+            const item = library.getItem(reference.id);
+            if (!item) throw new ControllerError("This item is no longer in the library.", 404);
+            return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...libraryMetadata(item) };
+          },
+          reservePlay: () => session.reservePlay(),
+          enqueue: (entry, intent, guard, actor) => { if (intent !== undefined) session.playNewEntries([entry], { intent, authorize: guard, playedBy: actor }); else session.command({ type: "enqueue", entry }, guard, actor); },
+        };
+        const guideContext: GuidePlaybackContext = { enqueue: (channel, playNow, guard, actor) => {
+          const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
+          if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, guard, actor); }
+          else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, guard, actor);
+        } };
         if (caller.controller) store.touchController(caller.controller.id);
         if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
         if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
@@ -621,14 +713,14 @@ export function createHub(options: HubOptions) {
         if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
         if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
         if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
+        if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy, guideContext));
         if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await controllers.handle(request, currentIdentity));
         if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
         if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
         if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
-        if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize, playedBy) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-        return server.upgrade(request, { data: { playbackClock: url.searchParams.get("playbackClock") === "1", trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy, laterContext));
+        if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize, playedBy, queueContext) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy, queueContext) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
+        return server.upgrade(request, { data: { runtime, playbackClock: url.searchParams.get("playbackClock") === "1", trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
     }),
     websocket: {
@@ -641,12 +733,14 @@ export function createHub(options: HubOptions) {
       open(socket) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         sockets.add(socket);
-        socket.subscribe(socket.data.playbackClock ? "session-clock" : "session");
+        socket.subscribe(topic(socket.data.runtime, socket.data.playbackClock));
         if (socket.data.trusted) socket.subscribe("navigation");
-        socket.send(JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
+        socket.send(JSON.stringify({ type: "state", state: snapshot(socket.data.runtime) } satisfies ServerMessage));
       },
       close(socket) { socket.data.renderer?.close(); sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
       async message(socket, message) {
+        const runtime = socket.data.runtime;
+        const { session, targets, id: sessionId } = runtime;
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
@@ -656,13 +750,14 @@ export function createHub(options: HubOptions) {
           const renderer = parseRendererMessage(JSON.parse(message));
           if (renderer) {
             const sendRenderer = (command: PlaybackCommand) => {
-              socket.data.authorize();
+              // Revocation still retires playback on the socket before closing it.
+              if (command.type !== "stop") socket.data.authorize();
               if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
             };
             if (renderer.type === "registerNativeRenderer") {
               if (!socket.data.controllerId || socket.data.renderer) throw new Error("Native receiver enrollment requires its own paired connection.");
               store.markNativeReceiverUsed();
-              socket.data.receiver = targets.registerReceiver(socket.data.controllerId, `${playbackActor(socket.data.controllerId)?.name ?? "Couch"} player`, sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
+              socket.data.receiver = registry.registerReceiver(socket.data.controllerId, `${playbackActor(socket.data.controllerId)?.name ?? "Couch"} player`, sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
               socket.data.renderer = socket.data.receiver;
               socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
@@ -672,7 +767,7 @@ export function createHub(options: HubOptions) {
               socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
             } else if (renderer.type === "registerRenderer") {
               if (socket.data.receiver) throw new Error("A native receiver cannot also register as a browser.");
-              socket.data.renderer ??= targets.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize);
+              socket.data.renderer ??= registry.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize);
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
             } else if (socket.data.renderer && renderer.sessionId === sessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");
@@ -693,26 +788,35 @@ export function createHub(options: HubOptions) {
           const action = command.action;
           const before = session.state;
           if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
-          const enqueued = enqueueMedia(action, authorize, playedBy);
+          const enqueued = enqueueMedia(runtime, action, authorize, playedBy);
           if (enqueued) {
             await enqueued;
             if (closed) return;
           } else if (action.type === "selectTarget") {
-            await targets.move(action.targetId, authorize);
+            const generation = runtime.sourceGeneration;
+            await targets.move(action.targetId, () => {
+              authorize();
+              if (generation !== runtime.sourceGeneration) throw new Error("The source changed while playback was moving.");
+            }, { takeover: action.takeover });
           } else if (action.type === "groupMembers" || action.type === "groupVolume" || action.type === "groupReconnect") {
-            if (!snapcast || action.targetId !== "snapcast-group") throw new Error("That audio group is not configured.");
+            const group = action.targetId === "snapcast-group" ? snapcast : undefined;
+            if (!group) throw new Error("That audio group is not configured.");
             if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
             authorize();
-            if (action.type === "groupReconnect") await snapcast.reconnect();
-            else if (action.type === "groupMembers") await snapcast.setMembers(action.memberIds);
-            else await snapcast.setMemberVolume(action.memberId, action.volume, action.muted);
+            await targets.control(action.targetId, async () => {
+              authorize();
+              if (action.type === "groupReconnect") await group.reconnect();
+              else if (action.type === "groupMembers") await group.setMembers(action.memberIds);
+              else await group.setMemberVolume(action.memberId, action.volume, action.muted);
+            }, action.type === "groupMembers" ? action.memberIds : undefined);
           } else if (action.type === "navigate") {
+            if (runtime.mode !== "household") throw new Error("TV navigation belongs to the household session.");
             const listeners = [server, ...lan?.servers ?? []];
             if (!listeners.some(listener => listener.subscriberCount("navigation"))) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             const navigation = JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage);
             for (const listener of listeners) listener.publish("navigation", navigation);
           } else {
-            if (action.type === "remove") inspections.get(action.entryId)?.abort();
+            if (action.type === "remove") inspections.get(`${runtime.id}:${action.entryId}`)?.abort();
             if (targets.nativeAssigned && soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
             else if (targets.nativeAssigned && soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
@@ -731,7 +835,7 @@ export function createHub(options: HubOptions) {
           }
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };
-          diagnostics.log.add("Controller command", result.error);
+          diagnostics.log.add("Controller command", runtime.mode === "household" ? result.error : "A personal playback command failed.");
         } finally { finishWork(); }
         socket.send(JSON.stringify(result));
       },
@@ -777,9 +881,13 @@ export function createHub(options: HubOptions) {
     shutdown.abort();
     for (const controller of inspections.values()) controller.abort();
     let progressError: unknown;
-    try { if (requiredProgress) session.quiesce(); else session.close(); }
-    catch (error) { progressError = error; }
-    targets.close();
+    for (const runtime of runtimes.values()) {
+      try { if (requiredProgress) runtime.session.quiesce(); else runtime.session.close(); }
+      catch (error) { progressError ??= error; }
+      runtime.disposed = true;
+      runtime.subtitles.close(); runtime.radioProgramme.close();
+    }
+    registry.close();
     const toolsStopped = toolHealth.close();
     sound?.close();
     soundRouting?.close();
@@ -787,15 +895,14 @@ export function createHub(options: HubOptions) {
     guide.close();
     metadata.close();
     providers.close();
-    subtitles.close();
     playlists.close();
     forLater.close();
     collections.close();
-    radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([toolsStopped, updates.close(), library.close(), jellyfin.close(), snapcast?.close(), lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), snapcast?.close(), lan?.close(), server.stop(true)]);
     diagnostics.close();
+    for (const runtime of runtimes.values()) runtime.privateStore?.close();
     store.close();
     if (progressError) throw progressError;
     const failed = results.find(result => result.status === "rejected");
@@ -804,18 +911,18 @@ export function createHub(options: HubOptions) {
 
   targets.publish();
   if (options.snapcast) {
-    const target = targets.registerGroup({ id: "snapcast-group", name: options.snapcast.name, kind: "group", backend: "snapcast", connected: false, handoffSafety: "buffer-drain" }, command => snapcast!.send(command));
+    const target = registry.registerGroup({ id: "snapcast-group", name: options.snapcast.name, kind: "group", backend: "snapcast", connected: false, handoffSafety: "buffer-drain" }, command => snapcast!.send(command));
     snapcast = createSnapcast(options.snapcast, { changed: target.update, observe: target.observe });
   }
   return {
-    server, session: { ...session, get state() { return session.state; }, observe: targets.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
+    server, session: { ...session, get state() { return session.state; }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
     prepareRestart: () => {
       if (!admitted()) throw new Error("Already updating or restarting.");
       // The strict write happens before any irreversible shutdown. On failure the
       // authenticated listener and playback remain usable and the dirty save is retained.
-      session.checkpoint();
-      session.quiesce();
+      for (const runtime of runtimes.values()) runtime.session.checkpoint();
+      for (const runtime of runtimes.values()) runtime.session.quiesce();
       restarting = true;
       return { progressSaved: true, admissionClosed: true };
     },

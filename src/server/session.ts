@@ -42,6 +42,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
   let audioInterrupted = false;
   let resolution: AbortController | null = null;
   let qualityResolution: AbortController | null = null;
+  let handoffResolution: AbortController | null = null;
   let audioOnly = false;
   let prepared: { entryId: string; playbackId: string; currentId: string; key: string; controller: AbortController; sent: boolean } | null = null;
   let subtitleWarning: string | null = null;
@@ -512,6 +513,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
     }
   };
   const stop = () => {
+    handoffResolution?.abort();
     restoredCheckpoint = false;
     try { store.savePlaybackContinuation(null); }
     catch { state.queueError = STORAGE_ERROR("Autoplay"); }
@@ -645,14 +647,15 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       const playbackId = crypto.randomUUID();
       let media: MediaSource;
       const controller = new AbortController();
+      handoffResolution = controller;
       const timeout = setTimeout(() => controller.abort(new DOMException("Source resolution timed out.", "TimeoutError")), 15_000);
       try { media = await (options.resolveSource?.(entry, playbackId, controller.signal, false, false, true, destination) ?? { source: entry.source }); }
       catch (error) { options.releaseHandoff?.(playbackId); throw error; }
-      finally { clearTimeout(timeout); }
+      finally { clearTimeout(timeout); if (handoffResolution === controller) handoffResolution = null; }
       const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
       return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, duration: state.player.duration ?? media.metadata?.duration ?? entry.duration, paused: true,
         ...(!browser && !destination.remote && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
-        startPosition: entry.live || media.radio ? undefined : state.player.position,
+        startPosition: entry.live || state.player.live || media.radio ? undefined : state.player.position,
         preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser || destination.remote ? 0 : state.preferences!.device.audioDelay } } };
     },
     commitHandoff(player: PlayerState, delivery: HandoffDelivery) {
@@ -734,6 +737,11 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       const entry = existing ?? { ...saved, id: crypto.randomUUID() };
       if (existing) play(entry.id, fromStart, false, authorize, false, playedBy);
       else playNewEntries([entry], { fromStart, authorize, playedBy });
+    },
+    stopForSourceChange() {
+      handoffResolution?.abort(); resolution?.abort(); qualityResolution?.abort();
+      try { cancelPreparation(); } catch { /* An unavailable output must not keep source preparation alive. */ }
+      stop();
     },
     close() { if (!quiescing) end(false); },
     checkpoint() { persistProgress(() => { progress.checkpoint(); saveCheckpoint(true); }, true); },
@@ -932,7 +940,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
         case "seek":
           currentPlayback(action.playbackId);
           if (!state.player.seekable) throw new Error("This stream does not support seeking.");
-          const position = state.player.duration === null ? action.position : Math.min(action.position, state.player.duration);
+          const position = state.player.seekRange ? Math.max(state.player.seekRange.start, Math.min(action.position, state.player.seekRange.end)) : state.player.duration === null ? action.position : Math.min(action.position, state.player.duration);
           send({ ...action, position });
           pendingSeek = { playbackId: action.playbackId, position, from: state.player.position };
           progress.seek(position);

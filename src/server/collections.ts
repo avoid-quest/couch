@@ -15,6 +15,8 @@ type Options = {
   queue: () => QueueEntry[];
   loadQueue: (entries: QueueEntry[], mode: "append" | "play", authorize: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void;
 };
+export type CollectionPlaybackContext = Readonly<Pick<Options, "queue" | "loadQueue">>;
+
 type Row = { id: string; revision: number; updatedAt: number; definition: string };
 class CollectionError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -54,6 +56,7 @@ async function body(request: Request) {
 const saved = (row: Row): SavedCollection => ({ ...JSON.parse(row.definition) as CollectionDefinition, id: row.id, revision: row.revision, updatedAt: row.updatedAt });
 
 export function createCollections({ databasePath, library, onChange, queue, loadQueue }: Options) {
+  const playback = { queue, loadQueue };
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000");
   db.run("CREATE TABLE IF NOT EXISTS library_collections (id TEXT PRIMARY KEY, name_key TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL, definition TEXT NOT NULL)");
@@ -115,7 +118,8 @@ export function createCollections({ databasePath, library, onChange, queue, load
     return { collection, items, total, digest };
   };
   return {
-    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
+    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor, context?: CollectionPlaybackContext): Promise<Response> {
+      const { queue, loadQueue } = context ?? playback;
       try {
         assertOpen();
         const path = new URL(request.url).pathname;

@@ -157,7 +157,7 @@ export function HomePage() {
     </HomeRow>,
 
     later: !!savedMedia.length && <HomeRow title="For later" time={`${savedMedia.length} saved`} action={<Button variant="ghost" onClick={() => shell.changeSection("Saved")}>Open Saved</Button>}>
-      <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} showHeading={false} mediaOnly limit={shown.later} />
+      <ForLaterSection {...credentials} connected={connected} canPlay={available} showHeading={false} mediaOnly limit={shown.later} />
     </HomeRow>,
 
     recent: !!recent.length && <HomeRow title="Played recently" time={plural(recent.length, "title")}>
@@ -353,6 +353,6 @@ function historyMeta(item: HistoryItem) {
 
 function Artwork({ credentials, item, intrinsic = false }: { credentials: Credentials; item: { artworkId?: string; thumbnail?: string; title: string }; intrinsic?: boolean }) {
   return item.artworkId
-    ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={item.artworkId} className={intrinsic ? "size-auto max-w-full rounded-none [&_img]:h-auto [&_img]:w-auto [&_img]:max-h-64 [&_img]:max-w-full [&_img]:object-contain" : undefined} />
+    ? <AuthArtwork {...credentials} id={item.artworkId} className={intrinsic ? "size-auto max-w-full rounded-none [&_img]:h-auto [&_img]:w-auto [&_img]:max-h-64 [&_img]:max-w-full [&_img]:object-contain" : undefined} />
     : <MediaArtwork thumbnail={item.thumbnail} title={item.title} className={intrinsic ? "aspect-auto h-auto w-auto max-h-64 max-w-full object-contain" : undefined} />;
 }

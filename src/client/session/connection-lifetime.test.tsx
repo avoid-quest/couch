@@ -18,7 +18,7 @@ const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { 
 const sockets: Socket[] = [];
 let client: QueryClient;
 let gate: ReturnType<typeof useSessionGate>;
-const requests: Array<{ path: string; token: string | null; signal?: AbortSignal | null }> = [];
+const requests: Array<{ path: string; token: string | null; mode: string | null; signal?: AbortSignal | null }> = [];
 let sharing = true;
 let installation: string, role: "administrator" | "controller", title: string;
 let delayedRead: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
@@ -33,7 +33,8 @@ class Socket {
   onclose: ((event: CloseEvent) => void) | null = null;
   onerror: (() => void) | null = null;
   constructor(readonly url: URL) { sockets.push(this); }
-  send() {}
+  sent: import("../../shared/protocol").ClientMessage[] = [];
+  send(value: string) { this.sent.push(JSON.parse(value)); }
   emit(message: ServerMessage) { this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent<string>); }
   close(code = 1000) { this.readyState = 3; this.onclose?.({ code } as CloseEvent); }
 }
@@ -77,7 +78,7 @@ beforeEach(() => {
   localStorage.setItem("couch.remote-installation-id", installation);
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
-    requests.push({ path, token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
+    requests.push({ path, mode: new Headers(init?.headers).get("X-Couch-Session"), token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
     if (path === "/api/connection") return Response.json({ name: "Couch", installationId: installation, urls: [origin], player: "idle", remoteControlEnabled: sharing });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ authority: role, controller: { id: "remote", name: "Memory remote", role }, claimAvailable: false });
@@ -278,4 +279,35 @@ test("forgetting a browser pairing clears saved credentials and discovery does n
   await act(async () => gate.reconnect());
   expect(gate.details?.name).toBe("Couch");
   expect(localStorage.getItem("couch.connection")).toBeNull();
+});
+
+test("changing session mode retires history cache and scopes replacement HTTP reads", async () => {
+  await mount(); await connected();
+  expect(await screen.findByText("Old household")).toBeInTheDocument();
+  const householdClient = client;
+  delayedRead = Promise.withResolvers<Response>();
+  await act(async () => { void client.invalidateQueries({ queryKey: ["progress"] }); });
+  title = "Private history";
+  const oldRead = delayedRead;
+  delayedRead = undefined;
+  await act(async () => gate.selectSession("personal"));
+  expect(client).not.toBe(householdClient);
+  expect(screen.queryByText("Old household")).toBeNull();
+  await connected();
+  expect(await screen.findByText("Private history")).toBeInTheDocument();
+  expect(requests.filter(request => request.path === "/api/progress/history").at(-1)?.mode).toBe("personal");
+  await act(async () => { oldRead.resolve(history("Late household")); });
+  expect(screen.queryByText("Late household")).toBeNull();
+});
+
+test("relative seeking clamps to the observed DVR window without a duration", async () => {
+  await mount(); await connected();
+  const peer = sockets.at(-1)!;
+  await act(async () => peer.emit({ type: "state", state: { ...state, player: { ...state.player, playbackId: "live", status: "playing", position: 125, duration: null, seekable: true, live: true, seekRange: { start: 120, end: 180 } } } }));
+  for (const [seconds, position] of [[-10, 120], [100, 180]]) {
+    const done = gate.seekBy(seconds!);
+    const message = peer.sent.at(-1)!;
+    expect(message.action).toEqual({ type: "seek", playbackId: "live", position });
+    await act(async () => { peer.emit({ type: "result", requestId: message.requestId, ok: true }); await done; });
+  }
 });

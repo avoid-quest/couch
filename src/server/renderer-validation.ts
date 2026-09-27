@@ -21,6 +21,8 @@ export function parseRendererMessage(value: unknown): RendererMessage | null {
     || !Number.isFinite(state.position) || state.position < 0
     || !(state.duration === null || Number.isFinite(state.duration) && state.duration >= 0)
     || !Number.isFinite(state.volume) || state.volume < 0 || state.volume > 100
+    || state.live !== undefined && typeof state.live !== "boolean"
+    || state.seekRange !== undefined && (!state.seekRange || typeof state.seekRange !== "object" || !Number.isFinite(state.seekRange.start) || state.seekRange.start < 0 || !Number.isFinite(state.seekRange.end) || state.seekRange.end < state.seekRange.start)
     || typeof state.seekable !== "boolean" || !(state.error === null || typeof state.error === "string" && state.error.length <= 500)
     || state.speed !== undefined && (!Number.isFinite(state.speed) || state.speed < 0.25 || state.speed > 4)
     || state.tracks !== undefined && (!Array.isArray(state.tracks) || state.tracks.length > 50 || state.tracks.some(track => !track
@@ -34,7 +36,7 @@ export function parseRendererMessage(value: unknown): RendererMessage | null {
     || state.nowPlaying != null && (typeof state.nowPlaying.title !== "string" || state.nowPlaying.title.length > 1000 || state.nowPlaying.artist !== undefined && (typeof state.nowPlaying.artist !== "string" || state.nowPlaying.artist.length > 1000))
     || state.chapters !== undefined && (!Array.isArray(state.chapters) || state.chapters.length > 200 || state.chapters.some(chapter => !chapter || typeof chapter.title !== "string" || chapter.title.length > 500 || !Number.isFinite(chapter.position) || chapter.position < 0))) throw new Error("Invalid renderer metadata.");
   return { type: "rendererObservation", sessionId: message.sessionId, state: { playbackId: state.playbackId, status: state.status,
-    position: state.position, duration: state.duration, volume: state.volume, seekable: state.seekable, error: state.error,
+    position: state.position, duration: state.duration, volume: state.volume, seekable: state.seekable, error: state.error, live: state.live, seekRange: state.seekRange ? { start: state.seekRange.start, end: state.seekRange.end } : undefined,
     speed: state.speed, tracks: state.tracks, audioTracksKnown: typeof state.audioTracksKnown === "boolean" ? state.audioTracksKnown : undefined, buffering: state.buffering === true, requiresGesture: state.requiresGesture === true,
     audioDelay: state.audioDelay, subtitleDelay: state.subtitleDelay, replayGain: state.replayGain, subtitleError: state.subtitleError,
     chapters: state.chapters?.map(({ title, position }) => ({ title, position })), nowPlaying: state.nowPlaying ? { title: state.nowPlaying.title, artist: state.nowPlaying.artist } : state.nowPlaying } };

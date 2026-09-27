@@ -16,7 +16,7 @@ type Props = { state: ClientSessionState; connected: boolean; run: (action: Acti
 export function playbackCapabilities(state: ClientSessionState | null, connected: boolean) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
-  const live = current?.live || current?.kind === "radio" || current?.source.startsWith("radio:");
+  const live = player?.live || current?.live || current?.kind === "radio" || current?.source.startsWith("radio:");
   const available = connected && !!player && player.status !== "unavailable";
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   return {
@@ -37,16 +37,18 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current) return null;
-  const length = playbackClock.duration || current.duration || 0;
+  const live = player.live || current.live || current.kind === "radio" || current.source.startsWith("radio:");
+  const range = player.seekRange ?? (playbackClock.duration ? { start: 0, end: playbackClock.duration } : undefined);
+  const length = live ? 0 : playbackClock.duration || current.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
-  const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0)) ?? [];
+  const chapters = player.chapters?.filter(chapter => range && chapter.position > range.start && chapter.position < range.end) ?? [];
   const chapter = player.chapters?.findLast(item => item.position <= playbackClock.position);
   return <div className={cn("grid gap-1", compact && "player-timeline")}>
-    {seekable && playbackClock.duration ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={playbackClock.duration} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
-      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}</div> : null}
+    {seekable && range && range.end > range.start ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} min={range.start} max={range.end} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
+      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(range.start, Math.min(range.end, position)) }) : false} />{chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${(item.position - range.start) / (range.end - range.start) * 100}%` }} />)}</div> : null}
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
-      {length ? <span className="shrink-0">−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></span> : null}
+      {live ? <span className="shrink-0">Live</span> : length ? <span className="shrink-0">−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></span> : null}
     </div>
   </div>;
 }

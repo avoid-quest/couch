@@ -27,8 +27,8 @@ export function FindPage() {
     {browse === "music" ? <BrowseMusic credentials={credentials} connected={connected} canPlay={available} active={onStage} onBack={() => void navigate({ href: "/find" })}
       onAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })}
       onTrack={(id, playNow) => enqueueCatalog("enqueueLibrary", id, { playNow })} />
-    : browse === "radio" ? <BrowseRadio origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onCommand={run} onBack={() => void navigate({ href: "/find" })} /> : <>
-      <SearchPanel onOpenCollection={shell.openProvider} draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={query => setDraft(current => ({ ...current, query }))} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
+    : browse === "radio" ? <BrowseRadio {...credentials} connected={connected} canPlay={available} active={onStage} onCommand={run} onBack={() => void navigate({ href: "/find" })} /> : <>
+      <SearchPanel onOpenCollection={shell.openProvider} draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={query => setDraft(current => ({ ...current, query }))} onCommand={run} defaultQuality={videoQualityPreference.quality} {...credentials} connected={connected} canPlay={available} active={onStage} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
       <div hidden={!!homeQuery.trim()} className="mt-8">
         <BrowseHome credentials={credentials} connected={connected} onBrowse={source => void navigate({ href: `/find?browse=${source}` })} />
       </div>

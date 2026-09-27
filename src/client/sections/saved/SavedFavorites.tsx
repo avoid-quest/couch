@@ -10,10 +10,9 @@ import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
-import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
-import { apiSend } from "@/api/client";
+import { apiSend, type ApiCredentials } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
 
@@ -38,14 +37,14 @@ export function reorderFavorites(favorites: Favorite[], kind: Favorite["kind"], 
   return next && { kind, order: next.map(favorite => favorite.item.id) };
 }
 
-export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider, onFind }: Credentials & SavedFavoriteActions & {
+export function SavedFavorites({ origin, token, sessionMode, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider, onFind }: ApiCredentials & SavedFavoriteActions & {
   connected: boolean; canPlay: boolean; onFind?: () => void;
 }) {
   // The session invalidates ["providers"] and ["radio"] whenever any remote
   // changes favorites. Enqueue and play stay on the WebSocket session.
   const session = useOptionalSessionGate();
   const queryClient = useQueryClient();
-  const credentials = { origin, token };
+  const credentials = { origin, token, sessionMode };
   const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
   const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const loading = connected && (online.isPending || radio.isPending);

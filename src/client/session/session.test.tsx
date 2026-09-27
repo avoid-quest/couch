@@ -324,3 +324,53 @@ test("native hosts remain controllers unless receiver mode and desktop protocol 
   }
   expect(native).not.toHaveBeenCalled();
 });
+
+test("independent playback reconnects scope and selects only the newly registered renderer", async () => {
+  const localRenderer = { command: () => {}, report: () => {}, play: () => {}, close: () => {} };
+  const closed = spyOn(localRenderer, "close");
+  spyOn(browserRenderer, "createBrowserRenderer").mockReturnValue(localRenderer);
+  const household = sockets[0]!;
+  const oldCommand = session.command;
+  const householdCredentials = session.scopedCredentials;
+  await act(async () => session.selectSession("personal", true));
+  expect(household.readyState).toBe(3);
+  expect(household.sent).toEqual([]);
+  expect(session.state).toBeNull();
+  expect(session.scopedCredentials).toMatchObject({ sessionMode: "personal", token: credentials.token });
+  expect(householdCredentials).toMatchObject({ sessionMode: "household" });
+  const personal = sockets.at(-1)!;
+  expect(personal.url.searchParams.get("session")).toBe("personal");
+  expect([...personal.url.searchParams.keys()]).not.toContain("ownerId");
+  await expect(oldCommand({ type: "stop" })).rejects.toThrow("Reconnecting");
+  await act(async () => personal.emit({ type: "state", state: { ...state, sessionId: "private" } }));
+  expect(personal.sent.filter(message => message.type === "command")).toHaveLength(0);
+  await act(async () => personal.emit({ type: "rendererRegistered", sessionId: "private", targetId: "browser-new" }));
+  const selection = personal.sent.find(message => message.type === "command")!;
+  expect(selection.action).toEqual({ type: "selectTarget", targetId: "browser-new" });
+  await act(async () => personal.emit({ type: "result", requestId: selection.requestId, ok: true }));
+  await act(async () => session.selectSession("household"));
+  expect(closed).toHaveBeenCalledTimes(1);
+  const resumed = sockets.at(-1)!;
+  expect(resumed.url.searchParams.has("session")).toBe(false);
+  await act(async () => resumed.emit({ type: "state", state }));
+  await act(async () => resumed.emit({ type: "rendererRegistered", sessionId: "household", targetId: "browser-household" }));
+  expect(resumed.sent.filter(message => message.type === "command")).toHaveLength(0);
+});
+
+test("mode selection never carries to different pairing credentials", async () => {
+  await act(async () => session.selectSession("personal"));
+  await mount({ ...credentials, token: "another-controller" });
+  expect(session.sessionMode).toBe("household");
+  expect(sockets.at(-1)!.url.searchParams.has("session")).toBe(false);
+});
+
+test("a retired mode's pending local selection cannot report an error in household control", async () => {
+  await act(async () => session.selectSession("personal", true));
+  const personal = sockets.at(-1)!;
+  await act(async () => personal.emit({ type: "state", state: { ...state, sessionId: "private" } }));
+  await act(async () => personal.emit({ type: "rendererRegistered", sessionId: "private", targetId: "private-browser" }));
+  expect(personal.sent.some(message => message.type === "command")).toBe(true);
+  await act(async () => session.selectSession("household"));
+  expect(session.sessionSelectionError).toBeNull();
+  expect(session.sessionMode).toBe("household");
+});

@@ -12,6 +12,7 @@ import { knownConnection, rememberConnection } from "./connection";
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
+export type SessionMode = "household" | "personal";
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "sharing-disabled" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
@@ -23,6 +24,15 @@ export function createId() {
 }
 
 export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false) {
+  const [selection, setSelection] = useState<{ owner: Credentials | null; mode: SessionMode }>({ owner: credentials, mode: "household" });
+  const sessionMode = sameCredentials(selection.owner, credentials) ? selection.mode : "household";
+  const scopedCredentials = useMemo(() => credentials ? { ...credentials, sessionMode } : null, [credentials, sessionMode]);
+  const currentMode = useRef(sessionMode);
+  currentMode.current = sessionMode;
+  const socketMode = useRef<SessionMode | null>(null);
+  const [ownerMode, setOwnerMode] = useState(sessionMode);
+  const selectHere = useRef<Credentials | null>(null);
+  const [sessionSelectionError, setSessionSelectionError] = useState<string | null>(null);
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -43,7 +53,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
+    if (!sameCredentials(selectHere.current, credentials)) selectHere.current = null;
     setRendererTargetId(null);
+    setOwnerMode(sessionMode);
     setState(null);
     observation.current = null;
     setClock(emptyPlaybackClock);
@@ -133,6 +145,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
+      if (sessionMode === "personal") url.searchParams.set("session", "personal");
       const asset = buildKey(loadedBuild);
       if (asset && !desktopProtocol) url.searchParams.set("build", asset);
       if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
@@ -160,7 +173,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
-      const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
+      socketMode.current = sessionMode;
+      const isCurrent = () => !disposed && currentMode.current === sessionMode && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
       handshake = setTimeout(() => connection.close(), 8_000);
 
       connection.onopen = () => {
@@ -265,9 +279,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current = null;
       socketCredentials.current = null;
     };
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, reconnectAttempt]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, reconnectAttempt, sessionMode]);
 
-  const current = sameCredentials(owner, credentials);
+  const current = sameCredentials(owner, credentials) && ownerMode === sessionMode;
   const snapshot = current ? state : null;
   const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
   const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
@@ -304,7 +318,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.controllers]);
 
   // Command/Undo readers see observations synchronously, before React commits a tick.
-  const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && currentMode.current === sessionMode && socketMode.current === sessionMode && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId, sessionMode]);
 
   const reconnect = useCallback(() => {
     ready.current = false;
@@ -314,7 +328,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   const command = useCallback((action: Action) => {
     const connection = socket.current;
-    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
+    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || currentMode.current !== sessionMode || socketMode.current !== sessionMode || !ready.current || connection?.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("Reconnecting. Try again in a moment."));
     }
     return new Promise<void>((resolve, reject) => {
@@ -333,9 +347,22 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         reject(error);
       }
     });
-  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, sessionMode]);
+
+  const selectSession = useCallback((mode: SessionMode, playLocally = false) => {
+    selectHere.current = playLocally ? credentials : null;
+    setSessionSelectionError(null);
+    if (mode !== sessionMode) ready.current = false;
+    setSelection({ owner: credentials, mode });
+  }, [credentials, sessionMode]);
+
+  useEffect(() => {
+    if (!selectHere.current || !sameCredentials(selectHere.current, credentials) || !current || status !== "connected" || !rendererTargetId) return;
+    selectHere.current = null;
+    void command({ type: "selectTarget", targetId: rendererTargetId }).catch(error => { if (currentMode.current === sessionMode && sameCredentials(credentials, currentCredentials.current)) setSessionSelectionError(error instanceof Error ? error.message : String(error)); });
+  }, [selection, credentials, current, status, rendererTargetId, command]);
 
   const playHere = useCallback(() => renderer.current?.play(), []);
 
-  return { rendererTargetId, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  return { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }

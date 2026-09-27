@@ -81,7 +81,7 @@ function checkedId(id: string) {
   return id;
 }
 
-/** One Jellyfin identity and playback reporter belong to the TV host, never its remotes. */
+/** Shared provider identity and catalog, with independent playback reporters. */
 export function createJellyfin(databasePath: string, options: { now?: () => number; onWarning?: (message: string) => void; onProgress?: () => void } = {}) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
@@ -94,12 +94,8 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
   const client = new Jellyfin({ clientInfo: { name: "Couch", version: "0.1.0" }, deviceInfo: { name: "Shared TV", id: row.device_id } });
   const http = axios.create({ adapter: "fetch", timeout: 10_000, maxRedirects: 0, maxContentLength: 4 * 1024 * 1024 });
   let api: Api | null = configuration ? client.createApi(configuration.url, configuration.accessToken, http) : null;
-  let active: ActivePlayback | null = null;
-  const attempts = new Map<string, ActivePlayback>();
-  let generation = 0;
   let configurationGeneration = 0;
   let closed = false;
-  let reporting = Promise.resolve();
   let configuring = Promise.resolve();
   const now = options.now ?? Date.now;
   const status = (): JellyfinStatus => ({ connected: configuration !== null, serverName: configuration?.serverName ?? null, username: configuration?.username ?? null });
@@ -118,26 +114,8 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     if (!previous?.accessToken || api?.accessToken === previous.accessToken) return;
     await getSessionApi(previous).reportSessionEnded().catch(() => undefined);
   };
-  const report = (send: () => Promise<unknown>) => {
-    reporting = reporting.then(send).then(() => { if (!closed) options.onProgress?.(); }).catch(() => { options.onWarning?.("Jellyfin couldn't save your progress. Check the server connection."); });
-    return reporting;
-  };
-  const release = (playbackId: string) => {
-    const previous = attempts.get(playbackId);
-    if (!previous) return reporting;
-    attempts.delete(playbackId);
-    if (active === previous) active = null;
-    if (!previous.started) return reporting;
-    return report(() => getPlaystateApi(previous.api).reportPlaybackStopped({ playbackStopInfo: {
-      ItemId: previous.itemId, MediaSourceId: previous.mediaSourceId, PlaySessionId: previous.playSessionId,
-      PositionTicks: Math.round((previous.last?.position ?? 0) * ticksPerSecond), Failed: previous.last?.status === "error",
-    } }));
-  };
-  const deactivate = () => {
-    generation++;
-    for (const playbackId of attempts.keys()) void release(playbackId);
-    return reporting;
-  };
+  const playbacks = new Set<{ deactivate: () => Promise<void>; close: () => Promise<void> }>();
+  const deactivateAll = async () => { await Promise.all([...playbacks].map(playback => playback.deactivate())); };
   // Persist opaque references so queue/history artwork survives a host restart.
   const viewItem = (item: BaseItemDto): JellyfinItem | null => {
     const view = itemView(item);
@@ -206,6 +184,128 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     return { subtitles, subtitleWarning: [...warnings].join(" ") || undefined };
   };
 
+  function createPlayback() {
+    if (closed) throw new Error("The Jellyfin connection is closed.");
+    let active: ActivePlayback | null = null;
+    const attempts = new Map<string, ActivePlayback>();
+    let generation = 0;
+    let playbackClosed = false;
+    let reporting = Promise.resolve();
+    const report = (send: () => Promise<unknown>) => {
+      reporting = reporting.then(send).then(() => { if (!closed) options.onProgress?.(); }).catch(() => { options.onWarning?.("Jellyfin couldn't save your progress. Check the server connection."); });
+      return reporting;
+    };
+    const release = (playbackId: string) => {
+      const previous = attempts.get(playbackId);
+      if (!previous) return reporting;
+      attempts.delete(playbackId);
+      if (active === previous) active = null;
+      if (!previous.started) return reporting;
+      return report(() => getPlaystateApi(previous.api).reportPlaybackStopped({ playbackStopInfo: {
+        ItemId: previous.itemId, MediaSourceId: previous.mediaSourceId, PlaySessionId: previous.playSessionId,
+        PositionTicks: Math.round((previous.last?.position ?? 0) * ticksPerSecond), Failed: previous.last?.status === "error",
+      } }));
+    };
+    const deactivate = () => {
+      generation++;
+      for (const playbackId of attempts.keys()) void release(playbackId);
+      return reporting;
+    };
+    const playback = {
+      async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false, preparing = false) {
+        signal?.throwIfAborted();
+        if (playbackClosed) throw new Error("The Jellyfin playback is closed.");
+        const [scope, itemId, extra] = reference.split(":");
+        if (!scope || !itemId || extra !== undefined) throw new Error("Invalid Jellyfin item.");
+        checkedId(itemId);
+        const current = connection();
+        if (scope !== current.configuration.scope) throw new Error("This queue item belongs to a different Jellyfin server or account. Add it again from the current library.");
+        const requestGeneration = ++generation;
+        // A replay must read the position after the preceding stop report has reached Jellyfin.
+        await reporting;
+        signal?.throwIfAborted();
+        if (generation !== requestGeneration || api !== current.api) throw new Error("The playing item changed.");
+        const item = await fetchItem(itemId, signal);
+        const startPosition = fromStart ? 0 : item.resumePosition;
+        let data;
+        try {
+          ({ data } = await getMediaInfoApi(current.api).getPostedPlaybackInfo({ itemId, playbackInfoDto: {
+            UserId: current.configuration.userId, DeviceProfile: profile, EnableDirectPlay: true,
+            EnableDirectStream: false, EnableTranscoding: false, AutoOpenLiveStream: false,
+            StartTimeTicks: Math.round(startPosition * ticksPerSecond),
+          } }, { signal }));
+        } catch { signal?.throwIfAborted(); throw new Error("Jellyfin couldn't prepare this item."); }
+        signal?.throwIfAborted();
+        if (generation !== requestGeneration || api !== current.api) throw new Error("The playing item changed.");
+        const media = data.MediaSources?.find(source => source.SupportsDirectPlay && !source.RequiresOpening && !source.IsInfiniteStream && source.Id);
+        if (data.ErrorCode || !media?.Id || !data.PlaySessionId) throw new Error("Jellyfin can't play this format yet.");
+        const { subtitles, subtitleWarning } = externalSubtitles(current.api, itemId, media);
+        const playback = { api: current.api, playbackId, itemId, mediaSourceId: media.Id, playSessionId: data.PlaySessionId, started: false, activated: !preparing, last: null, observedAt: 0, reportedAt: 0 };
+        attempts.set(playbackId, playback);
+        if (preparing) {
+          signal?.addEventListener("abort", () => { if (!playback.activated) void release(playbackId); }, { once: true });
+        } else {
+          if (active) void release(active.playbackId);
+          active = playback;
+        }
+        return {
+          audioOnly: item.kind === "Audio",
+          source: current.api.getUri(`/${item.kind === "Audio" ? "Audio" : "Videos"}/${itemId}/stream`, { Static: true, MediaSourceId: media.Id, PlaySessionId: data.PlaySessionId, DeviceId: row.device_id }),
+          headers: { Authorization: current.api.authorizationHeader },
+          ...(subtitles.length ? { subtitles } : {}),
+          ...(subtitleWarning ? { subtitleWarning } : {}),
+          ...(startPosition > 0 ? { startPosition } : {}),
+        };
+      },
+      activatePrepared(playbackId: string, previous?: PlayerState, keepPrevious = false) {
+        const next = attempts.get(playbackId);
+        if (!next || active === next) return;
+        if (active && previous?.playbackId === active.playbackId) active.last = previous;
+        if (active && !keepPrevious) void release(active.playbackId);
+        next.activated = true;
+        active = next;
+      },
+      release,
+      observe(player: PlayerState) {
+        if (player.status === "unavailable") return deactivate();
+        const current = active;
+        if (!current || player.playbackId !== current.playbackId) return reporting;
+        if (["ended", "error", "idle", "unavailable"].includes(player.status)) {
+          const final = player.status === "ended" && Number.isFinite(player.position) && player.position > 0 ? player : current.last ?? player;
+          current.last = { ...final, status: player.status };
+          return release(current.playbackId);
+        }
+        if (player.status !== "playing" && player.status !== "paused") return reporting;
+        const timestamp = now();
+        const previous = current.last;
+        const expectedPosition = (previous?.position ?? player.position) + (previous?.status === "playing" ? (timestamp - current.observedAt) / 1000 * (previous.speed ?? 1) : 0);
+        const changed = previous && (previous.status !== player.status || Math.abs(expectedPosition - player.position) > 2);
+        current.last = { ...player };
+        current.observedAt = timestamp;
+        if (current.started && !changed && timestamp - current.reportedAt < 15_000) return reporting;
+        const info: PlaybackProgressInfo = {
+          ItemId: current.itemId, MediaSourceId: current.mediaSourceId, PlaySessionId: current.playSessionId,
+          PositionTicks: Math.round(player.position * ticksPerSecond), CanSeek: player.seekable,
+          IsPaused: player.status === "paused", VolumeLevel: Math.round(player.volume), PlayMethod: "DirectPlay",
+        };
+        const started = current.started;
+        current.started = true;
+        current.reportedAt = timestamp;
+        return report(() => started
+          ? getPlaystateApi(current.api).reportPlaybackProgress({ playbackProgressInfo: info })
+          : getPlaystateApi(current.api).reportPlaybackStart({ playbackStartInfo: info }));
+      },
+      deactivate,
+      close() {
+        if (playbackClosed) return reporting;
+        playbackClosed = true;
+        return deactivate().finally(() => { playbacks.delete(playback); });
+      },
+    };
+    playbacks.add(playback);
+    return playback;
+  }
+  const playback = createPlayback();
   return {
     status,
     connection: (): JellyfinConnection => ({ ...status(), url: configuration?.url ?? null }),
@@ -242,7 +342,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
         } catch { throw new Error("Couldn't connect to Jellyfin. Check the address, username and password."); }
         try {
           authorize();
-          if (requestGeneration === configurationGeneration) await deactivate();
+          if (requestGeneration === configurationGeneration) await deactivateAll();
           authorize();
           if (requestGeneration !== configurationGeneration) throw new Error("The Jellyfin connection changed. Try again.");
         } catch (error) {
@@ -262,7 +362,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       authorize();
       configurationGeneration++;
       const previous = api;
-      const stopped = deactivate();
+      const stopped = deactivateAll();
       configuration = null;
       api = null;
       db.run("UPDATE jellyfin SET configuration = NULL WHERE id = 1");
@@ -351,94 +451,17 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       });
       return { title: (episode ? item.SeriesName : item.Album) || "Jellyfin", entries };
     },
-    async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false, preparing = false) {
-      signal?.throwIfAborted();
-      const [scope, itemId, extra] = reference.split(":");
-      if (!scope || !itemId || extra !== undefined) throw new Error("Invalid Jellyfin item.");
-      checkedId(itemId);
-      const current = connection();
-      if (scope !== current.configuration.scope) throw new Error("This queue item belongs to a different Jellyfin server or account. Add it again from the current library.");
-      const requestGeneration = ++generation;
-      // A replay must read the position after the preceding stop report has reached Jellyfin.
-      await reporting;
-      signal?.throwIfAborted();
-      if (generation !== requestGeneration || api !== current.api) throw new Error("The playing item changed.");
-      const item = await fetchItem(itemId, signal);
-      const startPosition = fromStart ? 0 : item.resumePosition;
-      let data;
-      try {
-        ({ data } = await getMediaInfoApi(current.api).getPostedPlaybackInfo({ itemId, playbackInfoDto: {
-          UserId: current.configuration.userId, DeviceProfile: profile, EnableDirectPlay: true,
-          EnableDirectStream: false, EnableTranscoding: false, AutoOpenLiveStream: false,
-          StartTimeTicks: Math.round(startPosition * ticksPerSecond),
-        } }, { signal }));
-      } catch { signal?.throwIfAborted(); throw new Error("Jellyfin couldn't prepare this item."); }
-      signal?.throwIfAborted();
-      if (generation !== requestGeneration || api !== current.api) throw new Error("The playing item changed.");
-      const media = data.MediaSources?.find(source => source.SupportsDirectPlay && !source.RequiresOpening && !source.IsInfiniteStream && source.Id);
-      if (data.ErrorCode || !media?.Id || !data.PlaySessionId) throw new Error("Jellyfin can't play this format yet.");
-      const { subtitles, subtitleWarning } = externalSubtitles(current.api, itemId, media);
-      const playback = { api: current.api, playbackId, itemId, mediaSourceId: media.Id, playSessionId: data.PlaySessionId, started: false, activated: !preparing, last: null, observedAt: 0, reportedAt: 0 };
-      attempts.set(playbackId, playback);
-      if (preparing) {
-        signal?.addEventListener("abort", () => { if (!playback.activated) void release(playbackId); }, { once: true });
-      } else {
-        if (active) void release(active.playbackId);
-        active = playback;
-      }
-      return {
-        audioOnly: item.kind === "Audio",
-        source: current.api.getUri(`/${item.kind === "Audio" ? "Audio" : "Videos"}/${itemId}/stream`, { Static: true, MediaSourceId: media.Id, PlaySessionId: data.PlaySessionId, DeviceId: row.device_id }),
-        headers: { Authorization: current.api.authorizationHeader },
-        ...(subtitles.length ? { subtitles } : {}),
-        ...(subtitleWarning ? { subtitleWarning } : {}),
-        ...(startPosition > 0 ? { startPosition } : {}),
-      };
-    },
-    activatePrepared(playbackId: string, previous?: PlayerState, keepPrevious = false) {
-      const next = attempts.get(playbackId);
-      if (!next || active === next) return;
-      if (active && previous?.playbackId === active.playbackId) active.last = previous;
-      if (active && !keepPrevious) void release(active.playbackId);
-      next.activated = true;
-      active = next;
-    },
-    release,
-    observe(player: PlayerState) {
-      if (player.status === "unavailable") return deactivate();
-      const current = active;
-      if (!current || player.playbackId !== current.playbackId) return reporting;
-      if (["ended", "error", "idle", "unavailable"].includes(player.status)) {
-        const final = player.status === "ended" && Number.isFinite(player.position) && player.position > 0 ? player : current.last ?? player;
-        current.last = { ...final, status: player.status };
-        return release(current.playbackId);
-      }
-      if (player.status !== "playing" && player.status !== "paused") return reporting;
-      const timestamp = now();
-      const previous = current.last;
-      const expectedPosition = (previous?.position ?? player.position) + (previous?.status === "playing" ? (timestamp - current.observedAt) / 1000 * (previous.speed ?? 1) : 0);
-      const changed = previous && (previous.status !== player.status || Math.abs(expectedPosition - player.position) > 2);
-      current.last = { ...player };
-      current.observedAt = timestamp;
-      if (current.started && !changed && timestamp - current.reportedAt < 15_000) return reporting;
-      const info: PlaybackProgressInfo = {
-        ItemId: current.itemId, MediaSourceId: current.mediaSourceId, PlaySessionId: current.playSessionId,
-        PositionTicks: Math.round(player.position * ticksPerSecond), CanSeek: player.seekable,
-        IsPaused: player.status === "paused", VolumeLevel: Math.round(player.volume), PlayMethod: "DirectPlay",
-      };
-      const started = current.started;
-      current.started = true;
-      current.reportedAt = timestamp;
-      return report(() => started
-        ? getPlaystateApi(current.api).reportPlaybackProgress({ playbackProgressInfo: info })
-        : getPlaystateApi(current.api).reportPlaybackStart({ playbackStartInfo: info }));
-    },
-    deactivate,
+    createPlayback,
+    resolve: playback.resolve,
+    activatePrepared: playback.activatePrepared,
+    release: playback.release,
+    observe: playback.observe,
+    deactivate: playback.deactivate,
     async close() {
       if (closed) return;
       closed = true;
       configurationGeneration++;
-      await deactivate();
+      await Promise.all([...playbacks].map(playback => playback.close()));
       await configuring;
       api = null;
       db.close();

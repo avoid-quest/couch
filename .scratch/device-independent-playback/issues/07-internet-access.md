@@ -19,8 +19,8 @@ or private-network setup. This is separate from supporting remote media provider
   from claiming a target ID. Revocation must end access and prevent renewal.
 - Ensure destination URLs are reachable outside LAN and that headers, ranges,
   WebSocket upgrades and manifest child resources survive the configured proxy.
-- Prefer provider → remote browser directly when allowed. For Couch relay, account
-  for home upload, select existing lower renditions, and provide usable quality limits.
+- Prefer provider → remote browser directly, retaining client quality controls.
+  Measure actual reachability and browser authentication without a Core media relay.
 - Limit public pairing/bootstrap deliberately. Household-only remote access need not
   wait for independent users, but must not claim private-user isolation until it exists.
 

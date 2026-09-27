@@ -38,3 +38,11 @@ test("Headers inputs retain custom headers but cannot override the live credenti
   }) as typeof fetch);
   await apiFetch(credentials, "/api/providers/favorites", { headers: new Headers({ authorization: "Bearer retired-token", "Content-Type": "application/json", "X-Test": "kept" }) });
 });
+
+for (const sessionMode of ["personal", "household", undefined] as const) test(`API session scope follows immutable credentials (${sessionMode ?? "legacy"})`, async () => {
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
+    expect(new Headers(init?.headers).get("X-Couch-Session")).toBe(sessionMode === "personal" ? "personal" : null);
+    return Response.json({});
+  }) as typeof fetch);
+  await apiFetch({ ...credentials, sessionMode }, "/api/progress/history", { headers: { "X-Couch-Session": "other-controller" } });
+});

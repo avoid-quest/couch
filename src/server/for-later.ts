@@ -16,11 +16,14 @@ type Options = {
   prepare: (entry: QueueEntry) => Promise<void>;
   enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;
 };
+export type ForLaterPlaybackContext = Readonly<Pick<Options, "lookup" | "reservePlay" | "enqueue">>;
+
 type Row = { id: string; entry: string };
 type RemovedRow = Row & { source: string; savedAt: number; position: number };
 const publicItem = (entry: QueueEntry) => { const { source, automaticTitle: _automaticTitle, ...item } = entry; return { ...item, ...(source.startsWith("web:") ? { url: source.slice(4) } : {}) }; };
 
 export function createForLater({ databasePath, onChange, lookup, prepare, reservePlay, enqueue, webMetadata }: Options) {
+  const playback = { lookup, reservePlay, enqueue };
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -40,7 +43,8 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
     return JSON.parse(row.entry) as QueueEntry;
   };
   return {
-    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
+    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor, context?: ForLaterPlaybackContext): Promise<Response> {
+      const { lookup, reservePlay, enqueue } = context ?? playback;
       const path = new URL(request.url).pathname;
       try {
         authorize();
