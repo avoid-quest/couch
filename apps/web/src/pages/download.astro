@@ -1,10 +1,12 @@
 ---
 import "../styles.css";
 import { buttonVariants } from "../../../../src/client/components/ui/button";
-import { catalog, formats } from "../release-catalog";
+import { currentCatalog, formats } from "../release-catalog";
 import type { Channel, PackageFormat } from "../../../../scripts/hosted-policy";
 
-const releases = catalog();
+export const prerender = false;
+
+const releases = await currentCatalog();
 const deb = releases.preview.deb ?? releases.stable.deb;
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
 const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
@@ -15,6 +17,14 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
 };
 const primary = buttonVariants();
 const secondary = buttonVariants({ variant: "outline" });
+// Chromium names the platform in a client hint; other browsers only in the user agent.
+const ua = Astro.request.headers.get("user-agent") ?? "";
+const platform = Astro.request.headers.get("sec-ch-ua-platform")?.replaceAll('"', "") ?? "";
+const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform === "Android" ? null
+  : platform === "macOS" || /Macintosh/.test(ua) ? "dmg"
+  : platform === "Windows" || /Windows/.test(ua) ? "nsis"
+  : platform === "Linux" || /Linux/.test(ua) ? "appimage"
+  : null;
 ---
 <!doctype html>
 <html lang="en" class="dark">
@@ -28,7 +38,7 @@ const secondary = buttonVariants({ variant: "outline" });
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
-    <main data-primary={primary}>
+    <main>
       <nav aria-label="Home"><a href="/"><img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" />couch.avoid.quest</a></nav>
       <h1>Download Couch</h1>
       <p class="intro">When you open it, choose <strong>This computer</strong> or connect to another Couch.</p>
@@ -38,14 +48,14 @@ const secondary = buttonVariants({ variant: "outline" });
         <ul>
           {formats.map(format => {
             const item = releases[channel][format];
-            return <li data-format={format} hidden={!item}>
+            return <li data-format={format} data-mine={format === mine || undefined} hidden={!item}>
               <div>
                 <h3>{labels[format].name}</h3>
                 <p>{labels[format].target}</p>
                 <p>{labels[format].note}</p>
               </div>
               <span data-version>{item?.version}</span>
-              <a class={secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}>Download</a>
+              <a class={format === mine ? primary : secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}>Download</a>
             </li>;
           })}
         </ul>
@@ -65,18 +75,16 @@ const secondary = buttonVariants({ variant: "outline" });
       </details>
       <footer>Dependency licenses and notices come with each package.</footer>
     </main>
+    <script is:inline define:vars={{ secondary }}>
+      // Desktop-mode iPad Safari says Macintosh, and iPads can't run the Mac app. Only touch support tells them apart.
+      if (navigator.maxTouchPoints > 1) for (const row of document.querySelectorAll("li[data-mine]")) {
+        row.removeAttribute("data-mine");
+        row.querySelector("a").className = secondary;
+      }
+    </script>
   </body>
 </html>
-<script>
-  // Put this computer's download first. The worker fills in the current releases before the page arrives.
-  const main = document.querySelector("main")!;
-  const ua = navigator.userAgent;
-  const mine = /iPhone|iPad|Android/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1) ? null : /Mac/.test(ua) ? "dmg" : /Win/.test(ua) ? "nsis" : /Linux/.test(ua) ? "appimage" : null;
-  for (const row of document.querySelectorAll<HTMLElement>(`li[data-format="${mine}"]`)) {
-    row.parentElement!.prepend(row);
-    row.querySelector("a")!.className = main.dataset.primary!;
-  }
-</script>
+
 <style>
   main { max-width: 48rem; margin: auto; padding: 2rem var(--gutter) 4rem; }
   nav a { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: var(--muted-foreground); }
@@ -85,9 +93,9 @@ const secondary = buttonVariants({ variant: "outline" });
   .intro { font-size: .875rem; color: var(--muted-foreground); }
   section { margin-top: 3rem; }
   h2, summary { font-size: 1rem; font-weight: 500; }
-  ul { margin-top: 1rem; }
+  ul { display: flex; flex-direction: column; margin-top: 1rem; border-bottom: 1px solid var(--border); }
   li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.5rem; padding-block: 1.25rem; border-top: 1px solid var(--border); }
-  li:last-child { border-bottom: 1px solid var(--border); }
+  li[data-mine] { order: -1; }
   h3 { font-size: 1rem; font-weight: 500; }
   li p, [data-version] { font-size: .875rem; }
   li p, [data-version], footer { color: var(--muted-foreground); }
