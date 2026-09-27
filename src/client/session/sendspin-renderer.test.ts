@@ -41,6 +41,16 @@ test("idle is lazy; prepare exposes stable enrollment identity without opening a
   expect(f.events).toEqual(["construct", "unlock", "connect"]);
 });
 
+test("protocol connection registers without unlocking audio until an explicit gesture", async () => {
+  const f = fixture();
+  await f.renderer.preload();
+  f.renderer.setEnrollment({ serverId: "trusted-server", psk: "private-psk" });
+  await f.renderer.connect();
+  expect(f.events).toEqual(["construct", "connect"]);
+  await f.renderer.unlockFromGesture();
+  expect(f.events).toEqual(["construct", "connect", "unlock"]);
+});
+
 test("unprepared gesture fails explicitly rather than awaiting import before unlock", async () => {
   const f = fixture();
   await expect(f.renderer.connectFromGesture()).rejects.toThrow("Wait for Sendspin");

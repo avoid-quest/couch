@@ -12,6 +12,7 @@ const beforeLeave = mock(async () => {});
 const afterJoin = mock(async (_clientId: string) => {});
 const renderer = {
   clientId: "sdk-client", preload: mock(async () => {}), setEnrollment: mock(() => {}),
+  connect: mock(async () => {}), unlockFromGesture: mock(async () => {}),
   connectFromGesture: mock(async () => {}), disconnect: mock(async () => {}),
   setVolume: mock(() => {}), setMuted: mock(() => {}), transport: mock(() => true), openPairingWindow: mock(() => {}),
 };
@@ -43,7 +44,6 @@ test("joining Sendspin reuses this device's name without another name prompt", a
   const user = userEvent.setup();
   render(<DialogProbe />);
   expect(screen.queryByRole("textbox", { name: "Device name" })).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Another audio server…" }));
   await user.type(screen.getByRole("textbox", { name: "Server address" }), "wss://music.local/sendspin");
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(adapter.createSendspinRenderer).toHaveBeenCalledWith(expect.objectContaining({ name: "Couch browser" }), expect.anything());

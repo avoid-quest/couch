@@ -137,7 +137,6 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
 
 export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: (event: Event) => void }) {
   const { sendspin, sendspinDisabledReason, connected, state, identity } = useSessionGate();
-  const [destination, setDestination] = useState<"couch" | "external">("couch");
   const [address, setAddress] = useState("");
   const idle = sendspin.phase === "idle";
   const waiting = ["preparing", "joining", "leaving"].includes(sendspin.phase);
@@ -145,12 +144,11 @@ export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: {
   const retryStopped = sendspin.error === sendspinReconnectStopped;
   const transport = playback?.isPlaying ? "pause" : "play";
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent onCloseAutoFocus={onCloseAutoFocus}>
-    <DialogHeader><DialogTitle>Listen together</DialogTitle><DialogDescription>{destination === "couch" ? "Add this device to shared audio on this Couch." : "Join another audio server on this device."}</DialogDescription></DialogHeader>
-    {idle ? <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void sendspin.prepare(destination, address, clientDeviceName(identity?.controller?.name)); }}>
-      {destination === "external" && <div className="grid gap-2"><Label htmlFor="sendspin-server">Server address</Label><Input id="sendspin-server" value={address} onChange={event => setAddress(event.target.value)} placeholder="wss://music.example/sendspin" autoComplete="url" spellCheck={false} /></div>}
+    <DialogHeader><DialogTitle>Other audio server</DialogTitle><DialogDescription>Join a separate Sendspin server on this device.</DialogDescription></DialogHeader>
+    {idle ? <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void sendspin.prepare("external", address, clientDeviceName(identity?.controller?.name)); }}>
+      <div className="grid gap-2"><Label htmlFor="sendspin-server">Server address</Label><Input id="sendspin-server" value={address} onChange={event => setAddress(event.target.value)} placeholder="wss://music.example/sendspin" autoComplete="url" spellCheck={false} /></div>
       {sendspinDisabledReason && <p className="text-sm text-muted-foreground">{sendspinDisabledReason}</p>}
-      <Button type="submit" disabled={!connected || !!sendspinDisabledReason || !!state?.handoff || destination === "external" && !address.trim()}>{destination === "couch" ? "Listen together" : "Continue"}</Button>
-      <Button type="button" variant="ghost" className="justify-self-start" onClick={() => setDestination(destination === "couch" ? "external" : "couch")}>{destination === "couch" ? "Another audio server…" : "Use this Couch"}</Button>
+      <Button type="submit" disabled={!connected || !!sendspinDisabledReason || !!state?.handoff || !address.trim()}>Continue</Button>
     </form> : <div className="grid gap-4">
       <p>{sendspin.server ?? "Preparing Sendspin…"}</p>
       {sendspin.external && playback?.metadata?.title && <div><p className="font-medium">{playback.metadata.title}</p><p className="text-sm text-muted-foreground">{playback.metadata.artist}</p></div>}

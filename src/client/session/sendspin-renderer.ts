@@ -65,6 +65,40 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
       callbacks.error(new Error(sendspinReconnectStopped));
     });
   };
+  const ensurePlayer = () => {
+    if (disposed) throw new Error("This Sendspin connection is closed.");
+    if (reconnectStopped) throw new Error(sendspinReconnectStopped);
+    if (!library) throw new Error("Wait for Sendspin to load, then connect again.");
+    return player ??= new library.SendspinPlayer({
+      baseUrl: config.url, clientName: config.name, productName: "Couch", storage: options.storage,
+      correctionMode: "sync", suite: config.suite ?? "aesgcm", unpairedAccess: false,
+      ...(enrollment ? { longTermPsks: [enrollment] } : {}),
+      onStateChange: publish,
+      onPairingPin: (pin, languages) => { if (!disposed && !reconnectStopped) callbacks.pairingPin?.(pin, languages); },
+      reconnect: { maxAttempts: 7, onReconnecting: () => { if (++reconnects > 7) stopReconnecting(); }, onExhausted: stopReconnecting },
+    });
+  };
+  const connect = () => {
+    if (disposed) return Promise.reject(new Error("This Sendspin connection is closed."));
+    if (reconnectStopped) return Promise.reject(new Error(sendspinReconnectStopped));
+    if (connecting) return connecting;
+    if (player?.isConnected) return Promise.resolve();
+    try {
+      const current = ensurePlayer();
+      connecting = current.connect().then(async () => {
+        if (disposed || reconnectStopped) await current.disconnect("user_request");
+      }).catch(async reason => {
+        await current.disconnect("user_request");
+        if (reconnectStopped) throw new Error(sendspinReconnectStopped);
+        throw fail(reason);
+      }).finally(() => { connecting = undefined; });
+      return connecting;
+    } catch (reason) { return Promise.reject(fail(reason)); }
+  };
+  const unlockFromGesture = () => {
+    try { return ensurePlayer().unlock(); }
+    catch (reason) { return Promise.reject(reason); }
+  };
   return {
     get clientId() { return clientId; },
     preload() {
@@ -78,31 +112,24 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
       if (disposed || player) throw new Error("Configure Sendspin enrollment before connecting.");
       enrollment = value;
     },
+    connect,
+    unlockFromGesture,
     connectFromGesture(): Promise<void> {
       if (disposed) return Promise.reject(new Error("This Sendspin connection is closed."));
       if (reconnectStopped) return Promise.reject(new Error(sendspinReconnectStopped));
       if (connecting) return connecting;
       if (player?.isConnected) return Promise.resolve();
-      if (!library) return Promise.reject(fail(new Error("Wait for Sendspin to load, then connect again.")));
       try {
-        player ??= new library.SendspinPlayer({
-          baseUrl: config.url, clientName: config.name, productName: "Couch", storage: options.storage,
-          correctionMode: "sync", suite: config.suite ?? "aesgcm", unpairedAccess: false,
-          ...(enrollment ? { longTermPsks: [enrollment] } : {}),
-          onStateChange: publish,
-          onPairingPin: (pin, languages) => { if (!disposed && !reconnectStopped) callbacks.pairingPin?.(pin, languages); },
-          reconnect: { maxAttempts: 7, onReconnecting: () => { if (++reconnects > 7) stopReconnecting(); }, onExhausted: stopReconnecting },
-        });
-        const current = player;
         // Do not await an import, enrollment request or another teardown here.
-        const unlocked = current.unlock();
+        const unlocked = unlockFromGesture();
         connecting = (async () => {
           await unlocked;
-          if (disposed || reconnectStopped) { await current.disconnect("user_request"); return; }
+          if (disposed || reconnectStopped) { await player?.disconnect("user_request"); return; }
+          const current = player!;
           await current.connect();
           if (disposed || reconnectStopped) await current.disconnect("user_request");
         })().catch(async reason => {
-          await current.disconnect("user_request");
+          await player?.disconnect("user_request");
           if (reconnectStopped) throw new Error(sendspinReconnectStopped);
           throw fail(reason);
         }).finally(() => { connecting = undefined; });
