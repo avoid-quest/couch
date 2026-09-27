@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { publicFiles } from "../../../scripts/hosted-policy";
-import { catalog, currentCatalog, fillDownloads, formats, type Catalog } from "./release-catalog";
+import { catalog, currentCatalog, formats, type Catalog } from "./release-catalog";
 
 // A fixed fallback, so these tests don't change when the published snapshot advances.
 const asset = (id: string) => `https://cdn.crabnebula.app/asset/${id}`;
@@ -46,17 +46,3 @@ test("rejects a feed version from the wrong channel", async () => {
   expect(ready.preview.dmg?.version).toBe("0.2.0-preview.13");
 });
 
-test("fills the download page with the current releases", async () => {
-  const page = `
-    <section data-channel="stable" hidden><li data-format="appimage" hidden><span data-version></span><a data-download></a></li><li data-format="dmg"></li></section>
-    <section data-channel="preview"><li data-format="deb"><span data-version>old</span><a data-download href="old"></a></li></section>
-    <p id="no-releases"></p><details id="tv" hidden><code id="deb-command">old</code></details>`;
-  const current: Catalog = { stable: { appimage: { version: "0.1.2", filename: "Couch_0.1.2_amd64.AppImage", url: asset("stable") } }, preview: { deb: { version: "0.2.0-preview.19", filename: "Couch_0.2.0-preview.19_amd64.deb", url: asset("deb") } } };
-  const html = await fillDownloads(new Response(page), current).text();
-  expect(html).toContain(`<section data-channel="stable"><li data-format="appimage"><span data-version>0.1.2</span><a data-download href="${asset("stable")}">`);
-  expect(html).toContain(`<li data-format="dmg" hidden="">`);
-  expect(html).toContain(`<span data-version>0.2.0-preview.19</span><a data-download href="${asset("deb")}">`);
-  expect(html).toContain(`<p id="no-releases" hidden="">`);
-  expect(html).toContain(`<code id="deb-command">sudo apt install ./Couch_0.2.0-preview.19_amd64.deb</code>`);
-  expect(html).toContain(`<details id="tv"><code`);
-});

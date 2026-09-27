@@ -28,7 +28,8 @@ export async function currentCatalog(fetcher: (input: RequestInfo | URL, init?: 
   await Promise.all((["stable", "preview"] as const).flatMap(channel => formats.map(async format => {
     const path = releasePlatforms(format).update;
     const endpoint = `https://cdn.crabnebula.app/update/avoid-quest/couch/${path}/0.0.0${channel === "preview" ? "?channel=preview" : ""}`;
-    const response = await fetcher(endpoint, { signal: AbortSignal.timeout(10_000) }).catch(() => null);
+    // Cloudflare keeps each feed answer for a minute.
+    const response = await fetcher(endpoint, { signal: AbortSignal.timeout(10_000), cf: { cacheTtl: 60, cacheEverything: true } } as RequestInit).catch(() => null);
     if (!response?.ok) return;
     const body = await response.json().catch(() => null);
     const found = body && typeof body.version === "string" && typeof body.url === "string" && release(format, channel, body.version);
@@ -37,25 +38,3 @@ export async function currentCatalog(fetcher: (input: RequestInfo | URL, init?: 
   return current;
 }
 
-// Fill the static download page with the current releases, so it never shows a stale version.
-export function fillDownloads(page: Response, current: Catalog): Response {
-  const shown = (visible: boolean) => ({ element: (element: HTMLRewriterTypes.Element) => { visible ? element.removeAttribute("hidden") : element.setAttribute("hidden", ""); } });
-  const deb = current.preview.deb ?? current.stable.deb;
-  const rewriter = new HTMLRewriter()
-    .on("#no-releases", shown(!formats.some(format => current.stable[format] || current.preview[format])))
-    .on("#tv", shown(!!deb))
-    .on("#deb-command", { element: element => { if (deb) element.setInnerContent(`sudo apt install ./${deb.filename}`); } });
-  for (const channel of ["stable", "preview"] as const) {
-    const section = `section[data-channel="${channel}"]`;
-    rewriter.on(section, shown(formats.some(format => current[channel][format])));
-    for (const format of formats) {
-      const item = current[channel][format], row = `${section} li[data-format="${format}"]`;
-      rewriter.on(row, shown(!!item));
-      if (!item) continue;
-      rewriter
-        .on(`${row} [data-version]`, { element: element => { element.setInnerContent(item.version); } })
-        .on(`${row} a[data-download]`, { element: element => { element.setAttribute("href", item.url); } });
-    }
-  }
-  return rewriter.transform(page);
-}

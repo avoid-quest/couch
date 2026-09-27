@@ -1,8 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "couch",
-  "main": "./src/worker.ts",
+  "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2026-09-07",
-  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/download", "/download/"] },
   "routes": [{ "pattern": "couch.avoid.quest", "custom_domain": true }]
 }
