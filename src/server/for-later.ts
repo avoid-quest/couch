@@ -14,7 +14,7 @@ type Options = {
   webMetadata?: (url: string, collection?: Extract<ForLaterReference, { kind: "web" }>["collection"]) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
   reservePlay: () => number;
   prepare: (entry: QueueEntry) => Promise<void>;
-  enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;
+  enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void | Promise<void>;
 };
 export type ForLaterPlaybackContext = Readonly<Pick<Options, "lookup" | "reservePlay" | "enqueue">>;
 
@@ -127,7 +127,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           await prepare(entry);
           authorize();
           get(id); // Another controller may have removed it while the source was checked.
-          enqueue({ ...entry, id: crypto.randomUUID() }, intent, authorize, playedBy);
+          await enqueue({ ...entry, id: crypto.randomUUID() }, intent, authorize, playedBy);
           return Response.json({ ok: true });
         }
         if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { Allow: "DELETE" } });

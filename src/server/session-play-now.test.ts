@@ -76,11 +76,11 @@ test("Add to queue appends without interrupting paused playback", () => {
   expect(f.upcoming()).toEqual(["first", "last"]);
 });
 
-test("Play now keeps an explicitly selected album together ahead of the waiting queue", () => {
+test("Play now keeps an explicitly selected album together ahead of the waiting queue", async () => {
   const f = fixture();
   f.add("current", true); f.add("waiting");
   const intent = f.session.reservePlay();
-  const album = f.session.loadQueue(["first", "second"].map(id => ({ id, title: id, source: `library:${id}` })), "append");
+  const album = await f.session.loadQueue(["first", "second"].map(id => ({ id, title: id, source: `library:${id}` })), "append");
   expect(f.upcoming()).toEqual(["waiting", ...album.map(entry => entry.id)]);
   f.session.playIfCurrent(intent, album[0]!.id, true, undefined, undefined, album.map(entry => entry.id));
   expect(f.session.state.queue.map(entry => entry.title)).toEqual(["current", "first", "second", "waiting"]);
@@ -89,12 +89,12 @@ test("Play now keeps an explicitly selected album together ahead of the waiting 
   expect(f.upcoming()).toEqual(["waiting"]);
 });
 
-test("canceling a play intent leaves separately queued album entries intact", () => {
+test("canceling a play intent leaves separately queued album entries intact", async () => {
   const f = fixture();
   f.add("current", true); f.add("waiting");
   const intent = f.session.reservePlay();
   f.session.command({ type: "stop" });
-  const album = f.session.loadQueue(["first", "second"].map(id => ({ id, title: id, source: `library:${id}` })), "append");
+  const album = await f.session.loadQueue(["first", "second"].map(id => ({ id, title: id, source: `library:${id}` })), "append");
   expect(() => f.session.playIfCurrent(intent, album[0]!.id, true, undefined, undefined, album.map(entry => entry.id))).toThrow("Another action canceled playback");
   expect(f.session.state.currentEntryId).toBeNull();
   expect(f.upcoming()).toEqual(["waiting", ...album.map(entry => entry.id)]);

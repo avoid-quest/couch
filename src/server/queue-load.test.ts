@@ -6,7 +6,7 @@ import { openStore } from "./store";
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
 const entries: QueueEntry[] = [{ id: "first", title: "Track", source: "https://media.example/track" }, { id: "second", title: "Track", source: "https://media.example/track" }];
 
-test("bulk append commits once, keeps duplicate occurrences and current playback", () => {
+test("bulk append commits once, keeps duplicate occurrences and current playback", async () => {
   const store = openStore(":memory:");
   const commands: PlaybackCommand[] = [];
   let broadcasts = 0;
@@ -17,7 +17,7 @@ test("bulk append commits once, keeps duplicate occurrences and current playback
   const player = session.state.player;
   const before = broadcasts;
   const sent = commands.length;
-  const added = session.loadQueue(entries, "append");
+  const added = await session.loadQueue(entries, "append");
   expect(broadcasts).toBe(before + 1);
   expect(commands).toHaveLength(sent);
   expect(session.state.player).toEqual(player);
@@ -42,7 +42,7 @@ test("replace retires slow resolution, leaves the new queue stopped and play sta
   expect(commands.filter(command => command.type === "load")).toHaveLength(0);
   expect(session.state.player.status).toBe("idle");
   expect(session.state.currentEntryId).toBeNull();
-  const added = session.loadQueue(entries, "play");
+  const added = await session.loadQueue(entries, "play");
   expect(session.state.currentEntryId).toBe(added[0]!.id);
   expect(commands.at(-1)).toMatchObject({ type: "load", source: entries[0]!.source });
   store.close();
@@ -134,7 +134,7 @@ test.each(["replace", "play"] as const)("%s marks a near-end item watched only a
   store.close();
 });
 
-test("a completion-write failure rolls back playlist Play and keeps observing the current item", () => {
+test("a completion-write failure rolls back playlist Play and keeps observing the current item", async () => {
   const store = openStore(":memory:");
   let failCompletion = true;
   const commands: PlaybackCommand[] = [];
@@ -157,7 +157,7 @@ test("a completion-write failure rolls back playlist Play and keeps observing th
   failCompletion = false;
   session.observe({ ...before.player, status: "paused", position: 960 });
   expect(store.progress("household", "library:current")).toMatchObject({ position: 960, watched: false });
-  const added = session.loadQueue(entries, "play");
+  const added = await session.loadQueue(entries, "play");
   expect(session.state.queue).toEqual([...before.queue, { ...added[0]!, addedBy: undefined }]);
   expect(session.state.autoplay?.next).toEqual(added[1]!);
   expect(session.state.currentEntryId).toBe(added[0]!.id);

@@ -12,7 +12,7 @@ type Options = {
   onChange: () => void;
   queue: () => QueueEntry[];
   upNext?: () => QueueEntry[];
-  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void;
+  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void | Promise<void>;
   resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
 export type PlaylistPlaybackContext = Readonly<Pick<Options, "queue" | "upNext" | "loadQueue">>;
@@ -211,7 +211,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
           const entries = JSON.parse(row.entries) as QueueEntry[];
           if (!entries.length) throw new PlaylistError("This playlist is empty. Save a queue before loading it.");
           if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError(QUEUE_FULL);
-          loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy, row.name);
+          await loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy, row.name);
           return Response.json({ ok: true });
         }
         if (request.method === "GET") return Response.json({ playlist: view(get(id)) });

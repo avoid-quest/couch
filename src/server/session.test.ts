@@ -1,10 +1,35 @@
 import { expect, spyOn, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
+import { validateSendspinLoad } from "./sendspin-playback";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
 import type { PlaybackCommand, PlaybackClock, PlayerState, SessionState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
+
+test("incompatible video does not interrupt playing shared audio", async () => {
+  const store = openStore(":memory:");
+  const commands: PlaybackCommand[] = [];
+  const session = createSession(store, command => commands.push(command), () => {}, {
+    preflightLoad: () => true,
+    validateCommand: command => { if (command.type === "load") validateSendspinLoad(command); },
+    resolveSource: entry => entry.source.endsWith(".mp4") ? Promise.resolve({ source: "https://example.org/video.mp4" }) : { source: "https://example.org/song.mp3", audioOnly: true },
+  });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "audio", title: "Audio", source: "https://example.org/song.mp3" }, playNow: true });
+    const playbackId = session.state.player.playbackId!;
+    session.observe({ ...idle, playbackId, status: "playing", duration: 120, seekable: true, position: 20 });
+    session.command({ type: "enqueue", entry: { id: "video", title: "Video", source: "https://example.org/video.mp4" } });
+    const before = session.state, sent = commands.length;
+    await expect(Promise.resolve(session.command({ type: "play", entryId: "video" }))).rejects.toThrow("Choose one device");
+    await expect(Promise.resolve(session.playNewEntries([{ id: "new-video", title: "New video", source: "https://example.org/video.mp4" }]))).rejects.toThrow("Choose one device");
+    expect(session.state.currentEntryId).toBe("audio");
+    expect(session.state.player).toMatchObject({ playbackId, status: "playing", position: 20 });
+    expect(session.state.queue).toEqual(before.queue);
+    expect(commands).toHaveLength(sent);
+  } finally { session.close(); store.close(); }
+});
 
 test("removed server-owned queue entries restore with their metadata and only once", () => {
   const store = openStore(":memory:");

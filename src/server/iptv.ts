@@ -10,7 +10,7 @@ import { ADMIN_ONLY } from "./messages";
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => ControllerIdentity | null;
 export type GuidePlaybackContext = Readonly<{
-  enqueue: (channel: GuideChannel, playNow: boolean, authorize: () => void, playedBy?: PlaybackActor) => void;
+  enqueue: (channel: GuideChannel, playNow: boolean, authorize: () => void, playedBy?: PlaybackActor) => void | Promise<void>;
 }>;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
@@ -236,7 +236,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
             if (req.method !== "POST") return methods("POST");
             caller();
             const current = channel(item.id);
-            enqueue(publicChannel(current), channelPath[2] === "play", caller, playedBy);
+            await enqueue(publicChannel(current), channelPath[2] === "play", caller, playedBy);
             return json({ ok: true });
           }
           if (req.method !== "GET") return methods("GET");

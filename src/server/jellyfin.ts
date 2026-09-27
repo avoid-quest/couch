@@ -259,11 +259,13 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       },
       activatePrepared(playbackId: string, previous?: PlayerState, keepPrevious = false) {
         const next = attempts.get(playbackId);
-        if (!next || active === next) return;
+        if (!next) return false;
+        if (active === next) return true;
         if (active && previous?.playbackId === active.playbackId) active.last = previous;
         if (active && !keepPrevious) void release(active.playbackId);
         next.activated = true;
         active = next;
+        return true;
       },
       release,
       observe(player: PlayerState) {

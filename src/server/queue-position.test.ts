@@ -78,30 +78,30 @@ test("reorder follows the cursor identity and deleting current keeps the previou
   expect(f.session.state.queue.map(entry => entry.id)).toEqual(["three"]);
 });
 
-test("moving a stopped cursor preserves its identity while append, replace and play have distinct boundaries", () => {
+test("moving a stopped cursor preserves its identity while append, replace and play have distinct boundaries", async () => {
   const f = fixture();
   f.session.command({ type: "play", entryId: "two" });
   f.session.command({ type: "stop" });
   f.session.command({ type: "move", entryId: "two", beforeEntryId: "four" });
   expect(f.session.state.queue.map(entry => entry.id)).toEqual(["one", "three", "two", "four"]);
   expect(f.session.state.queueCursorEntryId).toBe("two");
-  const added = f.session.loadQueue(entries, "append");
+  const added = await f.session.loadQueue(entries, "append");
   expect(f.session.state.queueCursorEntryId).toBe("two");
   expect(f.session.state.queue.slice(4)).toEqual(added);
-  const replaced = f.session.loadQueue(entries, "replace");
+  const replaced = await f.session.loadQueue(entries, "replace");
   expect(f.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: null, queue: replaced });
-  const played = f.session.loadQueue(entries, "play");
+  const played = await f.session.loadQueue(entries, "play");
   expect(f.session.state).toMatchObject({ currentEntryId: played[0]!.id, queueCursorEntryId: played[0]!.id, queue: [played[0]!, ...replaced], autoplay: { next: played[1]! } });
 });
 
-test("Play next inserts after the shared cursor and persists who added it", () => {
+test("Play next inserts after the shared cursor and persists who added it", async () => {
   const f = fixture();
   f.session.command({ type: "play", entryId: "two" });
   f.session.command({ type: "enqueue", entry: { id: "next", title: "next", source: "https://media.example/next" }, placement: "next" }, undefined, { deviceId: "phone", name: "Phone" });
   expect(f.session.state.queue.map(entry => entry.id)).toEqual(["two", "next", "one", "three", "four"]);
   expect(f.session.state.queue[1]?.addedBy).toEqual({ deviceId: "phone", name: "Phone" });
   f.session.command({ type: "stop" });
-  const added = f.session.loadQueue([{ id: "list", title: "list", source: "https://media.example/list" }], "append", undefined, undefined, "next");
+  const added = await f.session.loadQueue([{ id: "list", title: "list", source: "https://media.example/list" }], "append", undefined, undefined, "next");
   expect(f.session.state.queue.map(entry => entry.id)).toEqual(["two", added[0]?.id, "next", "one", "three", "four"]);
   f.close();
   const restarted = f.start().session.state;

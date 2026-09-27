@@ -174,7 +174,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           try { mediaId = decodeURIComponent(historyPlay[1]!); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
-          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings, playedBy);
+          await viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings, playedBy);
           return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {

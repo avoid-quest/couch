@@ -65,6 +65,7 @@ import { windowsSound } from "./sound-windows";
 import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import { createSendspin, validateSendspinConfig, type SendspinConfig } from "./sendspin";
+import { validateSendspinLoad } from "./sendspin-playback";
 import { openSendspinIdentity } from "./sendspin-identity";
 import type { SendspinHostingState } from "../shared/sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -233,9 +234,11 @@ export function createHub(options: HubOptions) {
       }
     }, {
       sessionId: id, admitted: () => admitted() && !runtime.disposed, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned, nativeRenderer: () => targets.nativeRenderer,
+      preflightLoad: () => targets.destination?.backend === "sendspin",
       validateCommand: command => {
         if (targets.nativeRenderer) return;
         if (command.type === "load" && targets.destination?.backend === "browser") browserCompatible(command);
+        if (command.type === "load" && targets.destination?.backend === "sendspin") validateSendspinLoad(command);
         if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported by the selected output.");
       },
       resolveContinuation: (entry, signal) => continuation(entry, signal),
@@ -262,7 +265,7 @@ export function createHub(options: HubOptions) {
         return { source: entry.source };
       },
       deactivate: () => { void playback.deactivate(); },
-      activatePrepared: (playbackId, previous) => playback.activatePrepared(playbackId, previous),
+      activatePrepared: (playbackId, previous) => { if (!playback.activatePrepared(playbackId, previous)) void playback.deactivate(); },
       activateHandoff: (playbackId, previous) => playback.activatePrepared(playbackId, previous, true),
       releaseHandoff: playbackId => { void playback.release(playbackId); },
       observe: player => { subtitles.observe(player); void playback.observe(player); },
@@ -300,7 +303,7 @@ export function createHub(options: HubOptions) {
       const cursor = current >= 0 ? current : session.state.queue.findIndex(entry => entry.id === session.state.queueCursorEntryId);
       return session.state.queue.slice(cursor + 1);
     },
-    loadQueue: (entries, mode, authorize, playedBy, title) => { session.loadQueue(entries, mode, authorize, playedBy, undefined, title); },
+    loadQueue: async (entries, mode, authorize, playedBy, title) => { await session.loadQueue(entries, mode, authorize, playedBy, undefined, title); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
       return { name: page.title ?? "Playlist", entries: providerListEntries(page) };
@@ -308,7 +311,7 @@ export function createHub(options: HubOptions) {
   const folders = createMediaFolders();
   const library = createLibrary({ folders, ffprobePath: buildInfo.packaged ? process.env.COUCH_FFPROBE ?? null : undefined, databasePath: options.databasePath, onChange: () => { idle.activity(); invalidateAll("library"); } });
   const continuation = createContinuationResolver({ library, jellyfin });
-  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => invalidateAll("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy, title) => { session.loadQueue(entries, mode, authorize, playedBy, undefined, title); } });
+  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => invalidateAll("library"), queue: () => session.state.queue, loadQueue: async (entries, mode, authorize, playedBy, title) => { await session.loadQueue(entries, mode, authorize, playedBy, undefined, title); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => invalidateAll("radio") });
   const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
@@ -316,10 +319,10 @@ export function createHub(options: HubOptions) {
     onSourcesChanged: channelIds => {
       stopSources(source => channelIds.some(id => source === `iptv:${id}`));
     },
-    enqueue: (channel, playNow, authorize, playedBy) => {
+    enqueue: async (channel, playNow, authorize, playedBy) => {
       const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
-      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, authorize, playedBy); }
-      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
+      if (existing) { if (playNow) await session.command({ type: "play", entryId: existing.id, fromStart: true }, authorize, playedBy); }
+      else await session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => invalidateAll("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
@@ -347,9 +350,9 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("radio:")) radio.getPlayable(entry.source.slice(6));
     },
     reservePlay: () => session.reservePlay(),
-    enqueue: (entry, intent, authorize, playedBy) => {
-      if (intent !== undefined) session.playNewEntries([entry], { intent, authorize, playedBy });
-      else session.command({ type: "enqueue", entry }, authorize, playedBy);
+    enqueue: async (entry, intent, authorize, playedBy) => {
+      if (intent !== undefined) await session.playNewEntries([entry], { intent, authorize, playedBy });
+      else await session.command({ type: "enqueue", entry }, authorize, playedBy);
     },
   });
   const metadata = createProviderMetadata({ store: createSessionStore(store), cachedItem: providers.cachedItem, onChange: () => invalidateAll("progress") });
@@ -539,7 +542,7 @@ export function createHub(options: HubOptions) {
       if ("entry" in prepared) {
         const { entry, inspectUrl } = prepared;
         if (action.type === "enqueueProvider" && action.collection) entry.collection = action.collection;
-        if (intent !== undefined) session.playNewEntries([entry], { intent, fromStart: prepared.fromStart, authorize, playedBy });
+        if (intent !== undefined) await session.playNewEntries([entry], { intent, fromStart: prepared.fromStart, authorize, playedBy });
         else session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
         if (entry.source.startsWith("web:")) {
           void metadata.load(entry.source.slice(4)).then(details => {
@@ -558,7 +561,7 @@ export function createHub(options: HubOptions) {
       } else {
         if (intent !== undefined) {
           const entries = prepared.entries.map(entry => ({ ...entry, id: crypto.randomUUID() }));
-          session.playNewEntries(entries.slice(0, 1), { intent, fromStart: true, authorize, playedBy, continuation: { title: prepared.title, entries: entries.slice(1) } });
+          await session.playNewEntries(entries.slice(0, 1), { intent, fromStart: true, authorize, playedBy, continuation: { title: prepared.title, entries: entries.slice(1) } });
         }
         else session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
       }
@@ -830,7 +833,7 @@ export function createHub(options: HubOptions) {
         const queueContext: PlaylistPlaybackContext = {
           queue: () => session.state.queue,
           upNext: () => { const state = session.state; const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId)); return state.queue.slice(cursor + 1); },
-          loadQueue: (entries, mode, authorize, actor, title) => session.loadQueue(entries, mode, authorize, actor, undefined, title),
+          loadQueue: async (entries, mode, authorize, actor, title) => { await session.loadQueue(entries, mode, authorize, actor, undefined, title); },
         };
         const laterContext: ForLaterPlaybackContext = {
           lookup: async reference => {
@@ -842,12 +845,12 @@ export function createHub(options: HubOptions) {
             return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...libraryMetadata(item) };
           },
           reservePlay: () => session.reservePlay(),
-          enqueue: (entry, intent, guard, actor) => { if (intent !== undefined) session.playNewEntries([entry], { intent, authorize: guard, playedBy: actor }); else session.command({ type: "enqueue", entry }, guard, actor); },
+          enqueue: async (entry, intent, guard, actor) => { if (intent !== undefined) await session.playNewEntries([entry], { intent, authorize: guard, playedBy: actor }); else await session.command({ type: "enqueue", entry }, guard, actor); },
         };
-        const guideContext: GuidePlaybackContext = { enqueue: (channel, playNow, guard, actor) => {
+        const guideContext: GuidePlaybackContext = { enqueue: async (channel, playNow, guard, actor) => {
           const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
-          if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, guard, actor); }
-          else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, guard, actor);
+          if (existing) { if (playNow) await session.command({ type: "play", entryId: existing.id, fromStart: true }, guard, actor); }
+          else await session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, guard, actor);
         } };
         if (caller.controller) store.touchController(caller.controller.id);
         if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
@@ -1099,9 +1102,9 @@ export function createHub(options: HubOptions) {
         if (!owner || !admitted() || !runtime) throw new Error("This client cannot control that playback session.");
         const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled() && owner !== "host" || !(store.sendspinEnabled() ?? true)) throw new Error("This client's access was revoked."); };
         const playbackId = runtime.session.state.player.playbackId;
-        if (command === "stop") runtime.session.command({ type: "stop" }, authorize);
-        else if (playbackId && command === "next") runtime.session.command({ type: "next", playbackId }, authorize);
-        else if (playbackId && (command === "play" || command === "pause")) runtime.session.command({ type: "pause", playbackId, paused: command === "pause" }, authorize);
+        if (command === "stop") await runtime.session.command({ type: "stop" }, authorize);
+        else if (playbackId && command === "next") await runtime.session.command({ type: "next", playbackId }, authorize);
+        else if (playbackId && (command === "play" || command === "pause")) await runtime.session.command({ type: "pause", playbackId, paused: command === "pause" }, authorize);
       } }); }
     catch (error) { clearTimeout(timeout); sendspinError = error instanceof Error ? error.message : "Sendspin could not start."; invalidateAll("controllers"); return; }
     sendspin = host;
