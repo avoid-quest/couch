@@ -53,6 +53,8 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "play": return id(value.entryId) && (value.fromStart === undefined || typeof value.fromStart === "boolean");
     case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));
     case "selectTarget": case "groupReconnect": return id(value.targetId);
+    case "groupPair": return id(value.targetId) && memberId(value.memberId) && (value.pin === undefined || typeof value.pin === "string" && /^\d{6,12}$/.test(value.pin));
+    case "groupPairCancel": return id(value.targetId) && memberId(value.memberId);
     case "groupMembers": return id(value.targetId) && Array.isArray(value.memberIds) && value.memberIds.length > 0 && value.memberIds.length <= 32 && value.memberIds.every(memberId) && new Set(value.memberIds).size === value.memberIds.length;
     case "groupVolume": return id(value.targetId) && memberId(value.memberId) && number(value.volume, 100) && typeof value.muted === "boolean";
     case "pause": return id(value.playbackId) && typeof value.paused === "boolean";

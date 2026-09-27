@@ -59,3 +59,56 @@ test("disconnected groups reconnect explicitly while member changes stay disable
   expect(actions).toEqual([{ type: "groupReconnect", targetId: group.id }]);
   expect(screen.getByRole("checkbox", { name: "Join Dining" })).toBeDisabled();
 });
+
+const sendspin: PlaybackTarget = { id: "sendspin-group", name: "Speakers", kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified", members: [
+  { id: "speaker:private-id", name: "Office", connected: true, paired: false, methods: ["dynamic_pin"], joined: false, volume: 50, muted: false },
+] };
+
+test("Sendspin pairing is hidden unless the caller can administer speakers", () => {
+  renderWithQueryClient(<PlaybackGroupControls target={{ ...sendspin, pairing: { clientId: "speaker:private-id", stage: "pin", methods: ["dynamic_pin"] } }} connected busy={false} run={async () => true} onClose={() => {}} />);
+  expect(screen.queryByRole("button", { name: "Pair Office" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Confirm pairing" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Cancel pairing" })).toBeNull();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.getByText("An administrator can pair this speaker.")).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "Join Office" })).toBeDisabled();
+});
+
+test("Sendspin administrators can start pairing before the empty group is connected", async () => {
+  const actions: Action[] = [];
+  renderWithQueryClient(<PlaybackGroupControls target={sendspin} connected canPair busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
+  await userEvent.click(screen.getByRole("button", { name: "Pair Office" }));
+  expect(actions).toEqual([{ type: "groupPair", targetId: sendspin.id, memberId: "speaker:private-id" }]);
+  expect(screen.getByRole("checkbox", { name: "Join Office" })).toBeDisabled();
+});
+
+test("Sendspin PIN submission and cancellation address the observed member without retaining its PIN", async () => {
+  const actions: Action[] = [];
+  const target = { ...sendspin, pairing: { clientId: "speaker:private-id", stage: "pin" as const, methods: ["dynamic_pin"] } };
+  renderWithQueryClient(<PlaybackGroupControls target={target} connected canPair busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
+  const input = screen.getByRole("textbox", { name: "PIN shown on Office" });
+  expect(screen.getByRole("button", { name: "Confirm pairing" })).toBeDisabled();
+  await userEvent.type(input, "12345");
+  expect(screen.getByRole("button", { name: "Confirm pairing" })).toBeDisabled();
+  await userEvent.type(input, "6");
+  await userEvent.click(screen.getByRole("button", { name: "Confirm pairing" }));
+  expect(actions).toEqual([{ type: "groupPair", targetId: sendspin.id, memberId: "speaker:private-id", pin: "123456" }]);
+  expect(input).toHaveValue("");
+  await userEvent.type(input, "654321");
+  await userEvent.click(screen.getByRole("button", { name: "Cancel pairing" }));
+  expect(actions.at(-1)).toEqual({ type: "groupPairCancel", targetId: sendspin.id, memberId: "speaker:private-id" });
+  expect(input).toHaveValue("");
+});
+
+test("paired Sendspin speakers can join an empty group", async () => {
+  const actions: Action[] = [];
+  renderWithQueryClient(<PlaybackGroupControls target={{ ...sendspin, members: sendspin.members!.map(member => ({ ...member, paired: true })) }} connected busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
+  await userEvent.click(screen.getByRole("checkbox", { name: "Join Office" }));
+  expect(actions).toEqual([{ type: "groupMembers", targetId: sendspin.id, memberIds: ["speaker:private-id"] }]);
+});
+
+for (const reason of ["offline", "handoff", "unsupported"] as const) test(`Sendspin pairing is unavailable when ${reason}`, () => {
+  renderWithQueryClient(<PlaybackGroupControls target={{ ...sendspin, members: sendspin.members!.map(member => ({ ...member, methods: reason === "unsupported" ? [] : member.methods })) }} connected={reason !== "offline"} canPair busy={reason === "handoff"} run={async () => true} onClose={() => {}} />);
+  if (reason === "unsupported") expect(screen.queryByRole("button", { name: "Pair Office" })).toBeNull();
+  else expect(screen.getByRole("button", { name: "Pair Office" })).toBeDisabled();
+});

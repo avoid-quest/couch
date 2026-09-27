@@ -75,6 +75,8 @@ export type SessionState = {
 export type Action =
   | { type: "selectTarget"; targetId: string }
   | { type: "groupReconnect"; targetId: string }
+  | { type: "groupPair"; targetId: string; memberId: string; pin?: string }
+  | { type: "groupPairCancel"; targetId: string; memberId: string }
   | { type: "groupMembers"; targetId: string; memberIds: string[] }
   | { type: "groupVolume"; targetId: string; memberId: string; volume: number; muted: boolean }
   | { type: "navigate"; key: NavigationKey }
@@ -133,10 +135,11 @@ export type PlaybackCommand =
   | { type: "stop" };
 
 // A backend-managed group has one timeline and one observation writer.
-export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast"; connected: boolean;
+export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast" | "sendspin"; connected: boolean;
   error?: string;
-  handoffSafety?: "buffer-drain";
-  members?: { id: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
+  handoffSafety?: "buffer-drain" | "unverified";
+  pairing?: { clientId: string; stage: "pin" | "pairing"; methods: string[] };
+  members?: { id: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean; paired?: boolean; methods?: string[]; qualified?: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
 export type RendererMessage = { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }
   | { type: "registerNativeRenderer"; nonce: string }
