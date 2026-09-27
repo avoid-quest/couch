@@ -131,3 +131,13 @@ resumable intent without autoplay, and explicit output choice obtains fresh deli
 paused. Real Chromium/Jellyfin restart, seek/speed retention and grant replacement
 passed. Issue 05 still needs independent deployment guidance; issue 03 is next for
 an actual Snapcast adapter, using the qualified backend buffering limits.
+
+## Latest increment — real Snapcast output
+
+[Restart checkpoints #621](https://github.com/avoid-quest/couch/pull/621) preserve
+resumable intent. Issue 03 now has a working Snapcast 0.35.0 adapter and member
+controls in the existing picker. Real two-client transport/recovery and actual
+Jellyfin browser/group transfers pass. Timing is explicitly estimated; software
+sink captures do not establish physical speaker synchronization. Sendspin, Core
+service deployment, demonstrated provider adaptation and independent sessions remain
+in the existing backlog. See validation for actual counts and retained evidence.

@@ -48,6 +48,60 @@ async function start(f: ReturnType<typeof fixture>, status: "paused" | "playing"
   f.native.report({ position: 32, status, speed: 1.5 });
 }
 
+test("a group control outage fences transfer until a fresh drained connection is ready", async () => {
+  const f = fixture(); await start(f, "paused");
+  const group = player(38);
+  const target = { id: "snapcast-group", name: "Rooms", kind: "group" as const, backend: "snapcast" as const, connected: true, handoffSafety: "buffer-drain" as const };
+  const registration = f.targets.registerGroup(target, group.send); group.connect(registration.observe);
+  await f.targets.move(target.id);
+  expect(f.session.state).toMatchObject({ targetId: target.id, player: { status: "paused", position: 32, volume: 38 } });
+  expect(group.commands.find(command => command.type === "load")).toMatchObject({ duration: 120, paused: true });
+  registration.update({ ...target, connected: false });
+  group.report({ position: 90, status: "ended" });
+  expect(f.session.state.player).toMatchObject({ status: "unavailable", position: 32 });
+  await expect(f.targets.move(f.registration.id)).rejects.toThrow("buffered output is uncertain");
+  const before = group.commands.length;
+  registration.update(target);
+  registration.observe(idle);
+  expect(f.session.state.player).toMatchObject({ status: "unavailable", position: 32 });
+  expect(group.commands).toHaveLength(before);
+  await f.targets.move(f.registration.id);
+  expect(f.session.state).toMatchObject({ targetId: f.registration.id, player: { status: "paused", position: 32 } });
+});
+
+test("group handoff strips Core hardware settings and preserves sole unknown audio", async () => {
+  const f = fixture(() => ({ source: "https://example.org/private.mp3", headers: { Authorization: "private" } }));
+  await start(f);
+  f.native.report({ tracks: [{ id: "a", kind: "audio", index: 1, label: "English", language: "eng", selected: true }] });
+  const group = player(38);
+  const registration = f.targets.registerGroup({ id: "rooms", name: "Rooms", kind: "group", backend: "snapcast", connected: true, handoffSafety: "buffer-drain" }, command => {
+    group.send(command);
+    if (command.type === "load") group.report({ audioTracksKnown: false, tracks: [] });
+  });
+  group.connect(registration.observe);
+  await f.targets.move("rooms");
+  expect(f.session.state.targetId).toBe("rooms");
+  expect(group.commands.find(command => command.type === "load")).toMatchObject({ headers: { Authorization: "private" }, preferences: { audioDelay: 0 } });
+  expect(f.native.state.status).toBe("idle");
+});
+
+test("Core restart fences buffered output even if its backend is no longer configured", async () => {
+  const store = openStore(":memory:");
+  expect(store.bufferedOutputUsed()).toBe(false);
+  store.markBufferedOutputUsed();
+  expect(store.bufferedOutputUsed()).toBe(true);
+  let now = 0;
+  const targets = createPlaybackTargets(undefined, () => session, { recoveringGroup: store.bufferedOutputUsed(), now: () => now });
+  const session = createSession(store, targets.send, () => {}, { nativeTarget: () => false });
+  const browser = targets.register("Browser", () => {});
+  try {
+    await expect(targets.move(browser.id)).rejects.toThrow("stopping");
+    now = 750;
+    await targets.move(browser.id);
+    expect(session.state.targetId).toBe(browser.id);
+  } finally { session.close(); targets.close(); store.close(); }
+});
+
 test.each(["playing", "paused"] as const)("handoff both directions preserves %s timeline, queue, speed, progress and destination volume", async status => {
   const f = fixture(); await start(f, status);
   const before = f.session.state;

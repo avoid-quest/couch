@@ -1,7 +1,7 @@
 # Play remote audio through a synchronized output group
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: none
 
 ## Goal
@@ -48,3 +48,24 @@ Continue at the existing playback-target command/observation boundary, adding on
 real backend's producer and timing ownership. Establish paused readiness, buffered
 progress, flush and confirmed silence before claiming handoff; do not add a group
 stub while the direct DASH increment proceeds in issue 02.
+
+## Snapcast implementation — 2026-09-27
+
+Snapcast 0.35.0 now presents a real group through the existing output picker, with
+observed join/leave and member volume/mute. A bounded FFmpeg PCM producer owns
+remote decoding; Snapcast owns synchronization. Paused preparation, seek, speed,
+Stop, disconnect/reconnect and browser transfers work. The qualified 500ms buffer
+and 750ms drain are estimated timing, not physical silence acknowledgements.
+Uncertain control/ingestion blocks transfer until a fresh backend reset, and Core
+restart observes a durable recovery fence. Removed members go to a dedicated idle
+stream. See [operator configuration](../../../docs/snapcast.md).
+
+Actual two-client software-sink journey passed 18 checks; Chromium and Jellyfin
+transferred to the group paused at 25 seconds/1.25×, played recorded audio, then
+returned to Chromium paused at 48.175 seconds/1.25×. The group sink recorded zero
+PCM after transfer. Full check: 1717 core tests passed, ten skipped, three clock
+tests passed, typecheck passed. Exact-revision backend qualification follows commit.
+
+Sendspin remains the next adapter. Its maintained SDK and two actual CLI clients
+have been qualified separately in ignored artifacts; no Couch Sendspin adapter is
+implemented yet. Physical speaker drift/latency remains unmeasured for both backends.

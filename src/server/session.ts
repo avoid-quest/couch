@@ -12,7 +12,7 @@ import type { PlaybackContinuation } from "./continuation";
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
-export type PlaybackDestination = { backend: "native" | "browser"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
+export type PlaybackDestination = { backend: "native" | "browser" | "snapcast"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type SessionOptions = {
   admitted?: () => boolean;
   transferBusy?: () => boolean;
@@ -356,7 +356,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       webRetried = true;
       pendingPause = recovery.paused;
       progress.replaceTransport(previous.playbackId, playbackId);
-      send({ type: "load", playbackId, ...media, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
+      send({ type: "load", playbackId, ...media, duration: previous.duration ?? undefined, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
         preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...(previous.replayGain !== undefined ? { replayGain: previous.replayGain } : {}), ...state.preferences!.device } });
       broadcast();
     }).catch(failed);
@@ -454,7 +454,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy);
-        send({ type: "load", playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
+        send({ type: "load", playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, duration: currentEntry.duration, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
         broadcast();
       };
@@ -501,7 +501,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       subtitleWarning = warning ?? null;
       state.player = { ...previous, playbackId, status: "loading", buffering: false, error: null, tracks: [], chapters: [] };
       progress.replaceTransport(previous.playbackId, playbackId, state.queue.find(item => item.id === entry!.id));
-      send({ type: "load", playbackId, ...media, paused,
+      send({ type: "load", playbackId, ...media, duration: fresh.metadata?.duration ?? previous.duration ?? undefined, paused,
         ...(entry!.live || fresh.metadata?.live ? {} : { startPosition: position }),
         ...(audioOutput ? { audioOutput } : {}),
         preferences: { ...state.preferences!.profile, ...(previous.speed === undefined ? {} : { speed: previous.speed }), ...state.preferences!.device } });
@@ -649,7 +649,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       catch (error) { options.releaseHandoff?.(playbackId); throw error; }
       finally { clearTimeout(timeout); }
       const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
-      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, paused: true,
+      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, duration: state.player.duration ?? media.metadata?.duration ?? entry.duration, paused: true,
         ...(!browser && !destination.remote && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
         startPosition: entry.live || media.radio ? undefined : state.player.position,
         preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser || destination.remote ? 0 : state.preferences!.device.audioDelay } } };
@@ -824,7 +824,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       assertNotMoving();
       authorize();
       switch (action.type) {
-        case "selectTarget": throw new Error("Select a target through the connected coordinator.");
+        case "selectTarget": case "groupReconnect": case "groupMembers": case "groupVolume": throw new Error("Select a target through the connected coordinator.");
         case "enqueue":
           if (action.playNow) available();
           if (state.queue.length >= 500) throw new Error(QUEUE_FULL);

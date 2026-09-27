@@ -39,6 +39,7 @@ export type PlayerState = {
   replayGain?: ReplayGainMode;
   subtitleError?: string | null;
   nowPlaying?: NowPlaying | null;
+  positionEstimated?: boolean;
 };
 
 export type SessionState = {
@@ -73,6 +74,9 @@ export type SessionState = {
 
 export type Action =
   | { type: "selectTarget"; targetId: string }
+  | { type: "groupReconnect"; targetId: string }
+  | { type: "groupMembers"; targetId: string; memberIds: string[] }
+  | { type: "groupVolume"; targetId: string; memberId: string; volume: number; muted: boolean }
   | { type: "navigate"; key: NavigationKey }
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
   | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
@@ -116,7 +120,7 @@ export type PlaybackCommand =
   | { type: "audioPause" }
   | { type: "audioOutput"; output: string }
   | { type: "prepare"; playbackId: string; next?: { playbackId: string; source: string; headers?: Record<string, string>; preferences: ProfilePlaybackPreferences & { audioDelay: number } } }
-  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
+  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; duration?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
@@ -129,7 +133,10 @@ export type PlaybackCommand =
   | { type: "stop" };
 
 // A backend-managed group has one timeline and one observation writer.
-export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser"; connected: boolean };
+export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast"; connected: boolean;
+  error?: string;
+  handoffSafety?: "buffer-drain";
+  members?: { id: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
 export type RendererMessage = { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }
   | { type: "registerNativeRenderer"; nonce: string }

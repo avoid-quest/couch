@@ -194,3 +194,8 @@ test("a stopped checkpoint asks for an output without promising resume", async (
   await render("unavailable", false, false, undefined, undefined, [], "checkpoint", true);
   expect(screen.getByText("Choose a playback output.")).toBeInTheDocument();
 });
+
+test("an uncertain audio group asks for reconnection before transfer", async () => {
+  await render("unavailable", false, false, undefined, undefined, [{ id: "rooms", name: "Home speakers", kind: "group", backend: "snapcast", connected: false }], "rooms");
+  expect(screen.getByText("Reconnect Home speakers from Playback output before moving playback.")).toBeInTheDocument();
+});

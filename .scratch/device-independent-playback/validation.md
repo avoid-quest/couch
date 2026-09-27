@@ -430,3 +430,28 @@ Stop returned idle and persisted a null checkpoint. Evidence:
 attempt reconfigured Jellyfin on startup, correctly stopping playback; the fixture
 now skips reconfiguration when already connected. This is actual browser decode,
 not a native checkpoint journey or abrupt-process-kill browser qualification.
+
+## Snapcast output — 2026-09-27
+
+- `bun run check`: **1717 core passed, 10 skipped, 0 failed**, **3 clock passed**;
+  typecheck passed. Log: `.artifacts/device-independent-playback/snapcast-check-aac.log`.
+- Actual Snapcast 0.35.0 plus two snapclients and Pulse null sinks: **18 checks**
+  passed for play/pause/seek/Stop, member volume/removal/rejoin, complete member loss
+  and backend loss/recovery without autoplay. Evidence: `snapcast-integration/run6`
+  under `.artifacts/device-independent-playback`. This run used dirty source before
+  the final AAC partial-chunk fix; final exact-revision qualification is pending.
+- Actual Jellyfin 10.11.11 private-header H.264/AAC source and Chromium: transfer
+  paused at 25 seconds/1.25×, group resume with 193128 captured PCM bytes (RMS 1978),
+  return through the existing picker paused at 48.175 seconds/1.25×, then Stop.
+  Group capture after return: 192000 PCM bytes, RMS 0. Browser source attribute was
+  removed and readyState 0 while the group owned playback; currentSrc retained the
+  former URL despite cleanup. Evidence: `snapcast-browser.json`, `snapcast-jellyfin.pcm`
+  and `snapcast-jellyfin-stopped.pcm` in the same artifact directory.
+- The real-media run exposed Bun stdout buffering and partial TCP chunk busy-loop
+  behavior. The producer now uses a bounded private TCP decoder pipe, consumes
+  partial bytes without spinning and preserves backpressure. Real long WAV and AAC
+  regressions run with an external watchdog. The hung exploratory Core was killed;
+  restart restored 25 seconds/1.25× without autoplay before explicit group selection.
+- Group dialog DOM/actions have focused UI coverage. The preview's saved screenshot
+  was stale, so no new screenshot-based visual qualification is claimed. No physical
+  speaker synchronization, hardware silence or distributed TV lip-sync is qualified.

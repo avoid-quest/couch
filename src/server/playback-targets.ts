@@ -11,12 +11,12 @@ export function browserCompatible(command: Extract<PlaybackCommand, { type: "loa
 }
 
 // The connection owns the endpoint. IDs in incoming observations never grant authority.
-export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, session: () => ReturnType<typeof createSession>, options: { timeout?: number; observeNative?: () => void; recoveringReceiver?: boolean; now?: () => number } = {}) {
+export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, session: () => ReturnType<typeof createSession>, options: { timeout?: number; observeNative?: () => void; recoveringReceiver?: boolean; recoveringGroup?: boolean; now?: () => number } = {}) {
   const timeout = options.timeout ?? 8_000;
   const now = options.now ?? (() => performance.now());
   // Native watchdog: 10s lease + 2s enforced shutdown, with a 500ms margin.
   const receiverFence = 12_500;
-  const recoveryUntil = options.recoveringReceiver ? now() + receiverFence : 0;
+  const recoveryUntil = options.recoveringReceiver ? now() + receiverFence : options.recoveringGroup ? now() + 750 : 0;
   const native: Endpoint | undefined = nativeSend ? { target: { id: "native", name: "Couch TV", kind: "endpoint", backend: "native", connected: false }, send: nativeSend, player: idle(), attempts: new Set() } : undefined;
   const endpoints = new Map<string, Endpoint>(native ? [["native", native]] : []);
   const waiters = new Set<Waiter>();
@@ -24,7 +24,7 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
   let busy = false;
   let closed = false;
   let published = false;
-  const deliveryFor = (endpoint: Endpoint): PlaybackDestination => ({ backend: endpoint.target.backend, remote: !!endpoint.receiver, capabilities: endpoint.capabilities, authorize: () => {
+  const deliveryFor = (endpoint: Endpoint): PlaybackDestination => ({ backend: endpoint.target.backend, remote: !!endpoint.receiver || endpoint.target.kind === "group", capabilities: endpoint.capabilities, authorize: () => {
     if (closed || !endpoint.target.connected) throw new Error("The playback device disconnected.");
     endpoint.authorize?.();
   } });
@@ -33,8 +33,9 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
     if (closed || !endpoint.target.connected) throw new Error("That playback device disconnected.");
     if (endpoint.receiver && (command.type === "audioOutput" || command.type === "audioPause" || command.type === "addSubtitle" && !/^https?:\/\//i.test(command.source))) throw new Error("This command belongs to the Core's own player.");
     if (command.type === "load") {
-      if (now() < recoveryUntil) throw new Error("Waiting for native receivers to stop after Core restarted. Try again in a few seconds.");
+      if (now() < recoveryUntil) throw new Error("Waiting for previous playback to stop after Core restarted. Try again in a few seconds.");
       if (endpoint.target.backend === "browser") browserCompatible(command);
+      if (endpoint.target.kind === "group") command = { ...command, audioOutput: undefined, preferences: command.preferences ? { ...command.preferences, audioDelay: 0 } : undefined };
       if (endpoint.receiver) {
         if (![command.source, ...(command.audioSource ? [command.audioSource] : []), ...command.subtitles?.map(subtitle => subtitle.source) ?? []].every(source => /^https?:\/\//i.test(source))) throw new Error("This source is only accessible on the Core's own player.");
         command = { ...command, audioOutput: undefined, preferences: command.preferences ? { ...command.preferences, audioDelay: 0 } : undefined };
@@ -105,6 +106,22 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
       endpoints.set(id, endpoint); changed();
       return { id, observe: (player: PlayerState) => { if (endpoints.get(id) === endpoint) observe(endpoint, player); }, close: () => { if (endpoints.delete(id)) disconnect(endpoint); } };
     },
+    registerGroup(target: PlaybackTarget, sendCommand: Endpoint["send"]) {
+      let endpoint: Endpoint = { target: { ...target }, send: sendCommand, player: idle(), attempts: new Set() };
+      endpoints.set(target.id, endpoint); changed();
+      return {
+        update(target: PlaybackTarget) {
+          if (closed) return;
+          if (!target.connected) disconnect(endpoint);
+          // A recovered group starts idle. The old assignment remains resumable,
+          // just like a replacement browser connection; it never autoplays.
+          if (target.connected && !endpoint.target.connected) endpoint = { target: { ...target }, send: sendCommand, player: idle(), attempts: new Set() };
+          else endpoint.target = { ...target };
+          endpoints.set(target.id, endpoint); changed();
+        },
+        observe: (player: PlayerState) => { if (endpoint.target.connected) observe(endpoint, player); },
+      };
+    },
     registerReceiver(controllerId: string, name: string, sendCommand: Endpoint["send"], authorize: () => void, expired: () => void) {
       const id = `receiver-${controllerId}`;
       const previous = endpoints.get(id);
@@ -132,7 +149,10 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
       if (destination === assigned) return;
       if (session().state.player.status === "error") throw new Error("Stop the failed playback attempt before selecting another output.");
       const source = assigned;
-      if (now() < recoveryUntil || source?.receiver && !source.target.connected && now() < source.receiver.unsafeUntil) throw new Error("The native receiver is stopping. Try again in a few seconds.");
+      // A backend control outage invalidates its configured buffering bound.
+      // Recovery must stop/drain the producer before advertising the group again.
+      if (source?.target.kind === "group" && !source.target.connected && !endpoints.get(source.target.id)?.target.connected) throw new Error("Reconnect the audio group before moving playback; its buffered output is uncertain.");
+      if (now() < recoveryUntil || source?.receiver && !source.target.connected && now() < source.receiver.unsafeUntil) throw new Error("The previous playback output is stopping. Try again in a few seconds.");
       const original = session().state.player;
       const paused = session().handoffPaused;
       if (!source || !original.playbackId || !["playing", "paused", "unavailable"].includes(original.status)) {
@@ -163,7 +183,7 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
             || (candidates.length === 1 && original.tracks?.filter(item => item.kind === kind).length === 1 && (!selected.language || !track.language || track.language === selected.language)));
           // Browsers without audioTracks can best-effort play the sole source audio track.
           // Known-empty metadata and explicit choices among multiple tracks still require a match.
-          const soleAudioWithUnknownDestination = kind === "audio" && destination.target.backend === "browser"
+          const soleAudioWithUnknownDestination = kind === "audio" && (destination.target.backend === "browser" || destination.target.kind === "group")
             && ready.audioTracksKnown === false && original.tracks?.filter(track => track.kind === "audio").length === 1;
           if (selected && !match && !soleAudioWithUnknownDestination) throw new Error(`The destination cannot preserve the selected ${kind} track. Keep playback here.`);
           if (match && !match.selected || kind === "subtitle" && !selected && candidates.some(track => track.selected)) {

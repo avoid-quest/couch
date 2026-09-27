@@ -3,6 +3,7 @@ import type { Action, ClientMessage, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
+const memberId = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 128 && !/[\u0000-\u0020\u007f]/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "streamingcommunity"]);
@@ -51,7 +52,9 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "restoreRemoved": return id(value.token);
     case "play": return id(value.entryId) && (value.fromStart === undefined || typeof value.fromStart === "boolean");
     case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));
-    case "selectTarget": return id(value.targetId);
+    case "selectTarget": case "groupReconnect": return id(value.targetId);
+    case "groupMembers": return id(value.targetId) && Array.isArray(value.memberIds) && value.memberIds.length > 0 && value.memberIds.length <= 32 && value.memberIds.every(memberId) && new Set(value.memberIds).size === value.memberIds.length;
+    case "groupVolume": return id(value.targetId) && memberId(value.memberId) && number(value.volume, 100) && typeof value.muted === "boolean";
     case "pause": return id(value.playbackId) && typeof value.paused === "boolean";
     case "seek": return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
     case "mute": return typeof value.muted === "boolean";

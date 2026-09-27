@@ -232,6 +232,8 @@ function ConnectionStatus() {
   if (!connected) return null;
   if (state?.targets && !state.targetId) return <StatusLine>Choose a playback output.</StatusLine>;
   if (state?.player.status === "unavailable" && state.targetId === "checkpoint") return <StatusLine>{state.currentEntryId ? "Choose a playback output to resume paused." : "Choose a playback output."}</StatusLine>;
+  const group = state?.targets?.find(target => target.id === state.targetId && target.kind === "group");
+  if (state?.player.status === "unavailable" && group) return <StatusLine>{group.connected ? state.currentEntryId ? "Choose a playback output to resume paused." : "Choose a playback output." : `Reconnect ${group.name} from Playback output before moving playback.`}</StatusLine>;
   if (state?.player.status === "unavailable") return <StatusLine>Player not running on {state.targets?.find(target => target.id === state.targetId)?.name ?? (state.targets && state.targetId !== "native" ? "the selected playback output" : localHost ? "this computer" : name)}.</StatusLine>;
   return null;
 }

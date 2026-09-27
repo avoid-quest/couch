@@ -19,7 +19,7 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 | Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. Independent packaged service installation remains work. |
 | Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. Their lifecycles are still coupled. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
-| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically; Snapcast/Sendspin adapters remain work. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. A configured local Snapcast group receives paced PCM; Sendspin remains work. |
 
 Server capabilities and target capabilities are separate. Available behavior
 depends on permissions, enabled integrations/helpers, source access and the selected
@@ -115,9 +115,16 @@ DASH audio selection and subtitles are not yet exposed; audio metadata stays unk
 rather than inventing a track. Those are delivery limits, not a
 reason to design a reduced browser UI.
 
-Future Snapcast/Sendspin groups fit as targets whose backend owns timing and member
-synchronization; Couch keeps queue and intent. Build a backend adapter when needed
-instead of teaching every UI a separate group-control protocol.
+The Snapcast adapter presents one configured group as a target and publishes observed
+membership/volume through the existing picker. One Core-owned FFmpeg producer decodes
+remote audio and paces bounded PCM into a loopback Snapserver; Snapcast owns member
+synchronization. Progress is estimated from submitted audio and the configured
+buffer. The qualified 500ms buffer/750ms drain is explicitly different from a physical
+silence acknowledgement. Uncertain control/ingestion blocks transfer until a fresh
+connection resets the backend; reconnect never autoplays. A durable marker also
+fences new playback for 750ms after Core restart. Removed speakers are assigned to
+an idle stream, and active foreign groups cannot be silently taken over. See
+[Snapcast configuration and limits](snapcast.md). Sendspin remains a separate adapter.
 
 For the next source-access gap, consult
 [browser delivery research](research/browser-media-delivery.md). For group adapters,

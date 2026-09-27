@@ -26,3 +26,14 @@ for (const nativeHost of [false, true]) test(`reconnected selected renderer can 
   await userEvent.click(screen.getByRole("menuitem", { name: "Move playback here" }));
   expect(actions).toEqual([{ type: "selectTarget", targetId: "receiver" }]);
 });
+
+for (const connected of [true, false]) test(`group management stays reachable and restores focus (group connected: ${connected})`, async () => {
+  const group = { id: "snapcast:downstairs", name: "Downstairs", kind: "group", backend: "snapcast", connected, members: [] };
+  renderUI(<ShellProviders value={{ state: { ...state, targets: [group] }, connected: true, run: async () => true }}><PlaybackTargetPicker /></ShellProviders>);
+  await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "Manage Downstairs" }));
+  expect(screen.getByRole("dialog", { name: "Downstairs" })).toBeInTheDocument();
+  expect(screen.getByText("Group playback uses estimated progress. Switching outputs waits for buffered audio to finish.")).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: "Playback output" })).toHaveFocus();
+});
