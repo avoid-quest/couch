@@ -10,7 +10,7 @@ export function validatePcmSource(command: Load) {
   let url: URL;
   try { url = new URL(source); } catch { throw new PlaybackError("Choose one device for this source. Playing on several devices requires an HTTP audio source."); }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || /[\u0000-\u0020\u007f\\]/.test(source)) throw new PlaybackError("Choose one device for this source. Playing on several devices requires an HTTP audio source without embedded credentials.");
-  if (command.segment || command.subtitles?.length || command.preferences?.replayGain && command.preferences.replayGain !== "off" || command.audioOutput || command.preferences?.audioDelay) throw new PlaybackError("Choose one device for this source. Its playback features aren't supported on several devices.");
+  if (command.segment || command.subtitles?.length && !command.playbackOwner || command.preferences?.replayGain && command.preferences.replayGain !== "off" || command.audioOutput || command.preferences?.audioDelay) throw new PlaybackError("Choose one device for this source. Its playback features aren't supported on several devices.");
   let headers = "";
   for (const [name, value] of Object.entries(command.headers ?? {})) {
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/.test(name) || /[\u0000-\u001f\u007f]/.test(value)) throw new Error("Invalid audio source headers.");

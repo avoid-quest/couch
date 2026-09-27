@@ -65,7 +65,6 @@ import { windowsSound } from "./sound-windows";
 import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import { createSendspin, validateSendspinConfig, type SendspinConfig } from "./sendspin";
-import { validateSendspinLoad } from "./sendspin-playback";
 import { openSendspinIdentity } from "./sendspin-identity";
 import type { SendspinHostingState } from "../shared/sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -238,8 +237,8 @@ export function createHub(options: HubOptions) {
       validateCommand: command => {
         if (targets.nativeRenderer) return;
         if (command.type === "load" && targets.destination?.backend === "browser") browserCompatible(command);
-        if (command.type === "load" && targets.destination?.backend === "sendspin") validateSendspinLoad(command);
-        if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported by the selected output.");
+        if (command.type === "load" && targets.destination?.backend === "sendspin") devices.validateLoad(runtime, command);
+        if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type) && !(devices.hasVideoScreen(runtime) && ["subtitleDelay", "addSubtitle"].includes(command.type))) throw new Error("This playback setting is not supported by the selected output.");
       },
       resolveContinuation: (entry, signal) => continuation(entry, signal),
       ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
@@ -814,6 +813,17 @@ export function createHub(options: HubOptions) {
           if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
           if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
         };
+        const joining = /^\/api\/playbacks\/([^/]+)\/join$/.exec(url.pathname);
+        if (joining && request.method === "POST") {
+          try {
+            const { deviceId } = await settingFields(request, ["deviceId"], false);
+            if (typeof deviceId !== "string") throw new ControllerError("Choose this device to join playback.");
+            const destination = resolvePlayback(decodeURIComponent(joining[1]!), caller.controller?.id ?? null);
+            await devices.join(destination, deviceId, authorize);
+            publishPlaybacks();
+            return cors(request, json({ id: destination.id }));
+          } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not join playback." }, 409)); }
+        }
         if (url.pathname === "/api/playbacks" && request.method === "POST") {
           try {
             const { deviceId } = await settingFields(request, ["deviceId"], false);

@@ -45,11 +45,12 @@ export type PlayerState = {
 };
 
 export type PlaybackDevice = { id: string; name: string; connected: boolean; playbackId?: string; volume: number; muted: boolean; audio: boolean; requiresGesture?: boolean };
-export type PlaybackSummary = { id: string; title: string; status: PlayerState["status"]; deviceIds: string[] };
+export type PlaybackSummary = { id: string; title: string; status: PlayerState["status"]; deviceIds: string[]; videoDeviceId?: string };
 
 export type SessionState = {
   devices?: PlaybackDevice[];
   deviceIds?: string[];
+  videoDeviceId?: string;
   playbacks?: PlaybackSummary[];
   sessionMode?: "household" | "personal";
   sessionId?: string;
@@ -125,11 +126,11 @@ export type ServerMessage = { type: "audioActivationRequired" }
   | { type: "navigation"; key: NavigationKey }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
-export type PlaybackCommand =
+export type PlaybackCommand = (
   | { type: "audioPause" }
   | { type: "audioOutput"; output: string }
   | { type: "prepare"; playbackId: string; next?: { playbackId: string; source: string; headers?: Record<string, string>; preferences: ProfilePlaybackPreferences & { audioDelay: number } } }
-  | { type: "load"; audioOnly?: boolean; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; duration?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
+  | { type: "load"; audioOnly?: boolean; videoOnly?: boolean; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; duration?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
@@ -139,7 +140,7 @@ export type PlaybackCommand =
   | { type: "replayGain"; playbackId: string; mode: ReplayGainMode }
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
-  | { type: "stop" };
+  | { type: "stop" }) & { playbackOwner?: string };
 
 // A backend-managed group has one timeline and one observation writer.
 export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "sendspin"; connected: boolean;

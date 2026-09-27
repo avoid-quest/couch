@@ -32,10 +32,14 @@ and device loudness. It handles these operations directly:
 - Control an existing playback without changing its devices or fetching its media.
 - Move playback to a device while preserving the ongoing experience.
 - Add or remove compatible audio devices from that same playback.
+- Watch video on one selected screen with its sound on all selected audio devices.
 - Start another playback on a device while other playbacks keep running.
 
 There are no personal/household modes, audio-group destinations, or Listen together
 setup flow. Adding another compatible speaker selects synchronized delivery internally.
+Video retains one picture output while the selected devices share its soundtrack.
+Multiple simultaneous picture outputs are deferred; selecting several devices must
+not make video unavailable.
 Occupied devices require an explicit contextual replacement choice. Unsupported
 combinations explain the limitation at that action. Browser audio permission appears
 only when the affected device needs a gesture. Device loudness stays with the device;

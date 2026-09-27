@@ -8,7 +8,7 @@ export const sendspinDrainMs = 1000;
 const leadUs = 500_000, maxMembers = 32;
 type Load = Extract<PlaybackCommand, { type: "load" }> & { duration?: number };
 export function validateSendspinLoad(command: Load) {
-  if (!command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(command.audioSource ?? command.source)) throw new PlaybackError("Choose one device for this source. Playing on several devices requires a supported audio source.");
+  if (!command.playbackOwner && !command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(command.audioSource ?? command.source)) throw new PlaybackError("Choose one device for this source. Playing on several devices requires a supported audio source.");
   validatePcmSource(command);
   if (command.preferences?.speed !== undefined && (!Number.isFinite(command.preferences.speed) || command.preferences.speed < 0.25 || command.preferences.speed > 4)) throw new Error("Invalid playback speed.");
 }
@@ -58,7 +58,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     callbacks.observe(state);
     if (serverNowUs() - metadataAt > 500_000) {
       metadataAt = serverNowUs();
-      for (const device of group) env.core.sendMetadata(device.id, { progress: { track_progress: state.position * 1000, track_duration: (state.duration ?? 0) * 1000, playback_speed: state.status === "playing" ? (state.speed ?? 1) * 1000 : 0 } });
+      for (const device of group) env.core.sendMetadata(device.id, { progress: { track_progress: state.position * 1000, track_duration: (state.duration ?? 0) * 1000, playback_speed: state.status === "playing" && serverNowUs() >= startedUs ? (state.speed ?? 1) * 1000 : 0 } });
     }
   };
   const position = () => state.status === "playing" && startedUs ? Math.min(state.duration ?? Infinity, startPosition + Math.min(sentSeconds, Math.max(0, (serverNowUs() - startedUs) / 1e6)) * (state.speed ?? 1)) : state.position;
@@ -117,7 +117,11 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
             if (epoch !== generation) return;
             clear(); state = { ...state, position: Math.min(state.duration ?? Infinity, startPosition + sentSeconds * speed), status: "ended" }; observe(); return;
           }
-          if (!startedUs) { startedUs = serverNowUs() + leadUs; for (const clientId of selected) startStream(clientId); }
+          if (!startedUs) {
+            startedUs = serverNowUs() + leadUs;
+            for (const clientId of selected) startStream(clientId);
+            void delay(leadUs / 1000).then(() => { if (epoch === generation && !closed) { metadataAt = 0; observe(); } });
+          }
           const timestampUs = Math.round(startedUs + sentSeconds * 1e6);
           await delay(Math.max(0, (timestampUs - serverNowUs() - leadUs) / 1000), undefined, { signal: cancellation!.signal });
           if (epoch !== generation) return;
@@ -177,6 +181,14 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     get members() { return [...selected]; },
     setMembers,
     setMemberVolume,
+    reject(playbackId: string, message: string) {
+      void enqueue(async () => {
+        await retire();
+        load = undefined;
+        state = { ...idle(), playbackId, status: "error", error: message };
+        observe();
+      }).catch(() => fail(message));
+    },
     send(command: PlaybackCommand) {
       if (closed) throw new Error("Sendspin playback is closed.");
       if (command.type === "load") validateSendspinLoad(command);
@@ -188,6 +200,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
       if (command.type === "volume") { for (const clientId of selected) void setMemberVolume(clientId, command.volume, env.device(clientId)?.muted ?? false).catch(() => fail("Sendspin volume was not confirmed.")); return; }
       if (command.type !== "load" && command.type !== "stop" && "playbackId" in command && command.playbackId !== load?.playbackId) return;
       if (queued >= 32) { if (command.type === "stop") { intentGeneration++; fail("Sendspin command backlog was cancelled. Reconnect before playback."); return; } throw new Error("Too many pending Sendspin commands."); }
+      if (["load", "seek", "pause", "speed", "stop"].includes(command.type)) metadataAt = 0;
       if (command.type === "load" || command.type === "stop") { intentGeneration++; cancel(); }
       const intent = intentGeneration;
       void enqueue(async () => {

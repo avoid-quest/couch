@@ -23,6 +23,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
   const native: Endpoint | undefined = nativeSend ? { target: { id: "native", name: "Couch TV", kind: "endpoint", backend: "native", connected: false }, send: nativeSend, player: idle(), attempts: new Set() } : undefined;
   const endpoints = new Map<string, Endpoint>(native ? [["native", native]] : []);
   const waiters = new Set<Waiter>();
+  const memberObservers = new Map<Binding, Set<(id: string, player: PlayerState) => void>>();
   const bindings = new Map<string, Binding>();
   const claims = new Map<string, Binding>();
   const reservations = new Map<string, Binding>();
@@ -81,6 +82,8 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
     }
     const owner = claims.get(endpoint.target.id);
     if (owner && !owner.closed && endpoint === owner.assigned) owner.session().observe(player);
+    for (const [binding, observers] of memberObservers) if (!binding.closed && binding.assigned?.target.kind === "group" && binding.assigned.target.members?.some(member => member.joined && member.deviceId === endpoint.target.id))
+      for (const observer of observers) observer(endpoint.target.id, player);
   };
   const disconnect = (endpoint: Endpoint) => {
     if (closed || !endpoint.target.connected) return;
@@ -89,6 +92,8 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
     for (const waiter of [...waiters]) if (waiter.endpoint === endpoint) waiter.reject(new Error("The playback device disconnected."));
     const owner = claims.get(endpoint.target.id);
     if (owner && !owner.closed && endpoint === owner.assigned) owner.session().rendererDisconnected();
+    for (const [binding, observers] of memberObservers) if (!binding.closed && binding.assigned?.target.kind === "group" && binding.assigned.target.members?.some(member => member.joined && member.deviceId === endpoint.target.id))
+      for (const observer of observers) observer(endpoint.target.id, { ...endpoint.player, status: "unavailable", error: "The video device disconnected." });
     changed();
   };
   const evict = async (owner: Binding, destination: Endpoint) => {
@@ -133,7 +138,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
         if (endpoint.receiver) clearTimeout(endpoint.receiver.timer);
         try { endpoint.send({ type: "stop" }); } catch { /* Closing sockets also stops browser renderers. */ }
       }
-      bindings.clear(); claims.clear(); reservations.clear(); controls.clear();
+      bindings.clear(); claims.clear(); reservations.clear(); controls.clear(); memberObservers.clear();
     },
     observeNative(player: PlayerState) {
       if (!native) return;
@@ -222,8 +227,25 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
             } catch { /* Keep uncertain outputs claimed until a safe explicit takeover. */ }
           }));
           binding.assigned = undefined; bindings.delete(id); changed();
+          memberObservers.delete(binding);
         },
         owns(targetId: string) { return claims.get(targetId) === binding; },
+        memberState(targetId: string) { return endpoints.get(targetId)?.player; },
+        observeMember(observer: (targetId: string, player: PlayerState) => void) {
+          const observers = memberObservers.get(binding) ?? new Set();
+          observers.add(observer); memberObservers.set(binding, observers);
+          return () => { observers.delete(observer); if (!observers.size) memberObservers.delete(binding); };
+        },
+        sendMember(targetId: string, command: PlaybackCommand) {
+          const endpoint = endpoints.get(targetId);
+          if (!endpoint?.target.connected) throw new Error("The video device disconnected.");
+          send(binding, endpoint, command);
+        },
+        waitMember(targetId: string, command: PlaybackCommand, accept: (player: PlayerState) => boolean) {
+          const endpoint = endpoints.get(targetId);
+          if (!endpoint?.target.connected) throw new Error("The video device disconnected.");
+          return wait(binding, endpoint, command, accept);
+        },
         assertAvailable(targetId: string, memberIds?: string[]) {
           if (binding.closed || closed) throw new Error("Playback session closed.");
           if (binding.busy) throw new Error("Playback is moving. Wait for it to finish.");

@@ -7,8 +7,9 @@ in the application and active product documents.
 Connecting to a Library does not assign a playback device.
 
 **Playback**: One durable queue, current item, timeline, intent, track choices and
-watching preferences. Several Playbacks may run independently. A window selects
-which authorized Playback it controls; that choice does not move or stop it.
+watching preferences. Several Playbacks may run independently. Participating devices
+control the same Playback. A window may explicitly control another authorized
+Playback without joining or interrupting it.
 
 **Device**: A named place that can render media. One persistent client identity and
 name spans pairing, direct rendering and synchronized audio. Device loudness stays
