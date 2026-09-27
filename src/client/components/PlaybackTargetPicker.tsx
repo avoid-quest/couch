@@ -9,7 +9,7 @@ export function PlaybackTargetPicker() {
   const target = state.targets.find(target => target.id === state.targetId);
   const here = state.targetId === rendererTargetId;
   return <>
-    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" disabled={!connected || !!state.handoff} aria-label="Playback output"><Speaker aria-hidden="true" /><span className="max-sm:hidden">{state.handoff ? "Moving playback…" : here ? "This browser" : target?.name ?? "Playback output"}</span></Button></DropdownMenuTrigger>
+    <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="min-w-11" disabled={!connected || !!state.handoff} aria-label="Playback output"><Speaker aria-hidden="true" /><span className="max-sm:hidden">{state.handoff ? "Moving playback…" : here ? "This browser" : target?.name ?? "Playback output"}</span></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {state.targets.map(target => <DropdownMenuItem key={target.id} disabled={!target.connected || target.id === state.targetId} onSelect={() => void run({ type: "selectTarget", targetId: target.id })}>
           <Monitor aria-hidden="true" />{target.id === rendererTargetId ? state.currentEntryId ? "Move playback here" : "Play in this browser" : `${state.currentEntryId ? "Continue on" : "Play on"} ${target.name}`}{!target.connected ? " (disconnected)" : ""}
