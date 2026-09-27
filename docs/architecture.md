@@ -51,12 +51,17 @@ audio devices are implementation choices behind that same assignment. One Playba
 can use several synchronized audio Devices; multiple Playbacks get separate Sendspin
 timelines. Device ownership is global so a Device cannot silently join competing
 Playbacks. The serialized `sendspin:<playback-id>` target is internal and never a
-user-facing destination.
+user-facing destination. Removing down to one direct-capable Device moves the
+current item back to its ordinary player, so the next video has no lingering
+audio-only backend. Standalone audio-only endpoints retain their Sendspin adapter.
 
 The registry fences late observations by authenticated connection and playback
 attempt. Moving prepares the destination paused, checks compatible tracks and seek,
 observes a source checkpoint, verifies the destination, then retires the source.
-The selected Device keeps its own volume. Failure keeps the source running when safe
+The selected Device keeps its own volume. Native system gain remains on that
+machine; managed client gain is converted at the Sendspin boundary and confirmed
+before its stream starts. Device faders and shared volume call the same assignment
+service. Off devices keep their last observed level in the mixer. Failure keeps the source running when safe
 or reports an uncertain, recoverable state. A browser gesture belongs to that
 Device's action. Closing a control-only window does not stop a remote renderer;
 loss of an active renderer leaves resumable intent. Receiver leases and restart
