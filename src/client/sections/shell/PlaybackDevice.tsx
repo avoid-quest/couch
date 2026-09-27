@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
-import { acknowledgeFrontend, apiSend } from "@/api/client";
+import { acknowledgeFrontend, ApiError, apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
 import { isNativeHost, isTvPresentation } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
@@ -163,7 +163,10 @@ export function InstallationUpdates({ open, onOpenChange, tvNavigable = false }:
         const connection = await invoke<Credentials>("connection_info");
         if (stop.signal.aborted) return;
         if (!connection?.origin || !connection.token) throw new Error("Updater starting…");
-        await acknowledgeFrontend(connection, stop.signal, 10_000).catch(() => { throw new Error("Couldn't verify the version on this computer."); });
+        await acknowledgeFrontend(connection, stop.signal, 10_000).catch(reason => {
+          // Builds without an installed updater still expose their local version.
+          if (!(reason instanceof ApiError && reason.status === 404)) throw new Error("Couldn't verify the version on this computer.");
+        });
         setCredentials(connection); setError(null);
       } catch (reason) { if (!stop.signal.aborted) { setError(message(reason)); timer = setTimeout(() => void connect(), 2_000); } }
     };
