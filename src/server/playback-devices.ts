@@ -38,6 +38,12 @@ export function createPlaybackDevices(options: Options) {
     if (JSON.stringify(assigned(runtime)) !== JSON.stringify(ids)) catalog.assign(runtime.id, ids);
   };
   const active = (runtime: Runtime) => !!runtime.session.state.player.playbackId && !["idle", "ended"].includes(runtime.session.state.player.status);
+  const videoScreen = (runtime: Runtime) => {
+    const binding = groups.get(runtime.id);
+    return binding?.screen && binding.video?.playbackId && binding.video.playbackId === binding.audio?.playbackId
+      && ["playing", "paused"].includes(binding.audio.status) && runtime.session.state.targetId === `sendspin:${runtime.id}`
+      && registry.targets.some(target => target.id === binding.screen && target.connected) ? binding.screen : undefined;
+  };
   const snapshot = (runtime: Runtime) => {
     const runtimes = options.runtimes();
     const audioDevices = options.host()?.devices ?? [];
@@ -64,17 +70,17 @@ export function createPlaybackDevices(options: Options) {
     }
     const playbacks: PlaybackSummary[] = runtimes.filter(value => value.id === runtime.id || assigned(value).length || value.session.state.queue.length || active(value)).map(value => {
       const state = value.session.state;
-      const screen = groups.get(value.id)?.screen;
-      return { id: value.id, title: state.queue.find(entry => entry.id === state.currentEntryId)?.title ?? "New playback", status: state.player.status, deviceIds: assigned(value), ...(screen && registry.targets.some(target => target.id === screen && target.connected) && state.targetId === `sendspin:${value.id}` && active(value) && !value.session.audioOnly ? { videoDeviceId: screen } : {}) };
+      const screen = videoScreen(value);
+      return { id: value.id, title: state.queue.find(entry => entry.id === state.currentEntryId)?.title ?? "New playback", status: state.player.status, deviceIds: assigned(value), ...(screen ? { videoDeviceId: screen } : {}) };
     });
-    const screen = groups.get(runtime.id)?.screen;
-    return { devices, playbacks, deviceIds: assigned(runtime), ...(screen && registry.targets.some(target => target.id === screen && target.connected) && runtime.session.state.targetId === `sendspin:${runtime.id}` && active(runtime) && !runtime.session.audioOnly ? { videoDeviceId: screen } : {}) };
+    const screen = videoScreen(runtime);
+    return { devices, playbacks, deviceIds: assigned(runtime), ...(screen ? { videoDeviceId: screen } : {}) };
   };
   const videoSource = (command: Extract<PlaybackCommand, { type: "load" }>) => !command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(command.source);
   const screenFor = (runtime: Runtime, ids: string[]) => {
     const capable = (id: string) => registry.targets.some(target => target.id === id && target.connected && target.kind === "endpoint" && target.backend !== "sendspin");
     const previous = groups.get(runtime.id)?.screen;
-    return [previous, runtime.session.state.targetId, "native", ...ids].find((id): id is string => !!id && ids.includes(id) && capable(id));
+    return [previous, runtime.session.state.targetId, ...ids].find((id): id is string => !!id && ids.includes(id) && capable(id));
   };
   const merged = (binding: GroupBinding) => {
     const audio = binding.audio;
