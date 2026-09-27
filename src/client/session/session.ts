@@ -62,12 +62,17 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const ready = useRef(false);
   const pending = useRef(new Map<string, Pending>());
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [nativeVideo, setNativeVideo] = useState<string | null>(null);
+  const [presentNativeVideo, setPresentNativeVideo] = useState<{ owner: string; transport: string } | null>(null);
+  const committedNativeOwner = useRef<{ target: string; owner: string | null; video: string | null } | null>(null);
 
   useEffect(() => {
     setRendererTargetId(null);
     setRendererAttached(false);
     setRendererSocket(null);
     setAudioActivationRequired(false);
+    setNativeVideo(null);
+    setPresentNativeVideo(null);
     if (!sameCredentials(owner, credentials)) setOwnerPlayback(null);
     setState(null);
     observation.current = null;
@@ -179,7 +184,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           connection.send(JSON.stringify({ type: "registerNativeRenderer", nonce: nativeNonce }));
         }
       };
-      const observe = (state: SessionState["player"]) => { if (isCurrent() && attached && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); };
+      const observe = (state: SessionState["player"]) => {
+        if (!isCurrent()) return;
+        if (native && ["playing", "paused"].includes(state.status)) setNativeVideo(state.playbackId && state.tracks?.some(track => track.kind === "video") ? state.playbackId : null);
+        else if (native && (!state.playbackId || ["idle", "error", "unavailable"].includes(state.status))) setNativeVideo(null);
+        if (attached && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state }));
+      };
       let rendering: ReturnType<typeof createBrowserRenderer> | ReturnType<typeof createNativeRenderer> | null = rendererEnabled && browserPlayback && !isNativeHost() ? createBrowserRenderer(observe) : null;
       renderer.current = rendering;
       socket.current = connection;
@@ -405,8 +415,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, [credentials?.origin, credentials?.token, credentials?.installationId, playbackId]);
 
-  const selectPlayback = useCallback((id: string) => {
-    if (!id || id === currentPlayback.current) return;
+  const selectPlayback = useCallback((id: string, presentation?: { owner: string; transport: string }) => {
+    if (!id) return;
+    if (id === currentPlayback.current) { if (presentation) setPresentNativeVideo(presentation); return; }
     ready.current = false;
     currentPlayback.current = id;
     observation.current = null;
@@ -414,6 +425,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     setOwnerPlayback(null);
     setClock(emptyPlaybackClock);
     setAudioActivationRequired(false);
+    setPresentNativeVideo(presentation ?? null);
     for (const request of pending.current.values()) {
       clearTimeout(request.timer);
       request.reject(new Error("Playback selection changed."));
@@ -424,6 +436,18 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     setSelection({ owner: credentials, playbackId: id });
   }, [credentials]);
 
+  useEffect(() => {
+    if (!nativeReceiver || !rendererAttached || !rendererTargetId || !state?.devices) { committedNativeOwner.current = null; return; }
+    const owner = state.devices.find(device => device.id === rendererTargetId)?.playbackId ?? null;
+    const previous = committedNativeOwner.current;
+    if (!previous || previous.target !== rendererTargetId) { committedNativeOwner.current = { target: rendererTargetId, owner, video: nativeVideo }; return; }
+    if (owner === previous.owner) return;
+    committedNativeOwner.current = { target: rendererTargetId, owner, video: nativeVideo };
+    // The renderer can prepare video before assignment. Follow only a later,
+    // committed owner change backed by a new local video observation.
+    if (owner && nativeVideo && nativeVideo !== previous.video) selectPlayback(owner, { owner, transport: nativeVideo });
+  }, [nativeReceiver, rendererAttached, rendererTargetId, state, nativeVideo, selectPlayback]);
+
   const setDeviceAudioReady = useCallback((audioReady: boolean) => {
     const connection = rendererSocket;
     if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !(rendererAttached || trustedLocal) || socket.current !== connection || connection?.readyState !== WebSocket.OPEN) return;
@@ -433,5 +457,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   const playHere = useCallback(() => renderer.current?.play(), []);
 
-  return { playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: credentialCurrent ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || credentialCurrent && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  return { playbackId, selectPlayback, presentNativeVideo, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: credentialCurrent ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || credentialCurrent && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }

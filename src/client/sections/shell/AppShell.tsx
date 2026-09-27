@@ -58,7 +58,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { credentials, state, status, details, connected, run, rendererTargetId, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
+  const { credentials, state, status, details, connected, run, rendererTargetId, nativeReceiver, presentNativeVideo, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -105,6 +105,16 @@ function useShellValue() {
   const openPlayer = (panel?: "queue") => {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
+  const presentedNativeVideo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!nativeReceiver || !rendererTargetId || !presentNativeVideo || state?.sessionId !== presentNativeVideo.owner
+      || state.player.playbackId !== presentNativeVideo.transport || !state.deviceIds?.includes(rendererTargetId)
+      || !state.player.tracks?.some(track => track.kind === "video")) return;
+    const key = `${presentNativeVideo.owner}:${presentNativeVideo.transport}`;
+    if (presentedNativeVideo.current === key) return;
+    presentedNativeVideo.current = key;
+    openPlayer();
+  }, [nativeReceiver, rendererTargetId, presentNativeVideo, state]);
   const focusSearch = () => {
     void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };

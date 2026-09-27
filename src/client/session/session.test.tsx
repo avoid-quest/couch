@@ -318,6 +318,40 @@ test.each([false, true])("native receiver registration waits for begin and basel
   expect(sockets.at(-1)!.readyState).toBe(Socket.OPEN);
 });
 
+test("native video follows a new committed owner, but initial and manual playback views stay put", async () => {
+  spyOn(nativeContext, "isNativeHost").mockReturnValue(true);
+  nativeReceiver = true; desktopProtocol = currentDesktopProtocol;
+  let observe!: (state: SessionState["player"]) => void;
+  spyOn(nativeRenderer, "createNativeRenderer").mockImplementation((report) => {
+    observe = report;
+    return { command() {}, close() {}, report() {}, play() {}, renew() {} };
+  });
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  const device = { id: "native-receiver", name: "Desk", connected: true, volume: 50, muted: false, audio: false };
+  const view = (sessionId: string, owner?: string): SessionState => ({ ...state, sessionId, devices: [{ ...device, playbackId: owner }], deviceIds: [], playbacks: owner ? [{ id: owner, title: "Movie", status: "paused", deviceIds: [device.id] }] : [] });
+  await act(async () => peer.emit({ type: "state", state: view("household", "old") }));
+  await act(async () => peer.emit({ type: "rendererRegistered", sessionId: "household", targetId: device.id }));
+  await act(async () => observe({ ...state.player, playbackId: "old-transport", status: "paused", tracks: [{ id: "video", index: 0, kind: "video", label: "", language: "", selected: true }] }));
+  await act(async () => peer.emit({ type: "state", state: view("household", "old") }));
+  expect((peer.sent as unknown as Array<{ type: string }>).filter(message => message.type === "selectPlayback")).toEqual([]);
+
+  await act(async () => session.selectPlayback("manual"));
+  await act(async () => peer.emit({ type: "state", state: view("manual", "old") }));
+  expect(session.playbackId).toBe("manual");
+  await act(async () => observe({ ...state.player, playbackId: "new-transport", status: "paused", tracks: [{ id: "video", index: 0, kind: "video", label: "", language: "", selected: true }] }));
+  await act(async () => peer.emit({ type: "state", state: { ...view("manual", "old"), handoff: { targetId: device.id } } }));
+  expect(session.playbackId).toBe("manual");
+  await act(async () => peer.emit({ type: "state", state: view("manual", "new") }));
+  expect(peer.sent.at(-1) as unknown).toEqual({ type: "selectPlayback", playbackId: "new" });
+  expect(session.presentNativeVideo).toEqual({ owner: "new", transport: "new-transport" });
+  await act(async () => peer.emit({ type: "state", state: view("new", "new") }));
+  await act(async () => session.selectPlayback("manual"));
+  await act(async () => peer.emit({ type: "state", state: view("manual", "new") }));
+  expect(session.playbackId).toBe("manual");
+  expect(session.presentNativeVideo).toBeNull();
+});
+
 test("initial native output failure keeps control connected and retries only when output becomes available", async () => {
   spyOn(nativeContext, "isNativeHost").mockReturnValue(true);
   nativeReceiver = true; desktopProtocol = currentDesktopProtocol;
