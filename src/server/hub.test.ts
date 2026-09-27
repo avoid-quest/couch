@@ -140,7 +140,7 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
   peer.close();
   const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
-  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, capabilities: { browserPlayback: true, nativePlayback: true }, desktopRemoteUi: 1, desktopClientProtocol: 1, playbackClock: 1, tvPresentation: false });
+  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, capabilities: { browserPlayback: true, nativePlayback: true, restart: false }, desktopRemoteUi: 1, desktopClientProtocol: 1, playbackClock: 1, tvPresentation: false });
   for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
@@ -1286,6 +1286,7 @@ test("legacy recording state survives startup without backend work or playback a
 
 test("General restart requires an administrator confirmation and installed supervisor", async () => {
   const { hub } = fixture();
+  expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ capabilities: { restart: false } });
   const admin = await pair(hub), guest = await pair(hub);
   await claimAdministrator(hub, admin);
   const restart = (token: string, confirmInterrupt: boolean) => controllerApi(hub, token, "/api/settings/restart", "POST", { confirmInterrupt });
@@ -1300,6 +1301,7 @@ test("restart checkpoint failure preserves authenticated HTTP, playback and dirt
   let hub!: Hub;
   const fixtureResult = fixture(undefined, undefined, undefined, { restart: async () => hub.prepareRestart() });
   hub = fixtureResult.hub;
+  expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ capabilities: { restart: true } });
   const admin = await pair(hub);
   await claimAdministrator(hub, admin);
   hub.session.observe(idle);

@@ -144,7 +144,7 @@ export function DeviceRecovery() {
 }
 
 /** This app's own updater; the selected Couch updates separately. */
-export function InstallationUpdates({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function InstallationUpdates({ open, onOpenChange, tvNavigable = false }: { open: boolean; onOpenChange: (open: boolean) => void; tvNavigable?: boolean }) {
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" }, mutations: { networkMode: "always" } } }));
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +165,7 @@ export function InstallationUpdates({ open, onOpenChange }: { open: boolean; onO
     return () => { stop.abort(); clearTimeout(timer); };
   }, []);
   return <QueryClientProvider client={queryClient}><Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent data-tv-local-only>
+    <DialogContent data-tv-local-only={tvNavigable ? undefined : ""}>
       <DialogHeader><DialogTitle>Update Couch on this computer</DialogTitle><DialogDescription>Only Couch on this computer. The Couch it plays on updates separately.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {credentials ? <UpdatesSettings credentials={credentials} connected target="this app" /> : !error && <StatusLine busy>Connecting…</StatusLine>}
