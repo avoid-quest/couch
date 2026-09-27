@@ -109,8 +109,19 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
         let audio = host.audio_output.lock().expect("audio output lock poisoned").clone();
         let request = match request {
             Ok(Request::VideoState { generation, playback_owner, reply }) => {
-                let state = video_authorized(&app, &owner, audio.as_ref(), &player, &generation, &playback_owner)
-                    .then(|| player.state.clone());
+                let state = if video_authorized(&app, &owner, audio.as_ref(), &player, &generation, &playback_owner) {
+                    if let Err(error) = player.observe(&app) {
+                        player.state.status = "error";
+                        player.state.error = Some(error);
+                    }
+                    *host.player_state.lock().expect("player state lock poisoned") = player.state.clone();
+                    drop(owner);
+                    if reported.as_ref() != Some(&player.state) {
+                        host.report(&app, &player.state);
+                        reported = Some(player.state.clone());
+                    }
+                    Some(player.state.clone())
+                } else { None };
                 let _ = reply.send(state);
                 continue;
             }

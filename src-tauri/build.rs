@@ -29,6 +29,8 @@ fn main() {
             "native_audio_begin",
             "native_audio_renew",
             "native_audio_end",
+            "native_video_state",
+            "native_video_command",
             "set_video_rect",
             "choose_media",
             "choose_folder",
