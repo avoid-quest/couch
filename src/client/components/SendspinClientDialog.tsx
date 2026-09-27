@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { createSendspinRenderer, sendspinReconnectStopped, type SendspinRendererState } from "@/session/sendspin-renderer";
 import { useSessionGate } from "@/session/session-context";
+import { clientDeviceName } from "@/session/device-name";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -91,10 +92,9 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
 }
 
 export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: (event: Event) => void }) {
-  const { sendspin, sendspinDisabledReason, connected, rendererTargetId, state, run, nativeHost } = useSessionGate();
+  const { sendspin, sendspinDisabledReason, connected, rendererTargetId, state, run, identity } = useSessionGate();
   const [destination, setDestination] = useState<"couch" | "external">("couch");
   const [address, setAddress] = useState("");
-  const [name, setName] = useState(nativeHost ? "Couch computer" : "Couch browser");
   const localBusy = !!rendererTargetId && state?.targetId === rendererTargetId && !!state.player.playbackId && !["idle", "ended", "error", "unavailable"].includes(state.player.status);
   const idle = sendspin.phase === "idle";
   const waiting = ["preparing", "joining", "leaving"].includes(sendspin.phase);
@@ -103,13 +103,12 @@ export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: {
   const transport = playback?.isPlaying ? "pause" : "play";
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent onCloseAutoFocus={onCloseAutoFocus}>
     <DialogHeader><DialogTitle>Sendspin playback</DialogTitle><DialogDescription>Join a server's synchronized audio group on this device.</DialogDescription></DialogHeader>
-    {idle ? <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void sendspin.prepare(destination, address, name); }}>
+    {idle ? <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void sendspin.prepare(destination, address, clientDeviceName(identity?.controller?.name)); }}>
       <RadioGroup aria-label="Sendspin server" value={destination} onValueChange={value => setDestination(value as typeof destination)}>
         <Label className="flex items-center gap-2"><RadioGroupItem value="couch" />This Couch</Label>
         <Label className="flex items-center gap-2"><RadioGroupItem value="external" />Another server</Label>
       </RadioGroup>
       {destination === "external" && <div className="grid gap-2"><Label htmlFor="sendspin-server">Server address</Label><Input id="sendspin-server" value={address} onChange={event => setAddress(event.target.value)} placeholder="wss://music.example/sendspin" autoComplete="url" spellCheck={false} /></div>}
-      <div className="grid gap-2"><Label htmlFor="sendspin-client-name">Device name</Label><Input id="sendspin-client-name" value={name} maxLength={80} onChange={event => setName(event.target.value)} /></div>
       {sendspinDisabledReason && <p className="text-sm text-muted-foreground">{sendspinDisabledReason}</p>}
       {localBusy && <div className="grid justify-items-start gap-2"><p className="text-sm text-muted-foreground">Stop playback on this device before joining Sendspin.</p><Button type="button" variant="outline" disabled={!connected} onClick={() => void run({ type: "stop" })}>Stop local playback</Button></div>}
       <Button type="submit" disabled={!connected || !!sendspinDisabledReason || localBusy || !!state?.handoff || destination === "external" && !address.trim()}>Continue</Button>

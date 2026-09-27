@@ -35,6 +35,16 @@ beforeEach(() => {
   spyOn(adapter, "createSendspinRenderer").mockImplementation((_config, events) => { callbacks = events; return renderer; });
 });
 
+test("joining Sendspin reuses this device's name without another name prompt", async () => {
+  const user = userEvent.setup();
+  render(<DialogProbe />);
+  expect(screen.queryByRole("textbox", { name: "Device name" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("radio", { name: "Another server" }));
+  await user.type(screen.getByRole("textbox", { name: "Server address" }), "wss://music.local/sendspin");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(adapter.createSendspinRenderer).toHaveBeenCalledWith(expect.objectContaining({ name: "Couch browser" }), expect.anything());
+});
+
 test("connection status follows SDK observations after connect resolves and across reconnects", async () => {
   const user = userEvent.setup();
   render(<DialogProbe />);

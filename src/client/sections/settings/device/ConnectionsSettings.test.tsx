@@ -51,6 +51,11 @@ beforeEach(() => {
       return Response.json({ domain: originDomain });
     }
     if (path === "/api/controllers" && method === "GET") return Response.json({ controllers: devices });
+    if (path === "/api/controllers/self/name" && method === "POST") {
+      devices[0] = { ...devices[0]!, name: JSON.parse(String(init?.body)).name };
+      return Response.json({ controller: devices[0] });
+    }
+    if (path === "/api/settings" && method === "POST") return Response.json({ name: JSON.parse(String(init?.body)).name });
     if (/^\/api\/controllers\/other\/role$/.test(path)) {
       const device = devices.find(entry => entry.id === "other")!;
       device.role = (init?.body ? JSON.parse(String(init.body)) : { role: device.role }).role;
@@ -75,6 +80,27 @@ test("an administrator opens the pairing dialog, then sees every device with its
   expect(screen.getByText("Phone")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
   expect(screen.queryByRole("button", { name: "Remove admin" })).not.toBeInTheDocument();
+});
+
+test("a paired device renames itself through its existing controller identity", async () => {
+  const user = userEvent.setup();
+  await render();
+  await user.clear(screen.getByRole("textbox", { name: "Name" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), "Living room laptop");
+  await user.click(button("Rename"));
+  await waitFor(() => expect(calls).toContainEqual({ path: "/api/controllers/self/name", method: "POST", body: { name: "Living room laptop" } }));
+  expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Living room laptop");
+});
+
+test("the host renames its installation from Devices", async () => {
+  const user = userEvent.setup();
+  await render({ authority: "host", controller: null, claimAvailable: false });
+  const name = screen.getByRole("textbox", { name: "Name" });
+  expect(name).toHaveValue("Couch");
+  await user.clear(name);
+  await user.type(name, "Living room");
+  await user.click(button("Rename"));
+  await waitFor(() => expect(calls).toContainEqual({ path: "/api/settings", method: "POST", body: { name: "Living room" } }));
 });
 
 test("the host can change whether this computer accepts remotes", async () => {

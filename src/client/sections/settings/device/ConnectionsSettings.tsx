@@ -1,5 +1,5 @@
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { claimCodeQuery, controllersQuery } from "@/api/controllers";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { TRY_AGAIN } from "@/copy";
+import { clientDeviceName, rememberClientDeviceName } from "@/session/device-name";
 import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
 
 const formatSeen = (at: number | null) => at ? `Seen ${new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Never seen";
@@ -23,6 +24,18 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.controller?.id;
+  const [savedDeviceName, setSavedDeviceName] = useState<{ key: string; name: string } | null>(null);
+  const [deviceNameDraft, setDeviceNameDraft] = useState<string | null>(null);
+  const deviceKey = `${credentials.origin}:${selfId ?? "host"}`;
+  useEffect(() => setDeviceNameDraft(null), [deviceKey]);
+  const currentDeviceName = savedDeviceName?.key === deviceKey ? savedDeviceName.name : selfId ? clientDeviceName(identity.controller?.name) : hostName;
+  const deviceName = deviceNameDraft ?? currentDeviceName;
+  const rename = useMutation({
+    mutationFn: (name: string) => selfId
+      ? apiSend(credentials, `/api/controllers/${selfId}/name`, { name })
+      : apiSend(credentials, "/api/settings", { name }),
+    onSuccess: (_result, name) => { rememberClientDeviceName(name); setSavedDeviceName({ key: deviceKey, name }); setDeviceNameDraft(null); refreshControllers(); },
+  });
   const host = identity.authority === "host";
   const manager = identity.authority === "administrator" || host;
   const controllers = useQuery({ ...controllersQuery(credentials), enabled: connected && manager });
@@ -60,8 +73,23 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
     event.preventDefault();
     if (!saveDomain.isPending) saveDomain.mutate(domain.trim());
   }
+  function submitDeviceName(event: FormEvent) {
+    event.preventDefault();
+    const name = deviceName.trim();
+    if (rename.isPending || !name || name === currentDeviceName) return;
+    rename.mutate(name);
+  }
 
   return <>
+    <SettingsSection title="This device">
+      <SettingsRow label="Name" htmlFor="device-name" description="Shown when this device connects or plays.">
+        <form className="flex w-full flex-wrap items-center gap-2" onSubmit={submitDeviceName}>
+          <Input id="device-name" className="min-w-0 flex-1" value={deviceName} maxLength={60} required onChange={event => setDeviceNameDraft(event.target.value)} disabled={!connected || rename.isPending} />
+          <Button type="submit" variant="outline" disabled={!connected || rename.isPending || !deviceName.trim() || deviceName.trim() === currentDeviceName}>{rename.isPending ? "Renaming…" : "Rename"}</Button>
+        </form>
+      </SettingsRow>
+      {rename.error && <Alert variant="destructive"><AlertDescription>{message(rename.error, "Couldn't rename this device.")}</AlertDescription></Alert>}
+    </SettingsSection>
     {manager && <SettingsSection>
       {host && <SettingsRow label="Allow remotes" description="Phones and computers on your network can pair.">
         <Switch aria-label="Allow remotes" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />

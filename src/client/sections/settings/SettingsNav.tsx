@@ -21,7 +21,7 @@ export function SettingsNav({ active }: Props) {
     ["Preferences", ["playback", "home", "appearance"]],
     ["Library", ["sources"]],
     [deviceName(state?.installationName ?? details?.name), ["general", "sound", "bluetooth", "display", "tv-appearance"]],
-    ["Connections", ["connection"]],
+    ["Devices", ["connection"]],
     ["System", ["updates", "advanced"]],
   ] as const).map(([label, pages]) => ({ label, pages: pages.filter(visible) })).filter(group => group.pages.length);
   const current = active.startsWith("source-") ? "sources" : active;

@@ -824,7 +824,7 @@ export function createHub(options: HubOptions) {
             if (renderer.type === "registerNativeRenderer") {
               if (!socket.data.controllerId || socket.data.renderer) throw new Error("Native receiver enrollment requires its own paired connection.");
               store.markNativeReceiverUsed();
-              socket.data.receiver = registry.registerReceiver(socket.data.controllerId, `${playbackActor(socket.data.controllerId)?.name ?? "Couch"} player`, sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
+              socket.data.receiver = registry.registerReceiver(socket.data.controllerId, playbackActor(socket.data.controllerId)?.name ?? "Couch computer", sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
               socket.data.renderer = socket.data.receiver;
               socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId: socket.data.rendererSessionId! } satisfies ServerMessage));
@@ -835,7 +835,7 @@ export function createHub(options: HubOptions) {
             } else if (renderer.type === "registerRenderer") {
               if (socket.data.receiver) throw new Error("A native receiver cannot also register as a browser.");
               const targetId = socket.data.controllerId ? `browser-${socket.data.controllerId}` : undefined;
-              if (!targetId || !registry.targets.some(target => target.id === targetId)) socket.data.renderer ??= registry.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize, targetId);
+              if (!targetId || !registry.targets.some(target => target.id === targetId)) socket.data.renderer ??= registry.register(playbackActor(socket.data.controllerId)?.name ?? "Couch browser", sendRenderer, renderer.capabilities, socket.data.authorize, targetId);
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer?.id ?? targetId!, sessionId: socket.data.rendererSessionId!, attached: !!socket.data.renderer } satisfies ServerMessage));
             } else if (socket.data.renderer && renderer.sessionId === socket.data.rendererSessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");

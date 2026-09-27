@@ -23,9 +23,9 @@ export function TvNameSettings({ credentials, connected, canWrite, name: savedNa
     if (canWrite && !saving.isPending) saving.mutate(name.trim());
   }
 
-  if (!canWrite) return <SettingsRow label="Name" description={ADMIN_ONLY}><span className="break-words text-sm" data-settings-tv-name>{deviceName(savedName)}</span></SettingsRow>;
+  if (!canWrite) return <SettingsRow label="Couch installation" description={ADMIN_ONLY}><span className="break-words text-sm" data-settings-tv-name>{deviceName(savedName)}</span></SettingsRow>;
   return <>
-    <SettingsRow label="Name" htmlFor="tv-name" description="Shown to remotes.">
+    <SettingsRow label="Couch installation" htmlFor="tv-name" description="Shown to remotes.">
       <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
         <Input id="tv-name" className="min-w-0 flex-1" value={name} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={!connected || saving.isPending} />
         <Button type="submit" variant="outline" disabled={!connected || saving.isPending || !name.trim() || name.trim() === savedName}>{saving.isPending ? "Saving…" : "Save"}</Button>
