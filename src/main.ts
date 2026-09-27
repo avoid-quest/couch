@@ -31,6 +31,7 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
+const sendspin = process.env.COUCH_SENDSPIN_CONFIG ? await Bun.file(process.env.COUCH_SENDSPIN_CONFIG).json() : undefined;
 const snapcast = process.env.COUCH_SNAPCAST_CONFIG ? await Bun.file(process.env.COUCH_SNAPCAST_CONFIG).json() : undefined;
 if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_DESKTOP_UPDATE === "1" ? "desktop" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null, process.env.COUCH_DEV_ORIGIN);
 
@@ -60,7 +61,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
-  snapcast,
+  snapcast, sendspin,
   ...(externalOrigin && trustedProxyIps ? { remoteAccess: { origin: externalOrigin, trustedProxyIps: trustedProxyIps.split(",").map(value => value.trim()), pairing: process.env.COUCH_EXTERNAL_PAIRING === "1" } } : {}),
   updater,
   managedLan: native && !previewProxyLan,

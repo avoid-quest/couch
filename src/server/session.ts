@@ -12,7 +12,7 @@ import type { PlaybackContinuation } from "./continuation";
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
-export type PlaybackDestination = { backend: "native" | "browser" | "snapcast"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
+export type PlaybackDestination = { backend: "native" | "browser" | "snapcast" | "sendspin"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type SessionOptions = {
   sessionId?: string;
   admitted?: () => boolean;

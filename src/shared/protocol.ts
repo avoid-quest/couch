@@ -136,11 +136,11 @@ export type PlaybackCommand =
   | { type: "stop" };
 
 // A backend-managed group has one timeline and one observation writer.
-export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast"; connected: boolean;
+export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast" | "sendspin"; connected: boolean;
   error?: string;
   occupied?: boolean;
   sessionKind?: "household" | "personal";
-  handoffSafety?: "buffer-drain";
+  handoffSafety?: "buffer-drain" | "unverified";
   members?: { id: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
 export type RendererMessage = { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }

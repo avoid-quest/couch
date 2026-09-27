@@ -62,6 +62,8 @@ import { macSound } from "./sound-mac";
 import { windowsSound } from "./sound-windows";
 import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
+import { createSendspin, validateSendspinConfig, type SendspinConfig } from "./sendspin";
+import { openSendspinIdentity } from "./sendspin-identity";
 import { createSnapcast, validateSnapcastConfig, type SnapcastConfig } from "./snapcast";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
@@ -71,6 +73,7 @@ type HubOptions = {
   managedLan?: boolean;
   remoteAccess?: { origin: string; trustedProxyIps: string[]; pairing?: boolean };
   snapcast?: SnapcastConfig;
+  sendspin?: SendspinConfig;
   onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
@@ -114,6 +117,7 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
   if (options.snapcast) validateSnapcastConfig(options.snapcast);
+  if (options.sendspin) validateSendspinConfig(options.sendspin);
   const remoteAccess = createRemoteAccess(options.remoteAccess);
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
@@ -121,7 +125,8 @@ export function createHub(options: HubOptions) {
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
-  if (options.snapcast) store.markBufferedOutputUsed();
+  if (options.snapcast || options.sendspin) store.markBufferedOutputUsed();
+  const sendspinIdentity = options.sendspin ? openSendspinIdentity(options.databasePath) : undefined;
   const sessionId = store.installationId();
   const runtimes = new Map<string, Runtime>();
   const playbackStates = new Map<string, { status: import("../shared/protocol").PlayerState["status"]; retry: boolean }>();
@@ -167,7 +172,7 @@ export function createHub(options: HubOptions) {
   const windowsAudio = process.platform === "win32" && options.nativeSound ? windowsSound(options.nativeSound) : null;
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
-  const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
+  const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed(), groupRecoveryMs: options.sendspin ? 1000 : 750 });
   registry.rename("native", store.installationName());
   function createRuntime(owner: string | null): Runtime {
     const mode = owner ? "personal" : "household";
@@ -260,6 +265,7 @@ export function createHub(options: HubOptions) {
     }
   }
   let snapcast: ReturnType<typeof createSnapcast> | undefined;
+  let sendspin: ReturnType<typeof createSendspin> | undefined;
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidateAll("playlists"), queue: () => session.state.queue,
     upNext: () => {
       const current = session.state.queue.findIndex(entry => entry.id === session.state.currentEntryId);
@@ -342,6 +348,7 @@ export function createHub(options: HubOptions) {
     } else registry.rename("native", store.installationName());
     invalidateAll("controllers");
   }, onRevoke: id => {
+    for (const clientId of sendspinIdentity?.revoke(id) ?? []) sendspin?.disconnectClient(clientId);
     const personal = runtimes.get(`personal:${id}`);
     if (personal) retire(personal);
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
@@ -609,6 +616,7 @@ export function createHub(options: HubOptions) {
             socket.unsubscribe(topic(socket.data.runtime, socket.data.playbackClock));
             socket.close(4003, "Remotes are off. Your pairing is remembered.");
           }
+          if (!enabled) sendspin?.disconnectAll();
           invalidateAll("controllers");
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
@@ -637,6 +645,27 @@ export function createHub(options: HubOptions) {
           await lan?.refresh().catch(() => {});
           return cors(request, json({ domain: alias }));
         } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
+      }
+      if (url.pathname === "/api/sendspin/enrollment") {
+        if (request.method === "GET" && !sendspin) return cors(request, json({ available: false }));
+        if (!sendspin || !sendspinIdentity || !options.sendspin) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
+        try {
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+          const address = options.sendspin.publicUrl ? new URL(options.sendspin.publicUrl) : new URL(access(request) === "external" ? remoteAccess.origin! : url.origin);
+          if (!options.sendspin.publicUrl) {
+            if (address.protocol === "https:") throw new ControllerError("Configure this Couch's secure Sendspin address before connecting.", 503);
+            address.protocol = "ws:"; address.port = String(sendspin.port); address.pathname = "/sendspin";
+          }
+          const configuration = { available: true, url: address.href, name: options.sendspin.name, serverId: sendspinIdentity.serverId };
+          if (request.method === "GET") return cors(request, json(configuration));
+          if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+          const clientId = await settingField(request, "clientId");
+          const current = identity();
+          if (!current || !admitted()) throw new ControllerError("Pair this remote first.", 401);
+          if (typeof clientId !== "string") throw new ControllerError("Choose a Sendspin client identity.");
+          const enrollment = sendspinIdentity.enroll(current.controller?.id ?? "host", clientId);
+          return cors(request, json({ ...configuration, ...enrollment }));
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Sendspin enrollment failed." }, error instanceof ControllerError ? error.status : 400)); }
       }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
@@ -816,7 +845,7 @@ export function createHub(options: HubOptions) {
               if (generation !== runtime.sourceGeneration) throw new Error("The source changed while playback was moving.");
             }, { takeover: action.takeover });
           } else if (action.type === "groupMembers" || action.type === "groupVolume" || action.type === "groupReconnect") {
-            const group = action.targetId === "snapcast-group" ? snapcast : undefined;
+            const group = action.targetId === "snapcast-group" ? snapcast : action.targetId === "sendspin-group" ? sendspin : undefined;
             if (!group) throw new Error("That audio group is not configured.");
             if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
             authorize();
@@ -917,8 +946,9 @@ export function createHub(options: HubOptions) {
     collections.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), snapcast?.close(), lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), snapcast?.close(), sendspin?.close(), lan?.close(), server.stop(true)]);
     diagnostics.close();
+    sendspinIdentity?.close();
     for (const runtime of runtimes.values()) runtime.privateStore?.close();
     store.close();
     if (progressError) throw progressError;
@@ -930,6 +960,22 @@ export function createHub(options: HubOptions) {
   if (options.snapcast) {
     const target = registry.registerGroup({ id: "snapcast-group", name: options.snapcast.name, kind: "group", backend: "snapcast", connected: false, handoffSafety: "buffer-drain" }, command => snapcast!.send(command));
     snapcast = createSnapcast(options.snapcast, { changed: target.update, observe: target.observe });
+  }
+  if (options.sendspin && sendspinIdentity) {
+    const target = registry.registerGroup({ id: "sendspin-group", name: options.sendspin.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => sendspin!.send(command));
+    sendspin = createSendspin(options.sendspin, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() ? sendspinIdentity.lookup(clientId) : null,
+      isQualified: clientId => options.sendspin?.qualifiedClientIds?.includes(clientId) ?? false,
+      initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: target.update, observe: target.observe,
+      control: async (clientId, command) => {
+        const owner = sendspinIdentity.owner(clientId);
+        const runtime = [...runtimes.values()].find(value => value.targets.owns("sendspin-group"));
+        if (!owner || !admitted() || !runtime || runtime.mode === "personal" && runtime.owner !== owner) throw new Error("This client cannot control that playback session.");
+        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled()) throw new Error("This client's access was revoked."); };
+        const playbackId = runtime.session.state.player.playbackId;
+        if (command === "stop") runtime.session.command({ type: "stop" }, authorize);
+        else if (playbackId && command === "next") runtime.session.command({ type: "next", playbackId }, authorize);
+        else if (playbackId && (command === "play" || command === "pause")) runtime.session.command({ type: "pause", playbackId, paused: command === "pause" }, authorize);
+      } });
   }
   return {
     server, session: { ...session, get state() { return session.state; }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,

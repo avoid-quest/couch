@@ -59,3 +59,11 @@ test("disconnected groups reconnect explicitly while member changes stay disable
   expect(actions).toEqual([{ type: "groupReconnect", targetId: group.id }]);
   expect(screen.getByRole("checkbox", { name: "Join Dining" })).toBeDisabled();
 });
+
+test("an authenticated Sendspin receiver can become the first group member", async () => {
+  const actions: Action[] = [];
+  const target: PlaybackTarget = { ...group, backend: "sendspin", connected: false, members: [{ ...group.members![0]!, joined: false }] };
+  renderWithQueryClient(<PlaybackGroupControls target={target} connected busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
+  await userEvent.click(screen.getByRole("checkbox", { name: "Join Kitchen" }));
+  expect(actions).toEqual([{ type: "groupMembers", targetId: target.id, memberIds: ["aa:bb:cc"] }]);
+});
