@@ -51,6 +51,10 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
     callbacks.state(lastState);
     if (state.playerState === "error") fail(new Error("Sendspin playback failed."));
   };
+  const publishDisconnected = () => {
+    if (disposed || reconnectStopped) return;
+    callbacks.state({ connected: false, isPlaying: false, volume: lastState?.volume ?? 100, muted: lastState?.muted ?? false, metadata: lastState?.metadata, group: lastState?.group ?? {}, supportedCommands: [] });
+  };
   const stopReconnecting = () => {
     if (disposed || reconnectStopped) return;
     reconnectStopped = true;
@@ -75,7 +79,7 @@ export function createSendspinRenderer(config: SendspinRendererConfig, callbacks
       ...(enrollment ? { longTermPsks: [enrollment] } : {}),
       onStateChange: publish,
       onPairingPin: (pin, languages) => { if (!disposed && !reconnectStopped) callbacks.pairingPin?.(pin, languages); },
-      reconnect: { maxAttempts: 7, onReconnecting: () => { if (++reconnects > 7) stopReconnecting(); }, onExhausted: stopReconnecting },
+      reconnect: { maxAttempts: 7, onReconnecting: () => { publishDisconnected(); if (++reconnects > 7) stopReconnecting(); }, onExhausted: stopReconnecting },
     });
   };
   const connect = () => {

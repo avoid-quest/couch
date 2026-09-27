@@ -110,6 +110,7 @@ test("reconnect budget survives socket opens and cached state; terminal state fe
   const f = fixture(); await f.renderer.preload(); await f.renderer.connectFromGesture();
   for (let attempt = 1; attempt <= 7; attempt++) {
     f.config().reconnect?.onReconnecting?.(1);
+    expect(f.callbacks.state.mock.calls.at(-1)?.[0]).toMatchObject({ connected: false, supportedCommands: [] });
     f.config().onStateChange?.({ isPlaying: false, volume: 100, muted: false, playerState: "synchronized", serverState: { controller: { supported_commands: ["play"] } }, groupState: {} });
   }
   expect(f.callbacks.error).not.toHaveBeenCalled();
