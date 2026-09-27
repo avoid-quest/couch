@@ -65,9 +65,9 @@ export function createPlaybackDevices(options: Options) {
       const player = registry.deviceState(target.id);
       const hardware = target.id === "native" ? options.localLevel?.() : undefined;
       const sdkVolume = audio?.volume === undefined ? undefined : audio.deviceId ? fromSendspinVolume(audio.volume) : audio.volume;
-      const observed = { volume: hardware?.volume ?? mutedDevices.get(target.id) ?? (shared ? sdkVolume : assignedTo?.session.state.systemAudio?.volume ?? (assignedTo?.session.state.targetId === target.id ? assignedTo.session.state.player.volume : player?.volume)) ?? 100,
+      const observed = { volume: hardware?.volume ?? mutedDevices.get(target.id) ?? (shared ? sdkVolume : player?.volume ?? assignedTo?.session.state.player.volume) ?? 100,
         muted: hardware?.muted ?? (shared ? audio?.muted ?? false : mutedDevices.has(target.id)) };
-      const selected = target.connected && !!assignedTo;
+      const selected = target.connected;
       const level = selected ? observed : lastLevels.get(target.id) ?? observed;
       if (selected) lastLevels.set(target.id, level);
       return { id: target.id, name: target.name, connected: target.connected || !!audio, playbackId: owner?.id,
