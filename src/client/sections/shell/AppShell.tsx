@@ -12,6 +12,7 @@ import { DeviceRecovery, LocalSharingPrompt, PlaybackDevice, useLocalSetupPendin
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
+import { PlaybackTargetPicker } from "@/components/PlaybackTargetPicker";
 import { MiniPlayer } from "./MiniPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TvAppearancePreview } from "./TvAppearancePreview";
@@ -229,6 +230,7 @@ function ConnectionStatus() {
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
   if (!credentials || status === "pairing-required") return null;
   if (!connected) return null;
+  if (state?.targets && !state.targetId) return <StatusLine>Choose a playback output.</StatusLine>;
   if (state?.player.status === "unavailable") return <StatusLine>Player not running on {localHost ? "this computer" : name}.</StatusLine>;
   return null;
 }
@@ -297,6 +299,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
+              {paired && <PlaybackTargetPicker />}
               {paired && !!state?.queue.length && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
               {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} updates={!localHost && !tvPresentation} />}

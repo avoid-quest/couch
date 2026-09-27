@@ -1,3 +1,5 @@
+import { createBrowserRenderer } from "./browser-renderer";
+import { isNativeHost } from "./native-context";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../../shared/protocol";
@@ -30,6 +32,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const observation = useRef<SessionState | null>(null);
   const [clock, setClock] = useState<PlaybackClock>(emptyPlaybackClock);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [rendererTargetId, setRendererTargetId] = useState<string | null>(null);
+  const renderer = useRef<ReturnType<typeof createBrowserRenderer> | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const socketCredentials = useRef<Credentials | null>(null);
   const ready = useRef(false);
@@ -37,6 +41,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
+    setRendererTargetId(null);
     setState(null);
     observation.current = null;
     setClock(emptyPlaybackClock);
@@ -72,6 +77,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
       let playbackClock = false;
+      let browserPlayback = true;
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
@@ -79,6 +85,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
         playbackClock = next.playbackClock === 1;
+        browserPlayback = next.capabilities?.browserPlayback !== false;
         setConnectionDetails({ origin, details: next });
         if (desktopProtocol && next.desktopClientProtocol !== desktopProtocol) { setStatus("protocol-mismatch"); setState(null); setIdentity(null); return; }
         if (desktopProtocol && next.remoteControlEnabled === false) { setStatus("sharing-disabled"); setState(null); setIdentity(null); retry = setTimeout(() => void connect(), 5_000); return; }
@@ -130,6 +137,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (playbackClock) url.searchParams.set("playbackClock", "1");
       const connection = new WebSocket(url);
       let baseline = false;
+      let rendererSessionId: string | null = null;
+      const rendering = browserPlayback && !isNativeHost() ? createBrowserRenderer(state => { if (isCurrent() && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); }) : null;
+      renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
       const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
@@ -147,7 +157,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           connection.close(4002, "Invalid response");
           return;
         }
-        if (message.type === "state") {
+        if (message.type === "rendererRegistered") {
+          rendererSessionId = message.sessionId; setRendererTargetId(message.targetId); rendering?.report();
+        } else if (message.type === "rendererCommand") {
+          if (rendererSessionId === message.sessionId) rendering?.command(message.command);
+        } else if (message.type === "state") {
+          if (!baseline && rendering && message.state.sessionId) connection.send(JSON.stringify({ type: "registerRenderer" }));
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;
@@ -186,6 +201,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         // Retire the socket now, not only on effect cleanup or replacement.
         // Captured callbacks from a closed/revoked connection must stay stale.
         socket.current = null;
+        rendering?.close(); setRendererTargetId(null);
         socketCredentials.current = null;
         clearTimeout(handshake);
         ready.current = false;
@@ -219,6 +235,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       clearTimeout(retry);
       clearTimeout(handshake);
       rejectPending();
+      renderer.current?.close(); renderer.current = null;
       socket.current?.close();
       socket.current = null;
       socketCredentials.current = null;
@@ -280,7 +297,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const timer = setTimeout(() => {
         pending.current.delete(requestId);
         reject(new Error("No reply from Couch. Check before retrying."));
-      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
+      }, action.type === "selectTarget" ? 60_000 : ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
       pending.current.set(requestId, { resolve, reject, timer });
       const message: ClientMessage = { type: "command", requestId, action };
       try {
@@ -293,5 +310,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  const playHere = useCallback(() => renderer.current?.play(), []);
+
+  return { rendererTargetId, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }

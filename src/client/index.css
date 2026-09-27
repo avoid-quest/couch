@@ -175,3 +175,9 @@ body.native-host:has(.player-page .video-stage.has-video) .tv-browser,
 body.native-host:has(.player-page .video-stage.has-video) .player-page { background: transparent; }
 
 @media (max-width: 959px) { [data-queue-open] .player-band.player-video-controls { padding-top: 0; background: var(--background); } }
+
+/* The connection-owned browser element stays mounted while routes change. */
+#couch-browser-video { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: contain; pointer-events: none; visibility: hidden; }
+body:has([data-browser-video="true"]) #couch-browser-video { visibility: visible; }
+body:has([data-browser-video="true"]) :is(.app-shell, .tv-browser, .player-page) { background: transparent; }
+@media (min-width: 960px) { body:has([data-browser-video="true"][data-queue-open]) #couch-browser-video { width: calc(100vw - 24rem); } }

@@ -89,7 +89,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   const origin = credentials?.origin ?? location.origin;
   const known = knownConnection();
   const other = known?.origin !== origin ? known : null;
-  const label = localHost ? "Playing here" : `Playing on ${name}`;
+  const label = state?.targets ? `Connected to ${name}` : localHost ? "Playing here" : `Playing on ${name}`;
   const choose = (value: string) => {
     const next = destinationOrigin(value);
     if (!next) { setAddressError("Enter just the address, like 192.168.1.10:4100."); return; }
@@ -100,7 +100,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     <PopoverTrigger asChild>
       <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11" aria-label={`${label}: ${status}`}>
         <StatusDot connected={connected} />
-        <span className="max-w-48 truncate max-sm:max-w-32">{localHost ? label : <><span className="max-sm:sr-only">Playing on </span>{name}</>}</span>
+        <span className="max-w-48 truncate max-sm:max-w-32">{state?.targets || localHost ? label : <><span className="max-sm:sr-only">Playing on </span>{name}</>}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="w-96 gap-4" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>
@@ -110,7 +110,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
         <p className="text-muted-foreground">{name} keeps playing. You may need to pair.</p>
         <div className="flex flex-wrap gap-2"><Button onClick={() => location.assign(target)}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button></div>
       </div> : <>
-        <RadioGroup aria-label="Play on" value={origin} onValueChange={choose} className="gap-0">
+        <RadioGroup aria-label={state?.targets ? "Couch server" : "Play on"} value={origin} onValueChange={choose} className="gap-0">
           {[{ origin, name }, ...(other ? [{ origin: other.origin, name: other.details.name }] : [])].map((item, index) => <Field key={item.origin} orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id={`play-on-${index}`} value={item.origin} aria-label={item.name} /><FieldLabel htmlFor={`play-on-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{item.name}</span><span className="truncate text-muted-foreground">{new URL(item.origin).host}</span></FieldLabel>{(item.origin !== origin || !localHost && credentials && gate) && <Button variant="ghost" size="sm" className="text-muted-foreground" aria-label={`Forget ${item.name}`} onClick={() => { setForgetting(item); setOpen(false); }}>Forget</Button>}</Field>)}
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); choose(address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={!address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>

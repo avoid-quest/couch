@@ -114,7 +114,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
+  const { rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
@@ -304,9 +304,9 @@ export function SessionGate({ children }: PropsWithChildren) {
   const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
   const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
-    queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
+    rendererTargetId, playHere, queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  }), [rendererTargetId, playHere, queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

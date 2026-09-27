@@ -17,6 +17,7 @@ const sockets: Socket[] = [];
 const timers: Array<{ handle: ReturnType<typeof setTimeout>; delay: number; fired: boolean; fire: () => void }> = [];
 let session: ReturnType<typeof useSession>;
 let capability = true;
+let browserPlayback: boolean | undefined;
 const renderedObservations: Array<SessionState | null> = [];
 let mount: (next: Credentials) => Promise<void>;
 
@@ -36,11 +37,12 @@ class Socket {
 
 beforeEach(async () => {
   capability = true;
+  browserPlayback = undefined;
   sockets.length = timers.length = 0;
   globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true, ...(capability ? { playbackClock: 1 } : {}) });
+    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true, ...(capability ? { playbackClock: 1 } : {}), ...(browserPlayback === undefined ? {} : { capabilities: { browserPlayback, nativePlayback: false } }) });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ controller: { id: "remote", name: "Remote", role: "controller" }, authority: "controller", claimAvailable: false });
     throw new Error(`Unexpected session request: ${path}`);
@@ -143,6 +145,34 @@ test("changing connections rejects the old provider request and an old confirmat
 
 
 const playing = { ...state, currentEntryId: "entry", queue: [{ id: "entry", title: "Track", source: "https://media.example/track" }], player: { ...state.player, playbackId: "active", status: "playing" as const, duration: 100 } };
+
+test("a control-only Core connects and accepts commands without registering a browser renderer", async () => {
+  browserPlayback = false;
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  expect(peer.sent).toEqual([]);
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(session.connected).toBe(true);
+  expect(peer.sent).toEqual([]);
+  const done = session.command({ type: "stop" });
+  expect(peer.sent).toMatchObject([{ type: "command", action: { type: "stop" } }]);
+  peer.emit({ type: "result", requestId: peer.sent[0]!.requestId, ok: true });
+  await expect(done).resolves.toBeUndefined();
+  expect(document.querySelector("#couch-browser-video")).toBeNull();
+});
+
+test.each([true, undefined])("browser playback capability %s registers only after the session baseline", async enabled => {
+  browserPlayback = enabled;
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  expect(peer.sent).toEqual([]);
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(session.connected).toBe(true);
+  expect(peer.sent.map(message => String(message.type))).toEqual(["registerRenderer"]);
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(peer.sent.map(message => String(message.type))).toEqual(["registerRenderer"]);
+  expect(document.querySelector("#couch-browser-video")).toBeNull();
+});
 
 test("clock negotiation retains full old-host fallback", async () => {
   expect(sockets[0]!.url.searchParams.get("playbackClock")).toBe("1");
