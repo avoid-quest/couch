@@ -37,7 +37,7 @@ export function PlaybackTargetPicker() {
           {playbacks.some(playback => playback.id !== state?.sessionId) && <section aria-label="Other playbacks" className="border-b py-3">
             {playbacks.filter(playback => playback.id !== state?.sessionId).map(playback => {
               const localDevice = devices.find(device => device.id === rendererTargetId);
-              const canJoin = !!rendererTargetId && !!localDevice?.connected && !playback.deviceIds.includes(rendererTargetId);
+              const canJoin = playback.deviceIds.length > 0 && !!rendererTargetId && !!localDevice?.connected && !playback.deviceIds.includes(rendererTargetId);
               const joining = joiningPlaybackId === playback.id;
               return <div key={playback.id} className="flex min-h-11 items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div>{canJoin && <Button size="sm" variant="ghost" aria-label={`Join ${playback.title}`} disabled={disabled} onClick={() => { setJoiningPlaybackId(playback.id); void joinPlayback(playback.id).then(ok => { if (ok) setOpen(false); }).finally(() => setJoiningPlaybackId(null)); }}>{joining ? "Joining…" : "Join"}</Button>}<Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button></div>;
             })}

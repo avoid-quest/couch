@@ -111,10 +111,11 @@ export function HomePage() {
   const { pausable, resumable, transportReady, active: transportActive } = playbackCapabilities(state, connected);
   const paused = player?.status === "paused";
   const live = !!(current?.live || current?.kind === "radio");
+  const playingOn = state?.deviceIds?.map(id => state.devices?.find(device => device.id === id)?.name).filter(Boolean).join(", ");
   const playingArt = programme?.playbackId === player?.playbackId && programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : current && art(current);
   const playingStatus = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
-    : [sourceLabel(current.source), resumable ? "Ready to resume" : paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
+    : [sourceLabel(current.source), resumable ? "Ready to resume" : paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, playingOn && `Playing on ${playingOn}`].filter(Boolean).join(", ");
 
   const rows: Record<HomeRowId, ReactNode> = {
     now: current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
