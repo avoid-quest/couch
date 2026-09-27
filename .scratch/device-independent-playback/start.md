@@ -1,6 +1,9 @@
 # Continue client-first playback
 
 Read `AGENTS.md`, `CONTEXT.md`, `docs/architecture.md`, then [map.md](map.md).
+The supported workflows are implemented, including both optional Sendspin roles.
+Use map.md and the latest validation receipt to select an actual remaining gap;
+hardware/external-topology qualification does not imply missing application code.
 The user corrected scope on 2026-09-27: clients perform media work they support;
 Core coordinates authorized sessions. Jellyfin relay/adaptation work is abandoned.
 

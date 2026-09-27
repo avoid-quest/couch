@@ -50,6 +50,8 @@ Detailed existing receipts and unqualified environments: [validation.md](validat
 Current code receipt `07f91ecf`: 1,804 core tests plus three clock tests pass, ten
 environment/network tests skip; typecheck and production build pass. Compiled macOS
 Core accepts the encrypted SDK and serves all 58 embedded assets byte-identically.
+Linux `verify --remote` has an eligible clean-revision receipt: 1,813 tests pass,
+four skip, build and 25 compiled-browser checks pass.
 Real browser tests cover independent VOD/live playback, mode roundtrips, explicit
 takeover, move back, existing desktop/TV-sized layouts, Sendspin group controls,
 explicit join/leave and Leave while Core is offline. Coordination

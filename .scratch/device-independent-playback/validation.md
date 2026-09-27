@@ -6,6 +6,16 @@ zero failures. A real compiled arm64 macOS Core enrolled and connected the offic
 SDK over AES-GCM; all 58 embedded assets matched `dist` byte for byte. Receipts:
 `.artifacts/sendspin-integrated-build`. This does not qualify Linux packaging.
 
+Linux exact-revision `bun run verify --remote` at clean `07f91ecf` also passes with
+an eligible receipt: 1,810 core tests plus three clock tests pass, four opt-in/platform
+tests skip, production build passes and 25 compiled WebKit browser checks pass.
+Receipt/logs/screenshots: `.artifacts/sendspin-integrated-verify`. The standard
+`test:linux --built-remote` journey separately passed at that revision. An initial
+verify-wrapper attempt incorrectly exported TV presentation before tests, causing
+two expected-mode failures; its ineligible receipt remains as `fixture-env-failure.*`.
+The corrected environment passed without application changes. This is compiled
+browser qualification, not physical speakers or new native-platform qualification.
+
 The active implementation uses `@sonn-audio/node-sendspin` 0.6.2 inside Bun and
 official `@sendspin/sendspin-js` 5.0.0 in the client. Four real protocol/PCM tests,
 five hub enrollment tests and five identity-store tests cover admission, durable
@@ -30,7 +40,7 @@ the SDK but was not independently exercised against another server here.
 
 The production registry/session and real Sendspin host transferred a queue from a
 simulated browser endpoint at 32 seconds/1.25× to two actual SDK Web Audio outputs,
-then back at 51.2008 seconds after 15 seconds of playback. Queue/speed/checkpoint
+then back at 51.3851 seconds after 15 seconds of playback. Queue/speed/checkpoint
 were retained, old group observations could not overwrite progress, and both audio
 graphs measured zero RMS after return. Receipt: `registry-handoff-results.json`.
 This qualifies the measured software group, not actual direct-browser handoff or
