@@ -200,6 +200,7 @@ export function createPlaybackDevices(options: Options) {
     if (shared) await Promise.all(requested.filter(device => device.requiresGesture).map(device => options.activate(device.id)));
     guard();
     const restore: (() => Promise<void>)[] = [];
+    const newlyAcquired: string[] = [];
     const previousBinding = groups.get(runtime.id);
     const previous = previousBinding?.group;
     const oldScreen = previousBinding?.screen;
@@ -254,12 +255,6 @@ export function createPlaybackDevices(options: Options) {
       await runtime.targets.detach(guard, true);
       await previous?.setMembers([]);
     } else if (groupRequested) {
-      const group = groupFor(runtime);
-      const clients = ids.map(id => options.host()!.devices.find(audio => deviceId(audio) === id)!.id);
-      const initialLevels = Object.fromEntries(clients.map((clientId, index) => [clientId, ids[index] === "native" && options.localVolume ? { volume: 100, muted: false } : { volume: options.host()?.devices.find(audio => audio.id === clientId)?.deviceId ? toSendspinVolume(requested[index]!.volume) : requested[index]!.volume, muted: requested[index]!.muted }]));
-      await runtime.targets.control(group.id, () => group.setMembers(clients, initialLevels), clients);
-      guard();
-      await runtime.targets.move(group.id, guard, { takeover: true });
       const group = groupFor(runtime), before = [...group.members];
       const binding = groups.get(runtime.id)!;
       if (oldScreen && oldScreen !== screen && runtime.session.state.targetId === group.id && active(runtime) && !runtime.session.audioOnly) {
@@ -285,6 +280,7 @@ export function createPlaybackDevices(options: Options) {
       if (previous && runtime.session.state.targetId === previous.id) {
         await runtime.targets.detach(guard, true);
         await previous.setMembers([]);
+        for (const id of [...leases.get(runtime.id) ?? []]) await lease(runtime.id, id, false);
         if (previousBinding) { previousBinding.screen = undefined; previous.refresh(); }
       }
       await runtime.targets.move(ids[0]!, guard, { takeover: true });
@@ -295,13 +291,11 @@ export function createPlaybackDevices(options: Options) {
     } catch (error) {
       // A failed move keeps uncertain outputs claimed; restoration then refuses to duplicate them.
       const group = groups.get(runtime.id)?.group;
-<<<<<<< HEAD
-      if (group && runtime.session.state.targetId !== group.id) await group.setMembers(oldMembers).catch(() => {});
-      if (previousBinding) { previousBinding.screen = oldScreen; previousBinding.group.refresh(); }
-      if (oldDevices.length === 1 && runtime.session.state.targetId === "checkpoint") await runtime.targets.move(oldDevices[0]!, guard, { takeover: true }).catch(() => {});
-      else if (oldDevices.length > 1 && previous && runtime.session.state.targetId === "checkpoint") await runtime.targets.move(previous.id, guard, { takeover: true }).catch(() => {});
-=======
       let retired = true;
+      if (previousBinding) { previousBinding.screen = oldScreen; previousBinding.group.refresh(); }
+      if (oldMembers.length) for (const id of oldDevices) {
+        if (options.host()?.devices.some(audio => audio.deviceId && deviceId(audio) === id)) await lease(runtime.id, id, true).catch(() => { retired = false; });
+      }
       if (group && JSON.stringify(group.members) !== JSON.stringify(oldMembers)) {
         try { await group.setMembers(oldMembers); } catch { retired = false; }
       }
@@ -309,7 +303,8 @@ export function createPlaybackDevices(options: Options) {
         if (group?.members.some(clientId => options.host()?.devices.some(audio => audio.id === clientId && deviceId(audio) === id))) continue;
         await lease(runtime.id, id, false).catch(() => {});
       }
->>>>>>> 16a04d13 (Keep library, renderer and audio lifetimes independent)
+      if (oldDevices.length === 1 && runtime.session.state.targetId === "checkpoint") await runtime.targets.move(oldDevices[0]!, guard, { takeover: true }).catch(() => {});
+      else if (retired && oldDevices.length > 1 && previous && runtime.session.state.targetId === "checkpoint") await runtime.targets.move(previous.id, guard, { takeover: true }).catch(() => {});
       for (const undo of restore.reverse()) await undo().catch(() => {});
       commit(runtime, oldDevices);
       throw error;
