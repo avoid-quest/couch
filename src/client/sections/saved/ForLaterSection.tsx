@@ -15,6 +15,7 @@ import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
 import { apiSend, type ApiCredentials } from "@/api/client";
+import { selectPlaybackForPlay } from "@/api/playback";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
 
@@ -48,8 +49,9 @@ export function ForLaterSection({ origin, token, sessionMode, connected, canPlay
     onSettled: refresh,
   });
   const action = useMutation({
-    mutationFn: ({ item, mode }: { item: ForLaterItem; mode: Mode }) => {
+    mutationFn: async ({ item, mode }: { item: ForLaterItem; mode: Mode }) => {
       const path = `/api/for-later/${encodeURIComponent(item.id)}`;
+      if (mode === "play") await selectPlaybackForPlay(session);
       return apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
     },
     onSuccess: async (body, { item, mode }) => {

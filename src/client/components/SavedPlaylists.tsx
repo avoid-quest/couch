@@ -10,6 +10,7 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PageHeader } from "@/components/PageHeader";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
 import { ApiError, apiSend, type ApiCredentials } from "@/api/client";
+import { selectPlaybackForPlay } from "@/api/playback";
 import { playlistQuery, playlistsQuery } from "@/api/playlists";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { formatDuration } from "@/time-format";
@@ -23,7 +24,7 @@ const summary = (list: SavedPlaylistSummary) => [
   list.totalDuration != null && formatDuration(list.totalDuration),
 ].filter(Boolean).join(" · ");
 const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
-type Write = { path: string; body: unknown; method?: string };
+type Write = { path: string; body: unknown; method?: string; play?: boolean };
 
 /** Saved's Lists tab: lists kept from Up next or a source, and one list's detail. */
 export function SavedPlaylists({ origin, token, sessionMode, connected, canPlay, queueCount }: ApiCredentials & {
@@ -49,12 +50,15 @@ export function SavedPlaylists({ origin, token, sessionMode, connected, canPlay,
   const loading = connected && (list.isPending || !!openId && detail.isPending);
   const loadError = connected ? list.error ?? (missing ? null : detail.error) : null;
   const mutation = useMutation({
-    mutationFn: ({ path, body, method = "POST" }: Write) => apiSend<{ playlist?: SavedPlaylist; undoToken?: string } | undefined>(credentials, path, body, method, 30_000),
+    mutationFn: async ({ path, body, method = "POST", play }: Write) => {
+      if (play) await selectPlaybackForPlay(session);
+      return apiSend<{ playlist?: SavedPlaylist; undoToken?: string } | undefined>(credentials, path, body, method, 30_000);
+    },
     onSuccess: result => { if (result?.playlist) queryClient.setQueryData(playlistQuery(credentials, result.playlist.id).queryKey, { playlist: result.playlist }); },
   });
   const pending = mutation.isPending;
   const disabled = !connected || pending;
-  const write = (path: string, body: unknown, method?: string) => connected && !pending ? mutation.mutateAsync({ path, body, method }).catch(() => null) : Promise.resolve(null);
+  const write = (path: string, body: unknown, method?: string, play?: boolean) => connected && !pending ? mutation.mutateAsync({ path, body, method, play }).catch(() => null) : Promise.resolve(null);
 
   // Focus the first selector that matches, after React commits.
   const focus = (...selectors: string[]) => requestAnimationFrame(() => {
@@ -76,7 +80,7 @@ export function SavedPlaylists({ origin, token, sessionMode, connected, canPlay,
     await write("/api/playlists", { name, scope: "upNext" });
   };
   const load = async (target: { id: string; name: string; revision: number }, mode: PlaylistLoadMode) => {
-    await write(`${listPath(target.id)}/load`, { revision: target.revision, mode });
+    await write(`${listPath(target.id)}/load`, { revision: target.revision, mode }, undefined, mode === "play");
   };
   const deleteList = async (target: SavedPlaylist) => {
     const result = await write(listPath(target.id), { revision: target.revision }, "DELETE");

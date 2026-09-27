@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiSend } from "@/api/client";
+import { selectPlaybackForPlay } from "@/api/playback";
 import { useIdleCursor } from "@/useIdleCursor";
 import { useNavigation } from "@/navigation";
 import { collectionLocation, DetailFocusRestoration, useDetailNavigation } from "@/detail-navigation";
@@ -54,7 +55,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
+  const { credentials, state, status, details, connected, run, rendererTargetId, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -155,7 +156,10 @@ function useShellValue() {
     run({ type, itemId, entryId: createId(), ...options });
 
   const playProgress = useMutation({
-    mutationFn: ({ mediaId, ...body }: { mediaId: string; fromStart: boolean; profileId: string }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play`, body, "POST", 35_000),
+    mutationFn: async ({ mediaId, ...body }: { mediaId: string; fromStart: boolean; profileId: string }) => {
+      await selectPlaybackForPlay({ state, rendererTargetId, run });
+      return apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play`, body, "POST", 35_000);
+    },
   });
   const playHistory: HistoryPlayback = async (item, options) => {
     if (item.playable && credentials && state) {

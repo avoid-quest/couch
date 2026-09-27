@@ -3,6 +3,7 @@ import { useLocation } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
+import { selectPlaybackForPlay } from "@/api/playback";
 import { forLaterQuery } from "@/api/for-later";
 import { radioProgrammesQuery } from "@/api/radio";
 import { removeFromContinue, undoProgressAction } from "@/api/library";
@@ -159,10 +160,12 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
   const shell = useShell();
-  const { connected } = useSessionGate();
+  const session = useSessionGate();
+  const { connected } = session;
   const client = useQueryClient();
   const action = useDetailAction();
   const load = async (mode: "play" | "append") => {
+    if (mode === "play") await selectPlaybackForPlay(session);
     const result = await apiSend<{ notice?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load`, { mode }, "POST", 30_000);
     if (result?.notice) toast(result.notice);
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
