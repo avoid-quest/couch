@@ -31,7 +31,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
   let cancellation: AbortController | undefined, prepared: Uint8Array | undefined;
   let generation = 0, intentGeneration = 0, queued = 0, closed = false, uncertain = false;
   let tail = Promise.resolve(), loop = Promise.resolve();
-  let startedUs = 0, startPosition = 0, sentSeconds = 0, progressAt = 0, metadataAt = 0;
+  let startedUs = 0, startPosition = 0, sentSeconds = 0, progressAt = 0, metadataAt = 0, drainUntil = 0;
   const devices = () => [...selected].map(clientId => env.device(clientId)).filter((device): device is SendspinDevice => !!device);
   const connected = () => env.ready() && !uncertain && selected.size > 0 && devices().length === selected.size && devices().every(device => device.connected);
   const publish = () => callbacks.changed({ id: targetId, name: env.name, kind: "group", backend: "sendspin", connected: connected(), error: state.error ?? undefined,
@@ -49,7 +49,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
   const position = () => state.status === "playing" && startedUs ? Math.min(state.duration ?? Infinity, startPosition + Math.min(sentSeconds, Math.max(0, (serverNowUs() - startedUs) / 1e6)) * (state.speed ?? 1)) : state.position;
   const cancel = () => { state = { ...state, position: position() }; generation++; cancellation?.abort(); };
   const end = (clientId: string) => {
-    if (activeStreams.delete(clientId)) env.core.sendStreamEnd(clientId);
+    if (activeStreams.delete(clientId)) { env.core.sendStreamEnd(clientId); drainUntil = Math.max(drainUntil, Date.now() + sendspinDrainMs); }
     env.core.sendGroupUpdate(clientId, PlaybackStateType.STOPPED, targetId, env.name);
   };
   const clear = () => { for (const clientId of selected) end(clientId); };
@@ -65,7 +65,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     tail = work.then(() => {}, () => {});
     return work;
   };
-  const retire = async () => { const draining = activeStreams.size > 0; cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; prepared = undefined; startedUs = 0; if (draining) await delay(sendspinDrainMs); };
+  const retire = async () => { cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; prepared = undefined; startedUs = 0; await delay(Math.max(0, drainUntil - Date.now())); };
   const openDecoder = () => {
     if (!load) throw new Error("No Sendspin source is loaded.");
     cancellation = new AbortController();
