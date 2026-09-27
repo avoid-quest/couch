@@ -82,8 +82,8 @@ silence or measured acoustic synchronization.
 
 ## Qualification still open
 
-The replacement model is being implemented and has **no complete built-app
-acceptance yet**. [The active matrix](../.scratch/device-independent-playback/map.md)
+The replacement model has targeted built-app observations and **no complete
+acceptance across the contract yet**. [The active matrix](../.scratch/device-independent-playback/map.md)
 tracks fresh/migrated installs, window selection, independent Core, browser/native
 clients, simultaneous Playbacks, multi-device audio, moves, recovery, sources and
 resource measurements. Earlier tests and receipts remain historical evidence for
