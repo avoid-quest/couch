@@ -127,7 +127,7 @@ export function createHub(options: HubOptions) {
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true, options.initialName);
   const configuredExternally = !!(options.sendspin || options.sendspinConfigError);
-  const sendspinConfig: SendspinConfig = options.sendspin ?? { host: "0.0.0.0", port: 8927, name: store.installationName() };
+  const sendspinConfig: SendspinConfig = options.sendspin ?? { host: "0.0.0.0", port: 0, name: store.installationName() };
   let sendspinError: string | null = null;
   const sendspinIdentity = openSendspinIdentity(options.databasePath);
   const sessionId = store.installationId();

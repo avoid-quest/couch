@@ -69,6 +69,9 @@ live/DVR limits. Unsupported sources remain explicit. New Jellyfin relay/adaptat
 is outside the contract. Core may decode bounded PCM for Sendspin audio; the
 maintained host and client dependencies own encryption, protocol and synchronization.
 The Sendspin host tracks devices globally but creates one producer per Playback.
+Normal hosting uses an OS-assigned port returned by authenticated enrollment, so
+another library on the same computer needs no manual port coordination. Explicit
+existing server configurations keep their configured address.
 SDK stop/clear and bounded drain are software-output evidence, not physical speaker
 silence or measured acoustic synchronization.
 
