@@ -19,6 +19,14 @@ Configure the listen IP, port and group name. The optional public URL is a `ws:/
 
 Couch enrollment provisions a random per-client long-term PSK through its authenticated channel. The official client accepts it through `longTermPsks: [{ psk, serverId }]`, with `unpairedAccess: false`. The server dependency verifies it through its public `PskProvider`; unknown clients, incorrect PSKs and legacy plaintext connections are refused. Revocation disconnects current connections as well as denying future handshakes. PIN pairing and arbitrary external-client onboarding are not provided by this dependency; external players must support explicit long-term-PSK provisioning and AES-GCM.
 
+To enroll an external receiver that supports explicit PSKs:
+
+1. Persist its cryptographic identity and obtain its 43-character base64url `clientId`. Reusing the identity is necessary for reconnects.
+2. From an already paired Couch controller, `POST /api/sendspin/enrollment` with `Authorization: Bearer <controller token>`, `Content-Type: application/json`, and `{"clientId":"<clientId>"}`. The response contains `url`, `serverId`, and a client-specific `psk`.
+3. Store the PSK and server ID in the receiver's protected settings. With [`@sendspin/sendspin-js`](https://github.com/Sendspin/sendspin-js#encryption-and-pairing), use the persisted identity/storage, `baseUrl: url.replace(/\/sendspin$/, "")`, `suite: "aesgcm"`, `longTermPsks: [{ psk, serverId }]`, and `unpairedAccess: false`. Connect to the returned endpoint and select that connected receiver as a group member in Couch. Pass credentials through protected settings or standard input rather than shell arguments or logs.
+
+This provisions a long-term PSK through Couch's authenticated controller channel; it is not Sendspin PIN or pairing-token onboarding. The latest published [`@sonn-audio/node-sendspin` 0.6.2](https://github.com/sonn-audio/node-sendspin#encryption) only exposes a PSK provider and explicitly lacks server dynamic PIN, static PIN, pairing PSK, trust-store, and management flows. The [Sendspin spec](https://github.com/Sendspin/spec#pairing) requires those server pairing flows. The [Rust `sendspin-rs` library](https://github.com/Sendspin/sendspin-rs#current-status) still documents client foundations as its completed work, so it supplies no supported replacement host pairing path. PIN-only receivers require a maintained TypeScript or Rust server dependency to add those flows; when one exists, integrate its pairing API with Couch's durable credential store.
+
 In the existing output menu, choose **Join Sendspin server…**, then **This Couch**
 or **Another server**. Continue prepares credentials; Join is the explicit browser
 audio gesture. This Couch provisions credentials through the current pairing.
