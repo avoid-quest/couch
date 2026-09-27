@@ -25,8 +25,10 @@ import "../styles.css";
     </main>
     <script>
       // The couch avoids the pointer a few times, then gives up and waits to be caught.
+      // Left alone for a while, it walks back to its spot and plays again.
       const sofa = document.querySelector<HTMLAnchorElement>(".sofa")!;
-      let dodges = 6, busy = false;
+      const DODGES = 6;
+      let dodges = DODGES, busy = false, rest = 0;
       addEventListener("pointermove", e => {
         if (busy || !dodges || e.pointerType !== "mouse" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         const r = sofa.getBoundingClientRect();
@@ -43,6 +45,12 @@ import "../styles.css";
         }
         sofa.style.translate = `${best[0]}px ${best[1]}px`;
         sofa.classList.toggle("caught", !--dodges);
+        clearTimeout(rest);
+        rest = setTimeout(() => {
+          sofa.style.translate = "";
+          sofa.classList.remove("caught");
+          dodges = DODGES;
+        }, 8000);
         busy = true;
         setTimeout(() => { busy = false; }, 400);
       });
