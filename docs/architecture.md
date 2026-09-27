@@ -16,8 +16,8 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 
 | Composition | Responsibility | Current implementation |
 | --- | --- | --- |
-| Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. Independent packaged service installation remains work. |
-| Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. Their lifecycles are still coupled. |
+| Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. The compiled executable runs independently with the documented Linux systemd unit. |
+| Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. The bundled sidecar follows the standalone app; an independent Core can serve explicitly enrolled native receivers. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
 | Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. A configured local Snapcast group receives paced PCM; Sendspin remains work. |
 
@@ -131,6 +131,11 @@ For the next source-access gap, consult
 consult [multiroom research](research/multiroom-snapcast-sendspin.md). The
 [PWA runtime exploration](research/couch-runtime-options.md) is an alternative
 deployment proposal, not a prerequisite or the current implementation plan.
+
+Core-only Linux deployment reuses the compiled executable with embedded frontend and a
+dedicated systemd account/data directory. Pairing and one-time administrator recovery
+use the existing authorization paths. See [service installation](core-service.md).
+The desktop installation retains its own state and updater.
 
 ## External access
 

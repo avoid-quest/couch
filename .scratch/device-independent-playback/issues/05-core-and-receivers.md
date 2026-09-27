@@ -91,3 +91,17 @@ native and build checks, 25 packaged-browser checks, and the actual libmpv recei
 journey (lease-expiry audio removal after 8380 ms). Physical hardware/macOS/Windows
 journeys remain unqualified. Independent deployment guidance is the remaining
 implementation in this issue.
+
+## Independent Core deployment increment — 2026-09-27
+
+A Linux systemd unit and explicit build/install/bootstrap/update instructions now
+reuse the existing compiled Core. The unit forces Core-only mode, binds loopback
+by default and uses a dedicated account and data directory. The existing browser
+pairing and one-use administrator recovery establish control without a local TV UI.
+No desktop window, player, data directory or updater behavior changes.
+
+[Deployment guide](../../../docs/core-service.md) includes the compiled process
+qualification entry point and distinguishes it from systemd boot qualification.
+The exact committed-revision act/process check is pending; a disposable systemd
+PID1 probe is unavailable in this environment, so host boot integration remains
+a specifically unqualified check. No hosted workflow was dispatched.
