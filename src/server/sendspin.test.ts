@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { Identity } from "@sonn-audio/node-sendspin";
 import { SendspinCore } from "@sendspin/sendspin-js";
 import { WebSocket } from "ws";
-import { createSendspin, validateSendspinConfig } from "./sendspin";
+import { createSendspin, sendspinDrainMs, validateSendspinConfig } from "./sendspin";
 import type { PlaybackTarget, PlayerState } from "../shared/protocol";
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -74,6 +74,9 @@ test("real decoded PCM preserves queued stop/load, pause seek/speed and fences a
   await until(() => frequencies.every(hz => Math.abs(hz - 880) < 60), "both decoded880");
   expect(f.player).toMatchObject({ speed: 1.25, status: "playing" });
   f.host.disconnectAll(); await until(() => !f.target.connected && f.player.status === "unavailable", "access loss");
+  await until(() => clients.every(client => !client.isConnected), "client transports closed");
+  // Already received PCM can finish decoding after the server revokes access.
+  await Bun.sleep(sendspinDrainMs);
   const before = [...counts]; await Bun.sleep(500); expect(counts).toEqual(before);
   expect(() => f.host.send({ type: "pause", playbackId: "tone", paused: false })).toThrow();
 }, 25000);
