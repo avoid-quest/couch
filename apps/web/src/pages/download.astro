@@ -5,6 +5,7 @@ import { catalog, formats } from "../release-catalog";
 import type { Channel, PackageFormat } from "../../../../scripts/hosted-policy";
 
 const releases = catalog();
+const deb = releases.preview.deb ?? releases.stable.deb;
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
 const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
   dmg: { name: "Mac", target: "Apple Silicon, macOS 26 or later", note: "Drag Couch to Applications. macOS may ask you to allow it in Privacy & Security." },
@@ -49,18 +50,17 @@ const secondary = buttonVariants({ variant: "outline" });
           })}
         </ul>
       </section>)}
-      <p id="no-releases" hidden>Downloads are unavailable right now. Try again later.</p>
+      <p id="no-releases" hidden={formats.some(format => releases.stable[format] || releases.preview[format])}>Downloads are unavailable right now. Try again later.</p>
 
       <details>
         <summary>Install and update</summary>
         <p>Couch checks for updates on its own channel. Installing them automatically when idle is optional.</p>
         <p>Reinstall in the same place to keep your data and pairing. Don't install an older version as a repair.</p>
-        <p>Coming from Preview .12? Install .13 by hand once to get the new update key.</p>
       </details>
-      <details id="tv">
+      <details id="tv" hidden={!deb}>
         <summary>Set up a dedicated Debian TV</summary>
         <p>In the folder with the package, run:</p>
-        <pre><code id="deb-command">sudo apt install ./Couch_0.2.0-preview.13_amd64.deb</code></pre>
+        <pre><code id="deb-command">sudo apt install ./{deb?.filename}</code></pre>
         <p>Then run <code>sudo couch-setup --tv</code> and reboot. Couch gets its own account with automatic sign-in; your admin account stays. Pair your phone with the code on screen.</p>
       </details>
       <footer>Dependency licenses and notices come with each package.</footer>
@@ -68,35 +68,13 @@ const secondary = buttonVariants({ variant: "outline" });
   </body>
 </html>
 <script>
-  type Release = { version: string; url: string; filename: string };
-  type Catalog = Record<"stable" | "preview", Record<string, Release>>;
+  // Put this computer's download first. The worker fills in the current releases before the page arrives.
   const main = document.querySelector("main")!;
   const ua = navigator.userAgent;
   const mine = /iPhone|iPad|Android/.test(ua) ? null : /Mac/.test(ua) ? "dmg" : /Win/.test(ua) ? "nsis" : /Linux/.test(ua) ? "appimage" : null;
-  // Put this computer's download first.
   for (const row of document.querySelectorAll<HTMLElement>(`li[data-format="${mine}"]`)) {
     row.parentElement!.prepend(row);
     row.querySelector("a")!.className = main.dataset.primary!;
-  }
-
-  const result: Catalog | null = await fetch("/api/releases").then(response => response.ok ? response.json() : null).catch(() => null);
-  if (result) {
-    for (const channel of ["stable", "preview"] as const) {
-      const section = document.querySelector<HTMLElement>(`section[data-channel="${channel}"]`);
-      if (!section) continue;
-      section.hidden = Object.keys(result[channel] ?? {}).length === 0;
-      for (const row of section.querySelectorAll<HTMLElement>("li[data-format]")) {
-        const item = result[channel]?.[row.dataset.format ?? ""];
-        row.hidden = !item;
-        if (!item) continue;
-        row.querySelector<HTMLAnchorElement>("a[data-download]")!.href = item.url;
-        row.querySelector<HTMLElement>("[data-version]")!.textContent = item.version;
-      }
-    }
-    document.getElementById("no-releases")!.hidden = Object.keys(result.stable ?? {}).length + Object.keys(result.preview ?? {}).length > 0;
-    const deb = result.preview?.deb ?? result.stable?.deb;
-    if (deb) document.getElementById("deb-command")!.textContent = "sudo apt install ./" + deb.filename;
-    document.getElementById("tv")!.hidden = !deb;
   }
 </script>
 <style>
