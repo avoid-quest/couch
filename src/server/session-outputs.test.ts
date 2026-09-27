@@ -26,7 +26,7 @@ function player() {
   };
   return peer;
 }
-function fixture(options: { recoveringReceiver?: boolean; now?: () => number } = {}) {
+function fixture(options: { recoveringReceiver?: boolean; recoveringGroup?: boolean; groupRecoveryMs?: number; now?: () => number } = {}) {
   const native = player();
   const registry = createPlaybackTargetRegistry(native.send, { timeout: 40, ...options });
   native.connect(registry.observeNative); registry.observeNative(idle);
@@ -196,3 +196,27 @@ test("group controls reserve current and proposed speakers until the async opera
   await second.targets.move("old-group");
   expect(second.targets.owns("old-group")).toBe(true);
 });
+
+test("closing a browser releases its obsolete claim while retaining the owner's resumable timeline", async () => {
+  const f = fixture(), first = f.bind("first"), browser = f.browser();
+  await first.targets.move(browser.endpoint.id); await play(first.session, "first");
+  browser.endpoint.close();
+  expect(first.targets.owns(browser.endpoint.id)).toBe(false);
+  expect(first.session.state.player.status).toBe("unavailable");
+  expect(first.session.state.currentEntryId).not.toBeNull();
+  await first.targets.close();
+  expect(f.registry.targets.some(target => target.id === browser.endpoint.id)).toBe(false);
+});
+
+for (const [recoveringReceiver, groupRecoveryMs, fence] of [[false, undefined, 750], [false, 1000, 1000], [true, 1000, 12_500], [true, 15_000, 15_000]] as const) {
+  test(`recovery waits for the longest enabled fence (${recoveringReceiver}, ${groupRecoveryMs})`, async () => {
+    let now = 50;
+    const f = fixture({ recoveringReceiver, recoveringGroup: true, groupRecoveryMs, now: () => now });
+    const session = f.bind("personal"), browser = f.browser();
+    now += fence - 1;
+    await expect(session.targets.move(browser.endpoint.id)).rejects.toThrow("stopping");
+    now += 1;
+    await session.targets.move(browser.endpoint.id);
+    expect(session.targets.owns(browser.endpoint.id)).toBe(true);
+  });
+}
