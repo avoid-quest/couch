@@ -303,10 +303,10 @@ export function SessionGate({ children }: PropsWithChildren) {
   const assignDevices = useCallback(async (deviceIds: string[], takeover = false) => {
     const owner = currentCredentials.current;
     setError(null);
-    if (localDeviceId && deviceIds.includes(localDeviceId)) void activateDeviceAudio();
-    try { await command({ type: "assignDevices", deviceIds, ...(takeover ? { takeover: true as const } : {}) }); return owner === currentCredentials.current; }
+    const activation = !nativeHost && deviceIds.length > 1 && localDeviceId && deviceIds.includes(localDeviceId) ? activateDeviceAudio() : null;
+    try { if (activation && !await activation) return false; await command({ type: "assignDevices", deviceIds, ...(takeover ? { takeover: true as const } : {}) }); return owner === currentCredentials.current; }
     catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
-  }, [command, localDeviceId, activateDeviceAudio]);
+  }, [command, localDeviceId, nativeHost, activateDeviceAudio]);
 
   const joinPlayback = useCallback(async (id: string) => {
     const owner = credentials;
