@@ -29,6 +29,7 @@ import "../styles.css";
       const sofa = document.querySelector<HTMLAnchorElement>(".sofa")!;
       const DODGES = 6;
       let dodges = DODGES, busy = false, rest = 0;
+      addEventListener("resize", () => { sofa.style.translate = ""; sofa.classList.remove("caught"); dodges = DODGES; clearTimeout(rest); });
       addEventListener("pointermove", e => {
         if (busy || !dodges || e.pointerType !== "mouse" || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         const r = sofa.getBoundingClientRect();

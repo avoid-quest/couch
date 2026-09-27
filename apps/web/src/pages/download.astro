@@ -71,7 +71,7 @@ const secondary = buttonVariants({ variant: "outline" });
   // Put this computer's download first. The worker fills in the current releases before the page arrives.
   const main = document.querySelector("main")!;
   const ua = navigator.userAgent;
-  const mine = /iPhone|iPad|Android/.test(ua) ? null : /Mac/.test(ua) ? "dmg" : /Win/.test(ua) ? "nsis" : /Linux/.test(ua) ? "appimage" : null;
+  const mine = /iPhone|iPad|Android/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1) ? null : /Mac/.test(ua) ? "dmg" : /Win/.test(ua) ? "nsis" : /Linux/.test(ua) ? "appimage" : null;
   for (const row of document.querySelectorAll<HTMLElement>(`li[data-format="${mine}"]`)) {
     row.parentElement!.prepend(row);
     row.querySelector("a")!.className = main.dataset.primary!;
