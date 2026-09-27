@@ -29,7 +29,7 @@ export function PlaybackTargetPicker() {
         {targets.filter(target => target.connected && target.occupied).map(target => target.kind === "group" && target.sessionKind === "household"
           ? selectSession && <DropdownMenuItem key={`join:${target.id}`} disabled={coreDisabled} onSelect={() => selectSession("household")}>Join {target.name}</DropdownMenuItem>
           : <DropdownMenuItem key={`takeover:${target.id}`} disabled={coreDisabled} onSelect={() => void run({ type: "selectTarget", targetId: target.id, takeover: true })}>Take over {target.name}</DropdownMenuItem>)}
-        {targets.filter(target => target.kind === "group" && !target.occupied && ["snapcast", "sendspin"].includes(target.backend)).map(target => <DropdownMenuItem key={`manage:${target.id}`} disabled={coreDisabled} onSelect={() => setGroupId(target.id)}>Manage {target.name}</DropdownMenuItem>)}
+        {targets.filter(target => target.kind === "group" && !target.occupied && target.backend === "sendspin").map(target => <DropdownMenuItem key={`manage:${target.id}`} disabled={coreDisabled} onSelect={() => setGroupId(target.id)}>Manage {target.name}</DropdownMenuItem>)}
         {sendspin && <DropdownMenuItem onSelect={() => setSendspinOpen(true)}>{sendspin.phase === "idle" ? "Join Sendspin server…" : "Sendspin playback"}</DropdownMenuItem>}
       </DropdownMenuContent></DropdownMenu>
     {group && <PlaybackGroupControls key={group.id} target={group} connected={connected} busy={!!state?.handoff} run={run} onClose={() => setGroupId(null)} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} />}

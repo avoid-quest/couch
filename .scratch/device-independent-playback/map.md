@@ -1,12 +1,16 @@
 # Device-independent playback
 
-Status: supported workflows implemented; real software boundaries qualified; external blockers recorded
+Status: local-only; Sendspin-only synchronized audio; hardware qualification remains
 
 ## Current direction
 
 Clients fetch, decode and render supported sources directly. Core owns authorization,
 queue/session intent, persistence and output assignment. Idle controllers fetch no
-media. Group backends own synchronization. Preserve the existing app presentation.
+media. Sendspin owns group synchronization. Preserve the existing app presentation.
+
+The user selected local-only deployment and Sendspin-only audio on 2026-09-27.
+Snapcast, its TCP producer and the separate external-pairing mode are retired.
+Local HTTPS is optional; public deployment and WAN qualification are outside scope.
 
 The user explicitly abandoned new Jellyfin work on 2026-09-27. Existing native
 provider support remains compatible; new Core browser relays/adaptation are removed.
@@ -20,17 +24,18 @@ It is not an implementation dependency or a priority for future agents.
 | --- | --- | --- |
 | [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
 | [02 Client sources](issues/02-remote-source-compatibility.md) | Implemented | Physical/platform qualification remains separate. |
-| [03 Groups](issues/03-multiroom-output.md) | Both roles implemented; real browser/group transfer and external PSK peers qualified | PIN server dependency, physical speaker timing and arbitrary receivers. |
+| [03 Groups](issues/03-multiroom-output.md) | Both roles implemented; real browser/group transfer and external PSK peers qualified | Physical speaker timing; PIN-only third-party receivers wait for maintained support. |
 | [04 Adaptation](issues/04-media-adaptation.md) | Client HLS/DASH adaptation and caps implemented | Further webpage rendition selection waits for a demonstrated provider need. |
 | [05 Core/receivers](issues/05-core-and-receivers.md) | Compiled independent startup/recovery and unit syntax pass | Real systemd boot and physical/platform qualification; no Linux device available. |
 | [06 Independent sessions](issues/06-independent-sessions.md) | Implemented | Disk/HTTP/WS isolation and real browser workflows pass. |
-| [07 External access](issues/07-internet-access.md) | Real HTTPS/WSS WebKit playback, handoff and revocation pass | Public deployment/WAN routing requires an intended host. |
+| [07 Local access](issues/07-internet-access.md) | Public access retired; optional local HTTPS retained | No public deployment required. |
 | [08 UI parity](issues/08-shared-ui-parity.md) | Session/group flows checked | Physical desktop/TV platform qualification remains separate. |
 
 ## Coordination
 
 The active PR chain includes independent sessions #629, TypeScript Sendspin hosting
-#631 and official JS Sendspin client #632, followed by this validation handoff. The Python
+#631 and official JS Sendspin client #632, validation #633, and the local/Sendspin-only
+retirement layer. This layer depends on the completed replacement host and client. The Python
 Sendspin experiment (#628) is closed and preserved on
 `archive/sendspin-python-20260927`; it is removed from the application. The user
 requires both independent optional roles: clients join an existing server, and Core
@@ -49,7 +54,10 @@ Current results, full decoder/browser/network workload measurements, exact-revis
 gate location and each external blocker's next action:
 [boundary qualification](boundaries-2026-09-27.md). The user confirms no external
 Sendspin server or Linux device is available. The remaining PIN, physical-output,
-systemd-boot and public-deployment checks require the specified dependency/environment;
+and systemd-boot checks require the specified dependency/environment;
 they are not missing implementations of either Sendspin role.
+
+The pre-retirement source is preserved at
+`archive/playback-before-local-sendspin-20260927` (`6356e76d`).
 
 Earlier receipts and archived experiments: [validation.md](validation.md).

@@ -196,6 +196,6 @@ test("a stopped checkpoint asks for an output without promising resume", async (
 });
 
 test("an uncertain audio group asks for reconnection before transfer", async () => {
-  await render("unavailable", false, false, undefined, undefined, [{ id: "rooms", name: "Home speakers", kind: "group", backend: "snapcast", connected: false }], "rooms");
+  await render("unavailable", false, false, undefined, undefined, [{ id: "rooms", name: "Home speakers", kind: "group", backend: "sendspin", connected: false }], "rooms");
   expect(screen.getByText("Reconnect Home speakers from Playback output before moving playback.")).toBeInTheDocument();
 });

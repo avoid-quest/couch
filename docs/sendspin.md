@@ -1,6 +1,6 @@
 # Sendspin roles
 
-Couch's optional Sendspin host runs inside Bun. It uses `@sonn-audio/node-sendspin` 0.6.2 for encrypted protocol sessions and the existing FFmpeg PCM decoder for HTTP audio sources. There is no Python helper or runtime. A Sendspin client joins an existing server; enabling that client role does not enable Couch's host role.
+Sendspin is Couch's only synchronized-audio backend. Its optional host runs inside Bun. It uses `@sonn-audio/node-sendspin` 0.6.2 for encrypted protocol sessions and the existing FFmpeg PCM decoder for HTTP audio sources. There is no Python helper or runtime. A Sendspin client joins an existing server; enabling that client role does not enable Couch's host role.
 
 The frontend uses the official `@sendspin/sendspin-js` 5.0.0 client, which owns clock synchronization, decoding and Web Audio scheduling. Explicitly choose `suite: "aesgcm"`: Bun's current `node:crypto` implementation does not support the server dependency's ChaCha cipher. A client that only uses ChaCha cannot connect to this host yet.
 
@@ -15,7 +15,7 @@ Set `COUCH_SENDSPIN_CONFIG` to a JSON configuration file before starting Core:
 The option is independent of native playback and is disabled when unset. Core-only
 installations can host groups; browser/Tauri clients can join without hosting.
 
-Configure the listen IP, port and group name. The optional public URL is a `ws://` or `wss://` endpoint without embedded credentials, query or fragment. An HTTPS application needs a reachable WSS reverse proxy endpoint. Private identity and per-client PSKs remain in Core's durable store; public URLs contain no credentials.
+Configure the local listen IP, port and group name. The optional `publicUrl` is the client-reachable address on your LAN, not a public deployment. This URL is a `ws://` or `wss://` endpoint without embedded credentials, query or fragment. An HTTPS application needs a reachable WSS endpoint; see [optional local HTTPS](local-https.md). Private identity and per-client PSKs remain in Core's durable store; public URLs contain no credentials.
 
 Couch enrollment provisions a random per-client long-term PSK through its authenticated channel. The official client accepts it through `longTermPsks: [{ psk, serverId }]`, with `unpairedAccess: false`. The server dependency verifies it through its public `PskProvider`; unknown clients, incorrect PSKs and legacy plaintext connections are refused. Revocation disconnects current connections as well as denying future handshakes. PIN pairing and arbitrary external-client onboarding are not provided by this dependency; external players must support explicit long-term-PSK provisioning and AES-GCM.
 

@@ -1,3 +1,25 @@
+## Local-only, Sendspin-only retirement — 2026-09-27
+
+The user retired Internet deployment and Snapcast. The new scope layer removes the
+Snapcast adapter, its daemon configuration, Linux fixture and unused TCP PCM producer.
+Sendspin retains the shared decoder, both optional roles, authenticated enrollment,
+revocation and output-transfer safeguards. UI composition and direct media delivery
+are unchanged. Local HTTPS retains exact proxy/host admission but uses ordinary
+Couch pairing; the separate external-pairing mode is removed.
+
+Focused group/session/UI and Sendspin protocol, enrollment, identity, decoder and
+HTTPS admission checks pass, including the single one-second group recovery fence.
+TypeScript and diff whitespace checks pass. The final clean Linux build/browser gate is retained at
+`.artifacts/local-sendspin/verification.json` with log and compiled-browser receipts
+in that directory. That receipt owns the exact revision, steps and eligibility;
+local TLS browser evidence is in `.artifacts/local-sendspin/https`.
+
+Public/WAN checks are no longer blockers. Physical output timing, real systemd boot
+and PIN-only third-party interoperability retain the concrete limits in the current
+issue files. Earlier results below are historical, not qualification of the new tree.
+Pre-retirement source is preserved at `archive/playback-before-local-sendspin-20260927`
+(`6356e76d`); the Jellyfin stash and Python archive remain intact.
+
 ## Current boundary continuation — 2026-09-27
 
 [Boundary qualification](boundaries-2026-09-27.md) supersedes the missing actual

@@ -1,6 +1,7 @@
 # Current architecture
 
-Couch separates Core, its UI clients, playback targets and media delivery. The
+Couch runs on the local computer and home network. Core coordinates its UI clients,
+playback targets and media delivery. Internet hosting is outside the product scope. The
 browser uses the shared application UI: it can control another target or render
 locally. Desktop/TV presentation, access permissions and playback location are
 independent choices. [The glossary](../CONTEXT.md) defines these terms.
@@ -19,7 +20,7 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 | Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. The compiled executable runs independently with the documented Linux systemd unit. |
 | Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. The bundled sidecar follows the standalone app; an independent Core can serve explicitly enrolled native receivers. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
-| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. Optional Snapcast and Sendspin groups receive bounded PCM; their backends own synchronization. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. Optional Sendspin groups receive bounded PCM; Sendspin owns synchronization. |
 
 Server capabilities and target capabilities are separate. Available behavior
 depends on permissions, enabled integrations/helpers, source access and the selected
@@ -115,17 +116,6 @@ explicitly unsupported until a client/provider-native path is available. The new
 Jellyfin browser relay/adaptation experiment was abandoned by user instruction;
 existing native provider integration remains compatible.
 
-The Snapcast adapter presents one configured group as a target and publishes observed
-membership/volume through the existing picker. One Core-owned FFmpeg producer decodes
-remote audio and paces bounded PCM into a loopback Snapserver; Snapcast owns member
-synchronization. Progress is estimated from submitted audio and the configured
-buffer. The qualified 500ms buffer/750ms drain is explicitly different from a physical
-silence acknowledgement. Uncertain control/ingestion blocks transfer until a fresh
-connection resets the backend; reconnect never autoplays. A durable marker also
-fences new playback for 750ms after Core restart. Removed speakers are assigned to
-an idle stream, and active foreign groups cannot be silently taken over. See
-[Snapcast configuration and limits](snapcast.md).
-
 Sendspin has two independent optional roles. Core hosts an encrypted group through
 `@sonn-audio/node-sendspin`; a UI client joins this Core or another server through
 the official `@sendspin/sendspin-js` renderer. Hosting is disabled unless configured.
@@ -138,14 +128,15 @@ Core enrolls its own clients with durable, owner-bound PSKs through existing pai
 revocation disconnects their encrypted sessions. Bun interoperability currently uses
 AES-GCM. External receivers need compatible PSK provisioning; this host dependency
 does not provide PIN onboarding. The client can use the official pairing flow with
-other servers. A shared PCM decoder feeds one group timeline with bounded buffering.
+other servers. The PCM decoder feeds one group timeline with bounded buffering.
 Unqualified outputs cannot promise silent handoff; explicitly qualified software
 identities use a one-second drain fence. See [Sendspin roles and limits](sendspin.md).
 
 For client playback API questions, consult
 [browser delivery research](research/browser-media-delivery.md) selectively. Its relay
-and conversion proposals are historical alternatives, not the active scope. For group adapters,
-consult [multiroom research](research/multiroom-snapcast-sendspin.md). The
+and conversion proposals are historical alternatives. Sendspin is the sole synchronized
+audio backend; the earlier [multiroom comparison](research/multiroom-snapcast-sendspin.md)
+is retained as historical research. The
 [PWA runtime exploration](research/couch-runtime-options.md) is an alternative
 deployment proposal, not a prerequisite or the current implementation plan.
 
@@ -154,13 +145,14 @@ dedicated systemd account/data directory. The first pairing establishes an admin
 uses the existing authorization path. See [service installation](core-service.md).
 The desktop installation retains its own state and updater.
 
-## External access
+## Local access
 
-Core admits an explicitly configured canonical HTTPS origin only through exact
-trusted proxy peers. Forwarded requests never receive native-host authority, even
-when the proxy connects over loopback. External pairing is a separate opt-in;
-revocation and Allow remotes retain their existing meaning. Discovery and scoped
-media URLs use the external origin. See [deployment configuration](remote-access.md).
+Use the existing LAN listener and Couch pairing. An optional local HTTPS proxy
+supports browser secure-context features with a certificate trusted on those devices.
+It uses the same pairing and revocation flow; forwarded requests never gain native-host
+authority. See [local HTTPS](local-https.md) only when that transport is needed.
+Source URLs may still point to Internet providers; local-only describes Couch access,
+not an offline media requirement.
 
 ## Frontend delivery
 

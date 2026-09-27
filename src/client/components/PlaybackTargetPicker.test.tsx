@@ -28,7 +28,7 @@ for (const nativeHost of [false, true]) test(`reconnected selected renderer can 
 });
 
 for (const connected of [true, false]) test(`group management stays reachable and restores focus (group connected: ${connected})`, async () => {
-  const group = { id: "snapcast:downstairs", name: "Downstairs", kind: "group", backend: "snapcast", connected, members: [] };
+  const group = { id: "sendspin:downstairs", name: "Downstairs", kind: "group", backend: "sendspin", connected, members: [] };
   renderUI(<ShellProviders value={{ state: { ...state, targets: [group] }, connected: true, run: async () => true }}><PlaybackTargetPicker /></ShellProviders>);
   await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
   await userEvent.click(screen.getByRole("menuitem", { name: "Manage Downstairs" }));
@@ -49,7 +49,7 @@ for (const sessionMode of ["household", "personal"] as const) test(`session menu
 
 for (const sessionKind of ["household", "personal"] as const) test(`occupied ${sessionKind} group requires joining or explicit takeover`, async () => {
   const selections: unknown[] = [], commands: unknown[] = [];
-  const group = { id: "group", name: "Downstairs", kind: "group", backend: "snapcast", connected: true, occupied: true, sessionKind };
+  const group = { id: "group", name: "Downstairs", kind: "group", backend: "sendspin", connected: true, occupied: true, sessionKind };
   renderUI(<ShellProviders value={{ state: { ...state, targets: [group] }, connected: true, sessionMode: "personal", selectSession: (...args: unknown[]) => selections.push(args), run: async (action: unknown) => commands.push(action) }}><PlaybackTargetPicker /></ShellProviders>);
   await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
   expect(screen.getByRole("menuitem", { name: "Continue on Downstairs" })).toHaveAttribute("aria-disabled", "true");

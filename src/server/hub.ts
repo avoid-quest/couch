@@ -52,7 +52,7 @@ import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
 import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createGuide, type GuidePlaybackContext } from "./iptv";
-import { createRemoteAccess } from "./remote-access";
+import { createHttpsProxy } from "./https-proxy";
 
 import { createSoundRouting } from "./sound-routing";
 import { bluetoothSettings } from "./bluetooth";
@@ -64,15 +64,13 @@ import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import { createSendspin, validateSendspinConfig, type SendspinConfig } from "./sendspin";
 import { openSendspinIdentity } from "./sendspin-identity";
-import { createSnapcast, validateSnapcastConfig, type SnapcastConfig } from "./snapcast";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
 type HubOptions = {
   observePlayer?: () => void;
   hostname?: string;
   managedLan?: boolean;
-  remoteAccess?: { origin: string; trustedProxyIps: string[]; pairing?: boolean };
-  snapcast?: SnapcastConfig;
+  httpsProxy?: { origin: string; trustedProxyIps: string[] };
   sendspin?: SendspinConfig;
   onAddresses?: (urls: string[]) => void;
   port?: number;
@@ -116,16 +114,15 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
-  if (options.snapcast) validateSnapcastConfig(options.snapcast);
   if (options.sendspin) validateSendspinConfig(options.sendspin);
-  const remoteAccess = createRemoteAccess(options.remoteAccess);
+  const httpsProxy = createHttpsProxy(options.httpsProxy);
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
-  if (options.snapcast || options.sendspin) store.markBufferedOutputUsed();
+  if (options.sendspin) store.markBufferedOutputUsed();
   const sendspinIdentity = options.sendspin ? openSendspinIdentity(options.databasePath) : undefined;
   const sessionId = store.installationId();
   const runtimes = new Map<string, Runtime>();
@@ -172,7 +169,7 @@ export function createHub(options: HubOptions) {
   const windowsAudio = process.platform === "win32" && options.nativeSound ? windowsSound(options.nativeSound) : null;
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
-  const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed(), groupRecoveryMs: options.sendspin ? 1000 : 750 });
+  const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
   registry.rename("native", store.installationName());
   function createRuntime(owner: string | null): Runtime {
     const mode = owner ? "personal" : "household";
@@ -264,7 +261,6 @@ export function createHub(options: HubOptions) {
       catch { diagnostics.log.add("Playback", "An output could not confirm the changed source stopped."); }
     }
   }
-  let snapcast: ReturnType<typeof createSnapcast> | undefined;
   let sendspin: ReturnType<typeof createSendspin> | undefined;
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidateAll("playlists"), queue: () => session.state.queue,
     upNext: () => {
@@ -403,11 +399,11 @@ export function createHub(options: HubOptions) {
   let pairAttempts = 0;
 
   const peer = (request: Request): string => server.requestIP(request)?.address ?? lan?.servers.map(listener => listener.requestIP(request)?.address).find(Boolean) ?? "";
-  const access = (request: Request) => remoteAccess.classify(request, peer(request));
+  const access = (request: Request) => httpsProxy.classify(request, peer(request));
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
     const context = access(request);
     if (context === "rejected") return false;
-    if (context === "external") return store.remoteControlEnabled() && (!requireOrigin || request.headers.get("origin") === remoteAccess.origin);
+    if (context === "proxied") return store.remoteControlEnabled() && (!requireOrigin || request.headers.get("origin") === httpsProxy.origin);
     if (options.managedLan && !loopbackPeer(peer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, peer(request)))) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
@@ -551,12 +547,11 @@ export function createHub(options: HubOptions) {
       ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: access(request) === "external" ? [remoteAccess.origin] : connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer }, ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: access(request) === "proxied" ? [httpsProxy.origin] : connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer }, ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
           const respond = (body: unknown, status = 200) => cors(request, json(body, status));
-          if (access(request) === "external" && !remoteAccess.pairing) return respond({ error: "External pairing is disabled on this Couch." }, 403);
           if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
           if (!admitted()) return respond({ error: UPDATING_PAUSED }, 503);
           if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
@@ -652,7 +647,7 @@ export function createHub(options: HubOptions) {
         if (!sendspin || !sendspinIdentity || !options.sendspin) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
         try {
           if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
-          const address = options.sendspin.publicUrl ? new URL(options.sendspin.publicUrl) : new URL(access(request) === "external" ? remoteAccess.origin! : url.origin);
+          const address = options.sendspin.publicUrl ? new URL(options.sendspin.publicUrl) : new URL(access(request) === "proxied" ? httpsProxy.origin! : url.origin);
           if (!options.sendspin.publicUrl) {
             if (address.protocol === "https:") throw new ControllerError("Configure this Couch's secure Sendspin address before connecting.", 503);
             address.protocol = "ws:"; address.port = String(sendspin.port); address.pathname = "/sendspin";
@@ -867,7 +862,7 @@ export function createHub(options: HubOptions) {
               if (generation !== runtime.sourceGeneration) throw new Error("The source changed while playback was moving.");
             }, { takeover: action.takeover });
           } else if (action.type === "groupMembers" || action.type === "groupVolume" || action.type === "groupReconnect") {
-            const group = action.targetId === "snapcast-group" ? snapcast : action.targetId === "sendspin-group" ? sendspin : undefined;
+            const group = action.targetId === "sendspin-group" ? sendspin : undefined;
             if (!group) throw new Error("That audio group is not configured.");
             if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
             authorize();
@@ -968,7 +963,7 @@ export function createHub(options: HubOptions) {
     collections.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), snapcast?.close(), sendspin?.close(), lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), sendspin?.close(), lan?.close(), server.stop(true)]);
     diagnostics.close();
     sendspinIdentity?.close();
     for (const runtime of runtimes.values()) runtime.privateStore?.close();
@@ -979,10 +974,6 @@ export function createHub(options: HubOptions) {
   })();
 
   targets.publish();
-  if (options.snapcast) {
-    const target = registry.registerGroup({ id: "snapcast-group", name: options.snapcast.name, kind: "group", backend: "snapcast", connected: false, handoffSafety: "buffer-drain" }, command => snapcast!.send(command));
-    snapcast = createSnapcast(options.snapcast, { changed: target.update, observe: target.observe });
-  }
   if (options.sendspin && sendspinIdentity) {
     const target = registry.registerGroup({ id: "sendspin-group", name: options.sendspin.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => sendspin!.send(command));
     sendspin = createSendspin(options.sendspin, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() ? sendspinIdentity.lookup(clientId) : null,

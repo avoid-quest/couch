@@ -1,3 +1,6 @@
+> Historical qualification at the revisions below. The later local-only scope
+> retires public deployment and Snapcast; [map.md](map.md) owns the active backlog.
+
 # Playback boundary qualification — 2026-09-27
 
 Both optional Sendspin roles remain implemented. This continuation qualified real

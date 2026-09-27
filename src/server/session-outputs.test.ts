@@ -26,7 +26,7 @@ function player() {
   };
   return peer;
 }
-function fixture(options: { recoveringReceiver?: boolean; recoveringGroup?: boolean; groupRecoveryMs?: number; now?: () => number } = {}) {
+function fixture(options: { recoveringReceiver?: boolean; recoveringGroup?: boolean; now?: () => number } = {}) {
   const native = player();
   const registry = createPlaybackTargetRegistry(native.send, { timeout: 40, ...options });
   native.connect(registry.observeNative); registry.observeNative(idle);
@@ -151,7 +151,7 @@ test("only canonical members within the same backend conflict, and group mutatio
   const f = fixture(), first = f.bind("first"), second = f.bind("second");
   const member = (id: string, joined = true) => ({ id, name: id, joined, connected: true, volume: 100, muted: false });
   const group = (id: string, members: ReturnType<typeof member>[]) => {
-    const peer = player(), target: PlaybackTarget = { id, name: id, kind: "group", backend: "snapcast", connected: true, handoffSafety: "buffer-drain", members };
+    const peer = player(), target: PlaybackTarget = { id, name: id, kind: "group", backend: "sendspin", connected: true, handoffSafety: "buffer-drain", members };
     const registration = f.registry.registerGroup(target, peer.send); peer.connect(registration.observe); return target;
   };
   group("one", [member("speaker")]); group("two", [member("native"), member("speaker", false)]); group("overlap", [member("speaker")]);
@@ -165,7 +165,7 @@ test("only canonical members within the same backend conflict, and group mutatio
 
 test("unverified outputs allow idle selection but cannot participate in active transfer or takeover", async () => {
   const f = fixture(), first = f.bind("first"), second = f.bind("second"), peer = player(), browser = f.browser();
-  const target = { id: "unverified", name: "Unverified output", kind: "group", backend: "snapcast", connected: true, handoffSafety: "unverified" } as unknown as PlaybackTarget;
+  const target = { id: "unverified", name: "Unverified output", kind: "group", backend: "sendspin", connected: true, handoffSafety: "unverified" } as unknown as PlaybackTarget;
   const registration = f.registry.registerGroup(target, peer.send); peer.connect(registration.observe);
   await first.targets.move(target.id); await play(first.session, "first");
   await expect(first.targets.move(browser.endpoint.id)).rejects.toThrow("cannot confirm silence");
@@ -178,7 +178,7 @@ test("group controls reserve current and proposed speakers until the async opera
   const member = (id: string, joined: boolean) => ({ id, name: id, joined, connected: true, volume: 100, muted: false });
   for (const [id, members] of [["changing", [member("old", true), member("new", false)]], ["old-group", [member("old", true)]], ["new-group", [member("new", true)]]] as const) {
     const peer = player();
-    const registration = f.registry.registerGroup({ id, name: id, kind: "group", backend: "snapcast", connected: true, members: [...members] }, peer.send);
+    const registration = f.registry.registerGroup({ id, name: id, kind: "group", backend: "sendspin", connected: true, members: [...members] }, peer.send);
     peer.connect(registration.observe);
   }
   const gate = Promise.withResolvers<number>();
@@ -208,10 +208,10 @@ test("closing a browser releases its obsolete claim while retaining the owner's 
   expect(f.registry.targets.some(target => target.id === browser.endpoint.id)).toBe(false);
 });
 
-for (const [recoveringReceiver, groupRecoveryMs, fence] of [[false, undefined, 750], [false, 1000, 1000], [true, 1000, 12_500], [true, 15_000, 15_000]] as const) {
-  test(`recovery waits for the longest enabled fence (${recoveringReceiver}, ${groupRecoveryMs})`, async () => {
+for (const [recoveringReceiver, fence] of [[false, 1000], [true, 12_500]] as const) {
+  test(`recovery waits for the longest enabled fence (${recoveringReceiver})`, async () => {
     let now = 50;
-    const f = fixture({ recoveringReceiver, recoveringGroup: true, groupRecoveryMs, now: () => now });
+    const f = fixture({ recoveringReceiver, recoveringGroup: true, now: () => now });
     const session = f.bind("personal"), browser = f.browser();
     now += fence - 1;
     await expect(session.targets.move(browser.endpoint.id)).rejects.toThrow("stopping");

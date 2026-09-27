@@ -12,7 +12,7 @@ export function PlaybackGroupControls({ target, connected, busy, run, onClose, o
   const members = target.members ?? [];
   const joined = members.filter(member => member.joined).map(member => member.id);
   const disabled = !connected || !target.connected || busy || update.isPending;
-  const membershipDisabled = !connected || busy || update.isPending || (target.backend === "sendspin" ? !!target.error : !target.connected);
+  const membershipDisabled = !connected || busy || update.isPending || !!target.error;
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent onCloseAutoFocus={onCloseAutoFocus}>
     <DialogHeader><DialogTitle>{target.name}</DialogTitle><DialogDescription>Group playback uses estimated progress. Switching outputs waits for buffered audio to finish.</DialogDescription></DialogHeader>
     {!target.connected && <div className="grid justify-items-start gap-2"><p className="text-sm text-muted-foreground">{target.error || "The group is disconnected. Reconnect to try again."}</p><Button variant="outline" disabled={!connected || busy || update.isPending} onClick={() => update.mutate({ type: "groupReconnect", targetId: target.id })}>Reconnect group</Button></div>}

@@ -93,7 +93,7 @@ environment and removes it before launching media helpers; keep the file tempora
 Create `/etc/couch-core/core.env` with root ownership and mode 0600 for overrides.
 For deliberate LAN access set `COUCH_HOST=0.0.0.0` and restrict reachability to the
 intended network. For HTTPS through a trusted proxy follow
-[explicit HTTPS access](remote-access.md). No installer changes your firewall,
+[local HTTPS](local-https.md). No installer changes your firewall,
 router or proxy. Sharing is persisted in the database: restarting does not override
 an administrator's decision to disable remotes.
 
@@ -102,7 +102,7 @@ Deno; install the repository's pinned helpers into a service-readable directory 
 `bun run setup:media --dir /absolute/path`, then set `COUCH_YT_DLP` and `COUCH_DENO` to
 the executable paths in `core.env`. Install ffprobe through your distribution when
 local video metadata is needed; this source build finds it on the service PATH.
-Other backends may require their own helpers, such as ffmpeg for Snapcast.
+Other backends may require their own helpers, such as FFmpeg for Sendspin.
 
 The folder picker offers `/var/lib/couch-core/Music`, `/var/lib/couch-core/Videos`
 and real subdirectories of `/media` and `/mnt`. Grant the service account read and

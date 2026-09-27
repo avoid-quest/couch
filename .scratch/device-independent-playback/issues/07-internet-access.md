@@ -1,56 +1,19 @@
-# Use Couch from outside the home through an explicit remote-access setup
+# Local Couch access
 
-Type: task
-Status: implemented; isolated real HTTPS browser topology qualified
-Blocked by: intended public deployment availability for WAN qualification
+Type: scope decision
+Status: public deployment retired by the user on 2026-09-27
 
-## Goal
+Couch is used exclusively on the local computer and home network. Public DNS,
+Internet hosting, router forwarding and WAN qualification are outside scope.
+This issue keeps its filename so existing historical links remain valid.
 
-Use the browser and its playback targets over a deliberately configured HTTPS proxy
-or private-network setup. This is separate from supporting remote media providers on LAN.
+Direct LAN access uses the existing listener and Couch pairing. Optional
+[local HTTPS](../../../docs/local-https.md) retains the small trusted-proxy boundary
+for browser secure-context features, using ordinary pairing and revocation.
+`COUCH_HTTPS_ORIGIN` and `COUCH_HTTPS_PROXY_IPS` replace the external-access options;
+the separate external-pairing toggle is removed. Forwarded requests never receive
+native-host authority. Ordinary media remains provider-to-client.
 
-## Work
-
-- Preserve current LAN admission while adding the chosen topology, canonical external
-  origin and explicit trusted-proxy configuration. Don't assume tunnel access works
-  through existing subnet checks or expose the private native host interface.
-- Use appropriate browser authentication and narrow media grants; keep long-lived
-  credentials out of media URLs/logs. Authorize renderer registration/control separately
-  from claiming a target ID. Revocation must end access and prevent renewal.
-- Ensure destination URLs are reachable outside LAN and that headers, ranges,
-  WebSocket upgrades and manifest child resources survive the configured proxy.
-- Prefer provider → remote browser directly, retaining client quality controls.
-  Measure actual reachability and browser authentication without a Core media relay.
-- Limit public pairing/bootstrap deliberately. Household-only remote access need not
-  wait for independent users, but must not claim private-user isolation until it exists.
-
-## Done when
-
-The chosen external topology supports browsing, playback, control and handoff with
-the actual authorization and bandwidth behavior recorded. No unauthenticated URL
-proxy, broad host token disclosure or silent weakening of LAN rules. Cloud relay,
-automatic router configuration and multi-Core federation are not required.
-
-## Explicit HTTPS proxy increment — 2026-09-27
-
-Implemented canonical HTTPS origin + exact direct proxy IP configuration. Missing or
-spoofed forwarding metadata fails closed, forwarded traffic never gains host-token
-authority, external discovery advertises only the external address, and external
-pairing requires a separate opt-in. Existing LAN admission, revocation and Allow
-remotes remain effective. See `docs/remote-access.md` for the Caddy deployment recipe.
-
-Typecheck, 17 new admission/hub tests (130 assertions) and 139 existing/overlapping
-hub/controller/relay tests pass. A real Caddy 2.11.4 fixture with explicit private CA
-trust serves HTTPS discovery. The collaborative browser rejects that private CA;
-this is not browser or public Internet qualification. Transport checks use that CA
-explicitly and keep simulated renderer evidence separate. The issue remains open
-until the configured browser topology passes its full workflow.
-
-## Current topology result
-
-Two actual WebKit browsers now pass TLS-trusted pairing, authenticated WSS,
-provider-direct HTTPS MP3 and H.264/AAC playback, paused handoff, resume and
-destination revocation. Caddy and its CA run only in a disposable Linux environment;
-stock WebKit's missing MP4 decoders were supplied by maintained distro plugins.
-No Core media relay was used. [Receipts and the remaining public-deployment next action](../boundaries-2026-09-27.md)
-distinguish actual browser proof from public DNS/WAN routing.
+The previous isolated Caddy/WebKit HTTPS/WSS playback, handoff and revocation
+receipts remain in [boundary qualification](../boundaries-2026-09-27.md).
+They qualify the recorded local topology. There is no missing public-deployment task.

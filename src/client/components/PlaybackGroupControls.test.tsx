@@ -4,7 +4,7 @@ import type { Action, PlaybackTarget } from "../../shared/protocol";
 import { PlaybackGroupControls } from "./PlaybackGroupControls";
 
 setupUiTests();
-const group: PlaybackTarget = { id: "snapcast:group", name: "Downstairs", kind: "group", backend: "snapcast", connected: true, members: [
+const group: PlaybackTarget = { id: "sendspin:group", name: "Downstairs", kind: "group", backend: "sendspin", connected: true, members: [
   { id: "aa:bb:cc", name: "Kitchen", connected: true, volume: 40, muted: false, joined: true },
   { id: "dd:ee:ff", name: "Dining", connected: true, volume: 60, muted: false, joined: false },
   { id: "00:11:22", name: "Patio", connected: false, volume: 30, muted: false, joined: false },
@@ -36,7 +36,7 @@ test("joined volume and mute address the group member and block while pending", 
 });
 
 for (const reason of ["offline", "handoff", "disconnected"] as const) test(`group changes are disabled during ${reason}`, () => {
-  renderWithQueryClient(<PlaybackGroupControls target={{ ...group, connected: reason !== "disconnected" }} connected={reason !== "offline"} busy={reason === "handoff"} run={async () => { throw new Error("Unavailable group must not change"); }} onClose={() => {}} />);
+  renderWithQueryClient(<PlaybackGroupControls target={{ ...group, connected: reason !== "disconnected", error: reason === "disconnected" ? "Connection failed." : undefined }} connected={reason !== "offline"} busy={reason === "handoff"} run={async () => { throw new Error("Unavailable group must not change"); }} onClose={() => {}} />);
   expect(screen.getByRole("checkbox", { name: "Join Dining" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Mute Kitchen" })).toBeDisabled();
 });

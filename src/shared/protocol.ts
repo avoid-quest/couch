@@ -136,7 +136,7 @@ export type PlaybackCommand =
   | { type: "stop" };
 
 // A backend-managed group has one timeline and one observation writer.
-export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "snapcast" | "sendspin"; connected: boolean;
+export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser" | "sendspin"; connected: boolean;
   error?: string;
   occupied?: boolean;
   sessionKind?: "household" | "personal";

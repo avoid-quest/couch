@@ -4,7 +4,7 @@ import type { createSession, PlaybackDestination } from "./session";
 type Endpoint = { target: PlaybackTarget; send: (command: PlaybackCommand) => void; player: PlayerState; attempts: Set<string>; capabilities?: BrowserMediaCapabilities; authorize?: () => void; receiver?: { unsafeUntil: number; timer?: ReturnType<typeof setTimeout> } };
 type Session = ReturnType<typeof createSession>;
 type Binding = { id: string; kind: "household" | "personal"; session: () => Session; assigned?: Endpoint; busy: boolean; closed: boolean; changed: (handoff?: SessionState["handoff"]) => void };
-type RegistryOptions = { timeout?: number; observeNative?: () => void; recoveringReceiver?: boolean; recoveringGroup?: boolean; groupRecoveryMs?: number; now?: () => number };
+type RegistryOptions = { timeout?: number; observeNative?: () => void; recoveringReceiver?: boolean; recoveringGroup?: boolean; now?: () => number };
 type Waiter = { binding: Binding; endpoint: Endpoint; accept: (player: PlayerState) => boolean; resolve: (player: PlayerState) => void; reject: (error: Error) => void };
 const idle = (volume = 100): PlayerState => ({ playbackId: null, status: "idle", position: 0, duration: null, volume, seekable: false, error: null });
 
@@ -19,7 +19,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
   const now = options.now ?? (() => performance.now());
   // Native watchdog: 10s lease + 2s enforced shutdown, with a 500ms margin.
   const receiverFence = 12_500;
-  const recoveryUntil = now() + Math.max(options.recoveringReceiver ? receiverFence : 0, options.recoveringGroup ? options.groupRecoveryMs ?? 750 : 0);
+  const recoveryUntil = now() + Math.max(options.recoveringReceiver ? receiverFence : 0, options.recoveringGroup ? 1000 : 0);
   const native: Endpoint | undefined = nativeSend ? { target: { id: "native", name: "Couch TV", kind: "endpoint", backend: "native", connected: false }, send: nativeSend, player: idle(), attempts: new Set() } : undefined;
   const endpoints = new Map<string, Endpoint>(native ? [["native", native]] : []);
   const waiters = new Set<Waiter>();

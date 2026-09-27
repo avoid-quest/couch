@@ -1,5 +1,9 @@
 # Snapcast and Sendspin integration boundaries
 
+Historical comparison: the user selected local-only, Sendspin-only playback on
+2026-09-27. The dual-backend recommendation below is superseded by
+[the current architecture](../architecture.md); retain these findings as research.
+
 Researched: 2026-09-27. This is a source-based architecture investigation, not hardware qualification. **Recommendation** identifies Couch design proposals. Remote-provider media is a primary input; nothing below requires a local-file library.
 
 ## Current compatibility and maturity

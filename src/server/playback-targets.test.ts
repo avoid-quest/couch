@@ -51,7 +51,7 @@ async function start(f: ReturnType<typeof fixture>, status: "paused" | "playing"
 test("a group control outage fences transfer until a fresh drained connection is ready", async () => {
   const f = fixture(); await start(f, "paused");
   const group = player(38);
-  const target = { id: "snapcast-group", name: "Rooms", kind: "group" as const, backend: "snapcast" as const, connected: true, handoffSafety: "buffer-drain" as const };
+  const target = { id: "sendspin-group", name: "Rooms", kind: "group" as const, backend: "sendspin" as const, connected: true, handoffSafety: "buffer-drain" as const };
   const registration = f.targets.registerGroup(target, group.send); group.connect(registration.observe);
   await f.targets.move(target.id);
   expect(f.session.state).toMatchObject({ targetId: target.id, player: { status: "paused", position: 32, volume: 38 } });
@@ -74,7 +74,7 @@ test("group handoff strips Core hardware settings and preserves sole unknown aud
   await start(f);
   f.native.report({ tracks: [{ id: "a", kind: "audio", index: 1, label: "English", language: "eng", selected: true }] });
   const group = player(38);
-  const registration = f.targets.registerGroup({ id: "rooms", name: "Rooms", kind: "group", backend: "snapcast", connected: true, handoffSafety: "buffer-drain" }, command => {
+  const registration = f.targets.registerGroup({ id: "rooms", name: "Rooms", kind: "group", backend: "sendspin", connected: true, handoffSafety: "buffer-drain" }, command => {
     group.send(command);
     if (command.type === "load") group.report({ audioTracksKnown: false, tracks: [] });
   });
@@ -148,7 +148,7 @@ test("Core restart fences buffered output even if its backend is no longer confi
   const browser = targets.register("Browser", () => {});
   try {
     await expect(targets.move(browser.id)).rejects.toThrow("stopping");
-    now = 750;
+    now = 1000;
     await targets.move(browser.id);
     expect(session.state.targetId).toBe(browser.id);
   } finally { session.close(); targets.close(); store.close(); }
