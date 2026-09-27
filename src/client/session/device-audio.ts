@@ -10,7 +10,7 @@ type Hosting = { available: boolean; url?: string; serverId?: string };
 type Enrollment = { url: string; serverId: string; psk: string };
 type OutputLease = { playbackId: string; generation: string | null; renewal?: ReturnType<typeof setInterval> };
 
-/** The owning tab registers shared audio quietly; only Play unlocks its output. */
+/** Register quietly; native autoplay prepares audio, while browsers unlock on Play. */
 export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, onReady }: {
   credentials: (ApiCredentials & { installationId?: string }) | null;
   rendererTargetId: string | null;
@@ -92,8 +92,17 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
         prepared = createSendspinRenderer({ url: hosting.url, name: latestName.current }, {
           state: state => {
             if (!current()) return;
+            const wasConnected = connectedRef.current;
             connectedRef.current = state.connected; setConnected(state.connected);
             if (!state.connected) ready(false);
+            else if (isNativeHost() && !wasConnected && prepared) {
+              // Wry permits native autoplay. SDK readiness is independent of assignment.
+              void prepared.unlockFromGesture().then(() => {
+                if (current() && connectedRef.current) { ready(true); setError(null); }
+              }, () => {
+                if (current()) setError("This device couldn't start audio. Try again.");
+              });
+            }
             else if (!isNativeHost()) try { localStorage.setItem("couch.browser-volume", String(fromSendspinVolume(state.volume) / 100)); } catch { /* Storage is optional. */ }
           },
           error: () => { if (current()) { ready(false); setError("Shared audio is unavailable on this device."); } },

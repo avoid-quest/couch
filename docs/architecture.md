@@ -90,6 +90,13 @@ this window supplies audio or remote native playback requires an explicit stop-a
 action; other Devices continue. A persistent audio client spanning several Libraries
 is not implemented.
 
+The native webview's existing autoplay policy lets the maintained Sendspin SDK
+initialize audio after authenticated connection and reconnect, without a separate
+Enable audio step. Readiness is published only after SDK initialization succeeds;
+assignment still reserves the output and starts media. Browser clients retain
+gesture-based initialization. See [Wry autoplay](https://docs.rs/wry/latest/wry/struct.WebViewBuilder.html#method.with_autoplay)
+and [WebKit's media policy](https://developer.apple.com/documentation/webkit/wkwebviewconfiguration/mediatypesrequiringuseractionforplayback).
+
 An independent Core process needs no window. The desktop-bundled Core still has the
 application's lifetime: explicit Quit stops it. Installing and managing an independent
 background Core through the desktop UI remains unimplemented.
