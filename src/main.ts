@@ -13,6 +13,7 @@ import { join } from "node:path";
 import frontend, { assets } from "./frontend";
 import { createNativeDiagnostics } from "./server/diagnostics-native";
 import { createHub, type Hub } from "./server/hub";
+import { validateSendspinConfig, type SendspinConfig } from "./server/sendspin";
 import type { HostMessage, PlaybackCommand, SidecarMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
 import { runMaintenanceMode } from "./server/maintenance-mode";
@@ -31,7 +32,13 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
-const sendspin = process.env.COUCH_SENDSPIN_CONFIG ? await Bun.file(process.env.COUCH_SENDSPIN_CONFIG).json() : undefined;
+let sendspin: SendspinConfig | undefined, sendspinConfigError: string | undefined;
+try {
+  if (process.env.COUCH_SENDSPIN_CONFIG) {
+    sendspin = await Bun.file(process.env.COUCH_SENDSPIN_CONFIG).json();
+    validateSendspinConfig(sendspin!);
+  }
+} catch { sendspinConfigError = "Could not load the existing Sendspin configuration. Check COUCH_SENDSPIN_CONFIG and restart Couch."; }
 if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_DESKTOP_UPDATE === "1" ? "desktop" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null, process.env.COUCH_DEV_ORIGIN);
 
 function send(message: SidecarMessage) {
@@ -61,6 +68,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
   sendspin,
+  sendspinConfigError,
   ...(httpsOrigin && trustedProxyIps ? { httpsProxy: { origin: httpsOrigin, trustedProxyIps: trustedProxyIps.split(",").map(value => value.trim()) } } : {}),
   updater,
   managedLan: native && !previewProxyLan,

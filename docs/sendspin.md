@@ -6,14 +6,24 @@ The frontend uses the official `@sendspin/sendspin-js` 5.0.0 client, which owns 
 
 ## Hosting and enrollment
 
-Set `COUCH_SENDSPIN_CONFIG` to a JSON configuration file before starting Core:
+An administrator can turn on **Host Sendspin** in **Settings → Connections**.
+The saved choice survives restart. Enabling requires restarting Core; the settings
+show that requirement. Disabling stops the producer, disconnects its clients and
+closes the listener immediately, without restarting Core. Enabling again requires
+another restart. Listener or configuration failures appear in the same settings.
+The default listener is `0.0.0.0:8927`, using the installation's name.
+
+Existing installations can retain `COUCH_SENDSPIN_CONFIG` for custom configuration:
 
 ```json
 {"host":"0.0.0.0","port":8927,"name":"Couch audio"}
 ```
 
-The option is independent of native playback and is disabled when unset. Core-only
-installations can host groups; browser/Tauri clients can join without hosting.
+Before a choice is saved in settings, an existing configuration enables hosting.
+Afterward the saved enable/disable choice takes precedence; the file continues to
+supply the address, name and advanced options. With neither a saved choice nor a
+file, hosting stays disabled. Core-only installations can host groups;
+browser/Tauri clients can join without hosting.
 
 Configure the local listen IP, port and group name. The optional `publicUrl` is the client-reachable address on your LAN, not a public deployment. This URL is a `ws://` or `wss://` endpoint without embedded credentials, query or fragment. An HTTPS application needs a reachable WSS endpoint; see [optional local HTTPS](local-https.md). Private identity and per-client PSKs remain in Core's durable store; public URLs contain no credentials.
 

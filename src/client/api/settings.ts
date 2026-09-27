@@ -4,6 +4,7 @@ import type { Diagnostics } from "../../shared/diagnostics";
 import type { DisplayState } from "../../shared/display";
 import type { SoundOutput, SoundProfile, SoundState } from "../../shared/sound";
 import type { StartupState } from "../../shared/startup";
+import type { SendspinHostingState } from "../../shared/sendspin";
 import type { AptPackageStatus, ToolHealth } from "../../shared/tool-health";
 import type { UpdateState } from "../../shared/updates";
 import { validStreamingCommunityOrigin } from "../../shared/streamingcommunity";
@@ -107,6 +108,13 @@ export const startupQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["settings", "startup"],
     queryFn: ({ signal }) => apiJson<StartupState>(credentials, "/api/settings/startup", { signal }),
+  });
+
+export const sendspinHostingQuery = (credentials: ApiCredentials) =>
+  queryOptions({
+    queryKey: ["controllers", "sendspin-hosting"],
+    queryFn: ({ signal }) => apiJson<SendspinHostingState>(credentials, "/api/settings/sendspin", { signal }),
+    retry: false,
   });
 
 export const streamingCommunityQuery = (credentials: ApiCredentials) =>

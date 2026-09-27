@@ -15,6 +15,7 @@ export type SendspinOptions = {
   control?: (clientId: string, command: "play" | "pause" | "stop" | "next") => void | Promise<void>;
   membersChanged?: (ids: string[]) => void;
   changed: (target: PlaybackTarget) => void;
+  listenerChanged?: () => void;
   observe: (player: PlayerState) => void;
 };
 export const sendspinDrainMs = 1000;
@@ -41,6 +42,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
   for (const id of selected) members.set(id, { id, name: "Sendspin player", connected: false, joined: true, volume: 100, muted: false });
   const sockets = new Set<WebSocket>();
   let closed = false, listening = false, recovering = true, uncertain = false;
+  let listenerError: string | null = null, closing: Promise<void> | undefined;
   let state = idle(), load: Load | undefined, generation = 0, intentGeneration = 0, queued = 0;
   let tail = Promise.resolve(), loop = Promise.resolve();
   let decoder: ReturnType<typeof createPcmDecoder> | undefined, cancellation: AbortController | undefined, prepared: Uint8Array | undefined;
@@ -109,8 +111,8 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
       core.handleConnection(socket, request); core.getSessionBySocket(socket)!.handleText(data.toString());
     });
   });
-  server.on("error", () => fail("Sendspin could not listen on the configured address."));
-  server.on("listening", () => { listening = true; void delay(sendspinDrainMs).then(() => { if (!closed) { recovering = false; publish(); observe(); } }); });
+  server.on("error", () => { listening = false; listenerError = "Sendspin could not listen on the configured address."; fail(listenerError); options.listenerChanged?.(); });
+  server.on("listening", () => { listening = true; listenerError = null; options.listenerChanged?.(); void delay(sendspinDrainMs).then(() => { if (!closed) { recovering = false; publish(); observe(); } }); });
   publish();
   const retire = async () => { cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; prepared = undefined; startedUs = 0; await delay(sendspinDrainMs); };
   const openDecoder = () => {
@@ -203,6 +205,8 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
   };
   return {
     serverId: identity.peerId,
+    get listening() { return listening && !closed; },
+    get listenerError() { return listenerError; },
     get port() { const address = server.address(); return typeof address === "object" && address ? address.port : config.port; },
     send(command: PlaybackCommand) {
       if (closed) throw new Error("Sendspin is closed.");
@@ -240,6 +244,13 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
     disconnectAll() { intentGeneration++; fail("Sendspin remote access was disabled. Reconnect explicitly before playback."); for (const socket of sockets) socket.terminate(); },
     disconnectClient(id: string) { for (const socket of sockets) if (core.getSessionBySocket(socket)?.getClientId() === id) socket.terminate(); },
     async reconnect() { await enqueue(async () => { recovering = true; publish(); await retire(); if (closed) return; load = undefined; state = idle(); uncertain = false; recovering = false; publish(); observe(); }); },
-    async close() { if (closed) return; closed = true; cancel(); clear(); await decoder?.close(); await loop; await tail; for (const socket of sockets) socket.terminate(); await new Promise<void>(resolve => server.close(() => resolve())); },
+    close() { return closing ??= (async () => {
+      closed = true; listening = false; cancel(); clear(); for (const socket of sockets) socket.terminate(); publish(); options.listenerChanged?.();
+      const results = await Promise.allSettled([decoder?.close(), loop, tail]);
+      await delay(sendspinDrainMs);
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      const failed = results.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    })(); },
   };
 }

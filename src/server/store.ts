@@ -129,6 +129,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS native_receiver_recovery (id INTEGER PRIMARY KEY CHECK (id = 1));
     CREATE TABLE IF NOT EXISTS buffered_output_recovery (id INTEGER PRIMARY KEY CHECK (id = 1));
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
+    CREATE TABLE IF NOT EXISTS installation_sendspin (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
@@ -175,6 +176,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     markBufferedOutputUsed() { db.run("INSERT OR IGNORE INTO buffered_output_recovery (id) VALUES (1)"); },
     remoteControlEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_sharing WHERE id = 1").get()!.enabled; },
     saveRemoteControlEnabled(enabled: boolean) { db.query("INSERT INTO installation_sharing VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
+    sendspinEnabled() { const enabled = db.query<{ enabled: number | null }, []>("SELECT enabled FROM installation_sendspin WHERE id = 1").get()?.enabled; return enabled == null ? null : !!enabled; },
+    saveSendspinEnabled(enabled: boolean) { db.query("INSERT INTO installation_sendspin VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     originDomain() { return db.query<{ domain: string }, []>("SELECT domain FROM installation_origin_domain WHERE id = 1").get()?.domain ?? ""; },
     saveOriginDomain(domain: string) { db.query("INSERT INTO installation_origin_domain VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET domain = excluded.domain").run(domain); },
     streamingCommunityOrigin: () => db.query<{ origin: string }, []>("SELECT origin FROM streamingcommunity_origin WHERE id = 1").get()?.origin ?? streamingCommunityOrigin,

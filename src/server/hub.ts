@@ -64,6 +64,7 @@ import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import { createSendspin, validateSendspinConfig, type SendspinConfig } from "./sendspin";
 import { openSendspinIdentity } from "./sendspin-identity";
+import type { SendspinHostingState } from "../shared/sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
 type HubOptions = {
@@ -72,6 +73,7 @@ type HubOptions = {
   managedLan?: boolean;
   httpsProxy?: { origin: string; trustedProxyIps: string[] };
   sendspin?: SendspinConfig;
+  sendspinConfigError?: string;
   onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
@@ -114,7 +116,6 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
-  if (options.sendspin) validateSendspinConfig(options.sendspin);
   const httpsProxy = createHttpsProxy(options.httpsProxy);
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
@@ -122,8 +123,15 @@ export function createHub(options: HubOptions) {
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
-  if (options.sendspin) store.markBufferedOutputUsed();
-  const sendspinIdentity = options.sendspin ? openSendspinIdentity(options.databasePath) : undefined;
+  const configuredExternally = !!(options.sendspin || options.sendspinConfigError);
+  const startupEnabled = store.sendspinEnabled() ?? configuredExternally;
+  const sendspinConfig: SendspinConfig | undefined = startupEnabled && !options.sendspinConfigError
+    ? options.sendspin ?? { host: "0.0.0.0", port: 8927, name: store.installationName() } : undefined;
+  let sendspinError: string | null = startupEnabled ? options.sendspinConfigError ?? null : null;
+  try { if (sendspinConfig) validateSendspinConfig(sendspinConfig); }
+  catch (error) { sendspinError = error instanceof Error ? error.message : "Invalid Sendspin host configuration."; }
+  if (sendspinConfig && !sendspinError) store.markBufferedOutputUsed();
+  const sendspinIdentity = openSendspinIdentity(options.databasePath);
   const sessionId = store.installationId();
   const runtimes = new Map<string, Runtime>();
   const playbackStates = new Map<string, { status: import("../shared/protocol").PlayerState["status"]; retry: boolean }>();
@@ -262,6 +270,15 @@ export function createHub(options: HubOptions) {
     }
   }
   let sendspin: ReturnType<typeof createSendspin> | undefined;
+  let sendspinRestartRequired = false;
+  let sendspinSettingsTail = Promise.resolve();
+  const sendspinHostingState = (): SendspinHostingState => ({
+    enabled: store.sendspinEnabled() ?? configuredExternally,
+    active: !!sendspin?.listening,
+    restartRequired: sendspinRestartRequired,
+    configuredExternally,
+    error: sendspin?.listenerError ?? sendspinError,
+  });
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidateAll("playlists"), queue: () => session.state.queue,
     upNext: () => {
       const current = session.state.queue.findIndex(entry => entry.id === session.state.currentEntryId);
@@ -617,6 +634,29 @@ export function createHub(options: HubOptions) {
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
       }
+      if (url.pathname === "/api/settings/sendspin") {
+        if (caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
+        if (request.method === "GET") return cors(request, json(sendspinHostingState()));
+        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+        try {
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+          const enabled = await settingField(request, "enabled");
+          if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to host Sendspin.");
+          const mutation = sendspinSettingsTail.then(async () => {
+            if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+            if (!identity() || identity()?.authority === "controller") throw new ControllerError(NO_LONGER_ADMIN, 403);
+            store.saveSendspinEnabled(enabled);
+            if (!enabled) {
+              sendspinRestartRequired = false;
+              if (sendspin) { const host = sendspin; await host.close(); if (sendspin === host) sendspin = undefined; }
+            } else if (!sendspin?.listening) sendspinRestartRequired = true;
+            invalidateAll("controllers");
+            return sendspinHostingState();
+          });
+          sendspinSettingsTail = mutation.then(() => {}, () => {});
+          return cors(request, json(await mutation));
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Sendspin hosting." }, error instanceof ControllerError ? error.status : 500)); }
+      }
       if (url.pathname === "/api/settings/origin-domain") {
         if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
         if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
@@ -643,21 +683,22 @@ export function createHub(options: HubOptions) {
         } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/sendspin/enrollment") {
-        if (request.method === "GET" && !sendspin) return cors(request, json({ available: false }));
-        if (!sendspin || !sendspinIdentity || !options.sendspin) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
+        if (request.method === "GET" && (!sendspin?.listening || !sendspinHostingState().enabled)) return cors(request, json({ available: false }));
+        if (!sendspin?.listening || !sendspinIdentity || !sendspinConfig || !sendspinHostingState().enabled) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
         try {
           if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
-          const address = options.sendspin.publicUrl ? new URL(options.sendspin.publicUrl) : new URL(access(request) === "proxied" ? httpsProxy.origin! : url.origin);
-          if (!options.sendspin.publicUrl) {
+          const address = sendspinConfig.publicUrl ? new URL(sendspinConfig.publicUrl) : new URL(access(request) === "proxied" ? httpsProxy.origin! : url.origin);
+          if (!sendspinConfig.publicUrl) {
             if (address.protocol === "https:") throw new ControllerError("Configure this Couch's secure Sendspin address before connecting.", 503);
             address.protocol = "ws:"; address.port = String(sendspin.port); address.pathname = "/sendspin";
           }
-          const configuration = { available: true, url: address.href, name: options.sendspin.name, serverId: sendspinIdentity.serverId };
+          const configuration = { available: true, url: address.href, name: sendspinConfig.name, serverId: sendspinIdentity.serverId };
           if (request.method === "GET") return cors(request, json(configuration));
           if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
           const { clientId, rendererTargetId } = await settingFields(request, ["clientId", "rendererTargetId"]);
           const current = identity();
           if (!current || !admitted()) throw new ControllerError("Pair this remote first.", 401);
+          if (!sendspin?.listening || !sendspinHostingState().enabled) throw new ControllerError("Sendspin hosting is not enabled on this Couch.", 503);
           if (typeof clientId !== "string") throw new ControllerError("Choose a Sendspin client identity.");
           // A live, same-owner Couch renderer qualifies software transfer only; it cannot attest a speaker's acoustic state.
           if (rendererTargetId !== undefined && (typeof rendererTargetId !== "string" || !(rendererTargetId === "native" && trusted && registry.targets.some(target => target.id === "native" && target.connected))
@@ -963,7 +1004,7 @@ export function createHub(options: HubOptions) {
     collections.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), sendspin?.close(), lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), sendspin?.close(), sendspinSettingsTail, lan?.close(), server.stop(true)]);
     diagnostics.close();
     sendspinIdentity?.close();
     for (const runtime of runtimes.values()) runtime.privateStore?.close();
@@ -974,10 +1015,13 @@ export function createHub(options: HubOptions) {
   })();
 
   targets.publish();
-  if (options.sendspin && sendspinIdentity) {
-    const target = registry.registerGroup({ id: "sendspin-group", name: options.sendspin.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => sendspin!.send(command));
-    sendspin = createSendspin(options.sendspin, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() ? sendspinIdentity.lookup(clientId) : null,
-      isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!options.sendspin?.qualifiedClientIds?.includes(clientId),
+  if (sendspinConfig && sendspinIdentity) {
+    const target = registry.registerGroup({ id: "sendspin-group", name: sendspinConfig.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => {
+      if (!sendspin) throw new Error("Sendspin is disabled.");
+      sendspin.send(command);
+    });
+    try { sendspin = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() && (store.sendspinEnabled() ?? configuredExternally) ? sendspinIdentity.lookup(clientId) : null,
+      isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!sendspinConfig.qualifiedClientIds?.includes(clientId),
       describeClient: clientId => {
         const deviceId = sendspinIdentity.deviceId(clientId);
         if (!deviceId) return undefined;
@@ -985,16 +1029,18 @@ export function createHub(options: HubOptions) {
         return { deviceId, name: owner === "host" ? store.installationName() : owner ? store.controller(owner)?.name : undefined };
       },
       initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: target.update, observe: target.observe,
+      listenerChanged: () => invalidateAll("controllers"),
       control: async (clientId, command) => {
         const owner = sendspinIdentity.owner(clientId);
         const runtime = [...runtimes.values()].find(value => value.targets.owns("sendspin-group"));
         if (!owner || !admitted() || !runtime || runtime.mode === "personal" && runtime.owner !== owner) throw new Error("This client cannot control that playback session.");
-        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled()) throw new Error("This client's access was revoked."); };
+        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled() || !(store.sendspinEnabled() ?? configuredExternally)) throw new Error("This client's access was revoked."); };
         const playbackId = runtime.session.state.player.playbackId;
         if (command === "stop") runtime.session.command({ type: "stop" }, authorize);
         else if (playbackId && command === "next") runtime.session.command({ type: "next", playbackId }, authorize);
         else if (playbackId && (command === "play" || command === "pause")) runtime.session.command({ type: "pause", playbackId, paused: command === "pause" }, authorize);
-      } });
+      } }); }
+    catch (error) { sendspinError = error instanceof Error ? error.message : "Sendspin could not start."; invalidateAll("controllers"); }
   }
   return {
     server, session: { ...session, get state() { return session.state; }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
