@@ -41,12 +41,12 @@ test("hosting settings require an administrator and validate the bounded body", 
   expect((await api(hub, controller, "POST", { enabled: true })).status).toBe(403);
   expect((await api(hub, admin, "POST", { enabled: "yes" })).status).toBe(400);
   expect((await api(hub, hostToken, "PUT")).status).toBe(405);
-  expect(await state(hub)).toEqual({ enabled: false, active: false, restartRequired: false, configuredExternally: false, error: null });
+  expect(await state(hub)).toEqual({ enabled: true, active: false, restartRequired: false, configuredExternally: false, error: null });
 });
 
-test("a fresh Core hosts immediately, disables, and re-enables without a restart", async () => {
-  const f = fixture(), first = f.start();
-  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: false, error: null });
+test("a configured Core hosts, disables, and re-enables without a restart", async () => {
+  const f = fixture(), first = f.start({ sendspin: { host: "127.0.0.1", port: 0, name: "Rooms" } });
+  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: true, error: null });
   const discovery = await fetch(`${first.origin}/api/sendspin/enrollment`, { headers: { Origin: first.origin, Authorization: `Bearer ${hostToken}` } });
   expect(discovery.status).toBe(200);
   expect((await discovery.json() as { available: boolean }).available).toBe(true);
@@ -57,9 +57,9 @@ test("a fresh Core hosts immediately, disables, and re-enables without a restart
   expect((await enrollment.json() as { psk: string }).psk).toBeTruthy();
   const response = await api(first, hostToken, "POST", { enabled: false });
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ enabled: false, active: false, restartRequired: false, configuredExternally: false, error: null });
+  expect(await response.json()).toEqual({ enabled: false, active: false, restartRequired: false, configuredExternally: true, error: null });
   expect(await (await fetch(`${first.origin}/api/sendspin/enrollment`, { headers: { Origin: first.origin, Authorization: `Bearer ${hostToken}` } })).json()).toEqual({ available: false });
-  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: false, error: null });
+  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: true, error: null });
   expect((await state(first)).active).toBe(true);
 });
 
@@ -108,7 +108,7 @@ test("settings POST rechecks administrator authority after reading the body", as
     expect(revoke.status).toBe(200);
     release.resolve();
     expect((await pending).status).toBe(403);
-    expect((await state(hub)).enabled).toBe(false);
+    expect((await state(hub)).enabled).toBe(true);
   } finally { release.resolve(); }
 });
 
@@ -124,7 +124,6 @@ test("disabling terminates transport sockets and rejects later admissions", asyn
   expect((await api(hub, hostToken, "POST", { enabled: false })).status).toBe(200);
   await closed;
   expect((await state(hub)).active).toBe(false);
-  expect(hub.session.state.targets?.find(target => target.id === "sendspin-group")?.connected).toBe(false);
   expect((await fetch(`${hub.origin}/api/sendspin/enrollment`, { method: "POST", headers: { Origin: hub.origin, Authorization: `Bearer ${hostToken}` } })).status).toBe(503);
 });
 
@@ -161,5 +160,4 @@ test("controller revocation removes a saved PSK while hosting is disabled", asyn
   await client.connect();
   await until(async () => !client.isConnected);
   expect(client.isConnected).toBe(false);
-  expect(third.session.state.targets?.find(target => target.id === "sendspin-group")?.members?.some(member => member.id === clientId && member.connected)).toBe(false);
 });

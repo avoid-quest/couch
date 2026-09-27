@@ -370,6 +370,7 @@ export function createHub(options: HubOptions) {
   const devices = createPlaybackDevices({
     registry, catalog: playbackCatalog, runtimes: () => [...runtimes.values()], host: () => sendspin,
     changed: publishPlaybacks,
+    name: id => id === "native" ? store.installationName() : store.controller(id.replace(/^(browser|receiver)-/, ""))?.name,
     ready: deviceId => !!audioSocket(deviceId)?.data.audioReady,
     activate: async deviceId => {
       const socket = audioSocket(deviceId);
@@ -671,7 +672,7 @@ export function createHub(options: HubOptions) {
             socket.unsubscribe(topic(socket.data.runtime, socket.data.playbackClock));
             socket.close(4003, "Remotes are off. Your pairing is remembered.");
           }
-          if (!enabled) sendspin?.disconnectAll();
+          if (!enabled) for (const device of sendspin?.devices ?? []) if (sendspinIdentity.owner(device.id) !== "host") sendspin?.disconnectClient(device.id);
           invalidateAll("controllers");
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
@@ -1082,7 +1083,7 @@ export function createHub(options: HubOptions) {
     const ready = Promise.withResolvers<void>();
     const timeout = setTimeout(() => { if (!settled) { settled = true; ready.resolve(); } }, 3000);
     let host: ReturnType<typeof createSendspin>;
-    try { host = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() && (store.sendspinEnabled() ?? true) ? sendspinIdentity.lookup(clientId) : null,
+    try { host = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && (store.remoteControlEnabled() || sendspinIdentity.owner(clientId) === "host") && (store.sendspinEnabled() ?? true) ? sendspinIdentity.lookup(clientId) : null,
       isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!sendspinConfig.qualifiedClientIds?.includes(clientId),
       describeClient: clientId => {
         const deviceId = sendspinIdentity.deviceId(clientId);
@@ -1096,7 +1097,7 @@ export function createHub(options: HubOptions) {
         const owner = sendspinIdentity.owner(clientId);
         const runtime = runtimes.get(runtimeId);
         if (!owner || !admitted() || !runtime) throw new Error("This client cannot control that playback session.");
-        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled() || !(store.sendspinEnabled() ?? true)) throw new Error("This client's access was revoked."); };
+        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled() && owner !== "host" || !(store.sendspinEnabled() ?? true)) throw new Error("This client's access was revoked."); };
         const playbackId = runtime.session.state.player.playbackId;
         if (command === "stop") runtime.session.command({ type: "stop" }, authorize);
         else if (playbackId && command === "next") runtime.session.command({ type: "next", playbackId }, authorize);
@@ -1117,7 +1118,7 @@ export function createHub(options: HubOptions) {
   }
   if (configuredExternally && sendspinHostingState().enabled) void ensureSendspin();
   return {
-    server, session: { ...session, get state() { return snapshot(household); }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
+    server, session: { ...session, get state() { return closed ? session.state : snapshot(household); }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
     prepareRestart: () => {
       if (!admitted()) throw new Error("Already updating or restarting.");

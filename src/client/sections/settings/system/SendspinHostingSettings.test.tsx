@@ -9,14 +9,16 @@ const credentials = { origin: "http://localhost", token: "admin" };
 let state: SendspinHostingState;
 let readError = false;
 let writeError = false;
+let startActive = true;
 const writes: boolean[] = [];
-const hostingSwitch = () => screen.getByRole("switch", { name: "Host Sendspin" });
+const hostingSwitch = () => screen.getByRole("switch", { name: "Enable synchronized audio" });
 const render = (connected = true) => renderWithQueryClient(<SendspinHostingSettings credentials={credentials} connected={connected} />);
 
 beforeEach(() => {
   state = { enabled: false, active: false, restartRequired: false, configuredExternally: false, error: null };
   readError = false;
   writeError = false;
+  startActive = true;
   writes.length = 0;
   spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin");
@@ -25,7 +27,7 @@ beforeEach(() => {
     if (writeError) return Response.json({ error: "Write failed" }, { status: 503 });
     const enabled = JSON.parse(String(init?.body)).enabled;
     writes.push(enabled);
-    state = { ...state, enabled, active: enabled, restartRequired: false };
+    state = { ...state, enabled, active: enabled && startActive, restartRequired: false };
     return Response.json(state);
   }) as typeof fetch);
 });
@@ -36,12 +38,12 @@ test("saving hosting starts it immediately and disabling stops hosting", async (
   await waitFor(() => expect(hostingSwitch()).toBeEnabled());
   await user.click(hostingSwitch());
   await waitFor(() => expect(hostingSwitch()).toBeChecked());
-  expect(screen.getByText("Hosting is active.")).toBeInTheDocument();
+  expect(screen.getByText("Available for synchronized audio.")).toBeInTheDocument();
   expect(writes).toEqual([true]);
   state = { ...state, active: true, restartRequired: false };
   await user.click(hostingSwitch());
   await waitFor(() => expect(hostingSwitch()).not.toBeChecked());
-  expect(screen.getByText("Hosting is off.")).toBeInTheDocument();
+  expect(screen.getByText("Off.")).toBeInTheDocument();
   expect(writes).toEqual([true, false]);
 });
 
@@ -78,12 +80,13 @@ test("external configuration remains available to disable and startup failure is
   expect(writes).toEqual([false]);
 });
 
-test("enabling an externally configured host starts it immediately", async () => {
+test("enabled hosting remains ready while its listener is idle", async () => {
+  startActive = false;
   state = { ...state, configuredExternally: true };
   render();
   await waitFor(() => expect(hostingSwitch()).toBeEnabled());
   await userEvent.setup().click(hostingSwitch());
-  expect(await screen.findByText("Hosting is active.")).toBeInTheDocument();
+  expect(await screen.findByText("Ready when needed.")).toBeInTheDocument();
   expect(screen.getByText("Existing Sendspin configuration supplies the address and name.")).toBeInTheDocument();
   expect(writes).toEqual([true]);
 });

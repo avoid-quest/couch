@@ -6,7 +6,6 @@ const blockBytes = 3840;
 
 export function validatePcmSource(command: Load) {
   const source = command.audioSource ?? command.source;
-  if (!command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(source)) throw new Error("Choose one device for this source. Playing on several devices requires a supported audio source.");
   let url: URL;
   try { url = new URL(source); } catch { throw new Error("Group playback requires an HTTP audio source."); }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || /[\u0000-\u0020\u007f\\]/.test(source)) throw new Error("Group playback requires an HTTP audio source without embedded credentials.");

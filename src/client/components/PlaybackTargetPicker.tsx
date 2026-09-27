@@ -11,14 +11,9 @@ type Device = { id: string; name: string; connected: boolean; playbackId?: strin
 type Playback = { id: string; title: string; status: string; deviceIds: string[] };
 
 export function PlaybackTargetPicker() {
-  const gate = useSessionGate() as ReturnType<typeof useSessionGate> & {
-    selectPlayback: (id: string) => void;
-    assignDevices: (ids: string[], takeover?: boolean) => Promise<boolean>;
-    newPlayback: (deviceId: string) => Promise<boolean>;
-    setDeviceVolume: (deviceId: string, volume: number, muted: boolean) => Promise<boolean>;
-  };
+  const gate = useSessionGate();
   const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, setDeviceVolume } = gate;
-  const model = state as typeof state & { devices?: Device[]; playbacks?: Playback[]; deviceIds?: string[] };
+  const model = state;
   const [open, setOpen] = useState(false);
   const [replace, setReplace] = useState<Device | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -28,7 +23,7 @@ export function PlaybackTargetPicker() {
   const selected = playbacks.find(playback => playback.id === model.sessionId);
   const assignedIds = model.deviceIds ?? selected?.deviceIds ?? [];
   const selectedNames = assignedIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean);
-  const label = model.handoff ? "Moving playback…" : selectedNames.length === 1 ? selectedNames[0] : selectedNames.length ? `${selectedNames.length} devices` : "Choose devices";
+  const label = model.handoff ? "Moving playback…" : selectedNames.length === 1 ? selectedNames[0] : selectedNames.length ? `${selectedNames.length} devices` : "Devices";
   const disabled = !connected || !!model.handoff;
   const move = (ids: string[], takeover = false) => {
     void assignDevices(ids, takeover).then(ok => { if (ok) setOpen(false); });
@@ -38,8 +33,8 @@ export function PlaybackTargetPicker() {
       <PopoverTrigger asChild><Button ref={trigger} variant="ghost" className="min-w-11" disabled={!connected} aria-label="Devices"><MonitorSpeaker aria-hidden="true" /><span className="max-sm:hidden">{label}</span></Button></PopoverTrigger>
       <PopoverContent align="end" className="w-[min(25rem,calc(100vw-1rem))] max-h-[min(80vh,36rem)] overflow-y-auto" onCloseAutoFocus={event => { if (replace) event.preventDefault(); }}>
         <PopoverHeader><PopoverTitle>Devices</PopoverTitle><p className="text-muted-foreground">{selected?.title ?? "Choose playback to control"}</p></PopoverHeader>
-        {playbacks.length > 0 && <section aria-label="Playbacks" className="divide-y border-t">
-          {playbacks.map(playback => <div key={playback.id} className="flex items-center gap-2 py-2"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div>{playback.id === model.sessionId ? <span className="text-xs text-muted-foreground">Selected</span> : <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button>}</div>)}
+        {playbacks.some(playback => playback.id !== model.sessionId) && <section aria-label="Playbacks" className="divide-y border-t">
+          {playbacks.filter(playback => playback.id !== model.sessionId).map(playback => <div key={playback.id} className="flex items-center gap-2 py-2"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div>{playback.id === model.sessionId ? <span className="text-xs text-muted-foreground">Selected</span> : <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button>}</div>)}
         </section>}
         <section aria-label="Available devices" className="divide-y border-t">
           {devices.map(device => {

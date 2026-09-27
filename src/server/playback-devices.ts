@@ -14,6 +14,7 @@ type Options = {
   runtimes: () => Runtime[];
   host: () => Host | undefined;
   changed: () => void;
+  name: (deviceId: string) => string | undefined;
   ready: (deviceId: string) => boolean;
   activate: (deviceId: string) => Promise<void>;
   localVolume?: (volume: number, muted: boolean, authorize: () => void) => Promise<unknown>;
@@ -51,7 +52,7 @@ export function createPlaybackDevices(options: Options) {
     }
     // Remember disconnected destinations by their persistent identity; never create a second row on reconnect.
     for (const value of runtimes) for (const id of assigned(value)) if (!devices.some(device => device.id === id)) {
-      devices.push({ id, name: "Disconnected device", connected: false, playbackId: active(value) ? value.id : undefined, volume: 100, muted: false, audio: false });
+      devices.push({ id, name: options.name(id) ?? "Disconnected device", connected: false, playbackId: active(value) ? value.id : undefined, volume: 100, muted: false, audio: false });
     }
     const playbacks: PlaybackSummary[] = runtimes.filter(value => value.id === runtime.id || value.session.state.queue.length || active(value)).map(value => {
       const state = value.session.state;
@@ -105,17 +106,24 @@ export function createPlaybackDevices(options: Options) {
     for (const other of occupied) {
       const group = groups.get(other.id)?.group;
       const before = assigned(other);
+      const wasPlaying = other.session.state.player.status === "playing";
+      const resume = async (target: string) => {
+        await other.targets.move(target, guard);
+        const player = other.session.state.player;
+        if (wasPlaying && player.playbackId && player.status === "paused") other.session.command({ type: "pause", playbackId: player.playbackId, paused: false }, guard);
+        commit(other, before);
+      };
       if (group && other.session.state.targetId === group.id) {
         const members = [...group.members];
         const remaining = members.filter(clientId => { const audio = options.host()?.devices.find(device => device.id === clientId); return audio && !ids.includes(deviceId(audio)); });
-        restore.push(async () => { await group.setMembers(members); await other.targets.move(group.id, guard); commit(other, before); });
+        restore.push(async () => { await group.setMembers(members); await resume(group.id); });
         if (remaining.length) await other.targets.control(group.id, () => group.setMembers(remaining), remaining);
         else { await other.targets.detach(guard); await group.setMembers([]); }
         commit(other, before.filter(id => !ids.includes(id)));
       } else {
         const target = other.session.state.targetId;
         if (target && target !== "checkpoint") {
-          restore.push(async () => { await other.targets.move(target, guard); commit(other, before); });
+          restore.push(() => resume(target));
           await other.targets.detach(guard);
           commit(other, []);
         }

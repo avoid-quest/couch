@@ -154,7 +154,9 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     setMemberVolume,
     send(command: PlaybackCommand) {
       if (closed) throw new Error("Sendspin playback is closed.");
-      if (command.type === "load") { validatePcmSource(command); if (command.preferences?.speed !== undefined && (!Number.isFinite(command.preferences.speed) || command.preferences.speed < 0.25 || command.preferences.speed > 4)) throw new Error("Invalid playback speed."); }
+      if (command.type === "load") {
+        if (!command.audioOnly && !command.radio && !/\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(command.audioSource ?? command.source)) throw new Error("Choose one device for this source. Playing on several devices requires a supported audio source.");
+        validatePcmSource(command); if (command.preferences?.speed !== undefined && (!Number.isFinite(command.preferences.speed) || command.preferences.speed < 0.25 || command.preferences.speed > 4)) throw new Error("Invalid playback speed."); }
       else if (!["stop", "pause", "seek", "speed", "volume", "track"].includes(command.type)) throw new Error("This playback command is not supported by Sendspin.");
       if (command.type === "track") { if (command.kind !== "audio" || command.index !== 0) throw new Error("Sendspin supports the sole audio track only."); observe(); return; }
       if (!connected() && command.type !== "stop") throw new Error("Sendspin is disconnected.");

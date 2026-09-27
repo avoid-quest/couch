@@ -17,9 +17,9 @@ export function SendspinHostingSettings({ credentials, connected }: { credential
   const state = connected ? hosting.data : undefined;
   const error = save.error?.message || hosting.error?.message;
 
-  return <SettingsSection title="Sendspin hosting" description="Make this Core available for synchronized audio groups.">
-    <SettingsRow label="Host Sendspin" description={state?.active ? "Hosting is active." : state?.enabled ? "Hosting could not start." : "Hosting is off."}>
-      <Switch aria-label="Host Sendspin" checked={state?.enabled ?? false} disabled={!connected || !state || save.isPending} onCheckedChange={enabled => save.mutate(enabled)} />
+  return <SettingsSection title="Synchronized audio (Sendspin)" description="Let this Couch play audio on multiple devices together.">
+    <SettingsRow label="Enable synchronized audio" description={state?.error ? "Unavailable. Check the error below." : state?.active ? "Available for synchronized audio." : state?.enabled ? "Ready when needed." : "Off."}>
+      <Switch aria-label="Enable synchronized audio" checked={state?.enabled ?? false} disabled={!connected || !state || save.isPending} onCheckedChange={enabled => save.mutate(enabled)} />
     </SettingsRow>
     {state?.configuredExternally && <p className="text-sm text-muted-foreground">Existing Sendspin configuration supplies the address and name.</p>}
     {state?.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
