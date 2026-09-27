@@ -302,3 +302,30 @@ pass. Log: `.artifacts/device-independent-playback/target-controls-tests.log`.
 The bottom Core PR was independently checked in a detached worktree at `7a18b833`: typecheck
 and 229 server tests passed; 7 LAN tests skipped because no LAN interface was selectable.
 These results are not physical audio-output validation or an exact-revision merge gate.
+
+## Jellyfin browser delivery — 2026-09-27
+
+- Typecheck and diff whitespace checks pass. Focused regressions: **313 pass, 0 fail,
+  2411 assertions in 15 files**. Log: `.artifacts/device-independent-playback/jellyfin-final-tests.log`.
+- Media relay tests use a real Bun upstream to verify Range/HEAD/304/416, private
+  headers, redirect rejection, authorization, expiry and active-body cancellation.
+- Six actual-hub/fake-Jellyfin tests cover destination profiles, private commands,
+  revoke/stop/disconnect, incompatible native→browser preparation, successful
+  transfer, and post-commit rollback without prematurely stopping the old provider
+  attempt. Native observations in these tests are simulated.
+- Disposable official Jellyfin **10.11.11**, isolated Core **4127**, Vite **1421**,
+  collaborative Chromium tabs 8 and 9: H.264/AAC MP4 loaded with readyState 4,
+  duration 90 seconds and advancing position. Media URL contains a scoped UUID,
+  not the Jellyfin credential. Jellyfin Sessions reported **DirectPlay**, no
+  transcoding, and `docker top` showed no encoder process.
+- Pause/seek reached **31.5 seconds at 1.5×**. Range `bytes=0-1023` returned **206**,
+  `Content-Range: bytes 0-1023/9248291`, exactly 1024 bytes.
+- A second browser remained idle (zero media elements) until selected. Paused
+  handoff retained **31.5 seconds, 1.5×**, while source stopped. Its old grant then
+  returned **404**. Stop released destination media (`src=null`, networkState 0)
+  and its grant returned **404**.
+- Credentials and disposable service files live only under ignored `.artifacts`;
+  credential JSON is mode 600. No packaging/workflow changes or CI dispatch.
+
+Limits: conservative direct play only; no claim of multi-audio, external captions,
+Jellyfin transcoding, physical TV playback or packaged exact-revision qualification.

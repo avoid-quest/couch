@@ -68,3 +68,21 @@ open. Header-dependent provider sources, opaque manifest URLs, explicit audio/su
 selection, DRM, Jellyfin and format adaptation remain open. The next useful slice is
 a real header-dependent provider's scoped access path or target-negotiated Jellyfin
 delivery; do not discard headers to force a URL through the new adapter.
+
+## Result — Jellyfin browser direct play
+
+The browser reports conservative Media Capabilities probes. Core requests a
+target-specific Jellyfin direct-play profile, validates the returned stream and
+relays its private-header media through a revocable attempt-scoped URL with ranges.
+Native negotiation remains unchanged. No remuxer/encoder starts for this access gap.
+Single-video/single-audio H.264/AAC MP4 and MP3 are supported when the browser probe
+succeeds; multi-audio, external subtitles and incompatible codecs fail explicitly.
+
+Real Jellyfin 10.11.11 and Chromium played a 90-second H.264/AAC fixture. Pause,
+seek, 1.5× speed and two-browser paused handoff retained 31.5 seconds. Old and stopped
+grants returned 404; range requests returned 206. Jellyfin reported DirectPlay, and
+its container had no encoder process. Six hub integration tests cover privacy,
+revocation, incompatible destinations, successful native-to-browser transfer and
+post-commit rollback (native endpoint simulated). See validation for exact evidence.
+
+Issue stays open for the remaining provider/manifest/audio/subtitle/live work above.

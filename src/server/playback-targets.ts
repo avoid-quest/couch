@@ -1,12 +1,12 @@
-import type { PlaybackCommand, PlaybackTarget, PlayerState, SessionState } from "../shared/protocol";
-import type { createSession } from "./session";
+import type { BrowserMediaCapabilities, PlaybackCommand, PlaybackTarget, PlayerState, SessionState } from "../shared/protocol";
+import type { createSession, PlaybackDestination } from "./session";
 
-type Endpoint = { target: PlaybackTarget; send: (command: PlaybackCommand) => void; player: PlayerState; attempts: Set<string> };
+type Endpoint = { target: PlaybackTarget; send: (command: PlaybackCommand) => void; player: PlayerState; attempts: Set<string>; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type Waiter = { endpoint: Endpoint; accept: (player: PlayerState) => boolean; resolve: (player: PlayerState) => void; reject: (error: Error) => void };
 const idle = (volume = 100): PlayerState => ({ playbackId: null, status: "idle", position: 0, duration: null, volume, seekable: false, error: null });
 
 export function browserCompatible(command: Extract<PlaybackCommand, { type: "load" }>) {
-  if (!/^https?:\/\//i.test(command.source) || command.headers && Object.keys(command.headers).length || command.audioSource || command.segment || command.subtitles?.length)
+  if (!/^https?:\/\//i.test(command.source) && !/^\/api\/media\/[a-f\d-]{36}$/.test(command.source) || command.headers && Object.keys(command.headers).length || command.audioSource || command.segment || command.subtitles?.length)
     throw new Error("This source needs media delivery that this browser does not support yet. Keep playing it on Couch TV.");
 }
 
@@ -19,6 +19,10 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
   let assigned = native;
   let busy = false;
   let closed = false;
+  const deliveryFor = (endpoint: Endpoint): PlaybackDestination => ({ backend: endpoint.target.backend, capabilities: endpoint.capabilities, authorize: () => {
+    if (closed || !endpoint.target.connected) throw new Error("The playback device disconnected.");
+    endpoint.authorize?.();
+  } });
   const changed = (handoff: SessionState["handoff"] = session().state.handoff ?? null) => { if (!closed) session().updateTargets(assigned?.target.id, [...endpoints.values()].map(endpoint => ({ ...endpoint.target })), handoff); };
   const send = (endpoint: Endpoint, command: PlaybackCommand) => {
     if (closed || !endpoint.target.connected) throw new Error("That playback device disconnected.");
@@ -62,6 +66,7 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
     },
     get busy() { return busy; },
     get nativeAssigned() { return !!native && assigned === native; },
+    get destination() { return assigned ? deliveryFor(assigned) : undefined; },
     send(command: PlaybackCommand) {
       if (!assigned) throw new Error("Choose a playback output.");
       // Browser loads retain their own volume; next-item preparation is native-only.
@@ -74,9 +79,9 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
       if (!native.target.connected) { native.target.connected = true; changed(); }
       observe(native, player);
     },
-    register(name: string, sendCommand: Endpoint["send"]) {
+    register(name: string, sendCommand: Endpoint["send"], capabilities?: BrowserMediaCapabilities, authorize?: () => void) {
       const id = crypto.randomUUID();
-      const endpoint: Endpoint = { target: { id, name, kind: "endpoint", backend: "browser", connected: true }, send: sendCommand, player: idle(), attempts: new Set() };
+      const endpoint: Endpoint = { target: { id, name, kind: "endpoint", backend: "browser", connected: true }, send: sendCommand, player: idle(), attempts: new Set(), capabilities, authorize };
       endpoints.set(id, endpoint); changed();
       return { id, observe: (player: PlayerState) => { if (endpoints.get(id) === endpoint) observe(endpoint, player); }, close: () => { if (endpoints.delete(id)) disconnect(endpoint); } };
     },
@@ -101,9 +106,11 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
       let prepared = false;
       let sourcePaused = false;
       let committed = false;
+      let preparedId: string | undefined;
       let previousDelivery: ReturnType<ReturnType<typeof createSession>["commitHandoff"]> | undefined;
       try {
-        const { command: load, delivery } = await session().prepareHandoff(destination.target.backend === "browser");
+        const { command: load, delivery } = await session().prepareHandoff(deliveryFor(destination));
+        preparedId = load.playbackId;
         authorize();
         if (destination.target.backend === "browser") browserCompatible(load);
         prepared = true;
@@ -158,7 +165,13 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
         }
         if (!silent && sourcePaused) session().handoffFailed("Playback could not be confirmed. The previous device is paused; stop or retry on the selected device.");
         throw error;
-      } finally { busy = false; changed(null); }
+      } finally {
+        if (!closed) {
+          if (preparedId && assigned !== destination) session().releaseHandoff(preparedId);
+          if (assigned !== source && original.playbackId) session().releaseHandoff(original.playbackId);
+        }
+        busy = false; changed(null);
+      }
     },
   };
 }

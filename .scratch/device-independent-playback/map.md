@@ -101,3 +101,12 @@ Initial draft stack: [Core targets #613](https://github.com/avoid-quest/couch/pu
 [browser renderer #614](https://github.com/avoid-quest/couch/pull/614) →
 [architecture records #615](https://github.com/avoid-quest/couch/pull/615).
 Subsequent implementation layers extend this same stack.
+
+## Latest increment — Jellyfin browser direct play
+
+Issue 02 now negotiates actual browser capability and privately relays compatible
+Jellyfin media with HTTP ranges. Real browser playback and paused transfer passed;
+provider attempt ownership and rollback have focused integration coverage. This
+closes the demonstrated authentication gap without starting an encoder. Broader
+formats, native enrollment, groups, independent sessions and external access remain
+in their existing issues. Target controls shipped as draft PR #617.

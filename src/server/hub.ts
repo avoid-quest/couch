@@ -19,6 +19,7 @@ import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, Server
 import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
 import { browserCompatible, createPlaybackTargets } from "./playback-targets";
 import { parseRendererMessage } from "./renderer-validation";
+import { createMediaRelay } from "./media-relay";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
@@ -135,7 +136,8 @@ export function createHub(options: HubOptions) {
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
-  const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  const mediaRelay = createMediaRelay();
+  const jellyfin = createJellyfin(options.databasePath, { onRelease: playbackId => mediaRelay.revoke(playbackId), onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => {
     const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
@@ -173,10 +175,18 @@ export function createHub(options: HubOptions) {
     },
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
-    resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
-      if (!targets.nativeAssigned && /^(jellyfin|library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
+    resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing, destination = targets.destination) => {
+      const browser = destination?.backend === "browser";
+      if (browser && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
-      if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
+      if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing, browser ? destination.capabilities ?? { mp4H264Aac: false, mp3: false } : undefined).then(media => {
+        if (!browser) return preparing ? media : subtitles.prepare(media, playbackId, signal);
+        try {
+          signal.throwIfAborted();
+          destination.authorize?.();
+          return { ...media, source: mediaRelay.issue(playbackId, media, destination.authorize ?? (() => { throw new Error("The playback device disconnected."); })), headers: undefined };
+        } catch (error) { void jellyfin.release(playbackId); throw error; }
+      });
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) throw new Error(RECORDINGS_UNSUPPORTED);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
@@ -192,6 +202,8 @@ export function createHub(options: HubOptions) {
     },
     deactivate: () => { void jellyfin.deactivate(); },
     activatePrepared: (playbackId, previous) => jellyfin.activatePrepared(playbackId, previous),
+    activateHandoff: (playbackId, previous) => jellyfin.activatePrepared(playbackId, previous, true),
+    releaseHandoff: playbackId => { void jellyfin.release(playbackId); },
     observe: player => { subtitles.observe(player); void jellyfin.observe(player); },
     stopped: playbackId => subtitles.stopped(playbackId),
   });
@@ -487,6 +499,8 @@ export function createHub(options: HubOptions) {
       const url = new URL(request.url);
       const websocket = url.pathname === "/api/ws";
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
+      const media = await mediaRelay.handle(request);
+      if (media) return cors(request, media);
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
       const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
@@ -640,7 +654,7 @@ export function createHub(options: HubOptions) {
               socket.data.renderer ??= targets.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, command => {
                 socket.data.authorize();
                 if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
-              });
+              }, renderer.capabilities, socket.data.authorize);
               socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId } satisfies ServerMessage));
             } else if (socket.data.renderer && renderer.sessionId === sessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");
@@ -741,6 +755,7 @@ export function createHub(options: HubOptions) {
     try { if (requiredProgress) session.quiesce(); else session.close(); }
     catch (error) { progressError = error; }
     targets.close();
+    mediaRelay.close();
     const toolsStopped = toolHealth.close();
     sound?.close();
     soundRouting?.close();

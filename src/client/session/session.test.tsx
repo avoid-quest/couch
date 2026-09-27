@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { Action, ClientMessage, ServerMessage, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
 import type { Credentials, useSession } from "./session";
+import * as capabilities from "./browser-capabilities";
+import * as browserRenderer from "./browser-renderer";
 
 setupUiTests();
 
@@ -147,10 +149,12 @@ test("changing connections rejects the old provider request and an old confirmat
 const playing = { ...state, currentEntryId: "entry", queue: [{ id: "entry", title: "Track", source: "https://media.example/track" }], player: { ...state.player, playbackId: "active", status: "playing" as const, duration: 100 } };
 
 test("a control-only Core connects and accepts commands without registering a browser renderer", async () => {
+  const probe = spyOn(capabilities, "browserMediaCapabilities");
   browserPlayback = false;
   await act(async () => session.reconnect());
   const peer = sockets.at(-1)!;
   expect(peer.sent).toEqual([]);
+  expect(probe).not.toHaveBeenCalled();
   await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
   expect(session.connected).toBe(true);
   expect(peer.sent).toEqual([]);
@@ -159,6 +163,39 @@ test("a control-only Core connects and accepts commands without registering a br
   peer.emit({ type: "result", requestId: peer.sent[0]!.requestId, ok: true });
   await expect(done).resolves.toBeUndefined();
   expect(document.querySelector("#couch-browser-video")).toBeNull();
+});
+
+test.each(["credentials", "close"])("pending capabilities do not stall state or register after %s changes", async change => {
+  let resolve!: (value: { mp4H264Aac: boolean; mp3: boolean }) => void;
+  spyOn(capabilities, "browserMediaCapabilities").mockReturnValue(new Promise(done => { resolve = done; }));
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(session.connected).toBe(true);
+  expect(peer.sent).toEqual([]);
+  if (change === "credentials") await mount({ ...credentials, token: "replacement" });
+  else await act(async () => peer.close());
+  await act(async () => resolve({ mp4H264Aac: true, mp3: true }));
+  expect(peer.sent).toEqual([]);
+});
+
+test("registers resolved capabilities exactly once and scopes media relay URLs to the selected Core", async () => {
+  spyOn(capabilities, "browserMediaCapabilities").mockResolvedValue({ mp4H264Aac: true, mp3: false });
+  const renderer = { command: (_command: import("../../shared/protocol").PlaybackCommand) => {}, close: () => {}, report: () => {}, play: () => {} };
+  spyOn(browserRenderer, "createBrowserRenderer").mockReturnValue(renderer);
+  await mount({ ...credentials, origin: "https://remote-core.example" });
+  const rendererCommand = spyOn(renderer, "command");
+  const peer = sockets.at(-1)!;
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(peer.sent as unknown[]).toEqual([{ type: "registerRenderer", capabilities: { mp4H264Aac: true, mp3: false } }]);
+  await act(async () => peer.emit({ type: "rendererRegistered", sessionId: "household", targetId: "browser" }));
+  const relay = "/api/media/12345678-1234-1234-1234-123456789abc";
+  for (const source of [relay, "/other/file.mp4", `${relay}?extra=1`, "https://provider.example/video.mp4"]) {
+    const load = { type: "load" as const, playbackId: "active", source };
+    await act(async () => peer.emit({ type: "rendererCommand", sessionId: "household", command: load }));
+    expect(rendererCommand).toHaveBeenLastCalledWith({ ...load, source: source === relay ? `https://remote-core.example${relay}` : source });
+  }
 });
 
 test.each([true, undefined])("browser playback capability %s registers only after the session baseline", async enabled => {
