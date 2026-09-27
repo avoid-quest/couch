@@ -159,7 +159,6 @@ export function createPlaybackDevices(options: Options) {
         if (!changing) {
           const held = leases.get(runtime.id);
           if (held) { for (const device of held) if (!joined.includes(device)) held.delete(device); if (!held.size) leases.delete(runtime.id); }
-          if (runtime.session.state.targetId === id) commit(runtime, joined);
         }
         options.changed();
       },
