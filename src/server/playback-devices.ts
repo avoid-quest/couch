@@ -59,7 +59,7 @@ export function createPlaybackDevices(options: Options) {
     for (const value of runtimes) for (const id of assigned(value)) if (!devices.some(device => device.id === id)) {
       devices.push({ id, name: options.name(id) ?? "Disconnected device", connected: false, playbackId: active(value) ? value.id : undefined, volume: 100, muted: false, audio: false });
     }
-    const playbacks: PlaybackSummary[] = runtimes.filter(value => value.id === runtime.id || value.session.state.queue.length || active(value)).map(value => {
+    const playbacks: PlaybackSummary[] = runtimes.filter(value => value.id === runtime.id || assigned(value).length || value.session.state.queue.length || active(value)).map(value => {
       const state = value.session.state;
       return { id: value.id, title: state.queue.find(entry => entry.id === state.currentEntryId)?.title ?? "New playback", status: state.player.status, deviceIds: assigned(value) };
     });

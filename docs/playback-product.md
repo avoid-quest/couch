@@ -14,11 +14,15 @@ A playback owns its queue, current item, timeline, paused/playing intent, speed,
 track choices and watching preferences. Its lifetime is independent of the window
 controlling it and the devices rendering it. Several playbacks can run concurrently.
 
-Each window selects a playback to control. Opening Couch starts nothing and takes
-over nothing. Pairing authorizes playback control for that library; choosing another
-ongoing playback is explicit. Library administration remains a separate permission.
-Each persistent client has a default playback, but this is a convenience pointer,
-not the playback's identity or lifetime. A new playback never mutates another queue.
+Every participating device controls the playback it is playing: media selection,
+queue, transport and membership are shared. Joining or being added to a playback
+updates those controls without changing the page being browsed. There is no primary
+controller. Output offers joining an existing playback directly, or controlling it
+without joining. An explicit remote-control choice remains until another choice or
+a new local assignment. Opening Couch starts nothing and takes over nothing.
+Pairing authorizes playback control for that library; administration remains a
+separate permission. An independent device keeps its own playback. A client's
+default playback is a convenience pointer, not ownership or control permission.
 
 The player names its assigned devices. Its transport, queue, seek and shared volume
 controls affect that playback. One Devices list shows availability, what is playing,
