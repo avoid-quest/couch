@@ -28,7 +28,7 @@ test("revoked request bodies cannot change profiles, progress, favorites, playli
   const jellyfin = createJellyfin(databasePath);
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
   let changes = 0, loads = 0, attachments = 0;
-  const playlists = createPlaylists({ databasePath, onChange: () => changes++, queue: () => [{ id: "item", title: "Item", source: "library:item" }], loadQueue: () => loads++ });
+  const playlists = createPlaylists({ databasePath, onChange: () => changes++, queue: () => [{ id: "item", title: "Item", source: "library:item" }], loadQueue: () => { loads++; } });
   const providers = createProviders({ databasePath, onChange: () => changes++ });
   const subtitles = createSubtitles(() => ({ playbackId: "current", status: "playing", position: 0, duration: 20, volume: 80, seekable: true, error: null }), () => attachments++);
   cleanup.push(() => { session.close(); store.close(); radio.close(); playlists.close(); providers.close(); subtitles.close(); });
