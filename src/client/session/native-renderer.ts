@@ -58,8 +58,9 @@ export function createNativeRenderer(observe: (state: PlayerState) => void, opti
       try { await invoke("native_receiver_command", { generation, command }); }
       catch (reason) {
         const message = reason instanceof Error ? reason.message : String(reason);
-        if ((command.type === "prepare" || command.type === "load") && outputOccupied.has(message)) {
-          observe({ playbackId: command.playbackId, status: "error", position: 0, duration: null, volume: 100, seekable: false, error: message });
+        if (outputOccupied.has(message)) {
+          if (command.type === "prepare" || command.type === "load") observe({ playbackId: command.playbackId, status: "error", position: 0, duration: null, volume: 100, seekable: false, error: message });
+          else await invoke("native_receiver_report", { generation });
           return;
         }
         throw reason;

@@ -77,6 +77,7 @@ test("busy local output reports the attempted playback without revoking receiver
   }) as typeof core.invoke);
   h.renderer.command({ type: "prepare", playbackId: "remote-attempt" }); await flush();
   expect(h.observe).toHaveBeenCalledWith(expect.objectContaining({ playbackId: "remote-attempt", status: "error", error: "This computer is already playing from its own library." }));
+  h.renderer.command({ type: "volume", volume: 25 }); await flush();
   expect(h.error).not.toHaveBeenCalled();
   expect(h.ipc.mock.calls.some(([name]) => name === "native_receiver_end")).toBe(false);
 });

@@ -43,7 +43,6 @@ struct Host {
     renderer_owner: Mutex<RendererOwner>,
     audio_output: Mutex<Option<AudioOutputLease>>,
     player_state: Mutex<PlayerState>,
-    local_volume: Mutex<f64>,
     workers: Mutex<
         Option<(
             mpsc::Receiver<player::Request>,
@@ -126,7 +125,6 @@ impl Host {
         *self.player_state.lock().expect("player state lock poisoned") = state.clone();
         match self.renderer_owner.lock().expect("renderer owner lock poisoned").clone() {
             RendererOwner::LocalCore => {
-                *self.local_volume.lock().expect("local volume lock poisoned") = state.volume;
                 if state.status == "idle" && self.audio_output.lock().expect("audio output lock poisoned").as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::LocalCore)) {
                     self.report_unavailable("This computer is playing shared audio.");
                 } else {
@@ -214,7 +212,7 @@ impl Host {
         if &*owner != expected { return; }
         *owner = RendererOwner::LocalCore;
         drop(owner);
-        let state = PlayerState { volume: *self.local_volume.lock().expect("local volume lock poisoned"), ..PlayerState::default() };
+        let state = PlayerState { volume: self.player_state.lock().expect("player state lock poisoned").volume, ..PlayerState::default() };
         *self.player_state.lock().expect("player state lock poisoned") = state.clone();
         if self.audio_output.lock().expect("audio output lock poisoned").as_ref().is_some_and(|lease| !lease.authority.permits(&RendererOwner::LocalCore)) {
             self.report_unavailable("This computer is playing shared audio.");
@@ -234,7 +232,7 @@ impl Host {
         drop(output);
         let available = *owner == RendererOwner::LocalCore && self.idle();
         if available {
-            let state = PlayerState { volume: *self.local_volume.lock().expect("local volume lock poisoned"), ..PlayerState::default() };
+            let state = PlayerState { volume: self.player_state.lock().expect("player state lock poisoned").volume, ..PlayerState::default() };
             self.report_message(serde_json::json!({ "type": "player", "state": state }));
         }
         drop(owner);
@@ -835,7 +833,6 @@ pub fn run() {
                 renderer_owner: Mutex::new(RendererOwner::LocalCore),
                 audio_output: Mutex::new(None),
                 player_state: Mutex::new(PlayerState::default()),
-                local_volume: Mutex::new(PlayerState::default().volume),
                 workers: Mutex::new(Some((player_receiver, display_receiver))),
                 bluetooth: bluetooth::Bluetooth::default(),
                 connection,

@@ -79,12 +79,17 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             Ok(Request::RemoteCommand { generation, command: PlaybackCommand::Stop }) => Some(generation.clone()),
             _ => None,
         };
+        let remote_volume = match &request {
+            Ok(Request::RemoteCommand { generation, command: PlaybackCommand::Volume { .. } }) => Some(generation.clone()),
+            _ => None,
+        };
         let host = app.state::<Host>();
         let owner = host.renderer_owner.lock().expect("renderer owner lock poisoned");
         let audio = host.audio_output.lock().expect("audio output lock poisoned").as_ref().map(|lease| lease.authority.clone());
         let request = match request {
             Ok(Request::RemoteCommand { generation, command }) => {
-                if !crate::native_receiver::valid(&app, &generation) || *owner != RendererOwner::Remote(generation.clone()) { continue; }
+                let idle_volume = matches!(command, PlaybackCommand::Volume { .. }) && *owner == RendererOwner::LocalCore && host.idle();
+                if !crate::native_receiver::valid(&app, &generation) || (*owner != RendererOwner::Remote(generation.clone()) && !idle_volume) { continue; }
                 if audio.as_ref().is_some_and(|authority| !authority.permits(&RendererOwner::Remote(generation.clone()))) { continue; }
                 Ok(Request::Command(command))
             }
@@ -181,6 +186,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             app.state::<Host>().report(&app, &player.state);
             reported = Some(player.state.clone());
         }
+        if let Some(generation) = remote_volume { crate::native_receiver::report(&app, &generation, &player.state); }
         if let Some(generation) = remote_stop {
             if player.state.status == "idle" {
                 app.state::<Host>().release_renderer(&app, &RendererOwner::Remote(generation));

@@ -172,7 +172,9 @@ pub fn native_receiver_command(window: tauri::WebviewWindow, app: tauri::AppHand
     }
     if *app.state::<Host>().renderer_owner.lock().unwrap() != RendererOwner::Remote(generation.clone()) {
         if matches!(command, PlaybackCommand::Stop) { report(&app, &generation, &PlayerState::default()); return Ok(()); }
-        return Err("This computer's player is already in use.".into());
+        if !matches!(command, PlaybackCommand::Volume { .. }) || !app.state::<Host>().idle() {
+            return Err("This computer's player is already in use.".into());
+        }
     }
     app.state::<Host>().player.send(player::Request::RemoteCommand { generation, command }).map_err(|error| error.to_string())
 }
@@ -187,7 +189,8 @@ fn observe(app: &tauri::AppHandle, generation: String) -> Result<(), String> {
     if *app.state::<Host>().renderer_owner.lock().unwrap() == RendererOwner::Remote(generation.clone()) {
         app.state::<Host>().player.send(player::Request::RemoteObserve(generation)).map_err(|error| error.to_string())
     } else {
-        report(app, &generation, &PlayerState::default());
+        let volume = app.state::<Host>().player_state.lock().unwrap().volume;
+        report(app, &generation, &PlayerState { volume, ..PlayerState::default() });
         Ok(())
     }
 }
