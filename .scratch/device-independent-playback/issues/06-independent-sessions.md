@@ -62,3 +62,9 @@ The 15-second coordination benchmark used real HTTP/WebSockets, two simulated
 renderers and 20 idle controllers: 1.01% of one CPU core, 70.94–73.50 MB RSS, p50
 0.56 ms / p95 1.49 ms command RTT. Idle controllers fetched no media. Decoder and
 physical output costs are not included.
+
+The [current full-workload receipt](../boundaries-2026-09-27.md) adds concurrent
+actual browser video/audio and a two-output Sendspin group with 20 idle controllers,
+complete FFmpeg process costs, browser/helper process aggregates, network payloads
+and command latency. Per-tab attribution and physical device budgets remain explicit
+environment limits; the earlier simulated coordination benchmark remains historical.

@@ -1,6 +1,6 @@
 # Device-independent playback
 
-Status: implementation complete for supported workflows; qualification limits below
+Status: supported workflows implemented; real software boundaries qualified; external blockers recorded
 
 ## Current direction
 
@@ -20,11 +20,11 @@ It is not an implementation dependency or a priority for future agents.
 | --- | --- | --- |
 | [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
 | [02 Client sources](issues/02-remote-source-compatibility.md) | Implemented | Physical/platform qualification remains separate. |
-| [03 Groups](issues/03-multiroom-output.md) | Snapcast and optional Sendspin host/client implemented | Physical speaker drift/latency and arbitrary receiver qualification. |
+| [03 Groups](issues/03-multiroom-output.md) | Both roles implemented; real browser/group transfer and external PSK peers qualified | PIN server dependency, physical speaker timing and arbitrary receivers. |
 | [04 Adaptation](issues/04-media-adaptation.md) | Client HLS/DASH adaptation and caps implemented | Further webpage rendition selection waits for a demonstrated provider need. |
-| [05 Core/receivers](issues/05-core-and-receivers.md) | Implemented | Host boot and physical/platform qualification remain separate. |
+| [05 Core/receivers](issues/05-core-and-receivers.md) | Compiled independent startup/recovery and unit syntax pass | Real systemd boot and physical/platform qualification; no Linux device available. |
 | [06 Independent sessions](issues/06-independent-sessions.md) | Implemented | Disk/HTTP/WS isolation and real browser workflows pass. |
-| [07 External access](issues/07-internet-access.md) | Admission/proxy implemented | Actual browser topology qualification. |
+| [07 External access](issues/07-internet-access.md) | Real HTTPS/WSS WebKit playback, handoff and revocation pass | Public deployment/WAN routing requires an intended host. |
 | [08 UI parity](issues/08-shared-ui-parity.md) | Session/group flows checked | Physical desktop/TV platform qualification remains separate. |
 
 ## Coordination
@@ -45,18 +45,11 @@ media workload. Ordinary direct playback keeps provider traffic on renderers. Ho
 group PCM is 192 kB/s per receiver before overhead. Do not infer physical performance
 or total decoding cost from the Core-only process measurements below.
 
-Detailed existing receipts and unqualified environments: [validation.md](validation.md).
+Current results, full decoder/browser/network workload measurements, exact-revision
+gate location and each external blocker's next action:
+[boundary qualification](boundaries-2026-09-27.md). The user confirms no external
+Sendspin server or Linux device is available. The remaining PIN, physical-output,
+systemd-boot and public-deployment checks require the specified dependency/environment;
+they are not missing implementations of either Sendspin role.
 
-Current code receipt `07f91ecf`: 1,804 core tests plus three clock tests pass, ten
-environment/network tests skip; typecheck and production build pass. Compiled macOS
-Core accepts the encrypted SDK and serves all 58 embedded assets byte-identically.
-Linux `verify --remote` has an eligible clean-revision receipt: 1,813 tests pass,
-four skip, build and 25 compiled-browser checks pass.
-Real browser tests cover independent VOD/live playback, mode roundtrips, explicit
-takeover, move back, existing desktop/TV-sized layouts, Sendspin group controls,
-explicit join/leave and Leave while Core is offline. Coordination
-benchmark: two simulated renderers plus 20 idle controllers, 1.01% of one CPU core,
-70.94–73.50 MB RSS, command p95 1.49 ms. Actual two-client Sendspin software playback:
-1.74% Core CPU, 115.31–120.80 MB RSS over 15 seconds, excluding FFmpeg/browser CPU.
-Two Web Audio graphs passed pause/seek/speed/Stop; physical speakers remain unqualified.
-Detailed receipts remain in validation and ignored artifacts.
+Earlier receipts and archived experiments: [validation.md](validation.md).

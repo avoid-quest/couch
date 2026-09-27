@@ -1,4 +1,12 @@
-## Current client-first integration — 2026-09-27
+## Current boundary continuation — 2026-09-27
+
+[Boundary qualification](boundaries-2026-09-27.md) supersedes the missing actual
+browser/group, provisioned external-peer, trusted HTTPS browser and decoder/client
+cost checks below. It records source revisions, the final exact gate path, test
+environment fixes, and external blockers with next actions. Earlier receipts remain
+historical evidence for their stated revisions and scopes.
+
+## Previous client-first integration — 2026-09-27
 
 Integrated Sendspin host/client revision `07f91ecf`: typecheck and production build
 pass. Full suite: 1,804 core tests and three clock tests pass, ten core tests skip,

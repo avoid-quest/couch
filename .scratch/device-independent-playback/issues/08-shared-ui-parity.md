@@ -56,3 +56,7 @@ Join, local volume/mute, transport and Leave. Live checks cover first-member joi
 group playback and Leave with Core offline. Leaving restores direct rendering.
 Clock-only updates still leave browsing/settings shells stable; regression tests
 pass unchanged. No window model, navigation or player layout was replaced.
+
+External-server qualification additionally fixed missing Sendspin waiting/reconnect
+status after the SDK's connection promise resolves. Pairing and Leave remain usable;
+real UI and repeated focused regressions pass. See [current boundary receipt](../boundaries-2026-09-27.md).

@@ -115,3 +115,8 @@ validation and six real compiled-process checks, including first-pair administra
 optional recovery, restart persistence and SIGTERM. Evidence is in
 `.artifacts/core-service-act/qualification.json`. Physical/platform journeys and
 systemd boot integration remain explicitly unqualified checks.
+
+Fresh exact-revision compiled-process and unit checks also pass at `f38c3bc`.
+The user confirms no Linux device is available; an isolated systemd PID1 probe
+exits 255 before launch. [Current evidence and host/hardware next actions](../boundaries-2026-09-27.md)
+separate these external qualification blockers from completed implementation.

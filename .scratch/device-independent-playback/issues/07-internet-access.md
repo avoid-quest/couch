@@ -1,8 +1,8 @@
 # Use Couch from outside the home through an explicit remote-access setup
 
 Type: task
-Status: open
-Blocked by: none
+Status: implemented; isolated real HTTPS browser topology qualified
+Blocked by: intended public deployment availability for WAN qualification
 
 ## Goal
 
@@ -45,3 +45,12 @@ trust serves HTTPS discovery. The collaborative browser rejects that private CA;
 this is not browser or public Internet qualification. Transport checks use that CA
 explicitly and keep simulated renderer evidence separate. The issue remains open
 until the configured browser topology passes its full workflow.
+
+## Current topology result
+
+Two actual WebKit browsers now pass TLS-trusted pairing, authenticated WSS,
+provider-direct HTTPS MP3 and H.264/AAC playback, paused handoff, resume and
+destination revocation. Caddy and its CA run only in a disposable Linux environment;
+stock WebKit's missing MP4 decoders were supplied by maintained distro plugins.
+No Core media relay was used. [Receipts and the remaining public-deployment next action](../boundaries-2026-09-27.md)
+distinguish actual browser proof from public DNS/WAN routing.

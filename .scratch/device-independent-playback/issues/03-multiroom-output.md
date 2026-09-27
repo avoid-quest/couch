@@ -1,8 +1,8 @@
 # Play remote audio through a synchronized output group
 
 Type: task
-Status: implemented; qualification limits recorded
-Blocked by: none
+Status: implemented; real software boundaries qualified
+Blocked by: maintained PIN-server dependency and unavailable physical/external environments for remaining qualification
 
 ## Goal
 
@@ -72,3 +72,12 @@ actual output configuration, not just successful enrollment.
 The rejected Python experiment is preserved on `archive/sendspin-python-20260927`
 and closed PR #628, outside active ancestry. Physical speaker drift/latency remains
 unmeasured for both backends. Detailed receipts are in [validation](../validation.md).
+
+## Current boundary result
+
+Actual Couch browser → two Sendspin Web Audio outputs → browser passes, preserving
+the session and 1.25× speed. Independent TypeScript PSK peers, PCM delivery,
+reconnect and revocation checks pass within their recorded scopes. Host enrollment
+now documents the existing supported external provisioning path; PIN-only onboarding
+remains an upstream dependency gap. The client connection-status regression is fixed.
+See [measurements, precise limits and next actions](../boundaries-2026-09-27.md).
