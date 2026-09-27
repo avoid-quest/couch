@@ -10,6 +10,7 @@ export type SendspinOptions = {
   identity: string;
   lookupPsk: (clientId: string) => string | null;
   isQualified?: (clientId: string) => boolean;
+  describeClient?: (clientId: string) => { deviceId: string; name?: string } | undefined;
   initialMembers?: string[];
   control?: (clientId: string, command: "play" | "pause" | "stop" | "next") => void | Promise<void>;
   membersChanged?: (ids: string[]) => void;
@@ -50,7 +51,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
     const timing = core.getSessionByClientId(id)?.getPlayerTiming();
     return !!(options.isQualified?.(id) ?? config.qualifiedClientIds?.includes(id)) && timing?.staticDelayMs === 0 && typeof timing.requiredLeadTimeMs === "number" && timing.requiredLeadTimeMs >= 0 && timing.requiredLeadTimeMs <= 250 && typeof timing.minBufferMs === "number" && timing.minBufferMs >= 0 && timing.minBufferMs <= 250;
   };
-  const publish = () => options.changed({ id: "sendspin-group", name: config.name, kind: "group", backend: "sendspin", connected: connected(), error: state.error ?? undefined, handoffSafety: joined().length > 0 && joined().every(member => qualified(member.id)) ? "buffer-drain" : "unverified", members: [...members.values()] });
+  const publish = () => options.changed({ id: "sendspin-group", name: config.name, kind: "group", backend: "sendspin", connected: connected(), error: state.error ?? undefined, handoffSafety: joined().length > 0 && joined().every(member => qualified(member.id)) ? "buffer-drain" : "unverified", members: [...members.values()].map(member => { const device = options.describeClient?.(member.id); return { ...member, ...(device ? { deviceId: device.deviceId, name: device.name ?? member.name } : {}) }; }) });
   let metadataAt = 0;
   const observe = () => { const group = joined(); state = { ...state, volume: group.length ? Math.round(group.reduce((sum, member) => sum + member.volume, 0) / group.length) : 100 }; options.observe(state);
     if (serverNowUs() - metadataAt > 500000) { metadataAt = serverNowUs(); for (const member of group) core.sendMetadata(member.id, { progress: { track_progress: state.position * 1000, track_duration: (state.duration ?? 0) * 1000, playback_speed: state.status === "playing" ? (state.speed ?? 1) * 1000 : 0 } }); }
@@ -77,7 +78,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
     const old = members.get(id);
     const member = { id, name: session.getClientName()?.slice(0, 128) || "Sendspin player", connected: sessionReady(session), joined: selected.has(id), volume: volume ?? old?.volume ?? 100, muted: muted ?? old?.muted ?? false };
     members.set(id, member);
-    if (member.joined && !member.connected && load) fail("A Sendspin member became unavailable. Reconnect before transferring playback.");
+    if (member.joined && !member.connected) dropDisconnected(id);
     const timing = session.getPlayerTiming();
     if (load && member.joined && (timing.staticDelayMs !== 0 || (timing.minBufferMs ?? Infinity) > 250 || (timing.requiredLeadTimeMs ?? Infinity) > 250)) fail("Sendspin player timing changed. Reconnect before transferring playback.");
     publish(); observe();
@@ -90,7 +91,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
       onIdentified: session => { update(session); core.sendControllerState(id, { supported_commands: options.control ? [MediaCommand.PLAY, MediaCommand.PAUSE, MediaCommand.STOP, MediaCommand.NEXT] : [], volume: state.volume, muted: false, repeat: RepeatMode.OFF, shuffle: false }); },
       onGroupCommand: (_session, command) => { if (options.control && ["play", "pause", "stop", "next"].includes(command.command)) void Promise.resolve().then(() => options.control!(id, command.command as "play" | "pause" | "stop" | "next")).catch(() => {}); },
       onPlayerState: (session, updateState) => update(session, updateState.volume, updateState.muted),
-      onDisconnected: () => { activeStreams.delete(id); const member = members.get(id); if (member) member.connected = false; if (selected.has(id) && load) fail("A Sendspin member disconnected. Buffered output is uncertain until reconnect."); publish(); },
+      onDisconnected: () => { activeStreams.delete(id); const member = members.get(id); if (member) member.connected = false; if (selected.has(id)) dropDisconnected(id); else publish(); },
       onFormatChanged: () => { if (selected.has(id) && load) fail("A Sendspin member changed audio format."); },
     });
     return { psk, pskId: pskIdFor(psk), category: PskCategory.LONG_TERM };
@@ -178,6 +179,28 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
       if (closed || !confirmed()) throw new Error("Sendspin did not confirm the member volume.");
     });
   };
+  const setMembers = async (ids: string[]) => {
+    if (ids.length > maxMembers || new Set(ids).size !== ids.length || ids.some(id => !members.get(id)?.connected)) throw new Error("Select connected Sendspin members.");
+    if (uncertain) throw new Error("Reconnect Sendspin before changing uncertain outputs.");
+    await enqueue(async () => {
+      const resume = state.status === "playing" || state.status === "loading";
+      const intent = intentGeneration;
+      await retire();
+      if (closed) return;
+      selected.clear(); for (const id of ids) selected.add(id);
+      for (const member of members.values()) member.joined = selected.has(member.id);
+      options.membersChanged?.([...selected]); publish();
+      if (!ids.length) { load = undefined; state = idle(); observe(); } else if (resume && intent === intentGeneration) start(); else if (load) await preparePaused(); else observe();
+    });
+  };
+  const dropDisconnected = (id: string) => {
+    if (!selected.delete(id)) return;
+    intentGeneration++; cancel();
+    const member = members.get(id); if (member) member.joined = false;
+    try { options.membersChanged?.([...selected]); } catch { fail("Could not save the remaining Sendspin members."); return; }
+    clear(); publish();
+    void setMembers([...selected]).catch(() => fail("A Sendspin member disconnected during group recovery."));
+  };
   return {
     serverId: identity.peerId,
     get port() { const address = server.address(); return typeof address === "object" && address ? address.port : config.port; },
@@ -211,20 +234,7 @@ export function createSendspin(config: SendspinConfig, options: SendspinOptions)
         }
       }).catch(() => fail("Sendspin could not complete the playback command."));
     },
-    async setMembers(ids: string[]) {
-      if (ids.length > maxMembers || new Set(ids).size !== ids.length || ids.some(id => !members.get(id)?.connected)) throw new Error("Select connected Sendspin members.");
-      if (uncertain) throw new Error("Reconnect Sendspin before changing uncertain outputs.");
-      await enqueue(async () => {
-        const resume = state.status === "playing" || state.status === "loading";
-        const intent = intentGeneration;
-        await retire();
-        if (closed) return;
-        selected.clear(); for (const id of ids) selected.add(id);
-        for (const member of members.values()) member.joined = selected.has(member.id);
-        options.membersChanged?.([...selected]); publish();
-        if (!ids.length) { load = undefined; state = idle(); observe(); } else if (resume && intent === intentGeneration) start(); else if (load) await preparePaused(); else observe();
-      });
-    },
+    setMembers,
     setMemberVolume,
     refresh() { publish(); },
     disconnectAll() { intentGeneration++; fail("Sendspin remote access was disabled. Reconnect explicitly before playback."); for (const socket of sockets) socket.terminate(); },

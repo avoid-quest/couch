@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { createPlaybackTargets } from "./playback-targets";
+import { createPlaybackTargetRegistry, createPlaybackTargets } from "./playback-targets";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
@@ -83,6 +83,58 @@ test("group handoff strips Core hardware settings and preserves sole unknown aud
   expect(f.session.state.targetId).toBe("rooms");
   expect(group.commands.find(command => command.type === "load")).toMatchObject({ headers: { Authorization: "private" }, preferences: { audioDelay: 0 } });
   expect(f.native.state.status).toBe("idle");
+});
+
+test("Sendspin member claims overlap direct endpoints and proposed membership across sessions", async () => {
+  const store = openStore(":memory:");
+  const registry = createPlaybackTargetRegistry(undefined, { timeout: 500 });
+  let firstSession!: ReturnType<typeof createSession>, secondSession!: ReturnType<typeof createSession>;
+  const first = registry.bind("first", () => firstSession), second = registry.bind("second", () => secondSession);
+  firstSession = createSession(store, first.send, () => {}, { nativeTarget: () => false });
+  secondSession = createSession(store, second.send, () => {}, { nativeTarget: () => false });
+  const direct = player(40), group = player(60);
+  const directTarget = registry.register("Device", direct.send);
+  direct.connect(directTarget.observe);
+  const member = { id: "sendspin-client", deviceId: directTarget.id, name: "Device", connected: true, joined: false, volume: 80, muted: false };
+  const groupTarget = { id: "sendspin-group", name: "Rooms", kind: "group" as const, backend: "sendspin" as const, connected: true, handoffSafety: "buffer-drain" as const, members: [member] };
+  const groupRegistration = registry.registerGroup(groupTarget, group.send);
+  group.connect(groupRegistration.observe);
+  try {
+    await first.move(directTarget.id);
+    expect(() => second.assertAvailable(groupTarget.id, [member.id])).toThrow("occupied");
+    await expect(second.control(groupTarget.id, async () => { throw new Error("backend reached"); }, [member.id])).rejects.toThrow("occupied");
+    groupRegistration.update({ ...groupTarget, members: [{ ...member, joined: true }] });
+    await expect(second.move(groupTarget.id)).rejects.toThrow("occupied");
+    // The same session may move its direct output into a group containing that device.
+    await first.move(groupTarget.id);
+    expect(() => second.assertAvailable(directTarget.id)).toThrow("occupied");
+  } finally { registry.close(); firstSession.close(); secondSession.close(); store.close(); }
+});
+
+test("a Sendspin move reserves its member's direct endpoint during paused preparation", async () => {
+  const store = openStore(":memory:"), registry = createPlaybackTargetRegistry(undefined, { timeout: 500 });
+  let firstSession!: ReturnType<typeof createSession>, secondSession!: ReturnType<typeof createSession>;
+  const first = registry.bind("first", () => firstSession), second = registry.bind("second", () => secondSession);
+  firstSession = createSession(store, first.send, () => {}, { nativeTarget: () => false });
+  secondSession = createSession(store, second.send, () => {}, { nativeTarget: () => false });
+  const source = player(40), direct = player(50), group = player(60);
+  const sourceTarget = registry.register("Source", source.send), directTarget = registry.register("Member", direct.send);
+  source.connect(sourceTarget.observe); direct.connect(directTarget.observe);
+  let heldLoad: Extract<PlaybackCommand, { type: "load" }> | undefined;
+  const registration = registry.registerGroup({ id: "sendspin-group", name: "Rooms", kind: "group", backend: "sendspin", connected: true, handoffSafety: "buffer-drain", members: [{ id: "client", deviceId: directTarget.id, name: "Member", connected: true, joined: true, volume: 50, muted: false }] }, command => { if (command.type === "load") heldLoad = command; else group.send(command); });
+  group.connect(registration.observe);
+  try {
+    await first.move(sourceTarget.id);
+    firstSession.command({ type: "enqueue", entry: { id: "song", title: "Song", source: "https://example.org/song.mp3" }, playNow: true });
+    for (let i = 0; firstSession.state.player.status !== "playing" && i < 100; i++) await Bun.sleep(10);
+    expect(firstSession.state.player.status).toBe("playing");
+    const moving = first.move("sendspin-group");
+    for (let i = 0; !heldLoad && i < 100; i++) await Bun.sleep(10);
+    expect(heldLoad?.paused).toBe(true);
+    expect(() => second.assertAvailable(directTarget.id)).toThrow("occupied");
+    group.send(heldLoad!);
+    await moving;
+  } finally { registry.close(); firstSession.close(); secondSession.close(); store.close(); }
 });
 
 test("Core restart fences buffered output even if its backend is no longer configured", async () => {

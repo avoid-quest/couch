@@ -14,10 +14,11 @@ export function openSendspinIdentity(databasePath: string) {
   db.run("PRAGMA journal_mode = WAL");
   db.run(`
     CREATE TABLE IF NOT EXISTS sendspin_identity (id INTEGER PRIMARY KEY CHECK (id = 1), privateKey TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS sendspin_enrollment (clientId TEXT PRIMARY KEY, owner TEXT NOT NULL, psk TEXT NOT NULL, softwareOutputQualified INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS sendspin_enrollment (clientId TEXT PRIMARY KEY, owner TEXT NOT NULL, psk TEXT NOT NULL, softwareOutputQualified INTEGER NOT NULL DEFAULT 0, deviceId TEXT);
     CREATE TABLE IF NOT EXISTS sendspin_members (clientId TEXT PRIMARY KEY, position INTEGER NOT NULL);
   `);
   if (!db.query<{ name: string }, []>("PRAGMA table_info(sendspin_enrollment)").all().some(column => column.name === "softwareOutputQualified")) db.run("ALTER TABLE sendspin_enrollment ADD COLUMN softwareOutputQualified INTEGER NOT NULL DEFAULT 0");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(sendspin_enrollment)").all().some(column => column.name === "deviceId")) db.run("ALTER TABLE sendspin_enrollment ADD COLUMN deviceId TEXT");
   const identity = db.transaction(() => {
     const saved = db.query<{ privateKey: string }, []>("SELECT privateKey FROM sendspin_identity WHERE id = 1").get();
     if (saved) return Identity.fromPrivateB64u(saved.privateKey);
@@ -28,16 +29,16 @@ export function openSendspinIdentity(databasePath: string) {
   return {
     privateKey: identity.privateB64u,
     serverId: identity.peerId,
-    enroll(ownerControllerId: string, clientId: string, softwareOutputQualified = false) {
+    enroll(ownerControllerId: string, clientId: string, deviceId?: string) {
       if (typeof ownerControllerId !== "string" || !ownerControllerId.trim()) throw new Error("Choose an authenticated controller.");
       if (!validClientId(clientId)) throw new Error("Invalid Sendspin client identity.");
       return db.transaction(() => {
-        const existing = db.query<{ owner: string; psk: string; softwareOutputQualified: number }, [string]>("SELECT owner, psk, softwareOutputQualified FROM sendspin_enrollment WHERE clientId = ?").get(clientId);
+        const existing = db.query<{ owner: string; psk: string; softwareOutputQualified: number; deviceId: string | null }, [string]>("SELECT owner, psk, softwareOutputQualified, deviceId FROM sendspin_enrollment WHERE clientId = ?").get(clientId);
         if (existing && existing.owner !== ownerControllerId) throw new Error("This Sendspin client belongs to another controller.");
         const psk = existing?.psk ?? randomBytes(32).toString("base64url");
-        if (!existing) db.query("INSERT INTO sendspin_enrollment (clientId, owner, psk, softwareOutputQualified) VALUES (?, ?, ?, ?)").run(clientId, ownerControllerId, psk, Number(softwareOutputQualified));
-        else if (softwareOutputQualified && !existing.softwareOutputQualified) db.query("UPDATE sendspin_enrollment SET softwareOutputQualified = 1 WHERE clientId = ?").run(clientId);
-        return { psk, serverId: identity.peerId, softwareOutputQualified: !!(existing?.softwareOutputQualified || softwareOutputQualified) };
+        if (!existing) db.query("INSERT INTO sendspin_enrollment (clientId, owner, psk, softwareOutputQualified, deviceId) VALUES (?, ?, ?, ?, ?)").run(clientId, ownerControllerId, psk, Number(!!deviceId), deviceId ?? null);
+        else if (deviceId) db.query("UPDATE sendspin_enrollment SET softwareOutputQualified = 1, deviceId = ? WHERE clientId = ?").run(deviceId, clientId);
+        return { psk, serverId: identity.peerId, softwareOutputQualified: !!(existing?.softwareOutputQualified || deviceId) };
       }).immediate();
     },
     lookup(clientId: string) {
@@ -51,6 +52,10 @@ export function openSendspinIdentity(databasePath: string) {
     softwareOutputQualified(clientId: string) {
       if (!validClientId(clientId)) return false;
       return db.query<{ softwareOutputQualified: number }, [string]>("SELECT softwareOutputQualified FROM sendspin_enrollment WHERE clientId = ?").get(clientId)?.softwareOutputQualified === 1;
+    },
+    deviceId(clientId: string) {
+      if (!validClientId(clientId)) return null;
+      return db.query<{ deviceId: string | null }, [string]>("SELECT deviceId FROM sendspin_enrollment WHERE clientId = ?").get(clientId)?.deviceId ?? null;
     },
     members() {
       return db.query<{ clientId: string }, []>("SELECT clientId FROM sendspin_members ORDER BY position").all().map(member => member.clientId);

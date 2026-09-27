@@ -346,6 +346,7 @@ export function createHub(options: HubOptions) {
       registry.rename(`browser-${controller.id}`, controller.name);
       registry.rename(`receiver-${controller.id}`, controller.name);
     } else registry.rename("native", store.installationName());
+    sendspin?.refresh();
     invalidateAll("controllers");
   }, onRevoke: id => {
     for (const clientId of sendspinIdentity?.revoke(id) ?? []) sendspin?.disconnectClient(clientId);
@@ -664,11 +665,29 @@ export function createHub(options: HubOptions) {
           if (!current || !admitted()) throw new ControllerError("Pair this remote first.", 401);
           if (typeof clientId !== "string") throw new ControllerError("Choose a Sendspin client identity.");
           // A live, same-owner Couch renderer qualifies software transfer only; it cannot attest a speaker's acoustic state.
-          if (rendererTargetId !== undefined && (typeof rendererTargetId !== "string" || ![...sockets].some(socket => socket.data.renderer?.id === rendererTargetId && !socket.data.receiver && socket.data.controllerId === (current.controller?.id ?? null) && socket.data.trusted === trusted))) throw new ControllerError("Connect this Couch renderer before qualifying its Sendspin output.");
-          const enrollment = sendspinIdentity.enroll(current.controller?.id ?? "host", clientId, rendererTargetId !== undefined);
+          if (rendererTargetId !== undefined && (typeof rendererTargetId !== "string" || !(rendererTargetId === "native" && trusted && registry.targets.some(target => target.id === "native" && target.connected))
+            && ![...sockets].some(socket => socket.data.renderer?.id === rendererTargetId && socket.data.controllerId === (current.controller?.id ?? null) && socket.data.trusted === trusted))) throw new ControllerError("Connect this Couch renderer before qualifying its Sendspin output.");
+          const enrollment = sendspinIdentity.enroll(current.controller?.id ?? "host", clientId, rendererTargetId);
           sendspin.refresh();
           return cors(request, json({ ...configuration, ...enrollment }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Sendspin enrollment failed." }, error instanceof ControllerError ? error.status : 400)); }
+      }
+      if (url.pathname === "/api/sendspin/leave") {
+        if (!sendspin || !sendspinIdentity) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
+        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "POST" } }));
+        try {
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+          const clientId = await settingField(request, "clientId");
+          const current = identity();
+          if (!current) throw new ControllerError("Pair this remote first.", 401);
+          if (typeof clientId !== "string" || sendspinIdentity.owner(clientId) !== (current.controller?.id ?? "host")) throw new ControllerError("This Sendspin player belongs to another device.", 403);
+          const members = sendspinIdentity.members();
+          if (!members.includes(clientId)) return cors(request, json({ ok: true }));
+          const remaining = members.filter(id => id !== clientId);
+          const owning = [...runtimes.values()].find(value => value.targets.owns("sendspin-group")) ?? runtime;
+          await owning.targets.control("sendspin-group", () => sendspin!.setMembers(remaining), remaining);
+          return cors(request, json({ ok: true }));
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not leave Sendspin." }, error instanceof ControllerError ? error.status : 409)); }
       }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
@@ -968,6 +987,12 @@ export function createHub(options: HubOptions) {
     const target = registry.registerGroup({ id: "sendspin-group", name: options.sendspin.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => sendspin!.send(command));
     sendspin = createSendspin(options.sendspin, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() ? sendspinIdentity.lookup(clientId) : null,
       isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!options.sendspin?.qualifiedClientIds?.includes(clientId),
+      describeClient: clientId => {
+        const deviceId = sendspinIdentity.deviceId(clientId);
+        if (!deviceId) return undefined;
+        const owner = sendspinIdentity.owner(clientId);
+        return { deviceId, name: owner === "host" ? store.installationName() : owner ? store.controller(owner)?.name : undefined };
+      },
       initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: target.update, observe: target.observe,
       control: async (clientId, command) => {
         const owner = sendspinIdentity.owner(clientId);

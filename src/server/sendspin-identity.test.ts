@@ -118,12 +118,14 @@ test("legacy enrollments stay unverified while qualified provenance survives reo
   let store = openSendspinIdentity(path);
   try {
     expect(store.softwareOutputQualified(legacyId)).toBe(false);
-    expect(store.enroll("owner", managedId, true).softwareOutputQualified).toBe(true);
+    expect(store.enroll("owner", managedId, "browser-owner").softwareOutputQualified).toBe(true);
     store.close(); store = openSendspinIdentity(path);
     expect(store.softwareOutputQualified(managedId)).toBe(true);
+    expect(store.deviceId(managedId)).toBe("browser-owner");
     expect(store.enroll("owner", managedId).softwareOutputQualified).toBe(true);
     store.revoke("owner");
     expect(store.softwareOutputQualified(managedId)).toBe(false);
+    expect(store.deviceId(managedId)).toBeNull();
     expect(store.softwareOutputQualified(legacyId)).toBe(false);
   } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
 });

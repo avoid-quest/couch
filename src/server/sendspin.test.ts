@@ -89,6 +89,11 @@ test("real decoded PCM preserves queued stop/load, pause seek/speed and fences a
   f.host.send({ type: "pause", playbackId: "tone", paused: false });
   await until(() => frequencies.every(hz => Math.abs(hz - 880) < 60), "both decoded880");
   expect(f.player).toMatchObject({ speed: 1.25, status: "playing" });
+  const retainedPosition = f.player.position, retainedCount = counts[1]!;
+  clients[0]!.disconnect();
+  await until(() => f.target.members?.find(member => member.id === clients[0]!.clientId)?.joined === false && f.target.connected, "remaining member keeps group");
+  await until(() => f.player.status === "playing" && counts[1]! > retainedCount + 5, "remaining member resumes the same playback");
+  expect(f.player.playbackId).toBe("tone"); expect(f.player.position).toBeGreaterThanOrEqual(retainedPosition);
   f.host.disconnectAll(); await until(() => !f.target.connected && f.player.status === "unavailable", "access loss");
   await until(() => clients.every(client => !client.isConnected), "client transports closed");
   // Already received PCM can finish decoding after the server revokes access.

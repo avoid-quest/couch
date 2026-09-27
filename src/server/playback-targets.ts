@@ -29,8 +29,11 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
   const controls = new Map<Binding, Endpoint>();
   let closed = false;
   const changed = () => { for (const binding of bindings.values()) binding.changed(); };
-  const overlap = (left: Endpoint, right: Endpoint) => left.target.id === right.target.id || left.target.kind === "group" && right.target.kind === "group" && left.target.backend === right.target.backend
-    && !!left.target.members?.some(member => member.joined && right.target.members?.some(other => other.joined && other.id === member.id));
+  const overlap = (left: Endpoint, right: Endpoint) => left.target.id === right.target.id
+    || left.target.kind === "group" && !!left.target.members?.some(member => member.joined && (
+      right.target.kind === "endpoint" ? member.deviceId === right.target.id
+        : right.target.members?.some(other => other.joined && (left.target.backend === right.target.backend && other.id === member.id || !!member.deviceId && other.deviceId === member.deviceId))))
+    || right.target.kind === "group" && left.target.kind === "endpoint" && !!right.target.members?.some(member => member.joined && member.deviceId === left.target.id);
   const owners = (endpoint: Endpoint, binding?: Binding) => [...new Set([...claims, ...reservations].flatMap(([id, owner]) => owner !== binding && (id === endpoint.target.id || endpoints.has(id) && overlap(endpoint, endpoints.get(id)!)) ? [owner] : []).concat([...controls].flatMap(([owner, reserved]) => owner !== binding && overlap(endpoint, reserved) ? [owner] : [])))];
   const descriptor = (endpoint: Endpoint, viewer?: Binding) => {
     const owner = owners(endpoint, viewer)[0];

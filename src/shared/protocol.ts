@@ -141,7 +141,7 @@ export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "gro
   occupied?: boolean;
   sessionKind?: "household" | "personal";
   handoffSafety?: "buffer-drain" | "unverified";
-  members?: { id: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
+  members?: { id: string; deviceId?: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
 export type RendererMessage = { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }
   | { type: "registerNativeRenderer"; nonce: string }

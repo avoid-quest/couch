@@ -10,11 +10,11 @@ const hostToken = "sendspin-hub-host-token-123456789012345678901234";
 const cleanup: (() => unknown | Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 type Enrollment = { available: boolean; url: string; name: string; serverId: string; psk: string; softwareOutputQualified: boolean };
-function fixture(enabled = true, publicUrl?: string) {
+function fixture(enabled = true, publicUrl?: string, localNative = false) {
   const directory = mkdtempSync(join(tmpdir(), "sendspin-hub-")), databasePath = join(directory, "state.sqlite");
   cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
   const start = () => {
-    const hub = createHub({ hostname: "127.0.0.1", port: 0, databasePath, hostToken, pairingCode: "123456", ...(enabled ? { sendspin: { host: "127.0.0.1", port: 0, name: "Rooms", ...(publicUrl ? { publicUrl } : {}) } } : {}) });
+    const hub = createHub({ hostname: "127.0.0.1", port: 0, databasePath, hostToken, pairingCode: "123456", ...(localNative ? { sendPlayer: () => {} } : {}), ...(enabled ? { sendspin: { host: "127.0.0.1", port: 0, name: "Rooms", ...(publicUrl ? { publicUrl } : {}) } } : {}) });
     let closing: Promise<void> | undefined;
     const close = () => closing ??= hub.close();
     cleanup.push(close);
@@ -42,8 +42,8 @@ async function until(predicate: () => boolean) {
   const deadline = Date.now() + 2000;
   while (!predicate()) { if (Date.now() > deadline) throw new Error("Sendspin state did not settle"); await Bun.sleep(10); }
 }
-async function connected(hub: Hub, token: string) {
-  const id = identity(), enrollment = await enroll(hub, token, id.clientId);
+async function connected(hub: Hub, token: string, id = identity(), rendererTargetId?: string) {
+  const enrollment = rendererTargetId ? await (await api(hub, token, undefined, "POST", { clientId: id.clientId, rendererTargetId })).json() as Enrollment : await enroll(hub, token, id.clientId);
   const client = new SendspinCore({ baseUrl: enrollment.url.replace(/\/sendspin$/, ""), suite: "aesgcm", clientName: "Official JS client", storage: id.storage, codecs: ["pcm"], unpairedAccess: false,
     longTermPsks: [{ psk: enrollment.psk, serverId: enrollment.serverId }], reconnect: { maxAttempts: 0 }, requiredLeadTimeMs: 250, minBufferMs: 250 });
   cleanup.push(() => client.disconnect());
@@ -111,17 +111,72 @@ test("only an authenticated controller's live Couch renderer qualifies its enrol
   const response = await api(hub, owner, undefined, "POST", { clientId: managed.clientId, rendererTargetId });
   expect(response.status).toBe(200);
   expect((await response.json()).softwareOutputQualified).toBe(true);
+  const live = await connected(hub, owner, managed, rendererTargetId);
+  const group = () => hub.session.state.targets?.find(target => target.id === "sendspin-group");
+  expect(group()?.members?.find(member => member.id === managed.clientId)).toMatchObject({ deviceId: rendererTargetId, name: expect.any(String) });
+  const { controller } = await (await api(hub, owner, "/api/controllers/me")).json() as { controller: { id: string } };
+  expect((await api(hub, owner, `/api/controllers/${controller.id}/name`, "POST", { name: "Living room" })).status).toBe(200);
+  await until(() => group()?.members?.find(member => member.id === managed.clientId)?.name === "Living room");
+  expect(live.client.isConnected).toBe(true);
   const saved = openSendspinIdentity(databasePath);
-  try { expect(saved.softwareOutputQualified(managed.clientId)).toBe(true); expect(saved.softwareOutputQualified(external.clientId)).toBe(false); }
+  try { expect(saved.softwareOutputQualified(managed.clientId)).toBe(true); expect(saved.deviceId(managed.clientId)).toBe(rendererTargetId); expect(saved.softwareOutputQualified(external.clientId)).toBe(false); }
   finally { saved.close(); }
   socket.close();
   await until(() => socket.readyState === WebSocket.CLOSED);
   expect((await api(hub, owner, undefined, "POST", { clientId: external.clientId, rendererTargetId })).status).toBe(400);
 });
 
+test("native receiver and trusted local native target can associate their own SDK output", async () => {
+  const { hub } = fixture(true, undefined, true), owner = await pair(hub), remote = identity(), local = identity();
+  const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
+  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=1`, { headers: { Origin: hub.origin } });
+  cleanup.push(() => socket.close());
+  const messages: any[] = [];
+  socket.addEventListener("message", event => messages.push(JSON.parse(String(event.data))));
+  await until(() => messages.some(message => message.type === "state"));
+  socket.send(JSON.stringify({ type: "registerNativeRenderer", nonce: crypto.randomUUID() }));
+  await until(() => messages.some(message => message.type === "rendererRegistered"));
+  const receiverId = messages.find(message => message.type === "rendererRegistered").targetId as string;
+  expect(receiverId).toStartWith("receiver-");
+  expect((await api(hub, owner, undefined, "POST", { clientId: remote.clientId, rendererTargetId: receiverId })).status).toBe(200);
+  expect((await api(hub, hostToken, undefined, "POST", { clientId: local.clientId, rendererTargetId: receiverId })).status).toBe(400);
+  expect((await api(hub, owner, undefined, "POST", { clientId: local.clientId, rendererTargetId: "native" })).status).toBe(400);
+  hub.session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 100, seekable: false, error: null });
+  expect((await api(hub, hostToken, undefined, "POST", { clientId: local.clientId, rendererTargetId: "native" })).status).toBe(200);
+});
+
+test("a paired device leaves only its own Sendspin membership across selected playback views", async () => {
+  const { hub } = fixture(), owner = await pair(hub), other = await pair(hub);
+  const first = await connected(hub, owner), second = await connected(hub, other);
+  const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
+  const socket = new Socket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${owner}&clientProtocol=1`, { headers: { Origin: hub.origin } });
+  cleanup.push(() => socket.close());
+  const messages: any[] = [];
+  socket.addEventListener("message", event => messages.push(JSON.parse(String(event.data))));
+  await until(() => messages.some(message => message.type === "state"));
+  const requestId = crypto.randomUUID();
+  socket.send(JSON.stringify({ type: "command", requestId, action: { type: "groupMembers", targetId: "sendspin-group", memberIds: [first.id.clientId, second.id.clientId] } }));
+  await until(() => messages.some(message => message.type === "result" && message.requestId === requestId));
+  expect(messages.find(message => message.type === "result" && message.requestId === requestId).ok).toBe(true);
+  await until(() => hub.session.state.targets?.find(target => target.id === "sendspin-group")?.connected === true);
+  const selectId = crypto.randomUUID();
+  socket.send(JSON.stringify({ type: "command", requestId: selectId, action: { type: "selectTarget", targetId: "sendspin-group" } }));
+  await until(() => messages.some(message => message.type === "result" && message.requestId === selectId));
+  expect(messages.find(message => message.type === "result" && message.requestId === selectId).ok).toBe(true);
+  expect((await api(hub, owner, "/api/sendspin/leave", "POST", { clientId: second.id.clientId })).status).toBe(403);
+  const leave = await fetch(`${hub.origin}/api/sendspin/leave`, { method: "POST", headers: { Origin: hub.origin, Authorization: `Bearer ${other}`, "Content-Type": "application/json", "X-Couch-Session": "personal" }, body: JSON.stringify({ clientId: second.id.clientId }) });
+  expect(leave.status).toBe(200);
+  await until(() => hub.session.state.targets?.find(target => target.id === "sendspin-group")?.members?.find(member => member.id === second.id.clientId)?.joined === false);
+  const group = hub.session.state.targets?.find(target => target.id === "sendspin-group");
+  expect(group?.members?.find(member => member.id === first.id.clientId)).toMatchObject({ joined: true, connected: true });
+  expect((await api(hub, other, "/api/sendspin/leave", "POST", { clientId: second.id.clientId })).status).toBe(200);
+});
+
 test("controller revocation deletes its PSK and disconnects only its Noise client, while disabling remotes disconnects all", async () => {
   const { hub, databasePath } = fixture(), owner = await pair(hub), other = await pair(hub);
   const first = await connected(hub, owner), second = await connected(hub, other);
+  expect(hub.session.state.targets?.find(target => target.id === "sendspin-group")?.members?.find(member => member.id === first.id.clientId)).toMatchObject({ name: "Official JS client" });
+  expect(hub.session.state.targets?.find(target => target.id === "sendspin-group")?.members?.find(member => member.id === first.id.clientId)?.deviceId).toBeUndefined();
   expect(JSON.stringify(hub.session.state)).not.toContain(first.enrollment.psk);
   expect(JSON.stringify(hub.session.state)).not.toContain(second.enrollment.psk);
   const { controller } = await (await api(hub, owner, "/api/controllers/me")).json() as { controller: { id: string } };
