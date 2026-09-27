@@ -121,3 +121,13 @@ existing desktop/TV window, use stable paired identity and native-enforced lease
 and keep installation maintenance separate. Real Linux libmpv playback and watchdog
 silence passed in an exploratory fixture; final clean-revision qualification and
 checkpoint restoration remain. HTTPS proxy access is draft [PR #619](https://github.com/avoid-quest/couch/pull/619).
+
+## Latest increment — restart recovery
+
+Native receivers are draft [PR #620](https://github.com/avoid-quest/couch/pull/620),
+qualified on clean revision `51677c8e` with core/native/build verification, packaged
+browser checks and actual Linux libmpv recovery. Core checkpoints now restore
+resumable intent without autoplay, and explicit output choice obtains fresh delivery
+paused. Real Chromium/Jellyfin restart, seek/speed retention and grant replacement
+passed. Issue 05 still needs independent deployment guidance; issue 03 is next for
+an actual Snapcast adapter, using the qualified backend buffering limits.

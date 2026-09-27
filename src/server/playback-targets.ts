@@ -23,6 +23,7 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
   let assigned = native;
   let busy = false;
   let closed = false;
+  let published = false;
   const deliveryFor = (endpoint: Endpoint): PlaybackDestination => ({ backend: endpoint.target.backend, remote: !!endpoint.receiver, capabilities: endpoint.capabilities, authorize: () => {
     if (closed || !endpoint.target.connected) throw new Error("The playback device disconnected.");
     endpoint.authorize?.();
@@ -69,7 +70,13 @@ export function createPlaybackTargets(nativeSend: Endpoint["send"] | undefined, 
     changed();
   };
   return {
-    publish: changed,
+    publish() {
+      if (!published && session().restoredCheckpoint) {
+        // A persisted checkpoint owns no physical output and never autoplays.
+        assigned = { target: { id: "checkpoint", name: "Previous playback", kind: "endpoint", backend: "native", connected: false }, send() {}, player: session().state.player, attempts: new Set() };
+      }
+      published = true; changed();
+    },
     close() {
       closed = true;
       for (const waiter of [...waiters]) waiter.reject(new Error("Couch is shutting down."));

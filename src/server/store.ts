@@ -3,7 +3,7 @@ import { setupSteps, type SetupStep } from "../shared/setup";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
+import type { MediaTrack, PlaybackActor, PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
 import type { HistoryItem, WatchingProfile } from "../shared/library";
 import type { Controller } from "../shared/controllers";
 import { ControllerError, controllerName } from "./controllers";
@@ -11,6 +11,42 @@ import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 import { CHANGED_ELSEWHERE } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
+
+export type PlaybackCheckpoint = {
+  entryId: string; source: string; position: number; duration: number | null; speed: number; seekable: boolean;
+  tracks?: MediaTrack[]; audioTracksKnown?: boolean; playedBy?: PlaybackActor; presentationId?: string | null;
+};
+
+// Only resumable intent crosses restarts; never retain delivery or renderer authority.
+function checkpointView(value: PlaybackCheckpoint): PlaybackCheckpoint {
+  const { entryId, source, position, duration, speed, seekable, audioTracksKnown, presentationId } = value;
+  return { entryId, source, position, duration, speed, seekable,
+    ...(value.tracks ? { tracks: value.tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label, language, selected })) } : {}),
+    ...(audioTracksKnown === undefined ? {} : { audioTracksKnown }),
+    ...(value.playedBy ? { playedBy: { deviceId: value.playedBy.deviceId, name: value.playedBy.name } } : {}),
+    ...(presentationId === undefined ? {} : { presentationId }),
+  };
+}
+function readCheckpoint(json: string | null): PlaybackCheckpoint | null {
+  if (!json) return null;
+  const text = (value: unknown, max: number, min = 0): value is string => typeof value === "string" && value.length >= min && value.length <= max;
+  const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+  try {
+    const value: PlaybackCheckpoint = JSON.parse(json);
+    if (!value || typeof value !== "object" || Array.isArray(value)
+      || !text(value.entryId, 80, 1) || !text(value.source, 4096, 1)
+      || !positive(value.position) || !(value.duration === null || positive(value.duration))
+      || !positive(value.speed) || value.speed < 0.25 || value.speed > 4 || typeof value.seekable !== "boolean"
+      || value.audioTracksKnown !== undefined && typeof value.audioTracksKnown !== "boolean"
+      || value.presentationId !== undefined && value.presentationId !== null && !text(value.presentationId, 80, 1)
+      || value.playedBy !== undefined && (!value.playedBy || !text(value.playedBy.deviceId, 100, 1) || !text(value.playedBy.name, 200, 1))
+      || value.tracks !== undefined && (!Array.isArray(value.tracks) || value.tracks.length > 50 || value.tracks.some(track => !track
+        || !text(track.id, 100) || !Number.isInteger(track.index) || track.index < 0
+        || !["video", "audio", "subtitle"].includes(track.kind) || typeof track.selected !== "boolean"
+        || !text(track.label, 200) || !text(track.language, 50)))) return null;
+    return checkpointView(value);
+  } catch { return null; }
+}
 
 type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
 export type ProgressSnapshot = Array<ProgressRow & { profileId: string }>;
@@ -38,6 +74,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     INSERT OR IGNORE INTO queue_position VALUES (1, NULL);
     CREATE TABLE IF NOT EXISTS playback_continuation (id INTEGER PRIMARY KEY CHECK (id = 1), context TEXT);
     INSERT OR IGNORE INTO playback_continuation VALUES (1, NULL);
+    CREATE TABLE IF NOT EXISTS playback_checkpoint (id INTEGER PRIMARY KEY CHECK (id = 1), checkpoint TEXT);
+    INSERT OR IGNORE INTO playback_checkpoint VALUES (1, NULL);
     CREATE TABLE IF NOT EXISTS devices (token_hash TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE);
     INSERT OR IGNORE INTO watching_profiles (id, name) VALUES ('household', 'Household');
@@ -158,6 +196,12 @@ export function openStore(path: string, remoteControlEnabled = false) {
     },
     queue: JSON.parse(stored.queue) as QueueEntry[],
     queueCursorEntryId() { return db.query<{ entryId: string | null }, []>("SELECT entryId FROM queue_position WHERE id = 1").get()!.entryId; },
+    playbackCheckpoint(): PlaybackCheckpoint | null {
+      return readCheckpoint(db.query<{ checkpoint: string | null }, []>("SELECT checkpoint FROM playback_checkpoint WHERE id = 1").get()?.checkpoint ?? null);
+    },
+    savePlaybackCheckpoint(value: PlaybackCheckpoint | null) {
+      db.query("INSERT INTO playback_checkpoint VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET checkpoint = excluded.checkpoint").run(value ? JSON.stringify(checkpointView(value)) : null);
+    },
     playbackContinuation(): PlaybackContinuation | null {
       const value = db.query<{ context: string | null }, []>("SELECT context FROM playback_continuation WHERE id = 1").get()!.context;
       return value ? JSON.parse(value) : null;

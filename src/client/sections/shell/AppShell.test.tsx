@@ -73,15 +73,15 @@ test("the local host's update page offers its controls", async () => {
   expect(screen.getByLabelText("Install updates")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string, target?: SessionState["targets"]) {
+async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string, target?: SessionState["targets"], targetId?: string, checkpointStopped = false) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
   if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { metadata: { currentWindow: { label: "main" } }, invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
   const state: SessionState = {
-    installationName: "Desk Couch", activity, targets: target, targetId: target ? target[0]?.id ?? "browser:phone" : undefined,
+    installationName: "Desk Couch", activity, targets: target, targetId: targetId ?? (target ? target[0]?.id ?? "browser:phone" : undefined),
     activeProfile: { id: "household", name: "Household" },
     queue: status === "unavailable" || emptyQueue ? [] : [{ id: "movie", title: "Movie", source: "library:movie" }],
-    currentEntryId: status === "playing" || status === "ended" ? "movie" : null,
+    currentEntryId: status === "playing" || status === "ended" || targetId === "checkpoint" && !checkpointStopped ? "movie" : null,
     player: { playbackId: status === "playing" ? "movie" : null, status, position: 0, duration: null, volume: 50, seekable: false, error: status === "unavailable" ? "Video backend missing" : null },
   };
   const shell = {
@@ -181,4 +181,16 @@ test("browsing names the unavailable renderer instead of the local Core", async 
 test("browsing does not name Core when a disconnected browser disappears from discovery", async () => {
   await render("unavailable", false, false, undefined, undefined, []);
   expect(screen.getByText("Player not running on the selected playback output.")).toBeInTheDocument();
+});
+
+test("a restored checkpoint asks for an output without describing a missing player", async () => {
+  await render("unavailable", false, false, undefined, undefined, [], "checkpoint");
+  expect(screen.getByText("Choose a playback output to resume paused.")).toBeInTheDocument();
+  expect(screen.queryByText(/Player not running/)).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("a stopped checkpoint asks for an output without promising resume", async () => {
+  await render("unavailable", false, false, undefined, undefined, [], "checkpoint", true);
+  expect(screen.getByText("Choose a playback output.")).toBeInTheDocument();
 });
