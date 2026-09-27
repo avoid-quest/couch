@@ -34,7 +34,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
-import { PairForm } from "./PairForm";
+import { PairForm, requestLocalSetup } from "./PairForm";
+import { clientDeviceName, rememberClientDeviceName } from "@/session/device-name";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { useNativeWindowTitle } from "@/native-window-title";
@@ -242,16 +243,21 @@ function ConnectionStatus() {
   return null;
 }
 
-function PairingPage() {
-  const { localHost, credentials, details, booting, retryHost, status } = useSessionGate();
+export function PairingPage() {
+  const { localHost, credentials, details, booting, retryHost, status, savePairing } = useSessionGate();
   const device = usePlaybackDevice();
+  const setup = useMutation({ mutationFn: (origin: string) => requestLocalSetup(origin, clientDeviceName()), onSuccess: value => { rememberClientDeviceName(clientDeviceName()); savePairing(value); } });
   if (localHost) return <Onboarding title="Starting Couch">
     {booting ? <StatusLine busy>Starting…</StatusLine> : <><p className="text-sm text-muted-foreground">Couldn't start Couch on this computer. If it keeps failing, restart this computer.</p><Button className="self-start" onClick={retryHost}>{TRY_AGAIN}</Button></>}
   </Onboarding>;
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
-  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Remotes → Pair a remote, then enter the code shown there.`}>
+  if (details?.localSetupAvailable && !credentials) return <Onboarding title="Set up Couch on this computer" description="This browser will manage Couch on this computer. You can pair other devices from Settings → Devices.">
+    <Button className="self-start" disabled={setup.isPending} onClick={() => setup.mutate(origin)}>{setup.isPending ? "Setting up…" : "Set up Couch"}</Button>
+    {setup.error && <Alert variant="destructive"><AlertDescription>{errorText(setup.error)}</AlertDescription></Alert>}
+  </Onboarding>;
+  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Devices → Pair a remote, then enter the code shown there.`}>
     {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This remote was removed. Pair again."}</AlertDescription></Alert>}
     {status !== "protocol-mismatch" && status !== "sharing-disabled" && <PairForm />}
   </Onboarding>;

@@ -134,7 +134,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
     )}
     {identity.authority === "controller" && identity.claimAvailable && (
       <SettingsSection data-admin-claim>
-        <SettingsRow label="Admin code" htmlFor="administrator-code" description={`Shown on ${hostName} in Settings → Remotes.`}>
+        <SettingsRow label="Admin code" htmlFor="administrator-code" description={`Shown on ${hostName} in Settings → Devices.`}>
           <form className="flex w-full flex-wrap items-center gap-2" onSubmit={claim}>
             <Input id="administrator-code" className="min-w-0 flex-1" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming.isPending} />
             <Button type="submit" disabled={claiming.isPending || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming.isPending ? "Checking…" : "Become admin"}</Button>

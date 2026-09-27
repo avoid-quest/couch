@@ -20,6 +20,15 @@ export async function requestPairing(origin: string, code: string, name: string)
   return { origin, token: result.token, installationId: result.installationId };
 }
 
+export async function requestLocalSetup(origin: string, name: string) {
+  const response = await fetch(`${origin}/api/setup-local`, {
+    method: "POST", signal: AbortSignal.timeout(8_000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  }).catch(() => { throw new Error("Couldn't reach Couch on this computer."); });
+  const result = await response.json() as { token?: string; installationId?: string; error?: string };
+  if (!response.ok || !result.token || !result.installationId) throw new Error(result.error || "Couldn't set up Couch.");
+  return { origin, token: result.token, installationId: result.installationId };
+}
+
 const slot = "h-8 touch:h-11 min-w-0 w-auto flex-1 text-sm";
 
 // The shell remounts per connection, so a pairing that outlives its form never applies.

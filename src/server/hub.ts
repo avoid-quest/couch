@@ -139,12 +139,11 @@ export function createHub(options: HubOptions) {
   let lan: ReturnType<typeof createLanListener<Bun.Server<SocketData>>> | undefined;
   let lanError: string | null = null;
   const addresses = new Set(["localhost", "127.0.0.1", "::1"]);
-  const lanAddresses = new Set<string>();
+  const lanAddresses = new Set(lanNetworks(networkInterfaces()).map(network => network.address));
   for (const entries of Object.values(networkInterfaces())) {
     for (const entry of entries ?? []) {
       if (entry.address.includes("%")) continue;
       addresses.add(entry.address);
-      if (!entry.internal) lanAddresses.add(entry.address);
     }
   }
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
@@ -431,6 +430,9 @@ export function createHub(options: HubOptions) {
     }
     return response;
   };
+  const localSetup = (request: Request) => !options.managedLan && !options.sendPlayer && access(request) === "direct"
+    && loopbackPeer(peer(request)) && ["localhost", "127.0.0.1", "[::1]"].includes(new URL(request.url).hostname)
+    && allowed(request, false);
 
   const playbackActor = (controllerId: string | null): PlaybackActor | undefined => {
     if (controllerId === null) return { deviceId: "host", name: store.installationName() };
@@ -559,7 +561,22 @@ export function createHub(options: HubOptions) {
       ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: access(request) === "proxied" ? [httpsProxy.origin] : connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer, restart: !!options.restart }, ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: access(request) === "proxied" ? [httpsProxy.origin] : connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer, restart: !!options.restart }, ...(options.managedLan ? { lanError } : {}), ...(localSetup(request) ? { localSetupAvailable: store.controllers().length === 0 } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/setup-local": {
+        POST: async request => {
+          if (!localSetup(request) || request.headers.get("origin") !== new URL(request.url).origin) return json({ error: "Set up Couch from its local page." }, 403);
+          if (!admitted()) return json({ error: UPDATING_PAUSED }, 503);
+          try {
+            const name = await settingField(request, "name");
+            if (!admitted()) return json({ error: UPDATING_PAUSED }, 503);
+            const token = store.pair(name, true);
+            invalidateAll("controllers");
+            return json({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
+          } catch (error) {
+            return json({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500);
+          }
+        },
+      },
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);

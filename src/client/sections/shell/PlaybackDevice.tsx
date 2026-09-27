@@ -316,7 +316,7 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   });
   if (!pending) return null;
   const setSharing = (enabled: boolean) => { if (!sharing.isPending) sharing.mutate(enabled); };
-  return <Onboarding title="Allow remotes?" description="Phones on your network can pair and control playback. Change it in Settings → Remotes." data-tv-navigation-scope>
+  return <Onboarding title="Allow remotes?" description="Phones on your network can pair and control playback. Change it in Settings → Devices." data-tv-navigation-scope>
     {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}
     <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Allow</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
   </Onboarding>;

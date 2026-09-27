@@ -387,12 +387,14 @@ export function openStore(path: string, remoteControlEnabled = false) {
     saveVolume(volume: number) {
       db.query("UPDATE session SET volume = ? WHERE id = 1").run(volume);
     },
-    pair(name?: unknown) {
+    pair(name?: unknown, firstOnly = false) {
       const label = controllerName(name === undefined ? "Remote" : name);
       const token = crypto.randomUUID() + crypto.randomUUID();
       const now = Date.now();
       db.transaction(() => {
-        const role = db.query("SELECT 1 FROM devices LIMIT 1").get() ? "controller" : "administrator";
+        const paired = !!db.query("SELECT 1 FROM devices LIMIT 1").get();
+        if (firstOnly && paired) throw new ControllerError("This Couch is already set up.", 409);
+        const role = paired ? "controller" : "administrator";
         db.query("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), crypto.randomUUID(), label, role, now, now);
       }).immediate();
       return token;

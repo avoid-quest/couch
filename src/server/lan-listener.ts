@@ -18,8 +18,8 @@ export function lanPeer(network: LanNetwork, peer: string) {
 }
 export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string): LanNetwork {
   const networks = lanNetworks(interfaces).filter(network => (!selected || network.name === selected) && (!address || network.address === address));
-  if (networks.length === 0) throw new Error(selected || address ? "The selected private IPv4 address is no longer assigned locally. Choose a network in Settings → Remotes." : "No eligible LAN address. Connect to a private IPv4 LAN before enabling remote control.");
-  if (networks.length !== 1) throw new Error("Several home networks are available. Choose one in Settings → Remotes.");
+  if (networks.length === 0) throw new Error(selected || address ? "The selected private IPv4 address is no longer assigned locally. Choose a network in Settings → Devices." : "No eligible LAN address. Connect to a private IPv4 LAN before enabling remote control.");
+  if (networks.length !== 1) throw new Error("Several home networks are available. Choose one in Settings → Devices.");
   return networks[0]!;
 }
 export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup, port80 = false) {
