@@ -27,12 +27,21 @@ export type SendspinPlaybackEnvironment = {
   release: (playbackId: string) => void;
 };
 const idle = (): PlayerState => ({ playbackId: null, status: "idle", position: 0, duration: null, volume: 100, seekable: false, error: null });
+const fadeIn = (pcm: Uint8Array) => {
+  const faded = Buffer.from(pcm), frames = Math.min(480, faded.length / 4); // 10 ms at 48 kHz, stereo 16-bit.
+  for (let frame = 0; frame < frames; frame++) for (let channel = 0; channel < 2; channel++) {
+    const offset = frame * 4 + channel * 2;
+    faded.writeInt16LE(Math.round(faded.readInt16LE(offset) * frame / frames), offset);
+  }
+  return faded;
+};
 
 /** One decoded timeline; the host owns sockets, encryption, and the device-to-playback index. */
 export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironment, callbacks: SendspinPlaybackCallbacks) {
   const targetId = `sendspin:${id}`;
   const selected = new Set<string>();
   const activeStreams = new Set<string>();
+  const firstBlocks = new Set<string>();
   let state = idle(), load: Load | undefined, decoder: ReturnType<typeof createPcmDecoder> | undefined;
   let cancellation: AbortController | undefined, prepared: Uint8Array | undefined;
   let generation = 0, intentGeneration = 0, queued = 0, closed = false, uncertain = false;
@@ -55,6 +64,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
   const position = () => state.status === "playing" && startedUs ? Math.min(state.duration ?? Infinity, startPosition + Math.min(sentSeconds, Math.max(0, (serverNowUs() - startedUs) / 1e6)) * (state.speed ?? 1)) : state.position;
   const cancel = () => { state = { ...state, position: position() }; generation++; cancellation?.abort(); };
   const end = (clientId: string) => {
+    firstBlocks.delete(clientId);
     if (activeStreams.delete(clientId)) { env.core.sendStreamEnd(clientId); drainUntil = Math.max(drainUntil, Date.now() + sendspinDrainMs); }
     env.core.sendGroupUpdate(clientId, PlaybackStateType.STOPPED, targetId, env.name);
   };
@@ -88,6 +98,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
   const startStream = (clientId: string) => {
     env.core.sendStreamStart(clientId, { codec: AudioCodec.PCM, sampleRate: 48000, channels: 2, bitDepth: 16 });
     activeStreams.add(clientId);
+    firstBlocks.add(clientId);
     env.core.sendGroupUpdate(clientId, PlaybackStateType.PLAYING, targetId, env.name);
   };
   const start = () => {
@@ -111,7 +122,11 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
           await delay(Math.max(0, (timestampUs - serverNowUs() - leadUs) / 1000), undefined, { signal: cancellation!.signal });
           if (epoch !== generation) return;
           if (timestampUs < serverNowUs()) throw new Error("The audio producer missed its playback deadline.");
-          for (const clientId of selected) env.sendPcm(clientId, pcm, timestampUs);
+          const faded = firstBlocks.size ? fadeIn(pcm) : undefined;
+          for (const clientId of selected) {
+            env.sendPcm(clientId, firstBlocks.has(clientId) ? faded! : pcm, timestampUs);
+            firstBlocks.delete(clientId);
+          }
           sentSeconds += pcm.byteLength / 192000;
           const publishProgress = state.status !== "playing" || serverNowUs() - progressAt >= 250_000;
           state = { ...state, status: "playing", position: position(), positionEstimated: true };
@@ -196,6 +211,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     disconnected(clientId: string) {
       if (!selected.delete(clientId)) return;
       activeStreams.delete(clientId);
+      firstBlocks.delete(clientId);
       env.drop(id, clientId);
       publish(); observe();
       if (!selected.size) { cancel(); void enqueue(async () => { await retire(); load = undefined; state = idle(); observe(); }).catch(() => {}); }

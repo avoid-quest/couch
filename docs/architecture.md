@@ -67,6 +67,16 @@ Device's action. Closing a control-only window does not stop a remote renderer;
 loss of an active renderer leaves resumable intent. Receiver leases and restart
 fences prevent stale native playback from becoming a second owner.
 
+A committed video move to a native Device selects and presents that Playback once
+in its existing window. Preparation, initial connection, audio membership and later
+browsing do not redirect the window. Native HLS track metadata exposes equivalent
+bitrate renditions as one audio choice while preserving distinct named/language
+tracks and original decoder indices.
+
+Before replacing media in shared audio, Core resolves and validates the candidate
+without changing the current queue or stopping its producer. A capability failure
+returns an actionable playback error through both command and HTTP entry points.
+
 Ordinary selected clients fetch and decode supported media; control-only clients
 fetch no media. Native playback retains its provider paths. The browser uses direct
 compatible HTTP(S) media and maintained HLS/DASH playback with track, quality and
@@ -79,6 +89,10 @@ another library on the same computer needs no manual port coordination. Explicit
 existing server configurations keep their configured address.
 SDK stop/clear and bounded drain are software-output evidence, not physical speaker
 silence or measured acoustic synchronization.
+The client SDK has no stream-start fade option. The PCM adapter therefore applies
+a 10 ms fade to each new listener's first block, keeping its timestamp and every
+ongoing listener's samples unchanged. This is an audible-transition mitigation;
+the reported phone pop still needs physical confirmation on the rebuilt app.
 
 ## Qualification still open
 
