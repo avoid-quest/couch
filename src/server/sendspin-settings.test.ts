@@ -44,25 +44,23 @@ test("hosting settings require an administrator and validate the bounded body", 
   expect(await state(hub)).toEqual({ enabled: false, active: false, restartRequired: false, configuredExternally: false, error: null });
 });
 
-test("enabling persists for restart and disabling closes hosting until a later restart", async () => {
+test("a fresh Core hosts immediately, disables, and re-enables without a restart", async () => {
   const f = fixture(), first = f.start();
-  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: false, restartRequired: true, configuredExternally: false, error: null });
-  expect(await (await fetch(`${first.origin}/api/sendspin/enrollment`, { headers: { Origin: first.origin, Authorization: `Bearer ${hostToken}` } })).json()).toEqual({ available: false });
-  await first.close();
-  const config = { host: "127.0.0.1", port: 0, name: "Rooms" };
-  const second = f.start({ sendspin: config });
-  await until(async () => (await state(second)).active);
-  expect((await state(second)).restartRequired).toBe(false);
-  const response = await api(second, hostToken, "POST", { enabled: false });
+  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: false, error: null });
+  const discovery = await fetch(`${first.origin}/api/sendspin/enrollment`, { headers: { Origin: first.origin, Authorization: `Bearer ${hostToken}` } });
+  expect(discovery.status).toBe(200);
+  expect((await discovery.json() as { available: boolean }).available).toBe(true);
+  const values = new Map<string, string>();
+  const clientId = loadSendspinClientIdentity({ getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); } }).clientId;
+  const enrollment = await fetch(`${first.origin}/api/sendspin/enrollment`, { method: "POST", headers: { Origin: first.origin, Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ clientId }) });
+  expect(enrollment.status).toBe(200);
+  expect((await enrollment.json() as { psk: string }).psk).toBeTruthy();
+  const response = await api(first, hostToken, "POST", { enabled: false });
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ enabled: false, active: false, restartRequired: false, configuredExternally: true, error: null });
-  expect(await (await fetch(`${second.origin}/api/sendspin/enrollment`, { headers: { Origin: second.origin, Authorization: `Bearer ${hostToken}` } })).json()).toEqual({ available: false });
-  expect((await api(second, hostToken, "POST", { enabled: true })).status).toBe(200);
-  expect((await state(second)).restartRequired).toBe(true);
-  await second.close();
-  const third = f.start({ sendspin: config });
-  await until(async () => (await state(third)).active);
-  expect((await state(third)).restartRequired).toBe(false);
+  expect(await response.json()).toEqual({ enabled: false, active: false, restartRequired: false, configuredExternally: false, error: null });
+  expect(await (await fetch(`${first.origin}/api/sendspin/enrollment`, { headers: { Origin: first.origin, Authorization: `Bearer ${hostToken}` } })).json()).toEqual({ available: false });
+  expect(await (await api(first, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: false, error: null });
+  expect((await state(first)).active).toBe(true);
 });
 
 test("external configuration remains the inherited default and a saved false overrides it", async () => {
@@ -91,6 +89,9 @@ test("listener address failure is visible and enrollment remains unavailable", a
   await until(async () => !!(await state(hub)).error);
   expect(await state(hub)).toEqual({ enabled: true, active: false, restartRequired: false, configuredExternally: true, error: "Sendspin could not listen on the configured address." });
   expect(await (await fetch(`${hub.origin}/api/sendspin/enrollment`, { headers: { Origin: hub.origin, Authorization: `Bearer ${hostToken}` } })).json()).toEqual({ available: false });
+  await new Promise<void>(resolve => occupied.close(() => resolve()));
+  expect(await (await api(hub, hostToken, "POST", { enabled: true })).json()).toEqual({ enabled: true, active: true, restartRequired: false, configuredExternally: true, error: null });
+  expect((await fetch(`${hub.origin}/api/sendspin/enrollment`, { headers: { Origin: hub.origin, Authorization: `Bearer ${hostToken}` } })).status).toBe(200);
 });
 
 test("settings POST rechecks administrator authority after reading the body", async () => {

@@ -25,18 +25,18 @@ beforeEach(() => {
     if (writeError) return Response.json({ error: "Write failed" }, { status: 503 });
     const enabled = JSON.parse(String(init?.body)).enabled;
     writes.push(enabled);
-    state = { ...state, enabled, active: false, restartRequired: enabled };
+    state = { ...state, enabled, active: enabled, restartRequired: false };
     return Response.json(state);
   }) as typeof fetch);
 });
 
-test("saving hosting shows the restart requirement and disabling stops hosting", async () => {
+test("saving hosting starts it immediately and disabling stops hosting", async () => {
   const user = userEvent.setup();
   render();
   await waitFor(() => expect(hostingSwitch()).toBeEnabled());
   await user.click(hostingSwitch());
   await waitFor(() => expect(hostingSwitch()).toBeChecked());
-  expect(screen.getByText("Saved. Restart Core to start Sendspin hosting.")).toBeInTheDocument();
+  expect(screen.getByText("Hosting is active.")).toBeInTheDocument();
   expect(writes).toEqual([true]);
   state = { ...state, active: true, restartRequired: false };
   await user.click(hostingSwitch());
@@ -78,12 +78,12 @@ test("external configuration remains available to disable and startup failure is
   expect(writes).toEqual([false]);
 });
 
-test("enabling an externally configured host still requires a Core restart", async () => {
+test("enabling an externally configured host starts it immediately", async () => {
   state = { ...state, configuredExternally: true };
   render();
   await waitFor(() => expect(hostingSwitch()).toBeEnabled());
   await userEvent.setup().click(hostingSwitch());
-  expect(await screen.findByText("Saved. Restart Core to start Sendspin hosting.")).toBeInTheDocument();
+  expect(await screen.findByText("Hosting is active.")).toBeInTheDocument();
   expect(screen.getByText("Existing Sendspin configuration supplies the address and name.")).toBeInTheDocument();
   expect(writes).toEqual([true]);
 });

@@ -124,13 +124,8 @@ export function createHub(options: HubOptions) {
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   const configuredExternally = !!(options.sendspin || options.sendspinConfigError);
-  const startupEnabled = store.sendspinEnabled() ?? configuredExternally;
-  const sendspinConfig: SendspinConfig | undefined = startupEnabled && !options.sendspinConfigError
-    ? options.sendspin ?? { host: "0.0.0.0", port: 8927, name: store.installationName() } : undefined;
-  let sendspinError: string | null = startupEnabled ? options.sendspinConfigError ?? null : null;
-  try { if (sendspinConfig) validateSendspinConfig(sendspinConfig); }
-  catch (error) { sendspinError = error instanceof Error ? error.message : "Invalid Sendspin host configuration."; }
-  if (sendspinConfig && !sendspinError) store.markBufferedOutputUsed();
+  const sendspinConfig: SendspinConfig = options.sendspin ?? { host: "0.0.0.0", port: 8927, name: store.installationName() };
+  let sendspinError: string | null = null;
   const sendspinIdentity = openSendspinIdentity(options.databasePath);
   const sessionId = store.installationId();
   const runtimes = new Map<string, Runtime>();
@@ -270,14 +265,14 @@ export function createHub(options: HubOptions) {
     }
   }
   let sendspin: ReturnType<typeof createSendspin> | undefined;
-  let sendspinRestartRequired = false;
+  let sendspinTarget: ReturnType<typeof registry.registerGroup> | undefined;
   let sendspinSettingsTail = Promise.resolve();
   const sendspinHostingState = (): SendspinHostingState => ({
     enabled: store.sendspinEnabled() ?? configuredExternally,
     active: !!sendspin?.listening,
-    restartRequired: sendspinRestartRequired,
+    restartRequired: false,
     configuredExternally,
-    error: sendspin?.listenerError ?? sendspinError,
+    error: (store.sendspinEnabled() ?? configuredExternally) ? sendspin?.listenerError ?? sendspinError : null,
   });
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidateAll("playlists"), queue: () => session.state.queue,
     upNext: () => {
@@ -646,10 +641,8 @@ export function createHub(options: HubOptions) {
             if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
             if (!identity() || identity()?.authority === "controller") throw new ControllerError(NO_LONGER_ADMIN, 403);
             store.saveSendspinEnabled(enabled);
-            if (!enabled) {
-              sendspinRestartRequired = false;
-              if (sendspin) { const host = sendspin; await host.close(); if (sendspin === host) sendspin = undefined; }
-            } else if (!sendspin?.listening) sendspinRestartRequired = true;
+            if (enabled) await startSendspin();
+            else await stopSendspin();
             invalidateAll("controllers");
             return sendspinHostingState();
           });
@@ -1004,7 +997,7 @@ export function createHub(options: HubOptions) {
     collections.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), sendspin?.close(), sendspinSettingsTail, lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), sendspinSettingsTail.then(() => sendspin?.close()), lan?.close(), server.stop(true)]);
     diagnostics.close();
     sendspinIdentity?.close();
     for (const runtime of runtimes.values()) runtime.privateStore?.close();
@@ -1015,12 +1008,30 @@ export function createHub(options: HubOptions) {
   })();
 
   targets.publish();
-  if (sendspinConfig && sendspinIdentity) {
-    const target = registry.registerGroup({ id: "sendspin-group", name: sendspinConfig.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => {
-      if (!sendspin) throw new Error("Sendspin is disabled.");
+  async function stopSendspin() {
+    const host = sendspin;
+    if (!host) return;
+    try { await host.close(); }
+    finally { if (sendspin === host) sendspin = undefined; }
+  }
+  async function startSendspin() {
+    if (sendspin?.listening) return;
+    if (sendspin) await stopSendspin();
+    sendspinError = options.sendspinConfigError ?? null;
+    if (sendspinError) return;
+    try { validateSendspinConfig(sendspinConfig); }
+    catch (error) { sendspinError = error instanceof Error ? error.message : "Invalid Sendspin host configuration."; return; }
+    if (!sendspinIdentity) { sendspinError = "Sendspin identity is unavailable."; return; }
+    if (!sendspinTarget) sendspinTarget = registry.registerGroup({ id: "sendspin-group", name: sendspinConfig.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => {
+      if (!sendspin?.listening) throw new Error("Sendspin is disabled.");
       sendspin.send(command);
     });
-    try { sendspin = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() && (store.sendspinEnabled() ?? configuredExternally) ? sendspinIdentity.lookup(clientId) : null,
+    store.markBufferedOutputUsed();
+    let settled = false;
+    const ready = Promise.withResolvers<void>();
+    const timeout = setTimeout(() => { if (!settled) { settled = true; ready.resolve(); } }, 3000);
+    let host: ReturnType<typeof createSendspin>;
+    try { host = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() && (store.sendspinEnabled() ?? configuredExternally) ? sendspinIdentity.lookup(clientId) : null,
       isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!sendspinConfig.qualifiedClientIds?.includes(clientId),
       describeClient: clientId => {
         const deviceId = sendspinIdentity.deviceId(clientId);
@@ -1028,8 +1039,8 @@ export function createHub(options: HubOptions) {
         const owner = sendspinIdentity.owner(clientId);
         return { deviceId, name: owner === "host" ? store.installationName() : owner ? store.controller(owner)?.name : undefined };
       },
-      initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: target.update, observe: target.observe,
-      listenerChanged: () => invalidateAll("controllers"),
+      initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: sendspinTarget.update, observe: sendspinTarget.observe,
+      listenerChanged: () => { invalidateAll("controllers"); if (!settled) { settled = true; ready.resolve(); } },
       control: async (clientId, command) => {
         const owner = sendspinIdentity.owner(clientId);
         const runtime = [...runtimes.values()].find(value => value.targets.owns("sendspin-group"));
@@ -1040,8 +1051,17 @@ export function createHub(options: HubOptions) {
         else if (playbackId && command === "next") runtime.session.command({ type: "next", playbackId }, authorize);
         else if (playbackId && (command === "play" || command === "pause")) runtime.session.command({ type: "pause", playbackId, paused: command === "pause" }, authorize);
       } }); }
-    catch (error) { sendspinError = error instanceof Error ? error.message : "Sendspin could not start."; invalidateAll("controllers"); }
+    catch (error) { clearTimeout(timeout); sendspinError = error instanceof Error ? error.message : "Sendspin could not start."; invalidateAll("controllers"); return; }
+    sendspin = host;
+    await ready.promise;
+    clearTimeout(timeout);
+    if (host.listening && admitted()) { sendspinError = null; return; }
+    sendspinError = host.listenerError ?? "Sendspin did not start listening in time.";
+    await stopSendspin();
   }
+  if (store.sendspinEnabled() ?? configuredExternally) sendspinSettingsTail = startSendspin().catch(error => {
+    sendspinError = error instanceof Error ? error.message : "Sendspin could not start.";
+  });
   return {
     server, session: { ...session, get state() { return session.state; }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
