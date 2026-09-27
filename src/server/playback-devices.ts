@@ -147,7 +147,6 @@ export function createPlaybackDevices(options: Options) {
       changed: target => {
         const selected = new Set(target.members?.filter(member => member.joined).map(member => member.id));
         endpoint.update(decorate(binding, { ...target, members: host.devices.map(audio => ({ ...audio, joined: selected.has(audio.id) })) }));
-        if (!changing && runtime.session.state.targetId === id) commit(runtime, [...target.members?.filter(member => member.joined).map(member => member.deviceId ?? `audio-${member.id}`) ?? [], ...(binding.screen ? [binding.screen] : [])].filter((value, index, all) => all.indexOf(value) === index));
         options.changed();
       },
     });
@@ -282,10 +281,6 @@ export function createPlaybackDevices(options: Options) {
         try { await assign(runtime, ids(), authorize, takeover); }
         finally {
           changing = false;
-          for (const current of options.runtimes()) {
-            const group = groups.get(current.id)?.group;
-            if (group && current.session.state.targetId === group.id) commit(current, group.members.flatMap(id => { const audio = options.host()?.devices.find(device => device.id === id); return audio ? [deviceId(audio)] : []; }));
-          }
           options.changed();
         }
       });
