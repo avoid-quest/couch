@@ -61,6 +61,7 @@ import { macSound } from "./sound-mac";
 import { windowsSound } from "./sound-windows";
 import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
+import { createSnapcast, validateSnapcastConfig, type SnapcastConfig } from "./snapcast";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
 type HubOptions = {
@@ -68,6 +69,7 @@ type HubOptions = {
   hostname?: string;
   managedLan?: boolean;
   remoteAccess?: { origin: string; trustedProxyIps: string[]; pairing?: boolean };
+  snapcast?: SnapcastConfig;
   onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
@@ -109,6 +111,7 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
+  if (options.snapcast) validateSnapcastConfig(options.snapcast);
   const remoteAccess = createRemoteAccess(options.remoteAccess);
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
@@ -116,6 +119,7 @@ export function createHub(options: HubOptions) {
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
+  if (options.snapcast) store.markBufferedOutputUsed();
   const sessionId = store.installationId();
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
@@ -152,7 +156,7 @@ export function createHub(options: HubOptions) {
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const targets = createPlaybackTargets(options.sendPlayer, () => session, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed() });
+  const targets = createPlaybackTargets(options.sendPlayer, () => session, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
   const session = createSession(store, targets.send, (state, clock) => {
     idle.playback(state.player.status, !!state.radioRetry);
     radioProgramme?.observe(state);
@@ -173,8 +177,8 @@ export function createHub(options: HubOptions) {
     admitted, systemAudio, transferBusy: () => targets.busy, nativeTarget: () => targets.nativeAssigned, nativeRenderer: () => targets.nativeRenderer,
     validateCommand: command => {
       if (targets.nativeRenderer) return;
-      if (command.type === "load") browserCompatible(command);
-      if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported in the browser yet.");
+      if (command.type === "load" && targets.destination?.backend === "browser") browserCompatible(command);
+      if (!["load", "stop", "prepare", "pause", "seek", "volume", "speed", "track"].includes(command.type)) throw new Error("This playback setting is not supported by the selected output.");
     },
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
@@ -210,6 +214,7 @@ export function createHub(options: HubOptions) {
     observe: player => { subtitles.observe(player); void jellyfin.observe(player); },
     stopped: playbackId => subtitles.stopped(playbackId),
   });
+  let snapcast: ReturnType<typeof createSnapcast> | undefined;
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlists"), queue: () => session.state.queue,
     upNext: () => {
@@ -702,6 +707,13 @@ export function createHub(options: HubOptions) {
             if (closed) return;
           } else if (action.type === "selectTarget") {
             await targets.move(action.targetId, authorize);
+          } else if (action.type === "groupMembers" || action.type === "groupVolume" || action.type === "groupReconnect") {
+            if (!snapcast || action.targetId !== "snapcast-group") throw new Error("That audio group is not configured.");
+            if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
+            authorize();
+            if (action.type === "groupReconnect") await snapcast.reconnect();
+            else if (action.type === "groupMembers") await snapcast.setMembers(action.memberIds);
+            else await snapcast.setMemberVolume(action.memberId, action.volume, action.muted);
           } else if (action.type === "navigate") {
             const listeners = [server, ...lan?.servers ?? []];
             if (!listeners.some(listener => listener.subscriberCount("navigation"))) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
@@ -791,7 +803,7 @@ export function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([toolsStopped, updates.close(), library.close(), jellyfin.close(), lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([toolsStopped, updates.close(), library.close(), jellyfin.close(), snapcast?.close(), lan?.close(), server.stop(true)]);
     diagnostics.close();
     store.close();
     if (progressError) throw progressError;
@@ -800,6 +812,10 @@ export function createHub(options: HubOptions) {
   })();
 
   targets.publish();
+  if (options.snapcast) {
+    const target = targets.registerGroup({ id: "snapcast-group", name: options.snapcast.name, kind: "group", backend: "snapcast", connected: false, handoffSafety: "buffer-drain" }, command => snapcast!.send(command));
+    snapcast = createSnapcast(options.snapcast, { changed: target.update, observe: target.observe });
+  }
   return {
     server, session: { ...session, get state() { return session.state; }, observe: targets.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),

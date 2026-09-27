@@ -3,6 +3,14 @@ import { parseCommand } from "./validation";
 
 const parse = (action: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "test", action }), false);
 
+test("audio group controls accept opaque member identities and bound membership and volume", () => {
+  expect(parse({ type: "groupMembers", targetId: "snapcast-group", memberIds: ["00:11:22:33:44:55#2"] }).action.type).toBe("groupMembers");
+  expect(parse({ type: "groupReconnect", targetId: "snapcast-group" }).action.type).toBe("groupReconnect");
+  expect(parse({ type: "groupVolume", targetId: "snapcast-group", memberId: "00:11:22:33:44:55#2", volume: 25, muted: true }).action.type).toBe("groupVolume");
+  for (const memberIds of [[], ["same", "same"], ["bad\nmember"], [""], Array.from({ length: 33 }, (_, index) => `member-${index}`)]) expect(() => parse({ type: "groupMembers", targetId: "snapcast-group", memberIds })).toThrow();
+  for (const volume of [-1, 101, "25", null]) expect(() => parse({ type: "groupVolume", targetId: "snapcast-group", memberId: "room", volume, muted: false })).toThrow();
+});
+
 test("provider albums accept a public link and discard client-supplied track lists and secrets", () => {
   const action = { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://blazo.bandcamp.com/album/jazz-format-mixtape-vol-1", playNow: true } as const;
   expect(parse({ ...action, entries: [{ source: "file:///private" }], headers: { Authorization: "secret" } }).action).toEqual(action);
