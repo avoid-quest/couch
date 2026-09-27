@@ -118,7 +118,10 @@ existing native provider integration remains compatible.
 
 Sendspin has two independent optional roles. Core hosts an encrypted group through
 `@sonn-audio/node-sendspin`; a UI client joins this Core or another server through
-the official `@sendspin/sendspin-js` renderer. Hosting is disabled unless configured.
+the official `@sendspin/sendspin-js` renderer. Administrators enable hosting in
+Settings → Remotes; enabling requires Core restart, while disabling closes the
+producer and listener immediately. The durable choice overrides legacy file-based
+enablement, retaining that file's address/name options. Hosting defaults to off.
 Joining requires an explicit audio gesture and suspends the client's direct renderer;
 leaving restores it. Connection ownership survives navigation, and active client
 controls remain available when Core is offline. The existing window and player stay

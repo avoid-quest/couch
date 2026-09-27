@@ -6,7 +6,7 @@ The frontend uses the official `@sendspin/sendspin-js` 5.0.0 client, which owns 
 
 ## Hosting and enrollment
 
-An administrator can turn on **Host Sendspin** in **Settings → Connections**.
+An administrator can turn on **Host Sendspin** in **Settings → Remotes**.
 The saved choice survives restart. Enabling requires restarting Core; the settings
 show that requirement. Disabling stops the producer, disconnects its clients and
 closes the listener immediately, without restarting Core. Enabling again requires
@@ -47,6 +47,14 @@ Stop local direct playback before joining; other targets continue playing. In Ta
 use the existing Another Couch mode with native receiver enrollment disabled. This
 keeps one renderer on the local device. Leaving restores normal direct rendering.
 Opening a page or restarting a client never connects or plays automatically.
+
+Each explicit Join allows up to seven automatic reconnect attempts. Couch counts
+them through the SDK's public reconnect hooks because SDK 5.0.0 resets its own
+counter on WebSocket open, before encrypted admission. A successful transient
+reconnect uses the same budget; socket opens and cached playback state do not
+replenish it. When exhausted, playback disconnects and the dialog asks you to Leave
+and join again. Leave cancels retries. Joining again renews the retry budget, not
+authorization: revoked credentials remain denied.
 
 Only explicitly selected, connected members receive audio. Restoring membership does not start playback. The library owns protocol encoding and Noise; Couch owns session intent, member selection and media pacing. Client controller commands return through Core authorization instead of creating an independent queue. Volume and mute are published from observed client state.
 
