@@ -2,6 +2,11 @@ import { lookup } from "node:dns/promises";
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 
 export type LanNetwork = { name: string; address: string; netmask: string };
+export function lanNetworks(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>): LanNetwork[] {
+  return Object.entries(interfaces).flatMap(([name, entries]) => /^(docker|br-|veth|virbr|tun|tap|utun|bridge\d*|vmenet\d*|vmnet\d*|awdl\d*|llw\d*)/i.test(name) ? [] : (entries ?? [])
+    .filter(entry => entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address))
+    .map(entry => ({ name, address: entry.address, netmask: entry.netmask })));
+}
 const ipv4 = (value: string) => {
   const parts = value.replace(/^::ffff:/, "").split(".");
   return parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255) ? parts.reduce((value, part) => (value * 256 + Number(part)) >>> 0, 0) : null;
@@ -12,9 +17,9 @@ export function lanPeer(network: LanNetwork, peer: string) {
   return address !== null && mask !== null && value !== null && (address & mask) === (value & mask);
 }
 export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string): LanNetwork {
-  const networks = Object.entries(interfaces).flatMap(([name, entries]) => (entries ?? []).filter(entry => entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address) && (!address || entry.address === address) && (selected ? name === selected : !/^(docker|br-|veth|virbr|tun|tap|utun)/.test(name))).map(entry => ({ name, address: entry.address, netmask: entry.netmask })));
-  if (networks.length === 0) throw new Error(selected || address ? "No eligible LAN address matches COUCH_LAN_INTERFACE/COUCH_LAN_ADDRESS. Check that the selected private IPv4 address is assigned locally." : "No eligible LAN address. Connect to a private IPv4 LAN before enabling remote control.");
-  if (networks.length !== 1) throw new Error("Several LAN addresses are available. Select a network with COUCH_LAN_INTERFACE; if it has multiple addresses, also set COUCH_LAN_ADDRESS to one of its private IPv4 addresses and restart Couch.");
+  const networks = lanNetworks(interfaces).filter(network => (!selected || network.name === selected) && (!address || network.address === address));
+  if (networks.length === 0) throw new Error(selected || address ? "The selected private IPv4 address is no longer assigned locally. Choose a network in Settings → Remotes." : "No eligible LAN address. Connect to a private IPv4 LAN before enabling remote control.");
+  if (networks.length !== 1) throw new Error("Several home networks are available. Choose one in Settings → Remotes.");
   return networks[0]!;
 }
 export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup, port80 = false) {
@@ -48,6 +53,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
   resolve?: typeof lookup;
 }) {
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
+  let selected = options.selected, address = options.address;
   let pending: Promise<void> = Promise.resolve();
   let last = "";
   const stopAll = async () => { await Promise.all([active?.stop(true), port80?.stop(true)]); active = port80 = null; };
@@ -60,15 +66,22 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
     const advertised = typeof options.advertised === "function" ? options.advertised() : options.advertised;
     const wantsPort80 = options.port !== 80 && advertised.some(value => { try { const url = new URL(value); return url.protocol === "http:" && !url.port; } catch { return false; } });
     try {
-      const next = selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
+      const next = selectLan((options.interfaces ?? networkInterfaces)(), selected, address);
       const moved = JSON.stringify(next) !== JSON.stringify(network);
-      if ((active || port80) && (!enabled || moved)) await stopAll();
+      if (!enabled && (active || port80)) await stopAll();
       if (closed) return;
-      network = next;
-      if (enabled && !active) {
-        try { active = options.start(next, options.port); }
+      let replacement: T | null = null;
+      if (enabled && (!active || moved)) {
+        try { replacement = options.start(next, options.port); }
         catch { throw new Error(`Couch cannot listen on ${next.address}:${options.port}. Another process may be using the port.`); }
       }
+      if (moved && active) {
+        try { await stopAll(); }
+        catch (error) { await replacement?.stop(true); throw error; }
+      }
+      if (closed) { await replacement?.stop(true); return; }
+      if (replacement) active = replacement;
+      network = next;
       // Port 80 is a best-effort extra listener: platforms that refuse the bind
       // keep the direct port and drop only the bare-name aliases.
       if (enabled && wantsPort80 && !port80) { try { port80 = options.start(next, 80); } catch { port80 = null; } }
@@ -77,10 +90,12 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
       const { urls, error } = await lanUrls(next, options.port, advertised, options.resolve, !!port80);
       if (!closed) changed(urls, error);
     } catch (error) {
-      await stopAll().catch(() => {});
-      network = null;
+      if (!active || !network || !lanNetworks((options.interfaces ?? networkInterfaces)()).some(candidate => candidate.name === network!.name && candidate.address === network!.address)) {
+        await stopAll().catch(() => {});
+        network = null;
+      }
       const message = error instanceof Error ? error.message : "Couldn't refresh the LAN address.";
-      if (!closed) changed([], message);
+      if (!closed) changed(network ? [`http://${network.address}:${options.port}`] : [], message);
       throw error;
     }
   });
@@ -94,12 +109,12 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
     refresh,
     validateAlias: (value: string) => pending = pending.catch(() => {}).then(async () => {
       if (enabled && (!active || !network)) throw new Error("The LAN listener is unavailable.");
-      const selected = enabled ? network! : selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
-      const result = await lanUrls(selected, options.port, [value], options.resolve, true);
+      const current = enabled ? network! : selectLan((options.interfaces ?? networkInterfaces)(), selected, address);
+      const result = await lanUrls(current, options.port, [value], options.resolve, true);
       if (!result.urls.includes(new URL(value).origin)) throw new Error(result.error ?? "The network address is unavailable.");
       if (options.port !== 80 && !new URL(value).port && !port80) {
         try {
-          const listener = options.start(selected, 80);
+          const listener = options.start(current, 80);
           if (enabled) port80 = listener;
           else await listener.stop(true);
         }
@@ -113,6 +128,13 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
         try { await refresh(); }
         catch (error) { enabled = false; throw error; }
       }
+    },
+    async setNetwork(value: string | null) {
+      const previous = address, previousSelected = selected;
+      selected = undefined;
+      address = value || undefined;
+      try { await refresh(); }
+      catch (error) { address = previous; selected = previousSelected; await refresh().catch(() => {}); throw error; }
     },
     async close() { closed = true; clearInterval(timer); await pending.catch(() => {}); await stopAll(); },
   };

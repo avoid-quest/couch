@@ -11,6 +11,7 @@ const self: Controller = { id: "self", name: "Browser", role: "administrator", c
 let devices: Controller[];
 let sharingFailure = false;
 let originDomain = "";
+let selectedNetwork: string | null = null;
 let setSharingFromHost: ((enabled: boolean) => void) | undefined;
 const sharingChanges: boolean[] = [];
 const button = (label: string) => screen.getByRole("button", { name: label });
@@ -31,6 +32,7 @@ beforeEach(() => {
   sharingChanges.length = 0;
   sharingFailure = false;
   originDomain = "";
+  selectedNetwork = null;
   setSharingFromHost = undefined;
   devices = [self, { id: "other", name: "Phone", role: "controller", createdAt: 1, lastSeenAt: 2 }];
   spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
@@ -49,6 +51,10 @@ beforeEach(() => {
     if (path === "/api/settings/origin-domain") {
       if (method === "POST") originDomain = JSON.parse(String(init?.body)).domain;
       return Response.json({ domain: originDomain });
+    }
+    if (path === "/api/settings/lan-network") {
+      if (method === "POST") selectedNetwork = JSON.parse(String(init?.body)).address;
+      return Response.json({ selected: selectedNetwork, active: selectedNetwork ?? "10.10.2.96", networks: [{ name: "en0", address: "10.10.2.96" }, { name: "en1", address: "192.168.1.9" }] });
     }
     if (path === "/api/controllers" && method === "GET") return Response.json({ controllers: devices });
     if (path === "/api/controllers/self/name" && method === "POST") {
@@ -111,6 +117,14 @@ test("the host can change whether this computer accepts remotes", async () => {
   expect(calls).toContainEqual({ path: "/api/settings/sharing", method: "POST", body: { enabled: true } });
   expect(sharingChanges).toEqual([true]);
   expect(screen.getByRole("switch", { name: "Allow remotes" })).toBeChecked();
+});
+test("the host chooses and saves an available home network in the app", async () => {
+  await render({ authority: "host", controller: null, claimAvailable: false });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("combobox", { name: "Home network" }));
+  await user.click(screen.getByRole("option", { name: "en1 · 192.168.1.9" }));
+  await waitFor(() => expect(calls).toContainEqual({ path: "/api/settings/lan-network", method: "POST", body: { address: "192.168.1.9" } }));
+  expect(await screen.findByText("Remotes connect at 192.168.1.9.")).toBeInTheDocument();
 });
 
 test("an administrator can save a network address", async () => {

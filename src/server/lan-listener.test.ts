@@ -5,15 +5,37 @@ const entry = (address: string): NetworkInterfaceInfo => ({ address, netmask: "2
 const network = { name: "eth0", address: "192.168.1.20", netmask: "255.255.255.0" };
 test("selects a private LAN, excludes virtual/public interfaces and requires an explicit ambiguous choice", () => {
   expect(selectLan({ eth0: [entry(network.address)], docker0: [entry("172.17.0.1")] })).toEqual(network);
+  expect(selectLan({ en0: [entry("10.10.2.96")], bridge100: [entry("192.168.64.1")], vmenet0: [entry("192.168.65.1")] })).toEqual({ name: "en0", address: "10.10.2.96", netmask: "255.255.255.0" });
   expect(() => selectLan({ eth0: [entry("203.0.113.2")] })).toThrow("No eligible LAN");
   const multiple = { eth0: [entry(network.address)], wlan0: [entry("10.1.2.3")] };
-  expect(() => selectLan(multiple)).toThrow("COUCH_LAN_INTERFACE");
+  expect(() => selectLan(multiple)).toThrow("Choose one in Settings");
   expect(selectLan(multiple, "wlan0").address).toBe("10.1.2.3");
+});
+test("a failed network switch retains the working listener and address", async () => {
+  let refuse = true, stops = 0;
+  const changes: { urls: string[]; error: string | null }[] = [];
+  const listener = createLanListener({ port: 4100, enabled: true, advertised: [], interfaces: () => ({ eth0: [entry(network.address)], wlan0: [entry("10.1.2.3")] }), selected: "eth0", start: next => {
+    if (next.name === "wlan0" && refuse) throw new Error("EADDRINUSE");
+    return { stop: async () => { stops++; } };
+  }, changed: (urls, error) => changes.push({ urls, error }) });
+  try {
+    await listener.refresh();
+    const old = listener.server;
+    await expect(listener.setNetwork("10.1.2.3")).rejects.toThrow("using the port");
+    expect(listener.server).toBe(old);
+    expect(listener.network).toEqual(network);
+    expect(changes.at(-1)?.urls).toEqual(["http://192.168.1.20:4100"]);
+    expect(stops).toBe(0);
+    refuse = false;
+    await listener.setNetwork("10.1.2.3");
+    expect(listener.network?.address).toBe("10.1.2.3");
+    expect(stops).toBe(1);
+  } finally { await listener.close(); }
 });
 test("an explicit local address resolves same-interface ambiguity and preserves its subnet", () => {
   const second = { ...entry("10.1.2.3"), netmask: "255.255.0.0" };
   const interfaces = { eth0: [entry(network.address), second], wlan0: [entry("192.168.2.20")] };
-  expect(() => selectLan(interfaces, "eth0")).toThrow("COUCH_LAN_ADDRESS");
+  expect(() => selectLan(interfaces, "eth0")).toThrow("Choose one in Settings");
   const selected = selectLan(interfaces, "eth0", second.address);
   expect(selected).toEqual({ name: "eth0", address: second.address, netmask: second.netmask });
   expect(selectLan(interfaces, undefined, second.address)).toEqual(selected);
@@ -91,7 +113,7 @@ test("a missing selected address closes LAN access and recovers only when that a
     present = false; await expect(listener.refresh()).rejects.toThrow("assigned locally");
     expect(listener.server).toBeNull(); expect(listener.network).toBeNull();
     expect(changes.at(-1)?.urls).toEqual([]);
-    expect(changes.at(-1)?.error).toContain("COUCH_LAN_ADDRESS");
+  expect(changes.at(-1)?.error).toContain("assigned locally");
     present = true; await listener.refresh();
     expect(changes.at(-1)).toEqual({ urls: ["http://192.168.1.20:4100"], error: null });
     expect(starts).toBe(2); expect(stops).toBe(1);
@@ -154,7 +176,7 @@ test("closing during a network change cannot start a replacement listener", asyn
     const close = listener.close();
     stopped.resolve();
     await Promise.all([refresh, close]);
-    expect(starts).toBe(1); expect(listener.server).toBeNull();
+    expect(starts).toBe(2); expect(listener.server).toBeNull();
   } finally { stopped.resolve(); await listener.close(); }
 });
 test("port conflicts reject enabling and cannot silently enable sharing on a later refresh", async () => {

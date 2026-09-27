@@ -131,6 +131,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_sendspin (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_lan_network (id INTEGER PRIMARY KEY CHECK (id = 1), address TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
@@ -180,6 +181,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     saveSendspinEnabled(enabled: boolean) { db.query("INSERT INTO installation_sendspin VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     originDomain() { return db.query<{ domain: string }, []>("SELECT domain FROM installation_origin_domain WHERE id = 1").get()?.domain ?? ""; },
     saveOriginDomain(domain: string) { db.query("INSERT INTO installation_origin_domain VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET domain = excluded.domain").run(domain); },
+    lanNetwork() { return db.query<{ address: string }, []>("SELECT address FROM installation_lan_network WHERE id = 1").get()?.address ?? null; },
+    saveLanNetwork(address: string | null) { if (address === null) db.run("DELETE FROM installation_lan_network WHERE id = 1"); else db.query("INSERT INTO installation_lan_network VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET address = excluded.address").run(address); },
     streamingCommunityOrigin: () => db.query<{ origin: string }, []>("SELECT origin FROM streamingcommunity_origin WHERE id = 1").get()?.origin ?? streamingCommunityOrigin,
     saveStreamingCommunityOrigin: (origin: string) => { db.query("INSERT INTO streamingcommunity_origin VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET origin = excluded.origin").run(origin); },
     audioOutput() { return db.query<{ name: string }, []>("SELECT name FROM audio_output WHERE id = 1").get()?.name ?? null; },

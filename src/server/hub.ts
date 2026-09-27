@@ -1,6 +1,6 @@
 import { libraryMetadata } from "./library-metadata";
 import { ADMIN_ONLY, NO_LONGER_ADMIN, RECORDINGS_UNSUPPORTED, REMOTES_OFF, STORAGE_ERROR, UPDATING_PAUSED, VERSION_MISMATCH } from "./messages";
-import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
+import { createLanListener, lanNetworks, lanPeer, loopbackPeer } from "./lan-listener";
 import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
@@ -629,6 +629,22 @@ export function createHub(options: HubOptions) {
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
       }
+      if (url.pathname === "/api/settings/lan-network") {
+        if (!options.managedLan || !trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+        const state = () => ({ selected: store.lanNetwork(), active: lan?.network?.address ?? null, networks: lanNetworks(networkInterfaces()).map(({ name, address }) => ({ name, address })) });
+        if (request.method === "GET") return cors(request, json(state()));
+        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+        try {
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+          const value = await settingField(request, "address");
+          if (value !== null && (typeof value !== "string" || !lanNetworks(networkInterfaces()).some(network => network.address === value))) throw new ControllerError("Choose an available home network.");
+          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
+          await lan?.setNetwork(value);
+          store.saveLanNetwork(value);
+          invalidateAll("controllers");
+          return cors(request, json(state()));
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't choose the network." }, error instanceof ControllerError ? error.status : 500)); }
+      }
       if (url.pathname === "/api/settings/sendspin") {
         if (caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
         if (request.method === "GET") return cors(request, json(sendspinHostingState()));
@@ -953,7 +969,7 @@ export function createHub(options: HubOptions) {
 
   if (options.managedLan) {
     lan = createLanListener({
-      port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
+      port, enabled: store.remoteControlEnabled(), selected: store.lanNetwork() ? undefined : process.env.COUCH_LAN_INTERFACE, address: store.lanNetwork() ?? process.env.COUCH_LAN_ADDRESS,
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       start: (network, port) => Bun.serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {

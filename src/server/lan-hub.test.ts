@@ -14,6 +14,29 @@ const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options:
 let port80 = false;
 try { const probe = Bun.serve({ hostname: "127.0.0.1", port: 80, fetch: () => new Response() }); probe.stop(true); port80 = true; } catch {}
 
+test.skipIf(!available)("the host saves a network choice for this installation across restart", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-lan-network-"));
+  const databasePath = join(directory, "state.sqlite");
+  const token = "local-host-token-with-at-least-32-characters";
+  const address = selectedLan().address;
+  const start = () => createHub({ managedLan: true, remoteControlEnabled: false, port: 0, databasePath, hostToken: token, sendPlayer: () => {} });
+  let hub = start();
+  const endpoint = () => `${hub.origin}/api/settings/lan-network`;
+  const request = (method = "GET", value?: unknown, bearer = token) => fetch(endpoint(), { method, headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" }, ...(method === "POST" ? { body: JSON.stringify({ address: value }) } : {}) });
+  try {
+    const unauthorized = await request("GET", undefined, "wrong-token");
+    expect(unauthorized.status).toBe(503);
+    expect(await unauthorized.json()).toEqual({ error: "Remotes are off. Turn on Allow remotes on Couch." });
+    expect((await request("POST", "192.168.255.254")).status).toBe(400);
+    expect((await (await request()).json() as { selected: string | null }).selected).toBeNull();
+    expect((await request("POST", address)).status).toBe(200);
+    expect((await (await request()).json() as { selected: string }).selected).toBe(address);
+    await hub.close();
+    hub = start();
+    expect((await (await request()).json() as { selected: string }).selected).toBe(address);
+  } finally { await hub.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test.skipIf(!available)("the native hub keeps loopback while sharing opens and closes a separate LAN listener", async () => {
   const token = "local-host-token-with-at-least-32-characters";
   const addresses = Promise.withResolvers<string[]>();

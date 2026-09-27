@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { claimCodeQuery, controllersQuery } from "@/api/controllers";
-import { originDomainQuery } from "@/api/settings";
+import { lanNetworkQuery, originDomainQuery, type LanNetworkState } from "@/api/settings";
 import { PairingDialog } from "@/components/PairingDialog";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TRY_AGAIN } from "@/copy";
 import { clientDeviceName, rememberClientDeviceName } from "@/session/device-name";
 import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
@@ -41,6 +42,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const controllers = useQuery({ ...controllersQuery(credentials), enabled: connected && manager });
   const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed });
   const originDomain = useQuery({ ...originDomainQuery(credentials), enabled: connected && manager && managedLan });
+  const lanNetwork = useQuery({ ...lanNetworkQuery(credentials), enabled: connected && host && managedLan });
   const [domainDraft, setDomainDraft] = useState<string | null>(null);
   const domain = domainDraft ?? originDomain.data?.domain ?? "";
   const [code, setCode] = useState("");
@@ -58,6 +60,10 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   });
   // The server bumps the controllers revision, which refreshes remoteControlEnabled.
   const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
+  const chooseNetwork = useMutation({
+    mutationFn: (address: string) => apiSend<LanNetworkState>(credentials, "/api/settings/lan-network", { address: address === "auto" ? null : address }),
+    onSuccess: result => queryClient.setQueryData(lanNetworkQuery(credentials).queryKey, result),
+  });
   const saveDomain = useMutation({
     mutationFn: (value: string) => apiSend<{ domain: string }>(credentials, "/api/settings/origin-domain", { domain: value }),
     onSuccess: result => { queryClient.setQueryData(originDomainQuery(credentials).queryKey, result); setDomainDraft(null); },
@@ -94,6 +100,16 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {host && <SettingsRow label="Allow remotes" description="Phones and computers on your network can pair.">
         <Switch aria-label="Allow remotes" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
       </SettingsRow>}
+      {host && managedLan && <SettingsRow label="Home network" description={lanError || (lanNetwork.data?.active ? `Remotes connect at ${lanNetwork.data.active}.` : "Choose the network your remotes use.")}>
+        <Select value={lanNetwork.data?.selected ?? "auto"} disabled={!connected || !lanNetwork.data || chooseNetwork.isPending} onValueChange={value => chooseNetwork.mutate(value)}>
+          <SelectTrigger aria-label="Home network" className="w-full max-w-sm"><SelectValue placeholder="Detect automatically" /></SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="auto">Detect automatically</SelectItem>
+            {lanNetwork.data?.networks.map(network => <SelectItem key={`${network.name}:${network.address}`} value={network.address}>{network.name} · {network.address}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </SettingsRow>}
+      {chooseNetwork.error && <Alert variant="destructive"><AlertDescription>{message(chooseNetwork.error, "Couldn't choose the network.")}</AlertDescription></Alert>}
       <SettingsRow label="New remote" description={remoteControlEnabled ? "Scan a code with your phone." : host ? "Turn on Allow remotes first." : `Turn on Allow remotes on ${hostName} first.`}>
         <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
       </SettingsRow>

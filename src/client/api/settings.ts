@@ -132,3 +132,10 @@ export const originDomainQuery = (credentials: ApiCredentials) =>
     queryKey: ["settings", "origin-domain"],
     queryFn: ({ signal }) => apiJson<{ domain: string }>(credentials, "/api/settings/origin-domain", { signal }),
   });
+
+export type LanNetworkState = { selected: string | null; active: string | null; networks: { name: string; address: string }[] };
+export const lanNetworkQuery = (credentials: ApiCredentials) =>
+  queryOptions({
+    queryKey: ["settings", "lan-network"],
+    queryFn: ({ signal }) => apiJson<LanNetworkState>(credentials, "/api/settings/lan-network", { signal }),
+  });
