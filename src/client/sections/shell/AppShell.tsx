@@ -13,6 +13,7 @@ import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { PlaybackTargetPicker } from "@/components/PlaybackTargetPicker";
+import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { MiniPlayer } from "./MiniPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TvAppearancePreview } from "./TvAppearancePreview";
@@ -179,7 +180,7 @@ function useShellValue() {
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const playbackState = state as typeof state & { devices?: { id: string; name: string; connected: boolean }[]; deviceIds?: string[] };
   const assignedIds = playbackState?.deviceIds ?? [];
-  const available = connected && !!player && (player.status !== "unavailable" || assignedIds.length === 0 && !!playbackState?.devices?.some(device => device.connected));
+  const { available } = playbackCapabilities(state, connected);
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   // Terse, stable labels for the header's screen-reader status and the Couch connection popover.
   const statusLabel = booting ? "Starting" : {
@@ -245,6 +246,7 @@ function ConnectionStatus() {
     const assigned = assignedIds.map(id => playbackState?.devices?.find(device => device.id === id));
     const disconnected = assigned.filter(device => device && !device.connected);
     if (disconnected.length) return <StatusLine>Reconnect {disconnected.map(device => device!.name).join(", ")} from Devices to resume playback.</StatusLine>;
+    if (assigned.length && assigned.every(device => device?.connected)) return state?.currentEntryId ? <StatusLine>Press Play to resume on {assigned.map(device => device!.name).join(", ")}.</StatusLine> : null;
     return <StatusLine>Player not running on {assigned.map(device => device?.name).filter(Boolean).join(", ") || "the selected devices"}.</StatusLine>;
   }
   return null;

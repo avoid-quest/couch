@@ -17,7 +17,9 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   const live = player?.live || current?.live || current?.kind === "radio" || current?.source.startsWith("radio:");
-  const available = connected && !!player && player.status !== "unavailable";
+  const assigned = state?.deviceIds ?? [];
+  const devicesReady = assigned.length ? assigned.every(id => state?.devices?.some(device => device.id === id && device.connected)) : state?.devices?.some(device => device.connected);
+  const available = connected && !!player && (player.status !== "unavailable" || !!devicesReady);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   return {
     available,
@@ -61,13 +63,14 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
   const { available, active, transportReady, nextReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
   const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current;
-  const stop = prominent && !pausable && !ended;
+  const resume = player.status === "unavailable" && !!current;
+  const stop = prominent && !pausable && !ended && !resume;
   const playLabel = stop ? "Stop" : ended ? "Replay" : playing ? "Pause" : "Play";
   const { seekBy } = useSessionGate();
   return <div className={cn("flex items-center gap-0.5", prominent && "player-transport gap-1")} role="group" aria-label="Playback controls">
     {(prominent || seekable) && <Button variant="ghost" size="icon-lg" className={cn("flex-col gap-0", prominent && "player-seek size-11")} aria-label="Back 10 seconds" title="Back 10 seconds" disabled={!transportReady || !seekable} onClick={() => seekBy(-10)}><RotateCcw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
-    {(prominent || pausable || ended) && <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={playLabel} title={playLabel} disabled={stop ? !available || !active : ended ? !available : !transportReady}
-      onClick={() => { if (stop) void run({ type: "stop" }); else if (ended && current) void run({ type: "play", entryId: current.id, fromStart: true }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>{stop ? <Square aria-hidden="true" className="fill-current" /> : ended ? <RotateCcw aria-hidden="true" /> : playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}</Button>}
+    {(prominent || pausable || ended || resume) && <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={playLabel} title={playLabel} disabled={stop ? !available || !active : ended || resume ? !available : !transportReady}
+      onClick={() => { if (stop) void run({ type: "stop" }); else if (current && (ended || resume && !player.playbackId)) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>{stop ? <Square aria-hidden="true" className="fill-current" /> : ended ? <RotateCcw aria-hidden="true" /> : playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}</Button>}
     {!prominent && <Button variant="ghost" size="icon-lg" aria-label="Stop" title="Stop" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>}
     {(prominent || seekable) && <Button variant="ghost" size="icon-lg" className={cn("flex-col gap-0", prominent && "player-seek size-11")} aria-label="Forward 10 seconds" title="Forward 10 seconds" disabled={!transportReady || !seekable} onClick={() => seekBy(10)}><RotateCw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
     {(prominent || hasNext) && <Button variant="ghost" size="icon-lg" className={prominent ? "size-11 [&_svg]:size-5" : undefined} aria-label="Next" title="Next" disabled={!nextReady || !hasNext}
