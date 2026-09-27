@@ -1,4 +1,5 @@
 import { createBrowserRenderer } from "./browser-renderer";
+import { browserMediaCapabilities } from "./browser-capabilities";
 import { isNativeHost } from "./native-context";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -160,9 +161,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (message.type === "rendererRegistered") {
           rendererSessionId = message.sessionId; setRendererTargetId(message.targetId); rendering?.report();
         } else if (message.type === "rendererCommand") {
-          if (rendererSessionId === message.sessionId) rendering?.command(message.command);
+          const command = message.command;
+          if (rendererSessionId === message.sessionId) rendering?.command(command.type === "load" && /^\/api\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(command.source) ? { ...command, source: new URL(command.source, origin).href } : command);
         } else if (message.type === "state") {
-          if (!baseline && rendering && message.state.sessionId) connection.send(JSON.stringify({ type: "registerRenderer" }));
+          if (!baseline && rendering && message.state.sessionId) void browserMediaCapabilities().then(capabilities => {
+            if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "registerRenderer", capabilities }));
+          });
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;

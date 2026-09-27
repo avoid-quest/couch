@@ -78,7 +78,13 @@ adaptive renditions under the existing height cap; Core does not relay or encode
 The adapter releases its pipeline on stop/replacement/fatal failure and preserves
 commanded speed while Shaka temporarily pauses its clock for buffering. Separate
 audio/video URLs, required headers, clip segments and external subtitles are still
-rejected; Jellyfin browser delivery and broader format adaptation remain unfinished.
+rejected for generic sources. Jellyfin negotiates a conservative browser direct-play
+profile from Media Capabilities probes (single-track H.264/AAC MP4 or MP3). Its
+header-authenticated bytes use an attempt-scoped HTTP range relay; the selected
+renderer receives only a revocable grant, never the provider token. Prepared
+provider sessions remain separate until handoff commits, and failed destinations
+release their own grant without destroying the source needed for rollback. Broader
+format adaptation remains unfinished.
 DASH audio selection and subtitles are not yet exposed; audio metadata stays unknown
 rather than inventing a track. Those are delivery limits, not a
 reason to design a reduced browser UI.

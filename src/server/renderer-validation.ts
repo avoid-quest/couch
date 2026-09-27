@@ -4,7 +4,11 @@ import type { PlayerState, RendererMessage } from "../shared/protocol";
 export function parseRendererMessage(value: unknown): RendererMessage | null {
   if (!value || typeof value !== "object") return null;
   const message = value as Partial<RendererMessage>;
-  if (message.type === "registerRenderer") return { type: "registerRenderer" };
+  if (message.type === "registerRenderer") {
+    const capabilities = message.capabilities;
+    if (capabilities !== undefined && (!capabilities || typeof capabilities !== "object" || typeof capabilities.mp4H264Aac !== "boolean" || typeof capabilities.mp3 !== "boolean")) throw new Error("Invalid browser capabilities.");
+    return { type: "registerRenderer", ...(capabilities ? { capabilities: { mp4H264Aac: capabilities.mp4H264Aac, mp3: capabilities.mp3 } } : {}) };
+  }
   if (message.type !== "rendererObservation") return null;
   const state = message.state as PlayerState | undefined;
   if (typeof message.sessionId !== "string" || !state || typeof state !== "object"

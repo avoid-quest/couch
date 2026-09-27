@@ -1,4 +1,4 @@
-import type { Action, Domain, PlaybackActor,ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
+import type { Action, BrowserMediaCapabilities, Domain, PlaybackActor,ExternalSubtitle, PlaybackCommand, PlaybackClock, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
 import type { Store } from "./store";
 import { createProgress, playbackMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
@@ -12,13 +12,16 @@ import type { PlaybackContinuation } from "./continuation";
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
+export type PlaybackDestination = { backend: "native" | "browser"; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type SessionOptions = {
   admitted?: () => boolean;
   transferBusy?: () => boolean;
   validateCommand?: (command: PlaybackCommand) => void;
   nativeTarget?: () => boolean;
-  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean) => MediaSource | Promise<MediaSource>;
+  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean, destination?: PlaybackDestination) => MediaSource | Promise<MediaSource>;
   activatePrepared?: (playbackId: string, previous: PlayerState) => void;
+  activateHandoff?: (playbackId: string, previous: PlayerState) => void;
+  releaseHandoff?: (playbackId: string) => void;
   deactivate?: () => void;
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
@@ -598,14 +601,20 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     selectIdleTarget(player: PlayerState) { state.player = { ...player, ...(options.systemAudio && nativeTarget() ? { volume: nativeSystemAudio?.volume ?? player.volume } : {}), playbackId: null, status: "idle", error: null }; broadcast(); },
     get handoffPaused() { return pendingPause ?? state.player.status !== "playing"; },
-    async prepareHandoff(browser: boolean): Promise<{ command: Extract<PlaybackCommand, { type: "load" }>; delivery: HandoffDelivery }> {
+    async prepareHandoff(target: PlaybackDestination | boolean): Promise<{ command: Extract<PlaybackCommand, { type: "load" }>; delivery: HandoffDelivery }> {
+      const destination: PlaybackDestination = typeof target === "boolean" ? { backend: target ? "browser" : "native" } : target;
+      const browser = destination.backend === "browser";
       const entry = state.queue.find(entry => entry.id === state.currentEntryId);
       if (!entry || !state.player.playbackId) throw new Error("The playing item changed.");
-      // Jellyfin's session-bound access and local paths need scoped browser delivery first.
-      if (browser && /^(jellyfin|library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
+      if (browser && /^(library|recording):/.test(entry.source)) throw new Error("This source is currently available on Couch TV only.");
       cancelPreparation(); qualityResolution?.abort();
       const playbackId = crypto.randomUUID();
-      const media = await (options.resolveSource?.(entry, playbackId, AbortSignal.timeout(15_000), false, false, true) ?? { source: entry.source });
+      let media: MediaSource;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(new DOMException("Source resolution timed out.", "TimeoutError")), 15_000);
+      try { media = await (options.resolveSource?.(entry, playbackId, controller.signal, false, false, true, destination) ?? { source: entry.source }); }
+      catch (error) { options.releaseHandoff?.(playbackId); throw error; }
+      finally { clearTimeout(timeout); }
       const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
       return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, paused: true,
         ...(!browser && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
@@ -613,18 +622,22 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser ? 0 : state.preferences!.device.audioDelay } } };
     },
     commitHandoff(player: PlayerState, delivery: HandoffDelivery) {
+      options.activateHandoff?.(player.playbackId!, state.player);
       const previous = { expiry, webRetried, audioOnly, subtitleWarning };
       ({ expiry, webRetried, audioOnly, subtitleWarning } = delivery);
       activePlayIntent = playIntent;
       webRecovery = null; state.webRetry = null;
       progress.replaceTransport(state.player.playbackId, player.playbackId!);
       state.player = { ...player, ...(options.systemAudio && nativeTarget() ? { volume: nativeSystemAudio?.volume ?? player.volume } : {}) }; pendingPause = null; pendingSeek = null;
-      persistProgress(() => progress.observe(player)); broadcast();
+      persistProgress(() => progress.observe(player)); options.observe?.(player); broadcast();
       return previous;
     },
+    releaseHandoff(playbackId: string) { options.releaseHandoff?.(playbackId); },
     rendererDisconnected() {
       persistProgress(progress.checkpoint);
       playIntent++; resolution?.abort(); qualityResolution?.abort(); cancelRadioRetry(); cancelContinuation();
+      if (options.transferBusy?.() && state.player.playbackId) options.releaseHandoff?.(state.player.playbackId);
+      else options.deactivate?.();
       state.player = { ...state.player, status: "unavailable", error: "The playback device disconnected. Move playback to a connected device to resume." }; broadcast();
     },
     handoffFailed(error: string) { state.player = { ...state.player, status: "error", error }; broadcast(); },

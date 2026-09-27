@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BaseItemDto, MediaStream } from "@jellyfin/sdk/lib/generated-client";
+import type { BaseItemDto, MediaSourceInfo, MediaStream } from "@jellyfin/sdk/lib/generated-client";
 import type { PlayerState } from "../shared/protocol";
 import { createJellyfin } from "./jellyfin";
 
@@ -12,7 +12,7 @@ const userId = "b".repeat(32);
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 
-function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait, logoutWait, reportWait, failReports = false, itemOverrides, imageResponse }: { itemOverrides?: Partial<BaseItemDto>; imageResponse?: () => Response | Promise<Response>; directPlay?: boolean; mediaStreams?: MediaStream[]; playbackWait?: () => Promise<void>; authWait?: () => Promise<void>; logoutWait?: () => Promise<void>; reportWait?: (path: string) => Promise<void>; failReports?: boolean } = {}) {
+function fixture({ mediaOverrides, directPlay = true, mediaStreams = [], playbackWait, authWait, logoutWait, reportWait, failReports = false, itemOverrides, imageResponse }: { mediaOverrides?: Partial<MediaSourceInfo>; itemOverrides?: Partial<BaseItemDto>; imageResponse?: () => Response | Promise<Response>; directPlay?: boolean; mediaStreams?: MediaStream[]; playbackWait?: () => Promise<void>; authWait?: () => Promise<void>; logoutWait?: () => Promise<void>; reportWait?: (path: string) => Promise<void>; failReports?: boolean } = {}) {
   const requests: { path: string; url: URL; authorization: string | null; body: Record<string, unknown> | null }[] = [];
   const item = { Id: itemId, Name: "Local test movie", Type: "Movie", RunTimeTicks: 900_000_000, ProductionYear: 2026, UserData: { PlaybackPositionTicks: 110_000_000, Played: false }, Path: "/private/server/path", ImageTags: { Primary: "private-image-tag" } };
   Object.assign(item, itemOverrides);
@@ -33,7 +33,7 @@ function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait,
     if (path === `/Items/${itemId}`) return Response.json(item);
     if (path === `/Items/${itemId}/PlaybackInfo`) {
       await playbackWait?.();
-      return Response.json({ PlaySessionId: "fixture-play-session", MediaSources: [{ Id: "fixture-media", SupportsDirectPlay: directPlay, SupportsTranscoding: !directPlay, RequiresOpening: false, Protocol: "File", Path: "/private/server/movie.mkv", Container: "mkv", MediaStreams: mediaStreams }] });
+      return Response.json({ PlaySessionId: "fixture-play-session", MediaSources: [{ Id: "fixture-media", SupportsDirectPlay: directPlay, SupportsTranscoding: !directPlay, RequiresOpening: false, Protocol: "File", Path: "/private/server/movie.mkv", Container: "mkv", MediaStreams: mediaStreams, ...mediaOverrides }] });
     }
     if (path.startsWith(`/Videos/${itemId}/fixture-media/Subtitles/`)) return new Response("1\n00:00:11,000 --> 00:00:15,000\nJellyfin external subtitle sample\n", { headers: { "Content-Type": "application/x-subrip" } });
     if (path === "/Sessions/Logout") await logoutWait?.();
@@ -50,7 +50,7 @@ function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait,
   return { url: `http://127.0.0.1:${server.port}/jellyfin`, requests, item };
 }
 
-function source(path = ":memory:", now?: () => number, options: { onProgress?: () => void; onWarning?: (message: string) => void } = {}) {
+function source(path = ":memory:", now?: () => number, options: { onRelease?: (id: string) => void; onProgress?: () => void; onWarning?: (message: string) => void } = {}) {
   const result = createJellyfin(path, { now, ...options });
   cleanup.push(() => result.close());
   return result;
@@ -62,6 +62,91 @@ const player = (overrides: Partial<PlayerState> = {}): PlayerState => ({
 });
 
 describe("Jellyfin source", () => {
+  test("negotiates the destination browser profile and rejects unsupported audio choices", async () => {
+    const upstream = fixture({ mediaOverrides: { Container: "mp4" }, mediaStreams: [
+      { Type: "Video", Codec: "h264", Profile: "High", Level: 40, BitDepth: 8, Width: 1920, Height: 1080 },
+      { Type: "Audio", Codec: "aac", Channels: 2 },
+      { Type: "Subtitle", Codec: "subrip", IsExternal: true, Index: 2 },
+    ] });
+    const jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "queue-1")).source.slice(9);
+    const media = await jellyfin.resolve(reference, "browser", undefined, true, true, { mp4H264Aac: true, mp3: false });
+    expect(media.subtitles).toBeUndefined();
+    const body = upstream.requests.find(request => request.path.endsWith("PlaybackInfo"))!.body!;
+    expect(body.EnableDirectStream).toBe(false);
+    expect(body.EnableTranscoding).toBe(false);
+    expect(body.DeviceProfile).toMatchObject({ Name: "Couch browser", DirectPlayProfiles: [{ Type: "Video", Container: "mp4,m4v", VideoCodec: "h264", AudioCodec: "aac" }], TranscodingProfiles: [], SubtitleProfiles: [] });
+    await expect(jellyfin.resolve(reference, "unsupported", undefined, true, true, { mp4H264Aac: false, mp3: true })).rejects.toThrow("browser");
+    const multiple = fixture({ mediaOverrides: { Container: "mp4" }, mediaStreams: [{ Type: "Video", Codec: "h264" }, { Type: "Audio", Codec: "aac" }, { Type: "Audio", Codec: "aac" }] });
+    await jellyfin.connect(credentials(multiple.url));
+    await expect(jellyfin.resolve((await jellyfin.entry(itemId, "queue-2")).source.slice(9), "multiple", undefined, true, true, { mp4H264Aac: true, mp3: true })).rejects.toThrow("browser");
+  });
+
+  test("browser MP3 preparation cancellation releases its grant without a playback report", async () => {
+    const upstream = fixture({ itemOverrides: { Type: "Audio" }, mediaOverrides: { Container: "mp3" }, mediaStreams: [{ Type: "Audio", Codec: "mp3" }] });
+    const released: string[] = [];
+    const jellyfin = source(":memory:", undefined, { onRelease: id => released.push(id) });
+    await jellyfin.connect(credentials(upstream.url));
+    const controller = new AbortController();
+    const media = await jellyfin.resolve((await jellyfin.entry(itemId, "queue-1")).source.slice(9), "mp3", controller.signal, true, true, { mp4H264Aac: false, mp3: true });
+    expect(media.audioOnly).toBe(true);
+    expect(media.source).toContain(`/Audio/${itemId}/stream`);
+    controller.abort();
+    await jellyfin.release("mp3");
+    expect(released).toEqual(["mp3"]);
+    expect(upstream.requests.filter(request => request.path.startsWith("/Sessions/Playing"))).toHaveLength(0);
+  });
+
+  test("handoff retains rollback attempts and releases each grant exactly once", async () => {
+    const upstream = fixture();
+    const released: string[] = [];
+    const jellyfin = source(":memory:", undefined, { onRelease: id => released.push(id) });
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "queue-1")).source.slice(9);
+    await jellyfin.resolve(reference, "playback-1");
+    await jellyfin.observe(player({ position: 12 }));
+    const pending = new AbortController();
+    await jellyfin.resolve(reference, "playback-2", pending.signal, true, true);
+    jellyfin.activatePrepared("playback-2", player({ position: 13, status: "paused" }), true);
+    pending.abort();
+    await jellyfin.observe(player({ playbackId: "playback-2", position: 13, status: "paused" }));
+    expect(released).toEqual([]);
+    jellyfin.activatePrepared("playback-1", undefined, true);
+    await jellyfin.release("playback-2");
+    await jellyfin.release("playback-2");
+    await jellyfin.observe(player({ position: 14 }));
+    expect(upstream.requests.filter(request => request.path === "/Sessions/Playing")).toHaveLength(2);
+    expect(released).toEqual(["playback-2"]);
+    await jellyfin.resolve(reference, "playback-3", undefined, true, true);
+    await jellyfin.disconnect();
+    expect(released).toEqual(["playback-2", "playback-1", "playback-3"]);
+    await jellyfin.deactivate();
+    expect(released).toHaveLength(3);
+  });
+
+  test("a failed active destination preserves the retained source for rollback", async () => {
+    const upstream = fixture();
+    const released: string[] = [];
+    const jellyfin = source(":memory:", undefined, { onRelease: id => released.push(id) });
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "queue-1")).source.slice(9);
+    await jellyfin.resolve(reference, "playback-1");
+    await jellyfin.observe(player({ position: 12 }));
+    await jellyfin.resolve(reference, "playback-2", undefined, true, true);
+    jellyfin.activatePrepared("playback-2", player({ position: 13, status: "paused" }), true);
+    await jellyfin.observe(player({ playbackId: "playback-2", position: 13, status: "paused" }));
+    await jellyfin.observe(player({ playbackId: "playback-2", position: 0, status: "error" }));
+    await jellyfin.release("playback-2");
+    expect(released).toEqual(["playback-2"]);
+    jellyfin.activatePrepared("playback-1", undefined, true);
+    await jellyfin.observe(player({ position: 14 }));
+    const reports = upstream.requests.filter(request => request.path.startsWith("/Sessions/Playing"));
+    expect(reports.map(request => request.path)).toEqual(["/Sessions/Playing", "/Sessions/Playing", "/Sessions/Playing/Stopped", "/Sessions/Playing/Progress"]);
+    expect(reports[2]!.body!.PositionTicks).toBe(130_000_000);
+    expect(reports[3]!.body!.PositionTicks).toBe(140_000_000);
+  });
+
   test("preparing an album successor retains the current reporter until native adoption", async () => {
     const upstream = fixture();
     upstream.item.Type = "Audio";

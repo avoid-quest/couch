@@ -129,7 +129,8 @@ export type PlaybackCommand =
 
 // A backend-managed group has one timeline and one observation writer.
 export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "group"; backend: "native" | "browser"; connected: boolean };
-export type RendererMessage = { type: "registerRenderer" } | { type: "rendererObservation"; sessionId: string; state: PlayerState };
+export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
+export type RendererMessage = { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities } | { type: "rendererObservation"; sessionId: string; state: PlayerState };
 
 export type ConnectionInfo = {
   origin: string;
