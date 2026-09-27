@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { MonitorSpeaker, MoreHorizontal } from "lucide-react";
 import { Button } from "./ui/button";
-import { Slider } from "./ui/slider";
+import { RangeControl } from "./RangeControl";
 import { Switch } from "./ui/switch";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -42,8 +42,8 @@ export function PlaybackTargetPicker() {
               const volumeEnabled = assigned && device.connected && !disabled;
               return <div key={device.id} className="flex w-36 shrink-0 flex-col items-center px-4 text-center first:pl-0 last:pr-0">
                 <div className="flex h-8 w-full items-center justify-between gap-1"><span className="text-xs tabular-nums text-muted-foreground">{device.muted ? "Muted" : `${device.volume}%`}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Options for ${device.name}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={disabled || !device.connected || occupied || assigned} onSelect={() => { void newPlayback(device.id).then(ok => { if (ok) setOpen(false); }); }}>New playback here</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>
-                <Slider key={`${device.id}:${device.volume}:${device.muted}`} orientation="vertical" aria-label={`${device.name} volume`} defaultValue={[device.volume]} min={0} max={100} step={1} disabled={!volumeEnabled} className="my-3 h-40" onValueCommit={([volume]) => { void setDeviceVolume(device.id, volume!, device.muted); }} />
-                <p className="w-full truncate font-medium" title={device.name}>{device.name}</p>
+                <div className="my-3 h-40 w-11 shrink-0"><RangeControl orientation="vertical" label={`${device.name} volume`} value={device.volume} max={100} disabled={!volumeEnabled} onCommit={volume => setDeviceVolume(device.id, volume, device.muted)} /></div>
+                <p className="w-full shrink-0 truncate font-medium" title={device.name}>{device.name}</p>
                 <p className="min-h-8 text-xs text-muted-foreground">{!device.connected ? "Disconnected" : occupied ? `Playing ${otherPlayback?.title ?? "another playback"}` : assigned ? "In this playback" : "Available"}{local && " · This device"}</p>
                 <label className="mt-2 flex min-h-11 items-center gap-2 text-xs"><Switch aria-label={`${device.name} output`} checked={assigned} disabled={!canToggle} onCheckedChange={checked => assign(checked ? [...assignedIds, device.id] : assignedIds.filter(id => id !== device.id), false, false)} />{assigned ? "On" : "Off"}</label>
                 {assigned && <Button size="sm" variant="ghost" disabled={!volumeEnabled} onClick={() => { void setDeviceVolume(device.id, device.volume, !device.muted); }}>{device.muted ? "Unmute" : "Mute"}</Button>}

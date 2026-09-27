@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
 
-export function RangeControl({ label, value, min = 0, max, disabled, onCommit, showValue = true, keyboardStep = 1, pageFirst = false }: {
+export function RangeControl({ label, value, min = 0, max, disabled, onCommit, showValue = true, keyboardStep = 1, pageFirst = false, orientation = "horizontal" }: {
   label: string;
   value: number;
   min?: number;
@@ -11,6 +11,7 @@ export function RangeControl({ label, value, min = 0, max, disabled, onCommit, s
   showValue?: boolean;
   keyboardStep?: number;
   pageFirst?: boolean;
+  orientation?: "horizontal" | "vertical";
 }) {
   const [draft, setDraft] = useState<number | null>(null);
   // A focused keyboard edit keeps its target; command acceptance is not a player observation.
@@ -27,6 +28,7 @@ export function RangeControl({ label, value, min = 0, max, disabled, onCommit, s
     );
   };
   return <Slider
+    orientation={orientation}
     data-page-first={pageFirst || undefined}
     aria-label={label}
     aria-valuetext={showValue ? `${Math.round(current)} percent` : `${Math.floor(current / 60)} minutes ${Math.floor(current % 60)} seconds`}
