@@ -13,7 +13,7 @@ const group: PlaybackTarget = { id: "sendspin:group", name: "Downstairs", kind: 
 test("group membership retains opaque IDs and waits for observed topology", async () => {
   const actions: Action[] = [];
   renderWithQueryClient(<PlaybackGroupControls target={group} connected busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
-  expect(screen.getByRole("checkbox", { name: "Join Kitchen" })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "Join Kitchen" })).toBeEnabled();
   expect(screen.getByRole("checkbox", { name: "Join Patio" })).toBeDisabled();
   await userEvent.click(screen.getByRole("checkbox", { name: "Join Dining" }));
   expect(actions).toEqual([{ type: "groupMembers", targetId: group.id, memberIds: ["aa:bb:cc", "dd:ee:ff"] }]);
@@ -66,4 +66,11 @@ test("an authenticated Sendspin receiver can become the first group member", asy
   renderWithQueryClient(<PlaybackGroupControls target={target} connected busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
   await userEvent.click(screen.getByRole("checkbox", { name: "Join Kitchen" }));
   expect(actions).toEqual([{ type: "groupMembers", targetId: target.id, memberIds: ["aa:bb:cc"] }]);
+});
+
+test("the last joined member can leave the group", async () => {
+  const actions: Action[] = [];
+  renderWithQueryClient(<PlaybackGroupControls target={group} connected busy={false} run={async action => { actions.push(action); return true; }} onClose={() => {}} />);
+  await userEvent.click(screen.getByRole("checkbox", { name: "Join Kitchen" }));
+  expect(actions).toEqual([{ type: "groupMembers", targetId: group.id, memberIds: [] }]);
 });

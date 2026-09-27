@@ -36,17 +36,22 @@ export function PlaybackTargetPicker() {
           {targets.map(target => {
             const current = target.id === state?.targetId;
             const local = target.id === rendererTargetId;
-            const canMove = !disabled && target.connected && (!current || state?.player.status === "unavailable");
+            const listeningGroup = targets.find(group => group.kind === "group" && group.members?.some(member => member.joined && (member as typeof member & { deviceId?: string }).deviceId === target.id));
+            const canMove = !disabled && target.connected && !(listeningGroup?.id === state?.targetId) && (!current || state?.player.status === "unavailable");
             return <div key={target.id} className="flex min-w-0 items-center gap-2 py-2">
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{local ? nativeHost ? "This computer" : "This browser" : target.name}</p><p className="text-xs text-muted-foreground">{!target.connected ? "Disconnected" : current ? "Playing here" : target.occupied ? "In use" : target.kind === "group" ? "Shared audio" : "Available"}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{target.name}</p><p className="text-xs text-muted-foreground">{!target.connected ? "Disconnected" : current ? "Playing here" : listeningGroup ? `Listening with ${listeningGroup.name}` : target.occupied ? "In use" : target.kind === "group" ? "Shared audio" : "Available"}{local && " · This device"}</p></div>
               {canMove && <Button size="sm" variant="ghost" onClick={() => target.occupied ? (setReplace(target), setOpen(false)) : move(target)}>{target.occupied ? "Replace…" : current ? "Resume" : state?.currentEntryId ? "Move" : "Choose"}</Button>}
+              {canMove && target.occupied && target.sessionKind === "household" && sessionMode === "personal" && selectSession && <Button size="sm" variant="ghost" onClick={() => { selectSession("household"); setOpen(false); }}>Control</Button>}
               {target.kind === "group" && target.backend === "sendspin" && <Button size="sm" variant="ghost" onClick={() => setGroupId(groupId === target.id ? null : target.id)} aria-label={`Adjust ${target.name} devices`}>Adjust</Button>}
             </div>;
           })}
           {!targets.length && <p className="py-3 text-muted-foreground">No devices available yet.</p>}
         </div>
         {group && <PlaybackGroupControls key={group.id} target={group} connected={connected} busy={!!state?.handoff} run={run} onClose={() => setGroupId(null)} />}
-        {selectSession && <div className="border-t pt-2"><Button variant="ghost" className="w-full justify-start px-0" disabled={disabled || sessionMode !== "personal" && !rendererTargetId} onClick={() => { if (sessionMode === "personal") selectSession("household"); else selectSession("personal", true); setOpen(false); }}>{sessionMode === "personal" ? "Control shared playback" : "Play separately on this device"}</Button></div>}
+        {selectSession && <div className="border-t pt-2">
+          <Button variant="ghost" className="w-full justify-start px-0" disabled={disabled} onClick={() => { selectSession(sessionMode === "personal" ? "household" : "personal"); setOpen(false); }}>{sessionMode === "personal" ? "Control shared playback" : "Control your playback"}</Button>
+          {sessionMode === "household" && (selected?.kind === "group" || sendspinActive) && rendererTargetId && <Button variant="ghost" className="w-full justify-start px-0" disabled={disabled} onClick={() => { selectSession("personal", true); setOpen(false); }}>Play separately on this device</Button>}
+        </div>}
         {sendspin && <div className="border-t pt-2"><Button variant="ghost" className="w-full justify-start px-0" onClick={() => { setOpen(false); setSendspinOpen(true); }}>{sendspinActive ? "Listening together" : "Listen together"}</Button></div>}
       </PopoverContent>
     </Popover>
