@@ -92,3 +92,12 @@ independently of source compatibility; neither is implemented by a stub. Current
 has no Snapcast/Sendspin executable, and independent native enrollment/lifecycle is
 still absent. Adaptation, independent sessions, internet access and UI parity remain
 in their existing issues 04, 06, 07 and 08.
+
+[Shared UI parity](issues/08-shared-ui-parity.md) — resolved for the current native/browser
+workflows: Core hardware controls follow the selected target, disconnected output copy
+is accurate, and source management follows authenticated authority. 68 UI tests pass.
+
+Initial draft stack: [Core targets #613](https://github.com/avoid-quest/couch/pull/613) →
+[browser renderer #614](https://github.com/avoid-quest/couch/pull/614) →
+[architecture records #615](https://github.com/avoid-quest/couch/pull/615).
+Subsequent implementation layers extend this same stack.

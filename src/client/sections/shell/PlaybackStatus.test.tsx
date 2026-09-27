@@ -25,7 +25,7 @@ async function render(state?: SessionState, run?: (action: Action) => Promise<bo
   const router = createRouter({ routeTree: base.addChildren([find, sound]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
   await router.load();
   renderWithQueryClient(<RouterProvider router={router} />);
-  await user.click(await screen.findByRole("button", { name: "Playing on Living room: Connected" }));
+  await user.click(await screen.findByRole("button", { name: state?.targets ? "Connected to Living room: Connected" : "Playing on Living room: Connected" }));
 }
 
 test("a typed Couch requires explicit switching and uses only its origin", async () => {
@@ -95,4 +95,15 @@ test("a remembered browser Couch can be forgotten without changing the current p
   expect(location.origin).toBe(origin);
   await user.click(screen.getByRole("button", { name: "Playing on Living room: Connected" }));
   expect(screen.queryByRole("radio", { name: "Kitchen" })).toBeNull();
+});
+
+for (const targetId of ["browser:phone", "native", undefined]) test(`sound hardware follows the selected target (${targetId ?? "legacy"})`, async () => {
+  await render({
+    queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" },
+    targetId, targets: targetId ? [{ id: targetId, name: "Phone", kind: "endpoint", backend: targetId === "native" ? "native" : "browser", connected: true }] : undefined,
+    player: { status: "idle", playbackId: null, position: 0, duration: null, seekable: false, volume: 40, error: null },
+  }, async () => true);
+  expect(screen.getByRole("slider", { name: "Volume" })).toBeInTheDocument();
+  expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/sound"))).toBe(targetId !== "browser:phone");
+  if (targetId === "browser:phone") expect(screen.queryByText("No outputs.")).toBeNull();
 });

@@ -231,7 +231,7 @@ function ConnectionStatus() {
   if (!credentials || status === "pairing-required") return null;
   if (!connected) return null;
   if (state?.targets && !state.targetId) return <StatusLine>Choose a playback output.</StatusLine>;
-  if (state?.player.status === "unavailable") return <StatusLine>Player not running on {localHost ? "this computer" : name}.</StatusLine>;
+  if (state?.player.status === "unavailable") return <StatusLine>Player not running on {state.targets?.find(target => target.id === state.targetId)?.name ?? (state.targets && state.targetId !== "native" ? "the selected playback output" : localHost ? "this computer" : name)}.</StatusLine>;
   return null;
 }
 
@@ -315,7 +315,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage /> : <>
             {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
-            <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
+            <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={identity?.authority === "host" || identity?.authority === "administrator"} />
             {current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
