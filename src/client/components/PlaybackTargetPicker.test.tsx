@@ -4,73 +4,92 @@ import { ShellProviders } from "../sections/shell/test-providers";
 import { PlaybackTargetPicker } from "./PlaybackTargetPicker";
 
 setupUiTests();
-const state = { targets: [{ id: "receiver", name: "Desktop", kind: "endpoint", backend: "native", connected: true }], targetId: null, currentEntryId: "movie", player: { status: "unavailable" } };
+const devices = [
+  { id: "desk", name: "Desk", connected: true, volume: 40, muted: false, audio: true },
+  { id: "kitchen", name: "Kitchen", connected: true, volume: 70, muted: false, audio: true },
+];
+const playbacks = [{ id: "mine", title: "Radio", status: "playing", deviceIds: ["desk"] }];
+const state = { sessionId: "mine", deviceIds: ["desk"], devices, playbacks, player: { status: "playing" } };
 
-test("an unselected Core offers this device without reporting a failed player", async () => {
-  const actions: unknown[] = [];
-  renderUI(<ShellProviders value={{ state, connected: true, rendererTargetId: "receiver", run: async (action: unknown) => { actions.push(action); } }}><PlaybackTargetPicker /></ShellProviders>);
-  expect(screen.getByRole("button", { name: "Devices" })).toHaveTextContent("This device");
+function renderPicker(value: Record<string, unknown>) {
+  return renderUI(<ShellProviders value={{ state, connected: true, rendererTargetId: "desk", selectPlayback: () => {}, assignDevices: async () => true, newPlayback: async () => true, activateDeviceAudio: () => {}, setDeviceVolume: async () => true, ...value }}><PlaybackTargetPicker /></ShellProviders>);
+}
+
+test("selected playback and its canonical destination appear in one Devices control", async () => {
+  renderPicker({});
+  expect(screen.getByRole("button", { name: "Devices" })).toHaveTextContent("Desk");
   await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  await userEvent.click(screen.getByRole("button", { name: "Move" }));
-  expect(actions).toEqual([{ type: "selectTarget", targetId: "receiver" }]);
+  expect(screen.getByText("In this playback · This device")).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "Remove Desk" })).toBeChecked();
 });
 
-test("occupied destination requires contextual replacement confirmation", async () => {
-  const actions: unknown[] = [];
-  const occupied = { id: "kitchen", name: "Kitchen", kind: "endpoint", backend: "browser", connected: true, occupied: true };
-  renderUI(<ShellProviders value={{ state: { ...state, targets: [occupied] }, connected: true, run: async (action: unknown) => { actions.push(action); } }}><PlaybackTargetPicker /></ShellProviders>);
+test("choosing another playback controls it without assigning devices", async () => {
+  const selected: string[] = [], assigned: unknown[] = [];
+  renderPicker({ state: { ...state, playbacks: [...playbacks, { id: "family", title: "Album", status: "paused", deviceIds: ["kitchen"] }] }, selectPlayback: (id: string) => selected.push(id), assignDevices: async (ids: string[]) => { assigned.push(ids); return true; } });
+  await userEvent.click(screen.getByRole("button", { name: "Devices" }));
+  await userEvent.click(screen.getByRole("button", { name: "Control" }));
+  expect(selected).toEqual(["family"]);
+  expect(assigned).toEqual([]);
+});
+
+test("audio devices can join or leave the selected playback and adjust their own volume", async () => {
+  const assigned: string[][] = [], volumes: unknown[] = [];
+  renderPicker({ assignDevices: async (ids: string[]) => { assigned.push(ids); return true; }, setDeviceVolume: async (...args: unknown[]) => { volumes.push(args); return true; } });
+  await userEvent.click(screen.getByRole("button", { name: "Devices" }));
+  await userEvent.click(screen.getByRole("checkbox", { name: "Add Kitchen" }));
+  expect(assigned).toEqual([["desk", "kitchen"]]);
+  await userEvent.click(screen.getByRole("button", { name: "Devices" }));
+  screen.getByRole("slider", { name: "Desk volume" }).focus();
+  await userEvent.keyboard("{End}");
+  expect(volumes).toEqual([["desk", 100, false]]);
+});
+
+test("occupied device offers view-only Control and confirms replacement before moving", async () => {
+  const selected: string[] = [], assigned: unknown[] = [];
+  renderPicker({ state: { ...state, devices: [devices[0], { ...devices[1], playbackId: "family" }], playbacks: [...playbacks, { id: "family", title: "Album", status: "playing", deviceIds: ["kitchen"] }] }, selectPlayback: (id: string) => selected.push(id), assignDevices: async (...args: unknown[]) => { assigned.push(args); return true; } });
+  await userEvent.click(screen.getByRole("button", { name: "Devices" }));
+  await userEvent.click(screen.getAllByRole("button", { name: "Control" }).at(-1)!);
+  expect(selected).toEqual(["family"]);
+  expect(assigned).toEqual([]);
   await userEvent.click(screen.getByRole("button", { name: "Devices" }));
   await userEvent.click(screen.getByRole("button", { name: "Replace…" }));
-  expect(actions).toEqual([]);
-  expect(screen.getByRole("alertdialog", { name: "Replace playback on Kitchen?" })).toBeInTheDocument();
+  expect(assigned).toEqual([]);
   await userEvent.click(screen.getByRole("button", { name: "Replace and move" }));
-  expect(actions).toEqual([{ type: "selectTarget", targetId: "kitchen", takeover: true }]);
+  expect(assigned).toEqual([[["kitchen"], true]]);
 });
 
-test("control shared playback changes the view without moving audio", async () => {
-  const selections: unknown[] = [], actions: unknown[] = [];
-  renderUI(<ShellProviders value={{ state, connected: true, sessionMode: "personal", selectSession: (...args: unknown[]) => selections.push(args), run: async (action: unknown) => { actions.push(action); } }}><PlaybackTargetPicker /></ShellProviders>);
+test("browser audio activation is explicit on the assigned device", async () => {
+  const activated: string[] = [];
+  renderPicker({ state: { ...state, devices: [{ ...devices[0], requiresGesture: true }] }, activateDeviceAudio: () => activated.push("activated") });
   await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  await userEvent.click(screen.getByRole("button", { name: "Control shared playback" }));
-  expect(selections).toEqual([["household"]]);
-  expect(actions).toEqual([]);
+  await userEvent.click(screen.getByRole("button", { name: "Listen here" }));
+  expect(activated).toEqual(["activated"]);
+  expect(screen.queryByRole("button", { name: "New playback here" })).toBeNull();
 });
 
-test("group members are adjusted in the devices control", async () => {
-  const group = { id: "group", name: "Downstairs", kind: "group", backend: "sendspin", connected: true, members: [{ id: "speaker", name: "Kitchen", connected: true, joined: true, volume: 40, muted: false }] };
-  renderUI(<ShellProviders value={{ state: { ...state, targets: [group] }, connected: true, run: async () => true }}><PlaybackTargetPicker /></ShellProviders>);
+test("without a selected playback, destinations remain available for a new one", async () => {
+  const created: string[] = [];
+  renderPicker({ state: { ...state, sessionId: null, deviceIds: [], playbacks: [] }, newPlayback: async (id: string) => { created.push(id); return true; } });
+  expect(screen.getByRole("button", { name: "Devices" })).toHaveTextContent("Choose devices");
   await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  await userEvent.click(screen.getByRole("button", { name: "Adjust Downstairs devices" }));
-  expect(screen.getByRole("region", { name: "Downstairs devices" })).toBeInTheDocument();
-  expect(screen.getByRole("slider", { name: "Kitchen volume" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Move" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "New playback here" }));
+  expect(created).toEqual(["desk"]);
 });
 
-test("returning to your playback changes only the view", async () => {
-  const selections: unknown[] = [], actions: unknown[] = [];
-  renderUI(<ShellProviders value={{ state, connected: true, rendererTargetId: "receiver", sessionMode: "household", selectSession: (...args: unknown[]) => selections.push(args), run: async (action: unknown) => { actions.push(action); } }}><PlaybackTargetPicker /></ShellProviders>);
+
+test("Move replaces only the selected playback destination", async () => {
+  const assigned: unknown[] = [];
+  renderPicker({ assignDevices: async (...args: unknown[]) => { assigned.push(args); return true; } });
   await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  expect(screen.queryByRole("button", { name: "Play separately on this device" })).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "Control your playback" }));
-  expect(selections).toEqual([["personal"]]);
-  expect(actions).toEqual([]);
+  await userEvent.click(screen.getByRole("button", { name: "Move" }));
+  expect(assigned).toEqual([[["kitchen"], false]]);
 });
 
-test("occupied shared playback offers Control independently of replacement", async () => {
-  const selections: unknown[] = [], actions: unknown[] = [];
-  const occupied = { id: "living-room", name: "Living room", kind: "endpoint", backend: "native", connected: true, occupied: true, sessionKind: "household" };
-  renderUI(<ShellProviders value={{ state: { ...state, targets: [occupied] }, connected: true, sessionMode: "personal", selectSession: (...args: unknown[]) => selections.push(args), run: async (action: unknown) => { actions.push(action); } }}><PlaybackTargetPicker /></ShellProviders>);
+test("removing an assigned audio device keeps the selected playback", async () => {
+  const assigned: unknown[] = [];
+  renderPicker({ assignDevices: async (...args: unknown[]) => { assigned.push(args); return true; } });
   await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  expect(screen.getByRole("button", { name: "Replace…" })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Control" }));
-  expect(selections).toEqual([["household"]]);
-  expect(actions).toEqual([]);
-});
-
-test("a joined group member keeps its device name and is identified as listening", async () => {
-  const group = { id: "group", name: "Downstairs", kind: "group", backend: "sendspin", connected: true, members: [{ id: "speaker", deviceId: "receiver", name: "Desktop", connected: true, joined: true, volume: 40, muted: false }] };
-  renderUI(<ShellProviders value={{ state: { ...state, targets: [state.targets[0], group], targetId: "group" }, connected: true, rendererTargetId: "receiver", sessionMode: "household", selectSession: () => {}, run: async () => true }}><PlaybackTargetPicker /></ShellProviders>);
-  await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  expect(screen.getByText("Desktop")).toBeInTheDocument();
-  expect(screen.getByText("Listening with Downstairs · This device")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Play separately on this device" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("checkbox", { name: "Remove Desk" }));
+  expect(assigned).toEqual([[[], false]]);
 });
