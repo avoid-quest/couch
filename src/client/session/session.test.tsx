@@ -14,7 +14,7 @@ const originalWebSocket = globalThis.WebSocket;
 afterEach(() => { globalThis.WebSocket = originalWebSocket; });
 
 const credentials: Credentials = { origin: "http://localhost", token: "paired", installationId: "installation" };
-const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
+const state: SessionState = { sessionId: "household", queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
 const atom = { type: "enqueueProvider", provider: "youtube", shape: "atom", url: "https://www.youtube.com/watch?v=abcdefghijk", title: "Episode" } as const;
 const playlist = { ...atom, shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890" } as const;
 const sockets: Socket[] = [];
@@ -84,6 +84,8 @@ afterEach(async () => {
   for (const timer of timers) clearTimeout(timer.handle);
 });
 
+const commands = (peer: Socket) => peer.sent.filter(message => message.type === "command");
+
 async function elapse(milliseconds: number) {
   for (const timer of timers) if (!timer.fired && timer.delay <= milliseconds) { timer.fired = true; clearTimeout(timer.handle); timer.fire(); }
   await Promise.resolve();
@@ -98,12 +100,12 @@ slow.push(["video quality", { type: "videoQuality", playbackId: "playing", quali
 for (const [label, action] of slow) test(`${label} still accepts its confirmation after eight seconds`, async () => {
   let outcome = "pending";
   const done = session.command(action).then(() => { outcome = "confirmed"; }, error => { outcome = error.message; });
-  expect(sockets[0]!.sent).toHaveLength(1);
-  expect(sockets[0]!.sent[0]!.action).toEqual(action);
+  expect(commands(sockets[0]!)).toHaveLength(1);
+  expect(commands(sockets[0]!)[0]!.action).toEqual(action);
   expect(timers).toHaveLength(1);
   await elapse(8_001);
   expect(outcome).toBe("pending");
-  sockets[0]!.emit({ type: "result", requestId: sockets[0]!.sent[0]!.requestId, ok: true });
+  sockets[0]!.emit({ type: "result", requestId: commands(sockets[0]!)[0]!.requestId, ok: true });
   await done;
   expect(outcome).toBe("confirmed");
 });
@@ -116,7 +118,7 @@ test("a generic playlist confirmation remains bounded at thirty-five seconds and
   await elapse(35_000);
   await done;
   expect(outcome).toBe("No reply from Couch. Check before retrying.");
-  sockets[0]!.emit({ type: "result", requestId: sockets[0]!.sent[0]!.requestId, ok: true });
+  sockets[0]!.emit({ type: "result", requestId: commands(sockets[0]!)[0]!.requestId, ok: true });
   await Promise.resolve();
   expect(outcome).not.toBe("confirmed");
 });
@@ -134,7 +136,7 @@ test.each([false, true])("a generic atom keeps the ordinary eight-second confirm
 test("changing connections rejects the old provider request and an old confirmation cannot settle the new request", async () => {
   let oldOutcome = "pending", nextOutcome = "pending";
   const old = session.command(playlist).then(() => { oldOutcome = "confirmed"; }, error => { oldOutcome = error.message; });
-  const oldSocket = sockets[0]!, oldRequest = oldSocket.sent[0]!;
+  const oldSocket = sockets[0]!, oldRequest = commands(oldSocket)[0]!;
   await mount({ ...credentials, origin: "http://another-tv", token: "new-pairing" });
   await old;
   expect(oldOutcome).toBe("Connection lost. Try again.");
@@ -146,7 +148,7 @@ test("changing connections rejects the old provider request and an old confirmat
   await Promise.resolve();
   expect(nextOutcome).toBe("pending");
   expect(oldOutcome).not.toBe("confirmed");
-  nextSocket.emit({ type: "result", requestId: nextSocket.sent[0]!.requestId, ok: true });
+  nextSocket.emit({ type: "result", requestId: commands(nextSocket)[0]!.requestId, ok: true });
   await next;
   expect(nextOutcome).toBe("confirmed");
 });
@@ -326,53 +328,37 @@ test("native hosts remain controllers unless receiver mode and desktop protocol 
   expect(native).not.toHaveBeenCalled();
 });
 
-test("changing playback to control retains the socket and active renderer", async () => {
-  const localRenderer = { command: () => {}, report: () => {}, play: () => {}, close: () => {} };
-  const closed = spyOn(localRenderer, "close");
-  const delivered = spyOn(localRenderer, "command");
-  spyOn(browserRenderer, "createBrowserRenderer").mockReturnValue(localRenderer);
+test("selecting playback changes only the view and fences old commands", async () => {
+  const renderer = { command: () => {}, report: () => {}, play: () => {}, close: () => {} };
+  const close = spyOn(renderer, "close");
+  spyOn(browserRenderer, "createBrowserRenderer").mockReturnValue(renderer);
   await act(async () => session.reconnect());
   const peer = sockets.at(-1)!;
-  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  await act(async () => peer.emit({ type: "state", state }));
   await act(async () => peer.emit({ type: "rendererRegistered", sessionId: "household", targetId: "browser" }));
   const oldCommand = session.command;
   const socketCount = sockets.length;
-  await act(async () => session.selectSession("personal", true));
+  await act(async () => session.selectPlayback("private"));
   expect(peer.readyState).toBe(Socket.OPEN);
   expect(sockets).toHaveLength(socketCount);
-  expect(closed).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
   expect(session.state).toBeNull();
-  expect(session.scopedCredentials).toMatchObject({ sessionMode: "personal", token: credentials.token });
+  expect(peer.sent.at(-1) as unknown).toEqual({ type: "selectPlayback", playbackId: "private" });
   await expect(oldCommand({ type: "stop" })).rejects.toThrow("Reconnecting");
-  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "private", sessionMode: "personal" } }));
-  const selection = peer.sent.find(message => message.type === "command")!;
-  expect(selection.action).toEqual({ type: "selectTarget", targetId: "browser" });
-  await act(async () => peer.emit({ type: "result", requestId: selection.requestId, ok: true }));
-  await act(async () => session.selectSession("household"));
-  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household", sessionMode: "household" } }));
-  await act(async () => peer.emit({ type: "rendererCommand", sessionId: "household", command: { type: "volume", volume: 37 } }));
-  expect(delivered).toHaveBeenCalledWith({ type: "volume", volume: 37 });
+  await act(async () => peer.emit({ type: "state", state }));
+  expect(session.state).toBeNull();
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "private" } }));
+  expect(session.scopedCredentials).toMatchObject({ playbackId: "private", token: credentials.token });
   expect(session.rendererTargetId).toBe("browser");
-  expect(closed).not.toHaveBeenCalled();
-  expect(peer.sent.filter(message => message.type === "command")).toHaveLength(1);
+  expect(close).not.toHaveBeenCalled();
+  expect(peer.sent.filter(message => message.type === "command")).toHaveLength(0);
 });
 
-test("mode selection never carries to different pairing credentials", async () => {
-  await act(async () => session.selectSession("personal"));
+test("playback selection does not carry to different pairing credentials", async () => {
+  await act(async () => session.selectPlayback("private"));
   await mount({ ...credentials, token: "another-controller" });
-  expect(session.sessionMode).toBe("household");
-  expect(sockets.at(-1)!.url.searchParams.has("session")).toBe(false);
-});
-
-test("a retired mode's pending local selection cannot report an error in household control", async () => {
-  await act(async () => session.selectSession("personal", true));
-  const personal = sockets.at(-1)!;
-  await act(async () => personal.emit({ type: "state", state: { ...state, sessionId: "private", sessionMode: "personal" } }));
-  await act(async () => personal.emit({ type: "rendererRegistered", sessionId: "private", targetId: "private-browser" }));
-  expect(personal.sent.some(message => message.type === "command")).toBe(true);
-  await act(async () => session.selectSession("household"));
-  expect(session.sessionSelectionError).toBeNull();
-  expect(session.sessionMode).toBe("household");
+  expect(session.playbackId).toBe("default");
+  expect(sockets.at(-1)!.url.searchParams.get("playback")).toBe("default");
 });
 
 test("Sendspin mode retires the local renderer but keeps Core control connected", async () => {

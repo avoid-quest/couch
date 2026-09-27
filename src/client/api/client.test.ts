@@ -46,3 +46,13 @@ for (const sessionMode of ["personal", "household", undefined] as const) test(`A
   }) as typeof fetch);
   await apiFetch({ ...credentials, sessionMode }, "/api/progress/history", { headers: { "X-Couch-Session": "other-controller" } });
 });
+
+test("durable playback scope overrides a stale legacy session header", async () => {
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    expect(headers.get("X-Couch-Playback")).toBe("playback-42");
+    expect(headers.get("X-Couch-Session")).toBeNull();
+    return Response.json({});
+  }) as typeof fetch);
+  await apiFetch({ ...credentials, playbackId: "playback-42" }, "/api/progress/history", { headers: { "X-Couch-Playback": "retired", "X-Couch-Session": "personal" } });
+});

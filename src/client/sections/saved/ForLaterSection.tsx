@@ -27,7 +27,7 @@ export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: s
 
 type Mode = "play" | "append" | "remove";
 
-export function ForLaterSection({ origin, token, sessionMode, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: ApiCredentials & { connected: boolean; canPlay: boolean;
+export function ForLaterSection({ origin, token, sessionMode, playbackId, connected, canPlay, onFind, showHeading = true, mediaOnly = false, limit }: ApiCredentials & { connected: boolean; canPlay: boolean;
   /** Shown as the empty state's next step. */
   onFind?: () => void;
   /** A visible section title (Find). Saved titles the tab with its PageHeader. */
@@ -41,7 +41,7 @@ export function ForLaterSection({ origin, token, sessionMode, connected, canPlay
   const session = useOptionalSessionGate();
   const details = useDetailNavigation();
   const queryClient = useQueryClient();
-  const credentials = { origin, token, sessionMode };
+  const credentials = { origin, token, sessionMode, playbackId };
   const refresh = () => queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
   const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery(credentials), enabled: connected });
   const reorder = useMutation({

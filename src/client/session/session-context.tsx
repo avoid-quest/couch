@@ -11,12 +11,12 @@ import { isNativeHost, isTvPresentation } from "./native-context";
 import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
-import { listenTogether } from "./listen-together";
+import { useDeviceAudio } from "./device-audio";
+import { clientDeviceName } from "./device-name";
 import { useInterfaceSize } from "../interface-size";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
-import { useSendspinClient } from "../components/SendspinClientDialog";
 import { desktopClientProtocol } from "../../shared/desktop-protocol";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
@@ -62,8 +62,11 @@ export function errorText(error: unknown) {
 type SessionBag = Omit<ReturnType<typeof useSession>, "clock" | "readObservation">;
 
 export type SessionGateValue = SessionBag & {
-  sendspin: ReturnType<typeof useSendspinClient>;
-  sendspinDisabledReason: string | null;
+  deviceAudio: ReturnType<typeof useDeviceAudio>;
+  assignDevices: (deviceIds: string[], takeover?: boolean) => Promise<boolean>;
+  newPlayback: (deviceId: string) => Promise<boolean>;
+  activateDeviceAudio: () => Promise<boolean>;
+  setDeviceVolume: (deviceId: string, volume: number, muted: boolean) => Promise<boolean>;
   queryClient: QueryClient;
   nativeHost: boolean;
   localHost: boolean;
@@ -120,27 +123,21 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver, true, localHost ? "household" : "personal");
+  const { playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver);
   const localDeviceId = rendererTargetId ?? (localHost ? "native" : null);
-  const sendspinDisabledReason = null;
-  const sendspin = useSendspinClient({
-    credentials, allowed: true, rendererTargetId: localDeviceId,
-    canEnableHosting: identity?.authority === "host" || identity?.authority === "administrator",
-    canActivate: () => connected && !readObservation()?.handoff,
-    afterJoin: clientId => listenTogether(clientId, localDeviceId, readObservation, command),
-    beforeLeave: async clientId => {
-      if (!credentials || !connected) return;
-      try { await apiSend(credentials, "/api/sendspin/leave", { clientId }); }
-      catch (reason) { if (reason instanceof ApiError && reason.status !== 401 && reason.status !== 503) throw reason; }
-    },
-  });
+  const deviceAudio = useDeviceAudio({ credentials, rendererTargetId: localDeviceId, enabled: (rendererAttached || localHost && connected) && !!credentials && !pairingRequired,
+    name: clientDeviceName(identity?.controller?.name), onReady: setDeviceAudioReady });
+  const activateDeviceAudio = useCallback(() => {
+    // The SDK unlock must precede every await and must not resume direct media.
+    return deviceAudio.activateFromGesture();
+  }, [deviceAudio.activateFromGesture]);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
   // detached client cannot populate the replacement client even if I/O ignores abort.
   // Local/loopback reachability comes from the session, not the browser's offline
   // indicator. Disconnected reads are disabled/cancelled below, never queued for replay.
-  const cacheOwner = [sessionMode, credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id] as const;
+  const cacheOwner = [playbackId, credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id] as const;
   const cacheRef = useRef<{ owner: typeof cacheOwner; id: number; client: QueryClient } | null>(null);
   if (!cacheRef.current || cacheRef.current.owner.some((value, index) => value !== cacheOwner[index])) cacheRef.current = { owner: cacheOwner, id: ++cacheSequence, client: new QueryClient({ defaultOptions: {
     queries: { networkMode: "always", retry: 1, refetchOnWindowFocus: false },
@@ -249,7 +246,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     if (undoToast.current !== null) toast.dismiss(undoToast.current);
     undoToast.current = null;
   }, []);
-  useEffect(() => { dismissUndo(); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, sessionMode, dismissUndo]);
+  useEffect(() => { dismissUndo(); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, playbackId, dismissUndo]);
 
   const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration = 6_000) => {
     dismissUndo();
@@ -263,6 +260,31 @@ export function SessionGate({ children }: PropsWithChildren) {
     undoToast.current = id;
   }, [dismissUndo]);
 
+  const assignDevices = useCallback(async (deviceIds: string[], takeover = false) => {
+    const owner = currentCredentials.current;
+    if (localDeviceId && deviceIds.includes(localDeviceId)) void activateDeviceAudio();
+    try { await command({ type: "assignDevices", deviceIds, ...(takeover ? { takeover: true as const } : {}) }); return owner === currentCredentials.current; }
+    catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
+  }, [command, localDeviceId, activateDeviceAudio]);
+
+  const newPlayback = useCallback(async (deviceId: string) => {
+    const owner = currentCredentials.current;
+    if (!owner) return false;
+    if (deviceId === localDeviceId) void activateDeviceAudio();
+    try {
+      const created = await apiSend<{ id: string }>(owner, "/api/playbacks", { deviceId });
+      if (owner !== currentCredentials.current || !created.id) return false;
+      selectPlayback(created.id);
+      return true;
+    } catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
+  }, [localDeviceId, activateDeviceAudio, selectPlayback]);
+
+  const setDeviceVolume = useCallback(async (deviceId: string, volume: number, muted: boolean) => {
+    const owner = currentCredentials.current;
+    try { await command({ type: "deviceVolume", deviceId, volume, muted }); return owner === currentCredentials.current; }
+    catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
+  }, [command]);
+
   const run = useCallback(async (action: Action) => {
     const owner = currentCredentials.current;
     const current = () => owner === currentCredentials.current;
@@ -273,9 +295,10 @@ export function SessionGate({ children }: PropsWithChildren) {
     setError(null);
     try {
       const startsPlayback = action.type === "play" || "playNow" in action && action.playNow === true;
-      if (startsPlayback && before && !before.targetId && rendererTargetId) {
-        await command({ type: "selectTarget", targetId: rendererTargetId });
-        if (!current()) return false;
+      const localSelected = !!localDeviceId && (before?.deviceIds?.includes(localDeviceId) || !before?.deviceIds?.length);
+      if (localSelected && (startsPlayback || action.type === "pause" && !action.paused)) { playHere(); if (before?.deviceIds?.length) void activateDeviceAudio(); }
+      if (startsPlayback && before && !(before.deviceIds?.length ?? 0) && localDeviceId) {
+        if (!await assignDevices([localDeviceId]) || !current()) return false;
       }
       await command(action);
       if (before && current() && attempt === commandAttempt.current) {
@@ -298,7 +321,7 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (current() && attempt === commandAttempt.current) setError(errorText(reason));
       return false;
     }
-  }, [command, dismissUndo, offerUndo, readObservation, rendererTargetId]);
+  }, [command, dismissUndo, offerUndo, readObservation, localDeviceId, assignDevices, playHere, activateDeviceAudio]);
 
   const seekBy = useCallback((seconds: number) => {
     const player = readObservation()?.player;
@@ -328,10 +351,10 @@ export function SessionGate({ children }: PropsWithChildren) {
   const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
   const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
-    sendspin, sendspinDisabledReason,
-    sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, nativeHost, localHost, nativeReceiver, tvPresentation, credentials: scopedCredentials, setCredentials, host, retryHost, booting, error: error ?? sessionSelectionError, setError, command,
+    deviceAudio, assignDevices, newPlayback, activateDeviceAudio, setDeviceVolume,
+    playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, queryClient, nativeHost, localHost, nativeReceiver, tvPresentation, credentials: scopedCredentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [sendspin, sendspinDisabledReason, sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  }), [deviceAudio, assignDevices, newPlayback, activateDeviceAudio, setDeviceVolume, playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

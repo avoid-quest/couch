@@ -6,10 +6,10 @@ import { ForLaterSection } from "../sections/saved/ForLaterSection";
 import { SaveForLater } from "./SaveForLater";
 
 setupUiTests();
-const credentials = { origin: "http://localhost", token: "paired", sessionMode: "personal" as const };
-for (const section of ["lists", "favorites", "later", "save"] as const) test(`${section} retains the personal scope when constructing API credentials`, async () => {
+const credentials = { origin: "http://localhost", token: "paired", playbackId: "private" };
+for (const section of ["lists", "favorites", "later", "save"] as const) test(`${section} retains the selected playback when constructing API credentials`, async () => {
   const request = spyOn(globalThis, "fetch").mockImplementation((async (_input, init) => {
-    expect(new Headers(init?.headers).get("X-Couch-Session")).toBe("personal");
+    expect(new Headers(init?.headers).get("X-Couch-Playback")).toBe("private");
     return Response.json({ items: [], favorites: [], playlists: [] });
   }) as typeof fetch);
   renderWithQueryClient(section === "lists" ? <SavedPlaylists {...credentials} connected canPlay queueCount={0} />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { isNativeHost } from "./native-context";
 import { createSendspinRenderer } from "./sendspin-renderer";
@@ -90,6 +90,7 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
     }, () => { if (attempt === generation.current) { ready(false); setError("This device couldn't start audio. Try Play again."); } return false; });
   }, [ready]);
 
-  return { connected, clientId, error, audioReady, activateFromGesture,
-    volume: (value: number) => client.current?.setVolume(value), mute: (value: boolean) => client.current?.setMuted(value) };
+  return useMemo(() => ({ connected, clientId, error, audioReady, activateFromGesture,
+    volume: (value: number) => client.current?.setVolume(value), mute: (value: boolean) => client.current?.setMuted(value)
+  }), [connected, clientId, error, audioReady, activateFromGesture]);
 }

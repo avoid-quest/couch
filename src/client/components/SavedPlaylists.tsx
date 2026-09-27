@@ -27,12 +27,12 @@ const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
 type Write = { path: string; body: unknown; method?: string; play?: boolean };
 
 /** Saved's Lists tab: lists kept from Up next or a source, and one list's detail. */
-export function SavedPlaylists({ origin, token, sessionMode, connected, canPlay, queueCount }: ApiCredentials & {
+export function SavedPlaylists({ origin, token, sessionMode, playbackId, connected, canPlay, queueCount }: ApiCredentials & {
   connected: boolean;
   canPlay: boolean;
   queueCount: number;
 }) {
-  const credentials = { origin, token, sessionMode };
+  const credentials = { origin, token, sessionMode, playbackId };
   const session = useOptionalSessionGate();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);

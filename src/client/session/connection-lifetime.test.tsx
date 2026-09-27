@@ -14,7 +14,7 @@ const originalWebSocket = globalThis.WebSocket;
 afterEach(() => { globalThis.WebSocket = originalWebSocket; });
 
 const origin = "http://localhost";
-const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
+const state: SessionState = { sessionId: "household", queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
 const sockets: Socket[] = [];
 let client: QueryClient;
 let gate: ReturnType<typeof useSessionGate>;
@@ -40,9 +40,9 @@ class Socket {
 }
 
 const history = (name: string) => Response.json({ items: [{ mediaId: "library:movie", title: name, libraryItemId: "movie", position: 0, duration: null, watched: false, lastPlayedAt: 1 }] });
-async function connected(mode: "household" | "personal" = "household") {
+async function connected(playbackId = "household") {
   await waitFor(() => expect(sockets.at(-1)?.readyState).toBe(1));
-  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, sessionMode: mode } }));
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, sessionId: playbackId } }));
   await waitFor(() => expect(gate.connected).toBe(true));
 }
 async function mount() {
@@ -60,16 +60,13 @@ async function mount() {
   }
   // The gate must own a separate query cache for each connection.
   await act(async () => { renderWithQueryClient(<SessionGate><Probe /></SessionGate>, createTestQueryClient()); });
-  expect(gate.sessionMode).toBe("personal");
-  // These cache-lifetime scenarios exercise the household view explicitly.
-  await act(async () => gate.selectSession("household"));
+  expect(gate.playbackId).toBe("default");
 }
 async function pair() {
   const { requestPairing } = await import("../sections/shell/PairForm");
   const count = sockets.length;
   await act(async () => gate.savePairing(await requestPairing(gate.pairingOrigin, "123456", "Memory remote")));
   await waitFor(() => expect(sockets.length).toBeGreaterThan(count));
-  await act(async () => gate.selectSession("household"));
   await connected();
 }
 
@@ -82,7 +79,7 @@ beforeEach(() => {
   localStorage.setItem("couch.remote-installation-id", installation);
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
-    requests.push({ path, mode: new Headers(init?.headers).get("X-Couch-Session"), token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
+    requests.push({ path, mode: new Headers(init?.headers).get("X-Couch-Playback"), token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
     if (path === "/api/connection") return Response.json({ name: "Couch", installationId: installation, urls: [origin], player: "idle", remoteControlEnabled: sharing });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ authority: role, controller: { id: "remote", name: "Memory remote", role }, claimAvailable: false });
@@ -294,12 +291,12 @@ test("changing session mode retires history cache and scopes replacement HTTP re
   title = "Private history";
   const oldRead = delayedRead;
   delayedRead = undefined;
-  await act(async () => gate.selectSession("personal"));
+  await act(async () => gate.selectPlayback("private"));
   expect(client).not.toBe(householdClient);
   expect(screen.queryByText("Old household")).toBeNull();
-  await connected("personal");
+  await connected("private");
   expect(await screen.findByText("Private history")).toBeInTheDocument();
-  expect(requests.filter(request => request.path === "/api/progress/history").at(-1)?.mode).toBe("personal");
+  expect(requests.filter(request => request.path === "/api/progress/history").at(-1)?.mode).toBe("private");
   await act(async () => { oldRead.resolve(history("Late household")); });
   expect(screen.queryByText("Late household")).toBeNull();
 });

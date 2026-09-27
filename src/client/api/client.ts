@@ -2,15 +2,17 @@ import { loadedBuild } from "../../shared/build";
 
 // Playback commands remain on the session WebSocket. Query owns server reads;
 // SessionGate owns and retires its QueryClient when connection/authority changes.
-export type ApiCredentials = { origin: string; token: string; sessionMode?: "household" | "personal" };
+export type ApiCredentials = { origin: string; token: string; sessionMode?: "household" | "personal"; playbackId?: string };
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly body: Record<string, unknown> = {}) { super(message); }
 }
 
-export async function apiFetch({ origin, token, sessionMode }: ApiCredentials, path: string, init: RequestInit = {}, timeoutMs = 15_000) {
+export async function apiFetch({ origin, token, sessionMode, playbackId }: ApiCredentials, path: string, init: RequestInit = {}, timeoutMs = 15_000) {
   const headers = new Headers(init.headers);
-  if (sessionMode === "personal") headers.set("X-Couch-Session", "personal");
+  if (playbackId) headers.set("X-Couch-Playback", playbackId);
+  else headers.delete("X-Couch-Playback");
+  if (!playbackId && sessionMode === "personal") headers.set("X-Couch-Session", "personal");
   else headers.delete("X-Couch-Session");
   headers.set("Authorization", `Bearer ${token}`);
   const timeout = AbortSignal.timeout(timeoutMs);

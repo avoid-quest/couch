@@ -17,6 +17,7 @@ afterEach(() => { globalThis.WebSocket = originalWebSocket; toast.dismiss(); });
 
 const origin = "http://localhost";
 const snapshot: SessionState = {
+  sessionId: "household",
   queue: [{ id: "one", title: "Current movie", source: "library:one", duration: 600 }, { id: "two", title: "Next movie", source: "library:two", duration: 120 }],
   currentEntryId: "one", queueCursorEntryId: "one", activeProfile: { id: "household", name: "Household" },
   preferences: { profile: { audioLanguage: "en", subtitleLanguage: "en", subtitles: "auto", speed: 1, replayGain: "off" }, device: { audioDelay: 0 } },
@@ -94,7 +95,7 @@ async function mount(path = "/find") {
   const router = createRouter({ routeTree: base.addChildren([find, settings]), history: createMemoryHistory({ initialEntries: [path] }) });
   await act(async () => { await router.load(); render(<RouterProvider router={router} />); });
   // Clock scenarios intentionally observe the shared household playback.
-  await act(async () => gate.selectSession("household"));
+
   await act(async () => sockets.at(-1)!.emit({ type: "state", state: snapshot }));
   if (path === "/settings/sources") await waitFor(() => expect(screen.getAllByText("Not set up")).toHaveLength(3));
   return router;

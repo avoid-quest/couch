@@ -12,7 +12,6 @@ import { knownConnection, rememberConnection } from "./connection";
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
-export type SessionMode = "household" | "personal";
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "sharing-disabled" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
@@ -23,16 +22,17 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true, initialMode: SessionMode = "household") {
-  const [selection, setSelection] = useState<{ owner: Credentials | null; mode: SessionMode }>({ owner: credentials, mode: initialMode });
-  const sessionMode = sameCredentials(selection.owner, credentials) ? selection.mode : initialMode;
-  const scopedCredentials = useMemo(() => credentials ? { ...credentials, sessionMode } : null, [credentials, sessionMode]);
-  const currentMode = useRef(sessionMode);
-  currentMode.current = sessionMode;
-  const socketMode = useRef<SessionMode | null>(null);
-  const [ownerMode, setOwnerMode] = useState(sessionMode);
-  const selectHere = useRef<Credentials | null>(null);
-  const [sessionSelectionError, setSessionSelectionError] = useState<string | null>(null);
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true) {
+  const [selection, setSelection] = useState<{ owner: Credentials | null; playbackId: string }>({ owner: credentials, playbackId: "default" });
+  const playbackId = sameCredentials(selection.owner, credentials) ? selection.playbackId : "default";
+  const currentPlayback = useRef(playbackId);
+  currentPlayback.current = playbackId;
+  const [ownerPlayback, setOwnerPlayback] = useState<string | null>(null);
+  const scopedCredentials = useMemo(() => credentials ? { ...credentials, playbackId: sameCredentials(selection.owner, credentials) ? ownerPlayback ?? playbackId : "default" } : null, [credentials, ownerPlayback, playbackId, selection.owner]);
+  const [audioActivationRequired, setAudioActivationRequired] = useState(false);
+  const [rendererAttached, setRendererAttached] = useState(false);
+  const [rendererSocket, setRendererSocket] = useState<WebSocket | null>(null);
+  const trustedLocal = isNativeHost() && !nativeReceiver && !desktopProtocol;
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -53,9 +53,11 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
-    if (!sameCredentials(selectHere.current, credentials)) selectHere.current = null;
     setRendererTargetId(null);
-    setOwnerMode(currentMode.current);
+    setRendererAttached(false);
+    setRendererSocket(null);
+    setAudioActivationRequired(false);
+    if (!sameCredentials(owner, credentials)) setOwnerPlayback(null);
     setState(null);
     observation.current = null;
     setClock(emptyPlaybackClock);
@@ -145,7 +147,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
-      if (currentMode.current === "personal") url.searchParams.set("session", "personal");
+      url.searchParams.set("playback", currentPlayback.current);
       const asset = buildKey(loadedBuild);
       if (asset && !desktopProtocol) url.searchParams.set("build", asset);
       if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
@@ -175,7 +177,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
-      socketMode.current = currentMode.current;
+
       const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
       handshake = setTimeout(() => connection.close(), 8_000);
 
@@ -194,7 +196,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (message.type === "nativeLease") {
           native?.renew(message.nonce);
         } else if (message.type === "rendererRegistered") {
-          rendererSessionId = message.sessionId; registeredTargetId = message.targetId; attached = message.attached !== false; setRendererTargetId(message.targetId); if (attached) rendering?.report();
+          rendererSessionId = message.sessionId; registeredTargetId = message.targetId; attached = message.attached !== false; setRendererTargetId(message.targetId); setRendererAttached(attached); setRendererSocket(attached ? connection : null); if (attached) rendering?.report();
         } else if (message.type === "rendererCommand") {
           const command = message.command;
           if (attached && rendererSessionId === message.sessionId) rendering?.command(command.type === "load" && /^\/api\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(command.source) ? { ...command, source: new URL(command.source, origin).href } : command);
@@ -203,13 +205,13 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
             if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "registerRenderer", capabilities }));
           });
           baseline = true;
+          if (trustedLocal) setRendererSocket(connection);
           rendererBaseline = !!message.state.sessionId;
           registerNative();
           clearTimeout(handshake);
-          const mode = message.state.sessionMode ?? "household";
-          if (mode !== currentMode.current) return;
-          socketMode.current = mode;
-          setOwnerMode(mode);
+          const receivedPlayback = message.state.sessionId;
+          if (!receivedPlayback || currentPlayback.current !== "default" && receivedPlayback !== currentPlayback.current) return;
+          setOwnerPlayback(receivedPlayback);
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
@@ -217,6 +219,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setState({ ...message.state, player });
           setClock({ playbackId: player.playbackId, position, duration });
           setStatus("connected");
+        } else if (message.type === "audioActivationRequired") {
+          setAudioActivationRequired(true);
         } else if (message.type === "clock") {
           if (!playbackClock || !(message.playbackId === null || typeof message.playbackId === "string")
             || typeof message.position !== "number" || !Number.isFinite(message.position)
@@ -246,7 +250,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         // Retire the socket now, not only on effect cleanup or replacement.
         // Captured callbacks from a closed/revoked connection must stay stale.
         socket.current = null;
-        rendering?.close(); setRendererTargetId(null);
+        rendering?.close(); setRendererTargetId(null); setRendererAttached(false); setRendererSocket(null); setAudioActivationRequired(false);
         socketCredentials.current = null;
         clearTimeout(handshake);
         ready.current = false;
@@ -287,7 +291,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
   }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, rendererEnabled, reconnectAttempt]);
 
-  const current = sameCredentials(owner, credentials) && ownerMode === sessionMode;
+  const current = sameCredentials(owner, credentials) && !!ownerPlayback && (playbackId === "default" || ownerPlayback === playbackId);
   const snapshot = current ? state : null;
   const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
   const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
@@ -324,7 +328,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.controllers]);
 
   // Command/Undo readers see observations synchronously, before React commits a tick.
-  const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && currentMode.current === sessionMode && socketMode.current === sessionMode && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId, sessionMode]);
+  const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && currentPlayback.current === playbackId && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId, playbackId]);
 
   const reconnect = useCallback(() => {
     ready.current = false;
@@ -334,7 +338,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   const command = useCallback((action: Action) => {
     const connection = socket.current;
-    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || currentMode.current !== sessionMode || socketMode.current !== sessionMode || !ready.current || connection?.readyState !== WebSocket.OPEN) {
+    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || currentPlayback.current !== playbackId || !ready.current || connection?.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("Reconnecting. Try again in a moment."));
     }
     return new Promise<void>((resolve, reject) => {
@@ -353,34 +357,34 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         reject(error);
       }
     });
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, sessionMode]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, playbackId]);
 
-  const selectSession = useCallback((mode: SessionMode, playLocally = false) => {
-    selectHere.current = playLocally ? credentials : null;
-    setSessionSelectionError(null);
-    if (mode !== currentMode.current) {
-      ready.current = false;
-      currentMode.current = mode;
-      observation.current = null;
-      setState(null);
-      setClock(emptyPlaybackClock);
-      for (const request of pending.current.values()) {
-        clearTimeout(request.timer);
-        request.reject(new Error("Playback selection changed."));
-      }
-      pending.current.clear();
-      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "selectSession", mode }));
+  const selectPlayback = useCallback((id: string) => {
+    if (!id || id === currentPlayback.current) return;
+    ready.current = false;
+    currentPlayback.current = id;
+    observation.current = null;
+    setState(null);
+    setOwnerPlayback(null);
+    setClock(emptyPlaybackClock);
+    setAudioActivationRequired(false);
+    for (const request of pending.current.values()) {
+      clearTimeout(request.timer);
+      request.reject(new Error("Playback selection changed."));
     }
-    setSelection({ owner: credentials, mode });
-  }, [credentials, sessionMode]);
+    pending.current.clear();
+    if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "selectPlayback", playbackId: id }));
+    setSelection({ owner: credentials, playbackId: id });
+  }, [credentials]);
 
-  useEffect(() => {
-    if (!selectHere.current || !sameCredentials(selectHere.current, credentials) || !current || status !== "connected" || !rendererTargetId) return;
-    selectHere.current = null;
-    void command({ type: "selectTarget", targetId: rendererTargetId }).catch(error => { if (currentMode.current === sessionMode && sameCredentials(credentials, currentCredentials.current)) setSessionSelectionError(error instanceof Error ? error.message : String(error)); });
-  }, [selection, credentials, current, status, rendererTargetId, command]);
+  const setDeviceAudioReady = useCallback((audioReady: boolean) => {
+    const connection = rendererSocket;
+    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !(rendererAttached || trustedLocal) || socket.current !== connection || connection?.readyState !== WebSocket.OPEN) return;
+    connection.send(JSON.stringify({ type: "deviceAudioReady", ready: audioReady }));
+    if (audioReady) setAudioActivationRequired(false);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, rendererAttached, rendererSocket, trustedLocal]);
 
   const playHere = useCallback(() => renderer.current?.play(), []);
 
-  return { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  return { playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }
