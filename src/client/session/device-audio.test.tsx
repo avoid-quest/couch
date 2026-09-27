@@ -10,8 +10,8 @@ const clients: Array<{ callbacks: Parameters<typeof adapter.createSendspinRender
 const requests: Array<{ path: string; method: string; body: unknown }> = [];
 let device: ReturnType<typeof useDeviceAudio>;
 let token = "first";
-function Probe() {
-  device = useDeviceAudio({ credentials: { origin: "http://core.local", token }, rendererTargetId: "browser-target", enabled: true, name: "Couch browser", onReady: ready });
+function Probe({ onReady = ready }: { onReady?: (value: boolean) => void } = {}) {
+  device = useDeviceAudio({ credentials: { origin: "http://core.local", token }, rendererTargetId: "browser-target", enabled: true, name: "Couch browser", onReady });
   return null;
 }
 
@@ -61,10 +61,12 @@ test("credential replacement closes the old registration and fences late observa
   await act(async () => old.callbacks.state({ connected: true, isPlaying: false, volume: 100, muted: false, metadata: undefined, group: {}, supportedCommands: [] }));
   await act(async () => expect(await device.activateFromGesture()).toBe(true));
   token = "second";
-  await act(async () => view.rerender(<Probe />));
+  const newOwnerReady = mock((_value: boolean) => {});
+  await act(async () => view.rerender(<Probe onReady={newOwnerReady} />));
   await waitFor(() => expect(clients).toHaveLength(2));
   expect(old.disconnect).toHaveBeenCalledTimes(1);
   expect(ready).toHaveBeenLastCalledWith(false);
+  expect(newOwnerReady).not.toHaveBeenCalled();
   await act(async () => old.callbacks.state({ connected: true, isPlaying: false, volume: 100, muted: false, metadata: undefined, group: {}, supportedCommands: [] }));
   expect(device.connected).toBe(false);
 });

@@ -24,14 +24,15 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
   const [audioReady, setAudioReady] = useState(false);
   const [clientId, setClientId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const ready = useCallback((value: boolean) => {
+  const ready = useCallback((value: boolean, report = latestReady.current) => {
     if (readyRef.current === value) return;
-    readyRef.current = value; setAudioReady(value); latestReady.current(value);
+    readyRef.current = value; setAudioReady(value); report(value);
   }, []);
 
   useEffect(() => {
     const attempt = ++generation.current;
     const current = () => attempt === generation.current;
+    const ownerReady = latestReady.current;
     let prepared: ReturnType<typeof createSendspinRenderer> | null = null;
     let retired = false;
     const disconnect = () => { if (!prepared || retired) return Promise.resolve(); retired = true; return prepared.disconnect(); };
@@ -72,7 +73,7 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
     return () => {
       ++generation.current;
       client.current = null;
-      connectedRef.current = false; setConnected(false); setClientId(null); ready(false);
+      connectedRef.current = false; setConnected(false); setClientId(null); ready(false, ownerReady);
       closing.current = closing.current.catch(() => {}).then(disconnect);
     };
   }, [credentials?.origin, credentials?.token, credentials?.installationId, rendererTargetId, enabled, name, ready]);
