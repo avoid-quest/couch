@@ -229,7 +229,6 @@ try {
     await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Pair"]'));
     const pairingCode = (await Bun.file("/artifacts/lifecycle-selected-host-error.log").text()).match(/Pairing code: (\d{6})/)?.[1];
     assert.ok(pairingCode, "selected host prints a pairing code");
-    await typeByLabel(native.session, "Remote name", "Native restart remote");
     await typeByLabel(native.session, "Pairing code", pairingCode);
     await click(native.session, '//button[normalize-space(.)="Pair"]');
     await until("paired desktop client saves the selected-host pairing", () => request(`/session/${native.session}/execute/sync`, { script: "return !document.querySelector('.pair-form') && !!localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }));
@@ -242,7 +241,8 @@ try {
       return response.json() as Promise<{ authority: string; controller: { name: string } | null }>;
     };
     assert.equal((await selectedIdentity()).authority, "administrator", "first paired desktop remote is the selected host administrator");
-    assert.equal((await selectedIdentity()).controller?.name, "Native restart remote", "selected host retains the paired device name");
+    const pairedName = (await selectedIdentity()).controller?.name;
+    assert.ok(pairedName, "selected host receives the automatic device name");
     remoteHost.kill();
     await remoteHost.exited;
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"Offline. Reconnecting")]'), 30_000);
@@ -290,7 +290,7 @@ try {
     assert.equal(await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }), paired, "native pairing data survives full app restart");
     const restoredIdentity = await selectedIdentity();
     assert.equal(restoredIdentity.authority, "administrator", "selected host authority survives app restart");
-    assert.equal(restoredIdentity.controller?.name, "Native restart remote", "selected host device name survives app restart");
+    assert.equal(restoredIdentity.controller?.name, pairedName, "selected host device name survives app restart");
     await click(native.session, '//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Settings"]');
     await click(native.session, '//nav[@aria-label="Settings pages"]//a[normalize-space(.)="Updates"]');
     await until("restarted administrator sees selected-host update target", () => role(native.session, `//section[@aria-label="Settings"]//*[normalize-space(.)="${process.env.COUCH_SOURCE_REVISION}"]`));
