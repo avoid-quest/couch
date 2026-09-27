@@ -18,7 +18,7 @@ export function GeneralPage() {
           : credentials ? <TvNameSettings credentials={credentials} connected={connected} canWrite={manager} name={details?.name} />
           : <SettingsRow label="Couch installation" description="Pair this remote to change it."><span className="text-sm">{deviceName(details?.name)}</span></SettingsRow>}
         {manager && credentials && details?.tvPresentation && <StartupSettings credentials={credentials} connected={connected} />}
-        {manager && credentials && <RestartSettings credentials={credentials} connected={connected} hostName={deviceName(details?.name)} />}
+        {manager && credentials && details?.capabilities?.nativePlayback !== false && <RestartSettings credentials={credentials} connected={connected} hostName={deviceName(details?.name)} />}
       </SettingsSection>
     </SettingsLayout>
   );

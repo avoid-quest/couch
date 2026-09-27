@@ -16,6 +16,7 @@ export function SettingsNav({ active }: Props) {
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
   const visible = (id: SettingsPage) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
     && (id !== "display" || !!details?.tvPresentation)
+    && (id !== "sound" && id !== "bluetooth" || details?.capabilities?.nativePlayback !== false)
     && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
   const groups = ([
     ["Preferences", ["playback", "home", "appearance"]],
