@@ -6,7 +6,7 @@ import type { JellyfinSource } from "./jellyfin";
 import type { Library } from "./library";
 import { RadioError, type createRadio } from "./radio";
 import { playbackMediaId, ViewingError } from "./progress";
-import type { Store } from "./store";
+import type { SessionStore } from "./session-store";
 import type { createSession } from "./session";
 import { ControllerError } from "./controllers";
 import { RECORDINGS_UNSUPPORTED } from "./messages";
@@ -15,7 +15,7 @@ type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations" | "getStation">;
   jellyfin: Pick<JellyfinSource, "status" | "items" | "getItem"> & Partial<Pick<JellyfinSource, "artwork">>;
-  viewing?: { store: Store; session: ReturnType<typeof createSession>; refreshHistory?: (items: import("../shared/library").HistoryItem[]) => void };
+  viewing?: { store: SessionStore; session: ReturnType<typeof createSession>; refreshHistory?: (items: import("../shared/library").HistoryItem[]) => void };
 };
 
 const progressIdentity = /^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64}|media:[a-f0-9]{64})$/;
