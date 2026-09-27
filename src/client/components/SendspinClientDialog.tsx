@@ -23,6 +23,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
   const closing = useRef(Promise.resolve());
   const [phase, setPhase] = useState<Phase>("idle");
   const [state, setState] = useState<SendspinRendererState | null>(null);
+  const [everConnected, setEverConnected] = useState(false);
   const [pin, setPin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [server, setServer] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
     try { await closing.current; }
     catch { if (generation.current === attempt) setError("Couldn't leave Sendspin. Close this window before starting other playback."); return; }
     if (generation.current !== attempt) return;
-    latest.current.setActive(false); setPhase("idle"); setState(null); setPin(null); setServer(null); setExternal(false);
+    latest.current.setActive(false); setPhase("idle"); setState(null); setEverConnected(false); setPin(null); setServer(null); setExternal(false);
   }, []);
   useEffect(() => () => { void leave(); }, [options.credentials?.origin, options.credentials?.token, leave]);
   useEffect(() => { if (!options.allowed && client.current) void leave(); }, [options.allowed, leave]);
@@ -44,7 +45,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
     if (phase !== "idle" || !latest.current.allowed || !latest.current.canActivate()) return;
     const attempt = ++generation.current;
     const current = () => attempt === generation.current;
-    setPhase("preparing"); setError(null); setPin(null);
+    setPhase("preparing"); setError(null); setPin(null); setEverConnected(false);
     let prepared: ReturnType<typeof createSendspinRenderer> | null = null;
     try {
       await closing.current;
@@ -55,7 +56,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
       if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol) || url.username || url.password || url.hash) throw new PreparationError("Enter an HTTP or WebSocket server address without credentials.");
       if (!current()) return;
       prepared = createSendspinRenderer({ url: url.href, name: name.trim() || "Couch browser" }, {
-        state: value => { if (current()) setState(value); },
+        state: value => { if (current()) { setState(value); if (value.connected) setEverConnected(true); } },
         error: () => { if (current()) setError("Sendspin couldn't connect or continue playback. Leave and try again."); },
         pairingPin: value => { if (current()) setPin(value); },
       });
@@ -83,10 +84,10 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
       if (attempt === generation.current) { setError("Couldn't join Sendspin. Leave and try again."); setPhase("ready"); }
     });
   }, [phase]);
-  return useMemo(() => ({ phase, state, pin, error, server, external, prepare, join, leave,
+  return useMemo(() => ({ phase, state, everConnected, pin, error, server, external, prepare, join, leave,
     volume: (value: number) => client.current?.setVolume(value), mute: (value: boolean) => client.current?.setMuted(value),
     transport: (value: "play" | "pause") => client.current?.transport(value), pair: () => client.current?.openPairingWindow(),
-  }), [phase, state, pin, error, server, external, prepare, join, leave]);
+  }), [phase, state, everConnected, pin, error, server, external, prepare, join, leave]);
 }
 
 export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: (event: Event) => void }) {
@@ -122,6 +123,7 @@ export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: {
       </div>}
       {sendspin.external && (["joining", "joined"].includes(sendspin.phase) || sendspin.pin) && <Button variant="outline" onClick={sendspin.pair}>Open pairing window</Button>}
       {waiting && <p role="status">{sendspin.phase === "joining" ? "Joining…" : sendspin.phase === "leaving" ? "Leaving…" : "Preparing…"}</p>}
+      {sendspin.phase === "joined" && <p role="status">{playback?.connected ? "Connected to Sendspin." : sendspin.everConnected ? "Disconnected. Waiting to reconnect…" : "Waiting for Sendspin connection or pairing…"}</p>}
       <Button variant="ghost" disabled={sendspin.phase === "leaving"} onClick={() => void sendspin.leave()}>Leave Sendspin</Button>
     </div>}
     {sendspin.error && <Alert variant="destructive"><AlertDescription>{sendspin.error}</AlertDescription></Alert>}

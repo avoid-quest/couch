@@ -1,7 +1,8 @@
-import { setupUiTests, act, render } from "@/testing/react";
+import { setupUiTests, act, render, screen, userEvent } from "@/testing/react";
 import { beforeEach, expect, mock, spyOn, test } from "bun:test";
 import * as adapter from "@/session/sendspin-renderer";
-import { useSendspinClient } from "./SendspinClientDialog";
+import { ShellProviders } from "@/sections/shell/test-providers";
+import { SendspinClientDialog, useSendspinClient } from "./SendspinClientDialog";
 
 setupUiTests();
 let connection = { origin: "http://core.local", token: "paired" };
@@ -17,13 +18,46 @@ function Probe() {
   client = useSendspinClient({ credentials: connection, allowed: true, canActivate: () => true, setActive: active });
   return null;
 }
+function DialogProbe() {
+  client = useSendspinClient({ credentials: connection, allowed: true, canActivate: () => true, setActive: active });
+  return <ShellProviders value={{ sendspin: client, connected: true, state: null, rendererTargetId: null, nativeHost: false }}>
+    <SendspinClientDialog open onOpenChange={() => {}} />
+  </ShellProviders>;
+}
+const playback = (connected: boolean): adapter.SendspinRendererState => ({ connected, isPlaying: false, volume: 100, muted: false, metadata: undefined, group: {}, supportedCommands: [] });
 beforeEach(() => {
   connection = { origin: "http://core.local", token: "paired" };
   active.mockClear();
   for (const method of Object.values(renderer)) if (typeof method === "function") method.mockClear();
   renderer.preload.mockImplementation(async () => {});
+  renderer.connectFromGesture.mockImplementation(async () => {});
   renderer.disconnect.mockImplementation(async () => {});
   spyOn(adapter, "createSendspinRenderer").mockImplementation((_config, events) => { callbacks = events; return renderer; });
+});
+
+test("connection status follows SDK observations after connect resolves and across reconnects", async () => {
+  const user = userEvent.setup();
+  render(<DialogProbe />);
+  await act(async () => client.prepare("external", "wss://music.local/sendspin", "Kitchen"));
+  await user.click(screen.getByRole("button", { name: "Join" }));
+  expect(renderer.connectFromGesture).toHaveBeenCalledTimes(1);
+  await act(async () => callbacks.state(playback(false)));
+  expect(screen.getByRole("status")).toHaveTextContent("Waiting for Sendspin connection or pairing…");
+  expect(screen.getByRole("button", { name: "Open pairing window" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "Open pairing window" }));
+  expect(renderer.openPairingWindow).toHaveBeenCalledTimes(1);
+  await act(async () => callbacks.state(playback(true)));
+  expect(screen.getByRole("status")).toHaveTextContent("Connected to Sendspin.");
+  await act(async () => callbacks.state(playback(false)));
+  expect(screen.getByRole("status")).toHaveTextContent("Disconnected. Waiting to reconnect…");
+  await act(async () => callbacks.state(playback(true)));
+  expect(screen.getByRole("status")).toHaveTextContent("Connected to Sendspin.");
+  await user.click(screen.getByRole("button", { name: "Leave Sendspin" }));
+  expect(client.phase).toBe("idle");
+  await act(async () => client.prepare("external", "wss://music.local/sendspin", "Kitchen"));
+  await user.click(screen.getByRole("button", { name: "Join" }));
+  await act(async () => callbacks.state(playback(false)));
+  expect(screen.getByRole("status")).toHaveTextContent("Waiting for Sendspin connection or pairing…");
 });
 
 test("hosting enrollment prepares identity but only a fresh Join connects", async () => {
