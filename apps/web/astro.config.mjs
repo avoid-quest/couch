@@ -5,5 +5,6 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   site: "https://couch.avoid.quest",
   adapter: cloudflare(),
+  session: false,
   vite: { plugins: [tailwindcss()] },
 });
