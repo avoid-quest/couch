@@ -20,6 +20,13 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "connection_info",
+            "set_native_receiver",
+            "native_receiver_begin",
+            "native_receiver_request",
+            "native_receiver_renew",
+            "native_receiver_command",
+            "native_receiver_report",
+            "native_receiver_end",
             "set_video_rect",
             "choose_media",
             "choose_folder",

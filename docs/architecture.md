@@ -19,7 +19,7 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 | Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. Independent packaged service installation remains work. |
 | Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. Their lifecycles are still coupled. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
-| Additional native receiver or output group | Another destination controlled by the chosen Core. | Separate receiver enrollment and Snapcast/Sendspin adapters remain work. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | Explicit paired native receiver enrollment reuses the Tauri player; Snapcast/Sendspin adapters remain work. |
 
 Server capabilities and target capabilities are separate. Available behavior
 depends on permissions, enabled integrations/helpers, source access and the selected
@@ -34,8 +34,9 @@ support for every source. `/api/tools` separately reports helper availability.
 Do not infer a renderer from the server's OS or installed media tools.
 
 **This computer** uses the bundled local Core/player; **Another Couch** selects a
-remote Core in the same app window and stops local playback. It does not yet enroll
-that local native player as a target of the remote Core. The installation retains
+remote Core in the same app window and stops local playback. **Enable playback on
+this computer** separately enrolls that existing native player as a target of the
+selected Core; enrollment alone never selects or starts playback. The installation retains
 its private maintenance coordinator and updater. Server selection and target
 selection must stay distinct. The serialized `clientOnly` artifact field remains
 `false`; it does not describe whether a particular Core currently has a renderer.
@@ -52,7 +53,7 @@ queue. Multiple simultaneous/private sessions are a later extension.
 | --- | --- |
 | `src/server/hub.ts`, `store.ts` | Authorization, integrations, persistence and protocol dispatch. |
 | `src/server/session.ts`, `progress.ts` | Queue policy, resolution, intent and progress continuity. |
-| `src/server/playback-targets.ts` | Optional native endpoint, socket-owned browser endpoints, assignment and handoff. |
+| `src/server/playback-targets.ts` | Optional native endpoint, socket-owned browser and paired native endpoints, assignment and handoff. |
 | `src/client/session/session.ts`, `browser-renderer.ts` | UI connection and browser rendering above route lifetime. |
 | `src/main.ts`, `src-tauri/src/player.rs` | Existing private native command/observation path. |
 
@@ -67,6 +68,23 @@ queue stays in Core. Playback speed and compatible selections follow the session
 destination volume stays local. Failure rolls back only when destination silence
 is confirmed. Browser autoplay can require a gesture on the destination. This is
 approximate continuity, not synchronized multiroom playback.
+
+A native receiver's stable identity derives from its paired controller, with one
+live socket per enrollment. Its trusted bundled window bridges commands and
+observations through Tauri IPC to the existing libmpv worker. Commands are checked
+again when the worker executes them. Core-local paths, hardware audio outputs and
+maintenance operations are not remote playback authority.
+
+Receiver leases use a fresh native monotonic challenge every two seconds. Core
+acknowledges that challenge; Rust accepts it within one second and anchors its
+ten-second lease to the original request time. An independent watchdog revokes
+expired generations and requires native stop within two seconds, exiting the app
+if shutdown cannot be confirmed. Core fences replacement playback for 12.5 seconds
+after its last grant when a receiver disconnects. A confirmed stopped reconnect
+can recover under the same target ID but requires explicit assignment/resume.
+Installations that have enrolled a receiver also wait 12.5 seconds after Core
+restart before starting playback, covering leases issued by the previous process.
+The native window, player layout and local maintenance coordinator are unchanged.
 
 Most sources are remote. Prefer provider-to-renderer delivery; Core does not need
 to carry the media bytes to coordinate playback. Keep idle controllers inexpensive

@@ -392,3 +392,22 @@ test("the neutral chooser forgets retained targets without connecting", async ()
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
   expect(button("This computer")).toHaveFocus();
 });
+
+test("failed receiver enrollment keeps the persisted choice and reports the error", async () => {
+  const { NativeModeGate, usePlaybackDevice } = await import("./PlaybackDevice");
+  choice = { ...choice, mode: "remote", address: "http://core:4100" };
+  let device: NonNullable<ReturnType<typeof usePlaybackDevice>>;
+  function Probe() { device = usePlaybackDevice()!; return null; }
+  await act(async () => { renderWithQueryClient(<NativeModeGate><Probe /></NativeModeGate>); });
+  let reject!: (reason: Error) => void;
+  invoke.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+  let enrolling!: Promise<boolean>;
+  await act(async () => { enrolling = device.setNativeReceiver(true); });
+  expect(device!.pending).toBe(true);
+  expect(await device!.setNativeReceiver(true)).toBe(false);
+  await act(async () => { reject(new Error("Receiver unavailable")); expect(await enrolling).toBe(false); });
+  expect(device!.nativeReceiver).not.toBe(true);
+  expect(device!.error).toBe("Receiver unavailable");
+  expect(device!.mode).toBe("remote");
+  expect(device!.pending).toBe(false);
+});

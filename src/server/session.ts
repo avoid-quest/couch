@@ -12,12 +12,13 @@ import type { PlaybackContinuation } from "./continuation";
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type HandoffDelivery = { expiry: MediaSource["expiry"]; webRetried: boolean; audioOnly: boolean; subtitleWarning: string | null };
-export type PlaybackDestination = { backend: "native" | "browser"; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
+export type PlaybackDestination = { backend: "native" | "browser"; remote?: boolean; capabilities?: BrowserMediaCapabilities; authorize?: () => void };
 type SessionOptions = {
   admitted?: () => boolean;
   transferBusy?: () => boolean;
   validateCommand?: (command: PlaybackCommand) => void;
   nativeTarget?: () => boolean;
+  nativeRenderer?: () => boolean;
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean, destination?: PlaybackDestination) => MediaSource | Promise<MediaSource>;
   activatePrepared?: (playbackId: string, previous: PlayerState) => void;
   activateHandoff?: (playbackId: string, previous: PlayerState) => void;
@@ -617,9 +618,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       finally { clearTimeout(timeout); }
       const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
       return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, paused: true,
-        ...(!browser && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
+        ...(!browser && !destination.remote && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
         startPosition: entry.live || media.radio ? undefined : state.player.position,
-        preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser ? 0 : state.preferences!.device.audioDelay } } };
+        preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser || destination.remote ? 0 : state.preferences!.device.audioDelay } } };
     },
     commitHandoff(player: PlayerState, delivery: HandoffDelivery) {
       options.activateHandoff?.(player.playbackId!, state.player);
@@ -862,10 +863,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         }
         case "audioDelay":
-          if (!nativeTarget()) throw new Error("Audio delay is not supported in the browser yet.");
+          if (!(options.nativeRenderer?.() ?? nativeTarget())) throw new Error("Audio delay is not supported in the browser yet.");
           currentPlayback(action.playbackId);
-          store.saveAudioDelay(action.delay);
-          state.preferences = { ...state.preferences!, device: { audioDelay: action.delay } };
+          if (nativeTarget()) { store.saveAudioDelay(action.delay); state.preferences = { ...state.preferences!, device: { audioDelay: action.delay } }; }
           broadcast();
           send(action);
           break;

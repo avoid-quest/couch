@@ -29,7 +29,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, nativeHost, localHost, rendererTargetId, tvPresentation, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, localHost, nativeReceiver, rendererTargetId, tvPresentation, videoQualityPreference } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -53,8 +53,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
   const audioOnly = current?.kind === "radio" || !!current?.source.startsWith("radio:") || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
-  const browserHere = !!rendererTargetId && state?.targetId === rendererTargetId;
-  const elsewhere = !(browserHere || localHost && (!state?.targetId || state.targetId === "native")) && (active || ended);
+  const browserHere = !nativeHost && !!rendererTargetId && state?.targetId === rendererTargetId;
+  const nativeHere = nativeHost && nativeReceiver && !!rendererTargetId && state?.targetId === rendererTargetId;
+  const elsewhere = !(browserHere || nativeHere || localHost && (!state?.targetId || state.targetId === "native")) && (active || ended);
   const artworkStage = audioOnly || elsewhere;
   const autoHide = playing && !artworkStage;
   useBottomBar(band, !!current && shown);

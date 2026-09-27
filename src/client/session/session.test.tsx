@@ -4,6 +4,8 @@ import type { Action, ClientMessage, ServerMessage, SessionState } from "../../s
 import { loadedBuild } from "../../shared/build";
 import type { Credentials, useSession } from "./session";
 import * as capabilities from "./browser-capabilities";
+import * as nativeRenderer from "./native-renderer";
+import * as nativeContext from "./native-context";
 import * as browserRenderer from "./browser-renderer";
 
 setupUiTests();
@@ -20,6 +22,8 @@ const timers: Array<{ handle: ReturnType<typeof setTimeout>; delay: number; fire
 let session: ReturnType<typeof useSession>;
 let capability = true;
 let browserPlayback: boolean | undefined;
+let nativeReceiver = false;
+let desktopProtocol: number | undefined;
 const renderedObservations: Array<SessionState | null> = [];
 let mount: (next: Credentials) => Promise<void>;
 
@@ -39,19 +43,20 @@ class Socket {
 
 beforeEach(async () => {
   capability = true;
+  nativeReceiver = false; desktopProtocol = undefined;
   browserPlayback = undefined;
   sockets.length = timers.length = 0;
   globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true, ...(capability ? { playbackClock: 1 } : {}), ...(browserPlayback === undefined ? {} : { capabilities: { browserPlayback, nativePlayback: false } }) });
+    if (path === "/api/connection") return Response.json({ desktopClientProtocol: 1, name: "Couch", installationId: "installation", urls: [credentials.origin], player: "idle", remoteControlEnabled: true, ...(capability ? { playbackClock: 1 } : {}), ...(browserPlayback === undefined ? {} : { capabilities: { browserPlayback, nativePlayback: false } }) });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ controller: { id: "remote", name: "Remote", role: "controller" }, authority: "controller", claimAvailable: false });
     throw new Error(`Unexpected session request: ${path}`);
   }) as typeof fetch);
   const { useSession } = await import("./session");
   function Probe({ connection }: { connection: Credentials }) {
-    session = useSession(connection);
+    session = useSession(connection, undefined, undefined, desktopProtocol, nativeReceiver);
     renderedObservations.push(session.readObservation());
     return <output role="status">{session.status}</output>;
   }
@@ -276,4 +281,46 @@ test("replacement credentials mask the private observation during render, before
   expect(renderedObservations.every(value => value === null)).toBe(true);
   expect(previousReader()).toBeNull();
   expect(session.clock).toEqual({ playbackId: null, position: 0, duration: null });
+});
+
+
+test.each([false, true])("native receiver registration waits for begin and baseline, begin first=%s", async beginFirst => {
+  spyOn(nativeContext, "isNativeHost").mockReturnValue(true);
+  nativeReceiver = true; desktopProtocol = 1;
+  const renderer = { command: (_command: import("../../shared/protocol").PlaybackCommand) => {}, close: () => {}, report: () => {}, play: () => {}, renew: (_nonce: string) => {} };
+  let options!: Parameters<typeof nativeRenderer.createNativeRenderer>[1];
+  spyOn(nativeRenderer, "createNativeRenderer").mockImplementation((_observe, next) => { options = next; return renderer; });
+  const renew = spyOn(renderer, "renew"), report = spyOn(renderer, "report"), close = spyOn(renderer, "close");
+  await act(async () => session.reconnect());
+  const peer = sockets.at(-1)!;
+  if (beginFirst) options.ready("challenge");
+  expect(peer.sent).toEqual([]);
+  await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(session.connected).toBe(true);
+  if (!beginFirst) { expect(peer.sent).toEqual([]); options.ready("challenge"); }
+  expect(peer.sent as unknown[]).toEqual([{ type: "registerNativeRenderer", nonce: "challenge" }]);
+  await act(async () => peer.emit({ type: "nativeLease", nonce: "answer" }));
+  expect(renew).toHaveBeenCalledWith("answer");
+  await act(async () => peer.emit({ type: "rendererRegistered", sessionId: "household", targetId: "native-receiver" }));
+  expect(report).toHaveBeenCalledTimes(1);
+  expect(session.rendererTargetId).toBe("native-receiver");
+  const previous = options;
+  await mount({ ...credentials, token: "new" });
+  expect(close).toHaveBeenCalled();
+  previous.ready("stale"); previous.lease("stale"); previous.error();
+  expect(peer.sent as unknown[]).toEqual([{ type: "registerNativeRenderer", nonce: "challenge" }]);
+  expect(sockets.at(-1)!.readyState).toBe(Socket.OPEN);
+});
+
+test("native hosts remain controllers unless receiver mode and desktop protocol are both selected", async () => {
+  spyOn(nativeContext, "isNativeHost").mockReturnValue(true);
+  const native = spyOn(nativeRenderer, "createNativeRenderer");
+  for (const [enabled, protocol] of [[false, 1], [true, undefined]] as const) {
+    nativeReceiver = enabled; desktopProtocol = protocol;
+    await act(async () => session.reconnect());
+    const peer = sockets.at(-1)!;
+    await act(async () => peer.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+    expect(peer.sent).toEqual([]);
+  }
+  expect(native).not.toHaveBeenCalled();
 });

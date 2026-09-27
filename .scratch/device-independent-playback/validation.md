@@ -361,3 +361,42 @@ The preceding Jellyfin review additionally found and fixed a timeout after resol
 its owned timer now clears when resolution finishes, leaving explicit handoff cleanup
 in charge. Both focused handoff tests passed, including survival past the 15-second
 resolution deadline. The fix is included in Jellyfin PR #618.
+
+## Native receiver enrollment — 2026-09-27 (qualification in progress)
+
+- `cargo check --lib` passes; **75 Rust library tests** pass with the build-only
+  `TAURI_CONFIG={"bundle":{"externalBin":[]}}` override because this macOS source
+  check did not build a packaged sidecar. Tests include challenge deadlines, stale
+  generations and persisted opt-in state.
+- **78 UI tests** pass for the output picker, device choice, native selection and
+  player page. **198 server/session/renderer regressions** pass (1899 assertions,
+  seven files). Log: `.artifacts/device-independent-playback/native-increment-tests.log`.
+- **Nine receiver tests / 39 assertions** exercise real Core HTTP/WebSockets with
+  simulated receiver observations and deterministic monotonic-fence checks.
+- Combined targeted receiver/client/UI run: **138 pass, 0 fail, 683 assertions**,
+  eight files (overlaps the groups above; do not add these counts). Log:
+  `.artifacts/device-independent-playback/native-targeted-tests.log`.
+- Linux exploratory qualification builds a copied dirty snapshot in an isolated
+  Docker container/target volume; it is not the final clean-revision merge receipt.
+  No physical display/speaker, macOS or Windows receiver qualification is claimed.
+
+### Exploratory real native journey
+
+Linux arm64, actual Tauri/libmpv, Xvfb and null PulseAudio: explicit enrollment,
+Core-selected playback, native video pixels, pause/seek/resume and audio-stream
+presence all passed. Suspending only the independent Core (`SIGSTOP`) caused
+native audio-stream removal after **8295 ms**. Resuming Core, reconnect under the
+same receiver ID without autoplay, explicit resume, disable and app close all
+passed; Core remained reachable. Evidence is under
+`.artifacts/device-independent-playback/native-qualification/journey`.
+
+The exploratory build is deliberately marked dirty (base `a634fad1`); a copied
+snapshot and cached rebuild were used while integrating this layer. It does not
+replace a final clean-revision receipt. Physical speaker/display timing and native
+macOS/Windows journeys remain untested.
+
+A tightened second native run also passed after explicitly observing the disconnected
+target before reconnect: silence after **8348 ms**, same-ID reconnect without autoplay,
+explicit resume, disable, and independent Core survival. The retained regression is
+`tests/linux/native-receiver.ts`; its targeted TypeScript check passes. The final
+source commit still needs the clean build/journey receipt before merge readiness.

@@ -1,3 +1,4 @@
+import { createNativeRenderer } from "./native-renderer";
 import { createBrowserRenderer } from "./browser-renderer";
 import { browserMediaCapabilities } from "./browser-capabilities";
 import { isNativeHost } from "./native-context";
@@ -21,7 +22,7 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number) {
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false) {
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -34,7 +35,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [clock, setClock] = useState<PlaybackClock>(emptyPlaybackClock);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [rendererTargetId, setRendererTargetId] = useState<string | null>(null);
-  const renderer = useRef<ReturnType<typeof createBrowserRenderer> | null>(null);
+  const renderer = useRef<Pick<ReturnType<typeof createBrowserRenderer>, "command" | "report" | "play" | "close"> | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const socketCredentials = useRef<Credentials | null>(null);
   const ready = useRef(false);
@@ -139,7 +140,23 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const connection = new WebSocket(url);
       let baseline = false;
       let rendererSessionId: string | null = null;
-      const rendering = browserPlayback && !isNativeHost() ? createBrowserRenderer(state => { if (isCurrent() && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); }) : null;
+      let nativeNonce: string | null = null;
+      let nativeRegistered = false;
+      let rendererBaseline = false;
+      const registerNative = () => {
+        if (!nativeRegistered && rendererBaseline && nativeNonce && isCurrent() && connection.readyState === WebSocket.OPEN) {
+          nativeRegistered = true;
+          connection.send(JSON.stringify({ type: "registerNativeRenderer", nonce: nativeNonce }));
+        }
+      };
+      const observe = (state: SessionState["player"]) => { if (isCurrent() && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); };
+      const native = isNativeHost() && nativeReceiver && desktopProtocol ? createNativeRenderer(observe, {
+        origin,
+        ready: nonce => { nativeNonce = nonce; registerNative(); },
+        lease: nonce => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "nativeLease", nonce })); },
+        error: () => { if (isCurrent()) connection.close(); },
+      }) : null;
+      const rendering = native ?? (browserPlayback && !isNativeHost() ? createBrowserRenderer(observe) : null);
       renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
@@ -158,16 +175,20 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           connection.close(4002, "Invalid response");
           return;
         }
-        if (message.type === "rendererRegistered") {
+        if (message.type === "nativeLease") {
+          native?.renew(message.nonce);
+        } else if (message.type === "rendererRegistered") {
           rendererSessionId = message.sessionId; setRendererTargetId(message.targetId); rendering?.report();
         } else if (message.type === "rendererCommand") {
           const command = message.command;
           if (rendererSessionId === message.sessionId) rendering?.command(command.type === "load" && /^\/api\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(command.source) ? { ...command, source: new URL(command.source, origin).href } : command);
         } else if (message.type === "state") {
-          if (!baseline && rendering && message.state.sessionId) void browserMediaCapabilities().then(capabilities => {
+          if (!baseline && rendering && !native && message.state.sessionId) void browserMediaCapabilities().then(capabilities => {
             if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "registerRenderer", capabilities }));
           });
           baseline = true;
+          rendererBaseline = !!message.state.sessionId;
+          registerNative();
           clearTimeout(handshake);
           attempt = 0;
           ready.current = true;
@@ -244,7 +265,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current = null;
       socketCredentials.current = null;
     };
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, reconnectAttempt]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, reconnectAttempt]);
 
   const current = sameCredentials(owner, credentials);
   const snapshot = current ? state : null;

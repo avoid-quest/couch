@@ -1,7 +1,7 @@
 # Run Couch Core independently and connect another native receiver
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: none
 
 ## Goal
@@ -53,3 +53,22 @@ the DASH increment.
 Next bounded receiver work must establish authenticated stable identity and fence
 old connections/attempts at the existing endpoint boundary. Keep server selection
 and local installation maintenance distinct; retain standalone window behavior.
+
+## Native enrollment increment — 2026-09-27
+
+Implemented explicit native playback enrollment in the existing output picker when
+the desktop/TV app controls another Core. It reuses Tauri/libmpv and the existing
+video stage. Stable identity derives from the pairing, duplicate live connections
+are rejected, reconnect starts idle and requires explicit resume. Receiver lease
+expiry is enforced independently of the frontend; failed/hung shutdown terminates
+the receiver app before Core's takeover fence expires. A persisted enrollment marker
+also fences playback for 12.5 seconds after Core restart. Private maintenance and
+Core-local hardware/path authority remain separate.
+
+75 Rust library tests, 78 focused UI tests and 198 server/session/renderer regressions
+pass. Nine receiver hub/target tests additionally cover enrollment, stale attempts,
+reconnect, restart marker and disconnect during destination preparation. An exploratory Linux Tauri/libmpv journey passed actual playback, pixels,
+pause/seek/resume, lease-expiry silence, explicit reconnect/resume, disable and
+Core survival after app close. It uses Xvfb/null PulseAudio, not physical hardware;
+final clean-revision qualification remains required. Checkpoint restoration beyond queue/progress persistence and
+independent deployment guidance remain follow-up work in this issue.
