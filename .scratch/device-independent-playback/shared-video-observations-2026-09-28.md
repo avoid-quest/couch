@@ -77,3 +77,37 @@ same core checks before native smoke. Logs: `/tmp/couch-mixer-verify-da15c350.lo
 and `/tmp/couch-mixer-linux-da15c350.log`. These are failed gates, not acceptance.
 Earlier successful Linux desktop and physical radio observations remain scoped to
 their recorded builds in the [prior receipt](model-software-observations-2026-09-27.md).
+
+## Follow-up: direct selection and participant Move
+
+Build `3bfa7f76b89669700adcec7d93b82e8159639fd2` removes Control from Output.
+Home → Now opens an assigned Playback's ordinary player and queue; Add this device
+joins it. Output exposes Move playback here for an already participating device.
+
+- Starting from Mac picture plus browser sound, Move playback here on the browser
+  left only that browser assigned. Its video was audible-mode (`muted=false`),
+  playing at 113.358 s, readyState 4 and 1920 pixels wide, with 771 decoded frames.
+  This observation was taken 7.278 s after the click, not an instrumented latency.
+  The Mac became a remote summary with no native video surface.
+- The user then moved that video to the phone and confirmed **picture and sound
+  continue**. The browser decoder stopped and only the phone remained assigned.
+- Creating an empty browser Playback left the phone's selection untouched. Opening
+  the phone's row from Home → Now changed the browser view only: phone stayed the
+  sole selected output; browser video stayed paused at 0 / readyState 0; the sampled
+  media-resource count stayed at 14. This narrow check is not a complete traffic audit.
+- The user subsequently selected real provider video, which failed the browser
+  delivery check. Provider playback is not qualified by the successful Mux fixture.
+  The next required work covers every existing Internet source, excluding Jellyfin
+  and local files at the user's request.
+
+`bun run verify --native` passed on `3bfa7f76`; receipt:
+`.artifacts/mixer-qualification-3bfa7f76/verification.json`, log:
+`/tmp/couch-mixer-verify-3bfa7f76.log`. Linux on that revision passed core/native
+checks but stopped at the obsolete Control selector in the built-browser journey.
+Updating that existing journey to open Home's playback row produced revision
+`ab91c7c4a40ac20810a9efe2b3b1c7001558c0d7`; its full
+`bun run test:linux --desktop-smoke` passed. Receipt directory:
+`.artifacts/mixer-linux-ab91c7c4`, log: `/tmp/couch-mixer-linux-ab91c7c4.log`.
+The Mac app is build 3bfa7f76 (build log `/tmp/couch-mixer-build-shared-video-6.log`);
+ab91c7c4 changes the harness only. These successes preserve, rather than replace,
+the earlier failed receipts and do not establish complete source acceptance.

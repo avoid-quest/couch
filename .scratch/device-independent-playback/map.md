@@ -8,8 +8,8 @@ resolved labels there do not close this matrix. Preserve their receipts and arch
 
 Library pairing grants control of playback in that Library; administrator access is
 separate. Participants follow their assigned Playback and can change its media,
-queue and devices. Explicit Control selects another Playback without rendering;
-Join adds this device. Opening a window never changes device assignment. The paired-device UI should disclose shared
+queue and devices. Home → Now opens another Playback without rendering;
+Add this device joins it. Opening a window never changes device assignment. The paired-device UI should disclose shared
 control. Legacy `household`/`personal` selectors are storage/migration aliases,
 not active user workflows. The old global Sendspin group and Listen together dialog
 are superseded by assigning audio Devices to an individual Playback.
