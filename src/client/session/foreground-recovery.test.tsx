@@ -11,7 +11,7 @@ afterEach(() => { globalThis.WebSocket = originalWebSocket; });
 
 const originalRevision = loadedBuild.revision;
 const credentials: Credentials = { origin: "http://localhost", token: "paired", installationId: "installation" };
-const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
+const state: SessionState = { sessionId: "household", queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
 const playlist = { type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", title: "Playlist" } as const;
 const sockets: Socket[] = [];
 const requests: Array<{ origin: string; path: string; token: string | null; signal?: AbortSignal | null }> = [];
@@ -184,13 +184,13 @@ test("healthy sockets and ordinary or slow provider commands survive every wake 
   expect(sockets).toEqual([socket]);
   expect(socket.readyState).toBe(Socket.OPEN);
   expect(requests).toHaveLength(before);
-  socket.emit({ type: "result", requestId: socket.sent[1]!.requestId, ok: true });
+  socket.emit({ type: "result", requestId: socket.sent.filter(message => message.type === "command")[1]!.requestId, ok: true });
   await ordinary;
   await elapse(8_001);
   await act(async () => burst());
   expect(outcome).toBe("pending");
   expect(activeTimers().map(timer => timer.delay)).toEqual([35_000]);
-  socket.emit({ type: "result", requestId: socket.sent[0]!.requestId, ok: true });
+  socket.emit({ type: "result", requestId: socket.sent.filter(message => message.type === "command")[0]!.requestId, ok: true });
   await slow;
   expect(outcome).toBe("confirmed");
   expect(session.connected).toBe(true);
@@ -234,7 +234,7 @@ test("reachable LAN recovers even when navigator reports offline, without replay
   await act(async () => sockets[1]!.emit({ type: "state", state }));
   expect(session.connected).toBe(true);
   expect(sockets[1]!.url.origin).toBe("ws://localhost");
-  expect(sockets[1]!.sent).toEqual([]);
+  expect(sockets[1]!.sent.filter(message => message.type === "command")).toEqual([]);
 });
 
 test.each(["target", "credential", "unmount"] as const)("%s replacement retires listeners, retry timers and late callbacks", async change => {

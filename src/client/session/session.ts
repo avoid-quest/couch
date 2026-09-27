@@ -291,9 +291,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
   }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, rendererEnabled, reconnectAttempt]);
 
-  const current = sameCredentials(owner, credentials) && !!ownerPlayback && (playbackId === "default" || ownerPlayback === playbackId);
+  const credentialCurrent = sameCredentials(owner, credentials);
+  const current = credentialCurrent && !!ownerPlayback && (playbackId === "default" || ownerPlayback === playbackId);
   const snapshot = current ? state : null;
-  const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
+  const connectionStatus: ConnectionStatus = credentialCurrent ? status : credentials ? "connecting" : "pairing-required";
   const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;
   const installationName = snapshot?.installationName;
@@ -386,5 +387,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   const playHere = useCallback(() => renderer.current?.play(), []);
 
-  return { playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+  return { playbackId, selectPlayback, scopedCredentials, rendererTargetId, rendererAttached, audioActivationRequired, setDeviceAudioReady, playHere, clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: credentialCurrent ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || credentialCurrent && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "sharing-disabled" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }

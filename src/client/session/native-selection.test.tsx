@@ -184,7 +184,7 @@ test("disabled remote control does not send a saved pairing", async () => {
 
 test("switching native targets clears the old clock before another host sends its baseline", async () => {
   const localSocket = Socket.instances.at(-1)!;
-  const state = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: "local-playback", status: "playing" as const, position: 200, duration: 600, volume: 80, seekable: true, error: null } };
+  const state = { sessionId: "household", queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: "local-playback", status: "playing" as const, position: 200, duration: 600, volume: 80, seekable: true, error: null } };
   await act(async () => localSocket.emit({ type: "state", state }));
   expect(clock.position).toBe(200);
   const retired = localSocket.onmessage!;

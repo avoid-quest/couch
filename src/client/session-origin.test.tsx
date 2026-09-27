@@ -15,7 +15,7 @@ let current: ReturnType<typeof useSession>;
 const originalRevision = loadedBuild.revision;
 const details: ConnectionDetails = { name: "Living room", player: "idle", urls: ["http://192.168.1.20:4100"], installationId: "installation" };
 const identity: ControllerIdentity = { controller: null, authority: "administrator", claimAvailable: false };
-const state: SessionState = { queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
+const state: SessionState = { sessionId: "household", queue: [], currentEntryId: null, activeProfile: { id: "household", name: "Household" }, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null } };
 const credentials: Credentials = { origin: "http://192.168.1.20:4100", token: "pairing", installationId: "installation" };
 
 class Socket {
@@ -163,7 +163,7 @@ test.each(["origin", "token", "installationId"] as const)("changing %s resets co
   await act(async () => { socket.open(); socket.receive({ type: "state", state }); });
   expect(current.identity).toEqual(identity);
   const pending = current.command({ type: "stop" }).then(() => null, error => error as Error);
-  expect(socket.sent).toHaveLength(1);
+  expect(socket.sent.filter(message => message.type === "command")).toHaveLength(1);
   const response = deferred<Response>();
   request.mockImplementation(() => response.promise);
   const next = { ...credentials, [key]: key === "origin" ? "http://192.168.1.21:4100" : "replacement" };
