@@ -131,3 +131,34 @@ audio. The picker now follows that same scope.
 
 The rebuilt Core includes the 10 ms stream-start fade. No physical pop retest or
 successful built native-video presentation check has yet followed these changes.
+
+## Mixer build 7b6be47a — standalone hosting, visible video and physical retest
+
+At 21:58:23 UTC the paused HLS checkpoint moved to native successfully. Couch
+selected the newly assigned Playback and opened Now at 392.1 s, paused. Explicit
+Play advanced the video. The user confirmed a visible picture; a later native
+capture also showed video pixels. The earlier readiness failure remains unresolved;
+this successful journey does not establish that every move succeeds.
+
+The native app then selected **This computer** through its connection menu. Its
+bundled Core listened on port 4100, with no independent server or launch environment
+required. **Pair a remote** offered the usable home-network address on this Mac
+with virtual interfaces. The user paired their phone at that address through the
+app and confirmed audible Sygma Radio. They switched on **mbp** in Output, adjusted
+its fader, and confirmed both devices played with **no pop**. This qualifies the
+reported transition on these devices, not physical synchronization or latency.
+
+This build still required **Enable audio** on the Mac. That requirement was imposed
+by Couch, despite the native webview's autoplay policy. The client-lifetimes layer
+now initializes the maintained audio SDK on authenticated native connection and
+reconnect. Device assignment still owns output reservation and media start. Browser
+gesture handling remains unchanged. A fresh built-app check of automatic native
+readiness is pending; the already activated process cannot prove it.
+
+The clean 7b6be47a Mac core/build/native gate passed. Linux reached the final Quit
+confirmation after passing browser playback, native pixels and restart; its retained
+journey was updated to acknowledge the confirmation when hosting remains enabled.
+The complete Linux desktop journey then passed on a9247004. That revision changed
+only the journey's two confirmation steps. Its Mac gate failed the existing PCM
+resume observation (`both decoded 880`); an isolated run passed, but the cause is
+unknown. Failed receipts remain preserved and are not green qualification.
