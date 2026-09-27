@@ -820,7 +820,7 @@ fn observed_tracks(mpv: &Mpv) -> Vec<NativeTrackInfo> {
             "sub" => TrackKind::Subtitle,
             _ => continue,
         };
-        tracks.push(NativeTrackInfo {
+        let info = NativeTrackInfo {
             id: index.to_string(),
             index: index as i32,
             kind,
@@ -836,9 +836,39 @@ fn observed_tracks(mpv: &Mpv) -> Vec<NativeTrackInfo> {
             selected: mpv
                 .get_property::<bool>(&format!("{prefix}/selected"))
                 .unwrap_or(false),
+        };
+        tracks.push((
+            info,
+            mpv.get_property::<i64>(&format!("{prefix}/program-id")).ok(),
+            !mpv.get_property::<bool>(&format!("{prefix}/external")).unwrap_or(false)
+                && mpv.get_property::<i64>(&format!("{prefix}/hls-bitrate")).is_ok(),
+            mpv.get_property::<bool>(&format!("{prefix}/external")).unwrap_or(false),
+        ));
+    }
+    let video = tracks.iter().find(|(track, _, _, _)| track.kind == TrackKind::Video && track.selected);
+    let audio = tracks.iter().find(|(track, _, _, _)| track.kind == TrackKind::Audio && track.selected);
+    let active_program = match (video, audio) {
+        (Some((_, video_program, video_hls, _)), Some((_, audio_program, audio_hls, _)))
+            if video_program == audio_program && *video_hls && *audio_hls => *video_program,
+        (None, Some((_, audio_program, true, _))) => *audio_program,
+        _ => None,
+    };
+    if let (Some(program), Some((selected_audio, _, _, _))) = (active_program, audio) {
+        let language = selected_audio.language.clone();
+        let label = selected_audio.label.clone();
+        // HLS bitrate variants can appear as separate audio tracks. Keep the active
+        // program and any explicitly named language/track alternatives.
+        tracks.retain(|(track, track_program, hls, external)| {
+            track.kind != TrackKind::Audio
+                || track.selected
+                || *external
+                || !*hls
+                || track_program.is_none_or(|id| id == program)
+                || (!track.language.is_empty() && track.language != language)
+                || (!track.label.is_empty() && track.label != label)
         });
     }
-    tracks
+    tracks.into_iter().map(|(track, _, _, _)| track).collect()
 }
 
 fn observed_chapters(mpv: &Mpv) -> Vec<MpvChapter> {
