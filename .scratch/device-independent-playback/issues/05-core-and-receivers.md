@@ -72,3 +72,22 @@ pause/seek/resume, lease-expiry silence, explicit reconnect/resume, disable and
 Core survival after app close. It uses Xvfb/null PulseAudio, not physical hardware;
 final clean-revision qualification remains required. Checkpoint restoration beyond queue/progress persistence and
 independent deployment guidance remain follow-up work in this issue.
+
+## Checkpoint recovery increment — 2026-09-27
+
+Core now restores a matching queue occurrence and its observed position, speed,
+tracks and original progress owner after restart, without assigning an output or
+resolving media. The existing picker explicitly prepares fresh delivery paused.
+Stop/EOF clear durable intent; failed handoff remains resumable. Profile/history
+changes require Stop while a restored item is pending, preserving progress ownership.
+
+Real Chromium/Jellyfin recovery retained 37.25 seconds at 1.5× after graceful Core
+restart with no media element/autoplay. Selecting this browser loaded a new grant
+paused at that position; the old grant returned 404. Resume advanced and Stop
+cleared the stored checkpoint. Disk-reopen tests also cover periodic crash recovery.
+
+The receiver layer passed clean-revision Linux verification at `51677c8e`: all core,
+native and build checks, 25 packaged-browser checks, and the actual libmpv receiver
+journey (lease-expiry audio removal after 8380 ms). Physical hardware/macOS/Windows
+journeys remain unqualified. Independent deployment guidance is the remaining
+implementation in this issue.

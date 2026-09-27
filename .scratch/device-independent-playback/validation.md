@@ -400,3 +400,33 @@ target before reconnect: silence after **8348 ms**, same-ID reconnect without au
 explicit resume, disable, and independent Core survival. The retained regression is
 `tests/linux/native-receiver.ts`; its targeted TypeScript check passes. The final
 source commit still needs the clean build/journey receipt before merge readiness.
+
+### Clean native receiver qualification
+
+Final receiver revision `51677c8e1cd28d0caa9e54c3a4b52d337e3462b2` passed
+`bun run verify --native` with clean before/after identity: core 1675 passed/4 skipped,
+three real-clock IPTV tests, native 71 passed/1 ignored plus two integrations and
+startup buffering. All steps exit zero. The separate packaged-browser journey
+passed 25 checks; actual native enrollment/playback/reconnect/disable/app-close
+journey passed, with watchdog audio removal at 8380 ms. Evidence:
+`.artifacts/device-independent-playback/native-qualification/exact-touchfix/`.
+The earlier exact run exposed a narrow phone output button; its owning renderer
+layer now uses the existing 44px minimum touch width. All final gates were rerun.
+
+## Core checkpoint recovery — 2026-09-27
+
+Disk-reopen tests cover graceful close/quiesce, periodic crash checkpoints, no
+autoplay/native-idle interference, stale queue identity, failed destination recovery,
+fresh paused browser/native delivery, original history ownership, profile/history
+mutation guards, Stop/EOF clearing and persistence failure. Focused regressions and
+typecheck pass; logs: `.artifacts/device-independent-playback/checkpoint-*.log`.
+
+Actual Chromium with Jellyfin 10.11.11: play/pause/seek 37.25 seconds at 1.5×;
+graceful Core restart restored the occurrence with no media element. Existing output
+picker "Move playback here" fetched fresh delivery and reached readyState 4 paused
+at 37.25/1.5×. Old grant returned 404. Explicit resume advanced to 66.71 seconds;
+Stop returned idle and persisted a null checkpoint. Evidence:
+`.artifacts/device-independent-playback/checkpoint-browser.json`. The first fixture
+attempt reconfigured Jellyfin on startup, correctly stopping playback; the fixture
+now skips reconfiguration when already connected. This is actual browser decode,
+not a native checkpoint journey or abrupt-process-kill browser qualification.

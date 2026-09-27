@@ -86,6 +86,14 @@ Installations that have enrolled a receiver also wait 12.5 seconds after Core
 restart before starting playback, covering leases issued by the previous process.
 The native window, player layout and local maintenance coordinator are unchanged.
 
+Core persists the current queue occurrence and observed position, speed and track
+choices on progress checkpoints and shutdown. Restart restores resumable intent
+without assigning hardware, resolving a source or autoplaying. Explicit output
+selection resolves fresh delivery and prepares it paused through the existing
+handoff path. Stop and completion clear the checkpoint; watching-profile/history
+changes require Stop while restored playback is pending. Provider grants, renderer
+identities and playback attempt IDs are never restored from the checkpoint.
+
 Most sources are remote. Prefer provider-to-renderer delivery; Core does not need
 to carry the media bytes to coordinate playback. Keep idle controllers inexpensive
 through lazy rendering and compact clock updates. Choose an existing compatible
