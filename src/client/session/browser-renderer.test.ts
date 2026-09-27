@@ -111,17 +111,24 @@ const deferred = () => {
 };
 const dashFixture = () => {
   const calls: unknown[] = [];
-  let error: (event: any) => void = () => {};
+  const listeners = new Map<string, (event: any) => void>();
   const player = {
     attach: async (_video: HTMLMediaElement) => { calls.push("attach"); },
     load: async (source: string, startTime?: number) => { calls.push([source, startTime]); },
     configure: (config: unknown) => { calls.push(config); },
-    addEventListener: (_type: string, listener: (event: any) => void) => { error = listener; },
+    addEventListener: (type: string, listener: (event: any) => void) => { listeners.set(type, listener); },
+    getAudioTracks: (): ReturnType<import("./browser-dash").DashPlayer["getAudioTracks"]> => [],
+    getTextTracks: (): ReturnType<import("./browser-dash").DashPlayer["getTextTracks"]> => [],
+    selectAudioTrack: (track: Parameters<import("./browser-dash").DashPlayer["selectAudioTrack"]>[0]) => { calls.push(["audio", track]); },
+    selectTextTrack: (track: Parameters<import("./browser-dash").DashPlayer["selectTextTrack"]>[0]) => { calls.push(["text", track]); },
+    seekRange: () => ({ start: 0, end: 100 }),
+    isLive: () => false,
+    isInProgress: () => false,
     trickPlay: (rate: number, useTrickPlayTrack?: boolean) => { calls.push(["speed", rate, useTrickPlayTrack]); document.querySelector("video")!.playbackRate = rate; },
     destroy: async () => { calls.push("destroy"); },
   };
   const library = { polyfill: { installAll() {} }, Player: Object.assign(function() { return player; }, { isBrowserSupported: () => true }) } as unknown as import("./browser-dash").DashLibrary;
-  return { calls, player, library, error: (code: number) => error({ detail: { severity: 2, code, data: ["https://private.invalid/token"] } }) };
+  return { calls, player, library, event: (type: string) => listeners.get(type)?.({}), error: (code: number) => listeners.get("error")?.({ detail: { severity: 2, code, data: ["https://private.invalid/token"] } }) };
 };
 
 test("DASH stays lazy, preserves paused preparation/start position, and caps adaptive video", async () => {
@@ -143,11 +150,11 @@ test("DASH stays lazy, preserves paused preparation/start position, and caps ada
   let plays = 0;
   video.play = async () => { plays++; };
   await Bun.sleep(0);
-  expect(fixture.calls).toContainEqual({ manifest: { disableText: true }, restrictions: { maxHeight: 720 } });
+  expect(fixture.calls).toContainEqual({ preferredText: [], accessibility: { handleForcedSubtitlesAutomatically: false }, restrictions: { maxHeight: 720 } });
   expect(fixture.calls).toContainEqual(["https://example.org/movie.mpd?token=secret", 42]);
   expect(video.playbackRate).toBe(1.5);
   expect(plays).toBe(0);
-  expect(states.at(-1)).toMatchObject({ status: "paused", audioTracksKnown: false });
+  expect(states.at(-1)).toMatchObject({ status: "paused", audioTracksKnown: true });
   video.playbackRate = 0;
   video.dispatchEvent(new Event("waiting"));
   expect(states.at(-1)?.speed).toBe(1.5);
@@ -190,7 +197,7 @@ test("replacement waits for DASH attach and destroy before reusing the element",
   expect(video.getAttribute("src")).toBeNull();
   attach.resolve();
   await Bun.sleep(0);
-  expect(fixture.calls).toEqual([{ manifest: { disableText: true } }, "destroy"]);
+  expect(fixture.calls).toEqual([{ preferredText: [], accessibility: { handleForcedSubtitlesAutomatically: false } }, "destroy"]);
   expect(video.getAttribute("src")).toBeNull();
   destroy.resolve();
   await Bun.sleep(0);
@@ -198,9 +205,9 @@ test("replacement waits for DASH attach and destroy before reusing the element",
   renderer.close();
 });
 
-test("progressive and HLS paths never import DASH", () => {
+test("progressive paths never import the adaptive player", () => {
   const renderer = createBrowserRenderer(() => {}, async () => { throw new Error("Unexpected DASH import"); });
-  for (const source of ["https://example.org/movie.mp4", "https://example.org/movie.m3u8", "https://example.org/movie.mp4?name=movie.mpd"]) {
+  for (const source of ["https://example.org/movie.mp4", "https://example.org/movie.mp4?name=movie.mpd"]) {
     renderer.command({ type: "load", playbackId: source, source, paused: true });
     expect(document.querySelector("video")?.src).toBe(source);
   }
@@ -274,5 +281,97 @@ test("stopping a pending DASH import releases the previous progressive source", 
   await Bun.sleep(0);
   expect(fixture.calls).toEqual([]);
   expect(video.getAttribute("src")).toBeNull();
+  renderer.close();
+});
+
+
+for (const extension of ["mpd", "m3u8"]) test(`public ${extension} tracks retain command identity across updates and allow subtitle off`, async () => {
+  const fixture = dashFixture();
+  type Audio = ReturnType<typeof fixture.player.getAudioTracks>[number];
+  type Text = ReturnType<typeof fixture.player.getTextTracks>[number];
+  const english = { language: "en", label: "English", roles: ["main"], active: true } as Audio;
+  const italian = { language: "it", label: "Italian", roles: ["main"], active: false } as Audio;
+  const captions = { id: 20, language: "en", label: "English captions", active: false } as Text;
+  let audio = [english, italian], text = [captions];
+  fixture.player.getAudioTracks = () => audio;
+  fixture.player.getTextTracks = () => text;
+  fixture.player.selectAudioTrack = track => { audio.forEach(candidate => { candidate.active = candidate === track; }); fixture.event("variantchanged"); };
+  fixture.player.selectTextTrack = track => { text.forEach(candidate => { candidate.active = candidate === track; }); fixture.event("textchanged"); };
+  const states: PlayerState[] = [];
+  let imports = 0;
+  const renderer = createBrowserRenderer(state => states.push(state), async () => { imports++; return fixture.library; });
+  renderer.report();
+  expect(imports).toBe(0);
+  expect(document.querySelector("video")).toBeNull();
+  renderer.command({ type: "load", playbackId: "manifest", source: `https://media.example/show.${extension}`, paused: true });
+  Object.defineProperty(document.querySelector("video")!, "readyState", { configurable: true, value: 2 });
+  await Bun.sleep(0);
+  expect(imports).toBe(1);
+  expect(states.at(-1)).toMatchObject({ audioTracksKnown: true, status: "paused" });
+  const initial = states.at(-1)!.tracks!;
+  expect(initial.map(track => [track.kind, track.language, track.selected])).toEqual([["audio", "en", true], ["audio", "it", false], ["subtitle", "en", false]]);
+  const italianIndex = initial.find(track => track.language === "it")!.index;
+  const captionIndex = initial.find(track => track.kind === "subtitle")!.index;
+  audio = [italian, english]; fixture.event("audiotrackschanged");
+  expect(states.at(-1)!.tracks!.find(track => track.language === "it")!.index).toBe(italianIndex);
+  renderer.command({ type: "track", playbackId: "manifest", kind: "audio", index: italianIndex });
+  expect(states.at(-1)!.tracks!.find(track => track.language === "it")!.selected).toBe(true);
+  renderer.command({ type: "track", playbackId: "manifest", kind: "subtitle", index: captionIndex });
+  expect(states.at(-1)!.tracks!.find(track => track.kind === "subtitle")!.selected).toBe(true);
+  renderer.command({ type: "track", playbackId: "manifest", kind: "subtitle", index: -1 });
+  expect(states.at(-1)!.tracks!.find(track => track.kind === "subtitle")!.selected).toBe(false);
+  audio = [english]; text = []; fixture.event("trackschanged");
+  renderer.command({ type: "track", playbackId: "manifest", kind: "audio", index: italianIndex });
+  expect(english.active).toBe(false);
+  expect(states.at(-1)!.tracks).toHaveLength(1);
+  renderer.command({ type: "stop" }); await Bun.sleep(0);
+  const count = states.length;
+  fixture.event("trackschanged"); fixture.error(3016);
+  expect(states).toHaveLength(count);
+  expect(fixture.calls.filter(call => call === "destroy")).toHaveLength(1);
+  renderer.close();
+});
+
+test.each([false, true])("manifest live range follows DVR updates, clamps seeks and preserves radio policy: radio=%s", async radio => {
+  const fixture = dashFixture();
+  let range = { start: 120, end: 180 };
+  fixture.player.seekRange = () => range;
+  fixture.player.isLive = () => true;
+  const states: PlayerState[] = [];
+  const renderer = createBrowserRenderer(state => states.push(state), async () => fixture.library);
+  renderer.command({ type: "load", playbackId: "live", source: "https://media.example/live.m3u8", paused: true, radio });
+  const video = document.querySelector("video")!;
+  Object.defineProperty(video, "readyState", { configurable: true, value: 2 });
+  Object.defineProperty(video, "duration", { configurable: true, value: Infinity });
+  await Bun.sleep(0);
+  expect(fixture.calls).toContainEqual(["https://media.example/live.m3u8", undefined]);
+  expect(states.at(-1) as unknown).toMatchObject({ live: true, duration: null, seekable: !radio, seekRange: radio ? undefined : range });
+  video.currentTime = 150;
+  renderer.command({ type: "seek", playbackId: "live", position: 1 });
+  expect(video.currentTime).toBe(radio ? 150 : 120);
+  range = { start: 140, end: 200 }; fixture.event("manifestupdated");
+  expect(states.at(-1) as unknown).toMatchObject({ seekRange: radio ? undefined : range });
+  renderer.command({ type: "seek", playbackId: "live", position: 999 });
+  expect(video.currentTime).toBe(radio ? 150 : 200);
+  range = { start: 200, end: 200 }; fixture.event("manifestupdated");
+  expect(states.at(-1)?.seekable).toBe(false);
+  renderer.close(); await Bun.sleep(0);
+});
+
+test("public HLS failures retain their format and stale load failures cannot replace current state", async () => {
+  const fixture = dashFixture();
+  let reject!: (error: unknown) => void;
+  fixture.player.load = () => new Promise((_resolve, fail) => { reject = fail; });
+  const states: PlayerState[] = [];
+  const renderer = createBrowserRenderer(state => states.push(state), async () => fixture.library);
+  renderer.command({ type: "load", playbackId: "hls", source: "https://media.example/live.m3u8", paused: true });
+  await Bun.sleep(0);
+  fixture.error(3016);
+  expect(states.at(-1)?.error).toBe("This browser cannot play HLS (3016). Try Couch TV.");
+  renderer.command({ type: "load", playbackId: "direct", source: "https://media.example/next.mp4", paused: true });
+  await Bun.sleep(0);
+  reject({ code: 1234 }); await Bun.sleep(0);
+  expect(states.at(-1)).toMatchObject({ playbackId: "direct", error: null });
+  expect(document.querySelector("video")!.src).toBe("https://media.example/next.mp4");
   renderer.close();
 });
