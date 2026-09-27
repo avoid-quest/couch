@@ -65,7 +65,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     tail = work.then(() => {}, () => {});
     return work;
   };
-  const retire = async () => { cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; prepared = undefined; startedUs = 0; await delay(sendspinDrainMs); };
+  const retire = async () => { const draining = activeStreams.size > 0; cancel(); clear(); await decoder?.close(); await loop; decoder = undefined; cancellation = undefined; prepared = undefined; startedUs = 0; if (draining) await delay(sendspinDrainMs); };
   const openDecoder = () => {
     if (!load) throw new Error("No Sendspin source is loaded.");
     cancellation = new AbortController();
