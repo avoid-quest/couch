@@ -98,22 +98,13 @@ Most sources are remote. Prefer provider-to-renderer delivery; Core does not nee
 to carry the media bytes to coordinate playback. Keep idle controllers inexpensive
 through lazy rendering and compact clock updates. Choose an existing compatible
 rendition before adding relay, remuxing or transcoding for a demonstrated need.
-The browser path handles compatible direct HTTP(S) media and public, CORS-enabled
-DASH VOD at `.mpd` URLs through a lazy Shaka Player adapter. DASH keeps upstream
-adaptive renditions under the existing height cap; Core does not relay or encode.
-The adapter releases its pipeline on stop/replacement/fatal failure and preserves
-commanded speed while Shaka temporarily pauses its clock for buffering. Separate
-audio/video URLs, required headers, clip segments and external subtitles are still
-rejected for generic sources. Jellyfin negotiates a conservative browser direct-play
-profile from Media Capabilities probes (single-track H.264/AAC MP4 or MP3). Its
-header-authenticated bytes use an attempt-scoped HTTP range relay; the selected
-renderer receives only a revocable grant, never the provider token. Prepared
-provider sessions remain separate until handoff commits, and failed destinations
-release their own grant without destroying the source needed for rollback. Broader
-format adaptation remains unfinished.
-DASH audio selection and subtitles are not yet exposed; audio metadata stays unknown
-rather than inventing a track. Those are delivery limits, not a
-reason to design a reduced browser UI.
+The browser handles compatible direct HTTP(S) media and public DASH through a lazy
+Shaka adapter. Media fetch and decoding belong to the selected client; Core owns
+source references and playback intent. Alternate audio, subtitles and live/DVR
+capabilities are being added at this renderer boundary. An unsupported source stays
+explicitly unsupported until a client/provider-native path is available. The new
+Jellyfin browser relay/adaptation experiment was abandoned by user instruction;
+existing native provider integration remains compatible.
 
 The Snapcast adapter presents one configured group as a target and publishes observed
 membership/volume through the existing picker. One Core-owned FFmpeg producer decodes
@@ -126,8 +117,9 @@ fences new playback for 750ms after Core restart. Removed speakers are assigned 
 an idle stream, and active foreign groups cannot be silently taken over. See
 [Snapcast configuration and limits](snapcast.md). Sendspin remains a separate adapter.
 
-For the next source-access gap, consult
-[browser delivery research](research/browser-media-delivery.md). For group adapters,
+For client playback API questions, consult
+[browser delivery research](research/browser-media-delivery.md) selectively. Its relay
+and conversion proposals are historical alternatives, not the active scope. For group adapters,
 consult [multiroom research](research/multiroom-snapcast-sendspin.md). The
 [PWA runtime exploration](research/couch-runtime-options.md) is an alternative
 deployment proposal, not a prerequisite or the current implementation plan.

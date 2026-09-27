@@ -1,8 +1,8 @@
 # Let people play independently without sharing every queue
 
 Type: task
-Status: open
-Blocked by: 01
+Status: claimed
+Blocked by: none
 
 ## Goal
 
@@ -29,3 +29,20 @@ handoff. Opening a personal browser must not unexpectedly replace living-room pl
 Two sessions can play different remote items, seek and change subtitles without
 cross-updating queues, upstream reports, progress or cleanup. A controller cannot
 observe/control a session outside its permissions. Existing household data migrates intact.
+
+## Implementation contract
+
+Use one shared Core service graph and one global output registry. Household storage
+remains intact. A personal session belongs to the authenticated controller ID and
+uses an explicit playback-store facade over private SQLite state. Watching profiles
+are not authentication identities. Requests select only household or own personal
+scope; private state/events never reach another controller.
+
+Session runtimes own queue, progress, continuation, provider playback attempts,
+subtitles and radio observations. Shared catalogs/configuration/scanners remain
+singletons. Reserve outputs before asynchronous preparation; explicit takeover
+requires the previous output to stop safely. Opening a client never steals playback.
+
+UI separates independent Play here, Move this session and joining an authorized
+group timeline. Measure two concurrent sessions plus idle controllers after the
+functional isolation tests pass.
