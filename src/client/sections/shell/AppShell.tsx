@@ -255,7 +255,7 @@ function ConnectionStatus() {
   if (state?.player.status === "unavailable") {
     const assigned = assignedIds.map(id => playbackState?.devices?.find(device => device.id === id));
     const disconnected = assigned.filter(device => device && !device.connected);
-    if (disconnected.length) return <StatusLine>Reconnect {disconnected.map(device => device!.name).join(", ")} from Devices to resume playback.</StatusLine>;
+    if (disconnected.length) return <StatusLine>Reconnect {disconnected.map(device => device!.name).join(", ")}, or switch them off in Output to resume playback.</StatusLine>;
     if (assigned.length && assigned.every(device => device?.connected)) return state?.currentEntryId ? <StatusLine>Press Play to resume on {assigned.map(device => device!.name).join(", ")}.</StatusLine> : null;
     return <StatusLine>Player not running on {assigned.map(device => device?.name).filter(Boolean).join(", ") || "the selected devices"}.</StatusLine>;
   }

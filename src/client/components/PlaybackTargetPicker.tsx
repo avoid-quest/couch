@@ -48,7 +48,7 @@ export function PlaybackTargetPicker() {
               const assigned = assignedIds.includes(device.id);
               const occupied = !!device.playbackId && device.playbackId !== state?.sessionId;
               const otherPlayback = playbacks.find(playback => playback.id === device.playbackId);
-              const canToggle = !!selected && device.connected && !disabled && !occupied && (assigned || device.audio || assignedIds.length === 0);
+              const canToggle = !!selected && !disabled && (assigned || device.connected && !occupied && (device.audio || assignedIds.length === 0));
               const volumeEnabled = assigned && device.connected && !disabled;
               return <div key={device.id} className="flex w-36 shrink-0 flex-col items-center px-4 text-center first:pl-0 last:pr-0">
                 <div className="flex h-8 w-full items-center justify-between gap-1"><span className="text-xs tabular-nums text-muted-foreground">{device.muted ? "Muted" : `${device.volume}%`}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Options for ${device.name}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={disabled || !device.connected || occupied || assigned} onSelect={() => { void newPlayback(device.id).then(ok => { if (ok) setOpen(false); }); }}>New playback here</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>

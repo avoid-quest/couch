@@ -178,7 +178,7 @@ for (const [actorId, controllerId, expected] of [["host", undefined, 0], ["phone
 
 test("browsing names the unavailable renderer instead of the local Core", async () => {
   await render("unavailable", false, false, undefined, undefined, [{ id: "browser:phone", name: "Kitchen phone", kind: "endpoint", backend: "browser", connected: false }]);
-  expect(screen.getByText("Reconnect Kitchen phone from Devices to resume playback.")).toBeInTheDocument();
+  expect(screen.getByText("Reconnect Kitchen phone, or switch them off in Output to resume playback.")).toBeInTheDocument();
 });
 
 test("browsing does not name Core when a disconnected browser disappears from discovery", async () => {
@@ -200,7 +200,7 @@ test("a stopped checkpoint does not imply device setup", async () => {
 
 test("a disconnected destination asks for reconnection before transfer", async () => {
   await render("unavailable", false, false, undefined, undefined, [{ id: "rooms", name: "Home speakers", kind: "group", backend: "sendspin", connected: false }], "rooms");
-  expect(screen.getByText("Reconnect Home speakers from Devices to resume playback.")).toBeInTheDocument();
+  expect(screen.getByText("Reconnect Home speakers, or switch them off in Output to resume playback.")).toBeInTheDocument();
 });
 
 
