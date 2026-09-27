@@ -14,20 +14,23 @@ export function PlaybackTargetPicker() {
   const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, setDeviceVolume, activateDeviceAudio, error } = useSessionGate();
   const [open, setOpen] = useState(false);
   const [replace, setReplace] = useState<Device | null>(null);
+  const [pending, setPending] = useState<string[] | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const devices = state?.devices ?? [];
   const playbacks = state?.playbacks ?? [];
   const selected = playbacks.find(playback => playback.id === state?.sessionId);
   const assignedIds = state?.deviceIds ?? selected?.deviceIds ?? [];
-  const disabled = !connected || !!state?.handoff;
+  const disabled = !connected || !!state?.handoff || pending !== null;
+  const waiting = pending?.map(id => devices.find(device => device.id === id)).filter(device => device?.requiresGesture).map(device => device!.name) ?? [];
   const assign = (ids: string[], takeover = false, close = true) => {
-    void assignDevices(ids, takeover).then(ok => { if (ok && close) setOpen(false); });
+    setPending(ids);
+    void assignDevices(ids, takeover).then(ok => { if (ok && close) setOpen(false); }).finally(() => setPending(null));
   };
   return <>
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild><Button ref={trigger} variant="ghost" disabled={!state} aria-label="Output"><MonitorSpeaker aria-hidden="true" /><span>Output</span></Button></SheetTrigger>
       <SheetContent side="bottom" className="max-h-[85dvh] gap-0" onCloseAutoFocus={event => { if (replace) event.preventDefault(); }}>
-        <SheetHeader className="border-b px-6 py-4 pr-16"><SheetTitle>Output</SheetTitle><SheetDescription>{state?.handoff ? "Moving playback…" : selected?.title ?? "Choose where to play"}</SheetDescription></SheetHeader>
+        <SheetHeader className="border-b px-6 py-4 pr-16"><SheetTitle>Output</SheetTitle><SheetDescription>{waiting.length ? `Enable audio in Couch on ${waiting.join(", ")} to continue.` : pending !== null ? "Updating devices…" : state?.handoff ? "Moving playback…" : selected?.title ?? "Choose where to play"}</SheetDescription></SheetHeader>
         <div className="overflow-y-auto px-6 pb-6">
           {playbacks.some(playback => playback.id !== state?.sessionId) && <section aria-label="Other playbacks" className="border-b py-3">
             {playbacks.filter(playback => playback.id !== state?.sessionId).map(playback => <div key={playback.id} className="flex min-h-11 items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div><Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button></div>)}
