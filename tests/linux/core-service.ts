@@ -56,7 +56,7 @@ async function stop() {
   await Promise.all(readers);
 }
 async function request(origin: string, path: string, token?: string, body?: unknown) {
-  return fetch(origin + path, { method: body === undefined ? "GET" : "POST", headers: {
+  return fetch(origin + path, { method: body === undefined ? "GET" : "POST", headers: { Origin: origin,
     ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }),
   }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(5_000) });
 }
@@ -86,7 +86,7 @@ try {
   assert.equal((await (await request(origin, "/api/controllers/me", token)).json()).authority, "administrator");
   assert.equal((await request(origin, "/api/settings", token, { name: "Independent Core qualification" })).status, 200);
   checks.push("HTTP pairing, separate one-use administrator bootstrap and persistent settings");
-  socket = new WebSocket(await remoteSocketUrl(origin, token));
+  socket = new WebSocket(await remoteSocketUrl(origin, token), { headers: { Origin: origin } });
   let baseline: SessionState | undefined;
   socket.onmessage = event => { const message = JSON.parse(String(event.data)); if (message.type === "state") baseline = message.state; };
   await wait(() => !!baseline, "Authenticated WebSocket receives its session baseline");
