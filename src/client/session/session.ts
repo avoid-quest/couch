@@ -448,7 +448,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     const previous = localAssignment.current;
     const first = !previous || !sameCredentials(previous.credentials, credentials);
     localAssignment.current = { credentials, target, playbackId: assigned };
-    if (assigned && (first ? !selected.explicit : previous.target !== target || previous.playbackId !== assigned)) selectPlayback(assigned, false);
+    if (assigned && assigned !== state.sessionId && (first ? !selected.explicit : previous.target !== target || previous.playbackId !== assigned)) selectPlayback(assigned, false);
   }, [credentials, rendererTargetId, trustedLocal, state, selected.explicit, selectPlayback]);
 
   useEffect(() => {
