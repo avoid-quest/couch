@@ -289,3 +289,16 @@ groups remain issues 05 and 03, with their resolved issue-01 blockers reconciled
 Implementation references: [Shaka basic usage](https://shaka-project.github.io/shaka-player/docs/api/tutorial-basic-usage.html),
 [Shaka Player API](https://shaka-project.github.io/shaka-player/docs/api/shaka.Player.html),
 [Shaka restrictions](https://shaka-project.github.io/shaka-player/docs/api/shaka.extern.html#.Restrictions).
+
+## Target-aware controls — 2026-09-27
+
+Core sound-output queries/choices and links now require native assignment; browser
+volume still controls the selected renderer. Unavailable names handle both known
+disconnected targets and removed browser descriptors. Host/admin source-management
+visibility follows authenticated authority. No layout/window/navigation changes.
+
+Typecheck and 68 tests across PlaybackStatus, AppShell, PlayerPage and SettingsPage
+pass. Log: `.artifacts/device-independent-playback/target-controls-tests.log`.
+The bottom Core PR was independently checked in a detached worktree at `7a18b833`: typecheck
+and 229 server tests passed; 7 LAN tests skipped because no LAN interface was selectable.
+These results are not physical audio-output validation or an exact-revision merge gate.

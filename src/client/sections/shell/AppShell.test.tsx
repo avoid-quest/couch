@@ -73,12 +73,12 @@ test("the local host's update page offers its controls", async () => {
   expect(screen.getByLabelText("Install updates")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string) {
+async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string, target?: SessionState["targets"]) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
   if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { metadata: { currentWindow: { label: "main" } }, invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
   const state: SessionState = {
-    installationName: "Desk Couch", activity,
+    installationName: "Desk Couch", activity, targets: target, targetId: target ? target[0]?.id ?? "browser:phone" : undefined,
     activeProfile: { id: "household", name: "Household" },
     queue: status === "unavailable" || emptyQueue ? [] : [{ id: "movie", title: "Movie", source: "library:movie" }],
     currentEntryId: status === "playing" || status === "ended" ? "movie" : null,
@@ -172,3 +172,13 @@ for (const [actorId, controllerId, expected] of [["host", undefined, 0], ["phone
     }
   });
 }
+
+test("browsing names the unavailable renderer instead of the local Core", async () => {
+  await render("unavailable", false, false, undefined, undefined, [{ id: "browser:phone", name: "Kitchen phone", kind: "endpoint", backend: "browser", connected: false }]);
+  expect(screen.getByText("Player not running on Kitchen phone.")).toBeInTheDocument();
+});
+
+test("browsing does not name Core when a disconnected browser disappears from discovery", async () => {
+  await render("unavailable", false, false, undefined, undefined, []);
+  expect(screen.getByText("Player not running on the selected playback output.")).toBeInTheDocument();
+});

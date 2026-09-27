@@ -9,11 +9,11 @@ import { useSessionGate } from "@/session/session-context";
 // Routes render this page only for Sources and its per-source pages.
 export function SettingsPage({ section }: { section: SettingsPage }) {
   const { credentials } = useShell();
-  const { connected, host, identity, state, details } = useSessionGate();
+  const { connected, identity, state, details } = useSessionGate();
   const source = section.startsWith("source-") ? section.slice(7) as SourceKind : undefined;
   return (
     <SettingsLayout section={section}>
-      <SettingsSources canManage={!!host || identity?.authority === "administrator"} connected={connected} credentials={credentials} source={source} hostName={deviceName(state?.installationName ?? details?.name)} />
+      <SettingsSources canManage={identity?.authority === "host" || identity?.authority === "administrator"} connected={connected} credentials={credentials} source={source} hostName={deviceName(state?.installationName ?? details?.name)} />
     </SettingsLayout>
   );
 }

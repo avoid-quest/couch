@@ -136,7 +136,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.source.startsWith("file:") || current?.source.startsWith("library:") ? "The file is missing from its folder." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
-  const status = !current ? null : unavailable ? { title: `Player not running on ${localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
+  const status = !current ? null : unavailable ? { title: `Player not running on ${state?.targets && state.targetId !== "native" ? state.targets.find(target => target.id === state.targetId)?.name ?? "the selected playback output" : localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }
     : retry ? { title: `Reconnecting to ${current.title}`, detail: `Retrying in ${retrySeconds} s (${retry.attempt} of ${retry.maximum})`, busy: true }
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }

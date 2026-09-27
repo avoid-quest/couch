@@ -476,3 +476,17 @@ test("TV Space still pauses when controls are visible", async () => {
   await act(async () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
   expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: true }]);
 });
+
+test("unavailable browser playback names its renderer even in the local native shell", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const unavailable = { ...state, targetId: "browser:phone", targets: [{ id: "browser:phone", name: "Kitchen phone", kind: "endpoint" as const, backend: "browser" as const, connected: false }], player: { ...state.player, status: "unavailable" as const } };
+  await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: unavailable }}><PlayerPage /></ShellProviders>));
+  expect(screen.getByText("Player not running on Kitchen phone")).toBeInTheDocument();
+});
+
+test("a disconnected browser removed from target discovery is not named as the Core", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const unavailable = { ...state, targetId: "browser:phone", targets: [], player: { ...state.player, status: "unavailable" as const } };
+  await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: unavailable }}><PlayerPage /></ShellProviders>));
+  expect(screen.getByText("Player not running on the selected playback output")).toBeInTheDocument();
+});
