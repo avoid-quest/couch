@@ -1,3 +1,7 @@
+> Scope correction, 2026-09-27: historical Jellyfin browser relay/adaptation results
+> below are archived evidence. That work is abandoned by user instruction. Current
+> direction and active completion criteria are in map.md and the issue files.
+
 # Browser / TV iteration validation — 2026-09-27
 
 Implemented in this worktree. The native observations below are simulated, not a

@@ -1,151 +1,44 @@
-# Make Couch playback device-independent
+# Device-independent playback
 
-Label: wayfinder:map
-Status: open
+Status: active
 
-## Destination
+## Current direction
 
-Make Couch's shared UI control a session that can play in a browser, on Couch TV,
-or on a compatible output group, with remote sources as the normal input.
-Reach this through usable iterations, starting with browser ↔ TV playback and handoff.
+Clients fetch, decode and render supported sources directly. Core owns authorization,
+queue/session intent, persistence and output assignment. Idle controllers fetch no
+media. Group backends own synchronization. Preserve the existing app presentation.
 
-## Notes
+The user explicitly abandoned new Jellyfin work on 2026-09-27. Existing native
+provider support remains compatible; new Core browser relays/adaptation are removed.
+The uncommitted HLS experiment is preserved in stash
+`6b5303026b2056bdbf34fb39efd05923bac7de72`, with ignored qualification artifacts.
+It is not an implementation dependency or a priority for future agents.
 
-- The preparation session on 2026-09-27 created this handoff, and a subsequent agent
-  implemented the first iteration. [The continuation prompt](start.md) describes
-  the current state; do not repeat the completed first slice.
-- The user explicitly requested faster iteration for a personal project and delegated
-  routine design choices. This map carries execution into the effort: its `task`
-  tickets are implementation iterations, overriding Wayfinder's default decision-only
-  workflow. Do not restart a grilling, research, or approval phase before building.
-- [The implementation brief](brief.md) supplies working defaults, not claims of
-  decisions individually approved by the user. Change a default when code or a
-  working experiment demonstrates a better small solution; record the reason.
-- Local Markdown is the tracker fallback because the repository has no configured
-  Wayfinder tracker. Child issues live in `issues/`. `Blocked by` records dependencies;
-  open, unclaimed issues whose blockers are resolved form the frontier, ordered by filename.
-  Claim by saving `Status: claimed`; finish with `Status: resolved` and `## Answer`,
-  then add a named link and one-line outcome below. Leave a short continuation note
-  when unfinished. Do not call a stub or untested simulation a completed integration.
-- Consult repo `AGENTS.md`. Reuse Bun, React, SQLite, Tauri/libmpv, pairing and the
-  existing UI. Use first-class media libraries and backend integrations. Keep the
-  core out of the media byte path when possible. Future Snapcast and Sendspin support
-  must fit the model; implementing both is not a prerequisite for the first iteration.
-- Existing research is evidence to consult selectively, not a mandatory reading or
-  release checklist. This brief supersedes its proposed rollout order and broad
-  qualification gates for the first personal-project iteration.
-- Resolve ordinary implementation questions autonomously. Ask only for missing
-  information or access that genuinely prevents progress, or a new destructive action.
+## Existing backlog
 
-## Decisions so far
+| Issue | Current state | Completion still needed |
+| --- | --- | --- |
+| [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
+| [02 Client sources](issues/02-remote-source-compatibility.md) | In progress | Client audio/subtitle/live behavior and supported-source evidence. |
+| [03 Groups](issues/03-multiroom-output.md) | Snapcast implemented | Sendspin adapter, pairing and qualified recovery/transfer. |
+| [04 Adaptation](issues/04-media-adaptation.md) | Revised scope | Client capability/rendition selection; conversion only for a new demonstrated need. |
+| [05 Core/receivers](issues/05-core-and-receivers.md) | Implemented | Host boot and physical/platform qualification remain separate. |
+| [06 Independent sessions](issues/06-independent-sessions.md) | In progress | Private storage, provider playback state, output ownership, scoped HTTP/WS and UI. |
+| [07 External access](issues/07-internet-access.md) | Admission/proxy implemented | Actual browser topology qualification. |
+| [08 UI parity](issues/08-shared-ui-parity.md) | Existing flows checked | Extend checks for new session/group controls. |
 
-[Browser / TV playback and handoff](issues/01-browser-tv-handoff.md) — resolved for the first direct-media iteration: real browser radio/video, persistent rendering and bidirectional handoff; TV routing validated with a simulated native peer. [Checks and limits](validation.md).
+## Coordination
 
-Review fixes now cover idle browser volume, fresh delivery recovery and rollback,
-honest audio-track metadata, and structured autoplay handling. See validation for
-the recorded checks and the latest Core-only iteration.
+The existing draft stack is #616, through service PR #623. New planned layers are
+client-first correction → session storage → session outputs → browser tracks →
+Sendspin → independent sessions. Each parallel branch has a separate worktree.
+The coordinator integrates dependencies and rebases the completed layers before
+submission. Each PR must be linked to this T3 thread. Nothing is merged or released.
 
-The user confirmed Core-only or Core plus local UI/native playback, with the full
-shared browser UI acting as controller and optionally renderer. Preserve the current
-app experience and window model while expanding capabilities. [The architecture](../../docs/architecture.md)
-is the implementation reference; standalone-PWA research is an unselected alternative.
+Runtime costs: client video decoding/rendering is the main direct-play workload.
+Core source resolution is transient; group PCM decoding/distribution is the central
+media workload. Measure concurrent sessions and idle controllers after integration,
+including CPU, memory, Core network traffic and command latency. Do not infer
+performance from passing functional tests.
 
-The Core-only increment now omits the native endpoint when no native command channel
-exists, advertises playback capabilities and waits for explicit browser selection.
-Buffering and handoff/recovery regressions are covered. The branch now includes main's
-desktop remote-reachability fix at `3bd72c7d`; preserve it rather than recreating it.
-
-Issue 02 now includes a working direct public DASH VOD increment: lazy Shaka rendering,
-upstream adaptive quality under the height cap, real browser handoff and cleanup.
-Header-dependent providers and Jellyfin remain the next source-specific access work. [Issue 05](issues/05-core-and-receivers.md)
-records the partial Core-only step and outstanding independent native lifecycle.
-Physical libmpv/TV qualification remains outstanding. See validation for exact checks.
-
-## Not yet specified
-
-- Source-specific compatibility gaps found while playing Couch's real provider mix;
-  the observations will determine additional delivery work, not a speculative matrix.
-- Constraints discovered while connecting the first synchronized backend that may
-  change the second adapter or later bridges.
-- Additional native/mobile integrations whose scope depends on actual use of the
-  shared browser and TV workflows.
-
-## Out of scope
-
-- Replacing the UI framework, native playback engine, database, or backend runtime.
-- Treating local-file serving as the primary milestone.
-- Cloud federation, automatic NAT traversal, or building a public hosted service.
-- A custom audio synchronization protocol, arbitrary mixed-backend synchronization,
-  and distributed TV lip-sync. Music groups come first; these need separate evidence.
-- Implementing every future compatibility feature before a usable handoff exists.
-
-## Latest increment — direct DASH VOD
-
-[Remote source compatibility](issues/02-remote-source-compatibility.md) stays open
-with a completed direct DASH slice. The real Angel One manifest failed native browser
-loading and now plays through the existing UI with seek/navigation, two-browser
-handoff and disconnect recovery. No UI/window, protocol or Core ownership change.
-[Validation](validation.md) records exact evidence and remaining provider/hardware gaps.
-
-The blockers on issues 03 and 05 now reflect resolved issue 01. Both can proceed
-independently of source compatibility; neither is implemented by a stub. Current PATH
-has no Snapcast/Sendspin executable, and independent native enrollment/lifecycle is
-still absent. Adaptation, independent sessions, internet access and UI parity remain
-in their existing issues 04, 06, 07 and 08.
-
-[Shared UI parity](issues/08-shared-ui-parity.md) — resolved for the current native/browser
-workflows: Core hardware controls follow the selected target, disconnected output copy
-is accurate, and source management follows authenticated authority. 68 UI tests pass.
-
-Initial draft stack: [Core targets #613](https://github.com/avoid-quest/couch/pull/613) →
-[browser renderer #614](https://github.com/avoid-quest/couch/pull/614) →
-[architecture records #615](https://github.com/avoid-quest/couch/pull/615).
-Subsequent implementation layers extend this same stack.
-
-## Latest increment — Jellyfin browser direct play
-
-Issue 02 now negotiates actual browser capability and privately relays compatible
-Jellyfin media with HTTP ranges. Real browser playback and paused transfer passed;
-provider attempt ownership and rollback have focused integration coverage. This
-closes the demonstrated authentication gap without starting an encoder. Broader
-formats, native enrollment, groups, independent sessions and external access remain
-in their existing issues. Target controls shipped as draft PR #617.
-
-[Explicit external access](issues/07-internet-access.md) now has canonical HTTPS
-origin/trusted-peer admission, separate pairing opt-in and host-token isolation.
-A real Caddy fixture verifies TLS discovery; private-CA browser trust limits are
-recorded. Jellyfin browser delivery is draft [PR #618](https://github.com/avoid-quest/couch/pull/618).
-
-[Native receivers](issues/05-core-and-receivers.md) now enroll explicitly from the
-existing desktop/TV window, use stable paired identity and native-enforced leases,
-and keep installation maintenance separate. Real Linux libmpv playback and watchdog
-silence passed in an exploratory fixture; final clean-revision qualification and
-checkpoint restoration remain. HTTPS proxy access is draft [PR #619](https://github.com/avoid-quest/couch/pull/619).
-
-## Latest increment — restart recovery
-
-Native receivers are draft [PR #620](https://github.com/avoid-quest/couch/pull/620),
-qualified on clean revision `51677c8e` with core/native/build verification, packaged
-browser checks and actual Linux libmpv recovery. Core checkpoints now restore
-resumable intent without autoplay, and explicit output choice obtains fresh delivery
-paused. Real Chromium/Jellyfin restart, seek/speed retention and grant replacement
-passed. Issue 05 still needs independent deployment guidance; issue 03 is next for
-an actual Snapcast adapter, using the qualified backend buffering limits.
-
-## Latest increment — real Snapcast output
-
-[Restart checkpoints #621](https://github.com/avoid-quest/couch/pull/621) preserve
-resumable intent. Issue 03 now has a working Snapcast 0.35.0 adapter and member
-controls in the existing picker. Real two-client transport/recovery and actual
-Jellyfin browser/group transfers pass. Timing is explicitly estimated; software
-sink captures do not establish physical speaker synchronization. Sendspin, Core
-service deployment, demonstrated provider adaptation and independent sessions remain
-in the existing backlog. See validation for actual counts and retained evidence.
-
-Snapcast is draft [PR #622](https://github.com/avoid-quest/couch/pull/622). Exact
-commit `52e09f46` passed the real 18-check group journey and Linux `verify --remote`,
-including 25 compiled-browser checks, with clean before/after identity.
-
-The independent Linux Core service slice adds a systemd unit and operator guide,
-reusing the existing compiled server and authorization paths. Exact process/act
-qualification follows its commit. Systemd boot on the intended host remains separate.
+Detailed existing receipts and unqualified environments: [validation.md](validation.md).

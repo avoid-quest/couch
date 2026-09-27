@@ -1,7 +1,7 @@
 # Run Couch Core independently and connect another native receiver
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 
 ## Goal
@@ -106,3 +106,12 @@ qualification entry point and distinguishes it from systemd boot qualification.
 The exact committed-revision act/process check is pending; a disposable systemd
 PID1 probe is unavailable in this environment, so host boot integration remains
 a specifically unqualified check. No hosted workflow was dispatched.
+
+## Current result
+
+Independent Core, native enrollment/leases, restart checkpoints and Linux deployment
+are implemented. Exact service commit721ff602 passed the required act image, unit
+validation and six real compiled-process checks, including first-pair administrator,
+optional recovery, restart persistence and SIGTERM. Evidence is in
+`.artifacts/core-service-act/qualification.json`. Physical/platform journeys and
+systemd boot integration remain explicitly unqualified checks.

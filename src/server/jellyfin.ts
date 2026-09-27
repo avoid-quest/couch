@@ -16,7 +16,7 @@ import { getUserLibraryApi } from "@jellyfin/sdk/lib/utils/api/user-library-api"
 import { getTvShowsApi } from "@jellyfin/sdk/lib/utils/api/tv-shows-api";
 import axios from "axios";
 import type { JellyfinConnection, JellyfinItem, JellyfinItems, JellyfinStatus } from "../shared/jellyfin";
-import type { BrowserMediaCapabilities, PlayerState, QueueEntry } from "../shared/protocol";
+import type { PlayerState, QueueEntry } from "../shared/protocol";
 import type { PlaybackContinuation } from "./continuation";
 
 const ticksPerSecond = 10_000_000;
@@ -37,24 +37,6 @@ const profile: DeviceProfile = {
     ...[...subtitleFormats, "pgssub"].map(Format => ({ Format, Method: "External" as const })),
   ],
 };
-
-function browserProfile(capabilities: BrowserMediaCapabilities): DeviceProfile {
-  return {
-    Name: "Couch browser", TranscodingProfiles: [], SubtitleProfiles: [],
-    DirectPlayProfiles: [
-      ...(capabilities.mp4H264Aac ? [{ Type: "Video" as const, Container: "mp4,m4v", VideoCodec: "h264", AudioCodec: "aac" }] : []),
-      ...(capabilities.mp3 ? [{ Type: "Audio" as const, Container: "mp3", AudioCodec: "mp3" }] : []),
-    ],
-    CodecProfiles: [
-      { Type: "Video", Codec: "h264", Conditions: [
-        { Condition: "EqualsAny", Property: "VideoProfile", Value: "main|high", IsRequired: true },
-        ...([ ["Width", "1920"], ["Height", "1080"], ["VideoBitDepth", "8"], ["VideoLevel", "40"] ] as const).map(([Property, Value]) => ({ Condition: "LessThanEqual" as const, Property, Value, IsRequired: true })),
-        { Condition: "Equals", Property: "IsInterlaced", Value: "false", IsRequired: true },
-      ] },
-      { Type: "VideoAudio", Codec: "aac", Conditions: [{ Condition: "LessThanEqual", Property: "AudioChannels", Value: "2", IsRequired: true }] },
-    ],
-  };
-}
 
 type Configuration = { url: string; userId: string; username?: string; accessToken: string; serverName: string; scope: string };
 type ActivePlayback = {
@@ -100,7 +82,7 @@ function checkedId(id: string) {
 }
 
 /** One Jellyfin identity and playback reporter belong to the TV host, never its remotes. */
-export function createJellyfin(databasePath: string, options: { now?: () => number; onWarning?: (message: string) => void; onProgress?: () => void; onRelease?: (playbackId: string) => void } = {}) {
+export function createJellyfin(databasePath: string, options: { now?: () => number; onWarning?: (message: string) => void; onProgress?: () => void } = {}) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -145,7 +127,6 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     if (!previous) return reporting;
     attempts.delete(playbackId);
     if (active === previous) active = null;
-    options.onRelease?.(playbackId);
     if (!previous.started) return reporting;
     return report(() => getPlaystateApi(previous.api).reportPlaybackStopped({ playbackStopInfo: {
       ItemId: previous.itemId, MediaSourceId: previous.mediaSourceId, PlaySessionId: previous.playSessionId,
@@ -370,7 +351,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       });
       return { title: (episode ? item.SeriesName : item.Album) || "Jellyfin", entries };
     },
-    async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false, preparing = false, browser?: BrowserMediaCapabilities) {
+    async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false, preparing = false) {
       signal?.throwIfAborted();
       const [scope, itemId, extra] = reference.split(":");
       if (!scope || !itemId || extra !== undefined) throw new Error("Invalid Jellyfin item.");
@@ -387,7 +368,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       let data;
       try {
         ({ data } = await getMediaInfoApi(current.api).getPostedPlaybackInfo({ itemId, playbackInfoDto: {
-          UserId: current.configuration.userId, DeviceProfile: browser ? browserProfile(browser) : profile, EnableDirectPlay: true,
+          UserId: current.configuration.userId, DeviceProfile: profile, EnableDirectPlay: true,
           EnableDirectStream: false, EnableTranscoding: false, AutoOpenLiveStream: false,
           StartTimeTicks: Math.round(startPosition * ticksPerSecond),
         } }, { signal }));
@@ -396,15 +377,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       if (generation !== requestGeneration || api !== current.api) throw new Error("The playing item changed.");
       const media = data.MediaSources?.find(source => source.SupportsDirectPlay && !source.RequiresOpening && !source.IsInfiniteStream && source.Id);
       if (data.ErrorCode || !media?.Id || !data.PlaySessionId) throw new Error("Jellyfin can't play this format yet.");
-      if (browser) {
-        const audio = media.MediaStreams?.filter(stream => stream.Type === "Audio") ?? [];
-        const video = media.MediaStreams?.filter(stream => stream.Type === "Video") ?? [];
-        const compatible = item.kind === "Audio"
-          ? browser.mp3 && media.Container === "mp3" && audio.length === 1 && audio[0]?.Codec === "mp3" && !video.length
-          : browser.mp4H264Aac && ["mp4", "m4v"].includes(media.Container ?? "") && video.length === 1 && video[0]?.Codec === "h264" && audio.length === 1 && audio[0]?.Codec === "aac";
-        if (!compatible) throw new Error("Jellyfin can't play this format in this browser yet.");
-      }
-      const { subtitles, subtitleWarning } = browser ? { subtitles: [], subtitleWarning: undefined } : externalSubtitles(current.api, itemId, media);
+      const { subtitles, subtitleWarning } = externalSubtitles(current.api, itemId, media);
       const playback = { api: current.api, playbackId, itemId, mediaSourceId: media.Id, playSessionId: data.PlaySessionId, started: false, activated: !preparing, last: null, observedAt: 0, reportedAt: 0 };
       attempts.set(playbackId, playback);
       if (preparing) {

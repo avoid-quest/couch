@@ -1,35 +1,24 @@
-# Adapt only the media a target cannot play directly
+# Choose media the client can render
 
 Type: task
 Status: open
-Blocked by: 02
+Blocked by: none
 
 ## Goal
 
-Resolve concrete compatibility failures discovered in existing remote sources using
-the least processing required. This issue does not block compatible-source handoff.
+Use client capabilities and existing upstream renditions to keep fetching, decoding
+and rendering on the selected client.
 
 ## Work
 
-- Prefer an existing compatible or lower-bandwidth upstream rendition, including a
-  negotiated Jellyfin rendition, before starting Couch conversion.
-- Add remux/streamcopy for container-only incompatibility; audio conversion without
-  video conversion where sufficient; simple subtitle conversion without video encoding.
-- Preserve subtitle choice/fidelity explicitly. Don't silently turn ASS/PGS into missing
-  captions. Use a maintained renderer or explain a necessary conversion/burn-in path.
-- Add bounded FFmpeg video jobs only for demonstrated needs. Use available hardware
-  support and account for the TV's own GPU use; don't assume every filter stays on GPU.
-- Support seeking through original content time even when output timestamps restart.
-  Keep existing upstream ABR; generate a new quality ladder only if measurements justify it.
-- Cancel unused workers/buffers on stop, failure and handoff. Expose enough diagnostic
-  information to tell direct access, relay, remux and encoding apart.
+- Report useful renderer capabilities and choose existing compatible media.
+- Preserve upstream adaptive quality and client quality limits.
+- Explain unsupported media through existing playback UI with actionable output choice.
+- Add processing only after a concrete source fails and client/provider-native options
+  are exhausted. No new Core relay/transcode pipeline is currently selected.
 
 ## Done when
 
-At least the actual reported incompatibilities work, compatible video remains copied
-or direct, seek/resume remains correct, and stopped sessions release workers. Record
-CPU/GPU/bandwidth observations on available hardware and any untested acceleration path.
-
-## Reference
-
-[Browser media delivery](../../../docs/research/browser-media-delivery.md).
+The tested source workflows choose a compatible client path and keep Core out of
+ordinary media transfer. Document the remaining limitations and measured resource
+costs. The abandoned Jellyfin experiment is not a dependency or a completion claim.

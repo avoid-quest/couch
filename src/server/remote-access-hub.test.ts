@@ -66,8 +66,15 @@ test("explicit external pairing authenticates controller HTTP and renderer regis
   expect((await request(hub, "/api/controllers/me", { external: true, token })).status).toBe(200);
   const peer = new Peer(hub, token);
   await peer.wait(message => message.type === "state");
-  peer.socket.send(JSON.stringify({ type: "registerRenderer", capabilities: { mp4H264Aac: true, mp3: true } }));
-  expect(await peer.wait(message => message.type === "rendererRegistered")).toMatchObject({ type: "rendererRegistered", targetId: expect.any(String) });
+  peer.socket.send(JSON.stringify({ type: "registerRenderer" }));
+  const registered = await peer.wait(message => message.type === "rendererRegistered");
+  if (registered.type !== "rendererRegistered") throw new Error("Missing renderer registration");
+  peer.socket.send(JSON.stringify({ type: "command", requestId: "target", action: { type: "selectTarget", targetId: registered.targetId } }));
+  expect(await peer.wait(message => message.type === "result" && message.requestId === "target")).toMatchObject({ ok: true });
+  const source = "https://provider.example/movie.mp4";
+  peer.socket.send(JSON.stringify({ type: "command", requestId: "play", action: { type: "enqueue", entry: { id: "movie", title: "Movie", source }, playNow: true } }));
+  expect(await peer.wait(message => message.type === "result" && message.requestId === "play")).toMatchObject({ ok: true });
+  expect(await peer.wait(message => message.type === "rendererCommand" && message.command.type === "load")).toMatchObject({ command: { type: "load", source } });
   peer.socket.send(JSON.stringify({ type: "command", requestId: "volume", action: { type: "volume", volume: 42 } }));
   expect(await peer.wait(message => message.type === "result" && message.requestId === "volume")).toMatchObject({ ok: true });
 });
