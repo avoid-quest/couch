@@ -18,6 +18,14 @@ export type DeviceAudioOutputRequest = Extract<ServerMessage, { type: "deviceAud
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "sharing-disabled" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
+const viewKey = "couch.playback-view";
+function rememberedPlayback(credentials: Credentials | null) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(viewKey) ?? "null");
+    if (credentials && sameCredentials(saved?.owner, credentials) && typeof saved?.playbackId === "string") return saved.playbackId as string;
+  } catch { /* Storage is optional; a fresh window selects its default. */ }
+  return "default";
+}
 
 // getRandomValues also works on the plain HTTP origins used by LAN remotes.
 export function createId() {
@@ -26,12 +34,12 @@ export function createId() {
 
 export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true, onDeviceAudioOutput?: (request: DeviceAudioOutputRequest) => Promise<void>) {
   const outputHandler = useRef(onDeviceAudioOutput); outputHandler.current = onDeviceAudioOutput;
-  const [selection, setSelection] = useState<{ owner: Credentials | null; playbackId: string }>({ owner: credentials, playbackId: "default" });
-  const playbackId = sameCredentials(selection.owner, credentials) ? selection.playbackId : "default";
+  const [selection, setSelection] = useState(() => ({ owner: credentials, playbackId: rememberedPlayback(credentials) }));
+  const playbackId = sameCredentials(selection.owner, credentials) ? selection.playbackId : rememberedPlayback(credentials);
   const currentPlayback = useRef(playbackId);
   currentPlayback.current = playbackId;
   const [ownerPlayback, setOwnerPlayback] = useState<string | null>(null);
-  const scopedCredentials = useMemo(() => credentials ? { ...credentials, playbackId: sameCredentials(selection.owner, credentials) ? ownerPlayback ?? playbackId : "default" } : null, [credentials, ownerPlayback, playbackId, selection.owner]);
+  const scopedCredentials = useMemo(() => credentials ? { ...credentials, playbackId: sameCredentials(selection.owner, credentials) ? ownerPlayback ?? playbackId : playbackId } : null, [credentials, ownerPlayback, playbackId, selection.owner]);
   const [audioActivationRequired, setAudioActivationRequired] = useState(false);
   const [rendererAttached, setRendererAttached] = useState(false);
   const [rendererSocket, setRendererSocket] = useState<WebSocket | null>(null);
@@ -412,6 +420,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     }
     pending.current.clear();
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "selectPlayback", playbackId: id }));
+    try { sessionStorage.setItem(viewKey, JSON.stringify({ owner: credentials, playbackId: id })); } catch { /* Selection still works until this window reloads. */ }
     setSelection({ owner: credentials, playbackId: id });
   }, [credentials]);
 

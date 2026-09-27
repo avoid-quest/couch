@@ -397,6 +397,10 @@ test("selecting playback changes only the view and fences old commands", async (
   expect(session.rendererTargetId).toBe("browser");
   expect(close).not.toHaveBeenCalled();
   expect(peer.sent.filter(message => message.type === "command")).toHaveLength(0);
+  const { useSession } = await import("./session");
+  function Reloaded() { useSession(credentials); return null; }
+  await act(async () => { render(<Reloaded />); });
+  expect(sockets.at(-1)!.url.searchParams.get("playback")).toBe("private");
 });
 
 test("playback selection does not carry to different pairing credentials", async () => {

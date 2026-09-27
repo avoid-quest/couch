@@ -41,7 +41,8 @@ mutating an earlier queue. Legacy `household`/`personal` request selectors and
 existing SQLite files, checkpoints, queue occurrences, progress and pairings when
 migrating. Restored intent stays resumable without claiming hardware or autoplay.
 The browser profile stores credentials per origin; a different origin/profile needs
-its own pairing.
+its own pairing. The window's selected Playback is retained in session storage for
+refresh, scoped to the same credentials; changing that view never assigns a Device.
 
 ## Assignment and media
 
