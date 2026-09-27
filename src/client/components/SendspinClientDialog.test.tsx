@@ -35,7 +35,7 @@ test("hosting enrollment prepares identity but only a fresh Join connects", asyn
   render(<Probe />);
   expect(renderer.connectFromGesture).not.toHaveBeenCalled();
   await act(async () => client.prepare("couch", "", "Kitchen"));
-  expect(JSON.parse(requests[1]!.body as string)).toEqual({ clientId: "sdk-client", name: "Kitchen" });
+  expect(JSON.parse(requests[1]!.body as string)).toEqual({ clientId: "sdk-client" });
   expect(renderer.setEnrollment).toHaveBeenCalledTimes(1);
   expect(active).toHaveBeenLastCalledWith(true);
   expect(client.phase).toBe("ready");
@@ -81,4 +81,16 @@ test("SDK preparation errors do not expose server secrets", async () => {
   expect(client.error).toBe("Couldn't prepare Sendspin. Check the server address and try again.");
   expect(client.phase).toBe("idle");
   expect(active).not.toHaveBeenCalledWith(true);
+});
+
+test("unrelated parent renders preserve the Sendspin context value", async () => {
+  const view = render(<Probe />);
+  const idle = client;
+  await act(async () => view.rerender(<Probe />));
+  expect(client).toBe(idle);
+  await act(async () => client.prepare("external", "wss://music.local", "Kitchen"));
+  const ready = client;
+  expect(ready).not.toBe(idle);
+  await act(async () => view.rerender(<Probe />));
+  expect(client).toBe(ready);
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { createSendspinRenderer, type SendspinRendererState } from "@/session/sendspin-renderer";
 import { useSessionGate } from "@/session/session-context";
@@ -40,7 +40,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
   useEffect(() => () => { void leave(); }, [options.credentials?.origin, options.credentials?.token, leave]);
   useEffect(() => { if (!options.allowed && client.current) void leave(); }, [options.allowed, leave]);
 
-  const prepare = async (destination: "couch" | "external", address: string, name: string) => {
+  const prepare = useCallback(async (destination: "couch" | "external", address: string, name: string) => {
     if (phase !== "idle" || !latest.current.allowed || !latest.current.canActivate()) return;
     const attempt = ++generation.current;
     const current = () => attempt === generation.current;
@@ -62,7 +62,7 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
       await prepared.preload();
       if (!current()) { await prepared.disconnect(); return; }
       if (destination === "couch") {
-        const enrollment = await apiSend<Enrollment>(credentials!, "/api/sendspin/enrollment", { clientId: prepared.clientId, name: name.trim() || "Couch browser" });
+        const enrollment = await apiSend<Enrollment>(credentials!, "/api/sendspin/enrollment", { clientId: prepared.clientId });
         if (enrollment.url !== hosting!.url || enrollment.serverId !== hosting!.serverId) throw new PreparationError("Sendspin configuration changed. Try again.");
         prepared.setEnrollment(enrollment);
       }
@@ -72,8 +72,8 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
       await prepared?.disconnect();
       if (current()) { setError(reason instanceof PreparationError ? reason.message : "Couldn't prepare Sendspin. Check the server address and try again."); setPhase("idle"); }
     }
-  };
-  const join = () => {
+  }, [phase]);
+  const join = useCallback(() => {
     if (phase !== "ready" || !client.current) return;
     const attempt = generation.current;
     // This call must retain the click's activation: the adapter unlocks first.
@@ -82,11 +82,11 @@ export function useSendspinClient(options: { credentials: ApiCredentials | null;
     void connecting.then(() => { if (attempt === generation.current) setPhase("joined"); }, () => {
       if (attempt === generation.current) { setError("Couldn't join Sendspin. Leave and try again."); setPhase("ready"); }
     });
-  };
-  return { phase, state, pin, error, server, external, prepare, join, leave,
+  }, [phase]);
+  return useMemo(() => ({ phase, state, pin, error, server, external, prepare, join, leave,
     volume: (value: number) => client.current?.setVolume(value), mute: (value: boolean) => client.current?.setMuted(value),
     transport: (value: "play" | "pause") => client.current?.transport(value), pair: () => client.current?.openPairingWindow(),
-  };
+  }), [phase, state, pin, error, server, external, prepare, join, leave]);
 }
 
 export function SendspinClientDialog({ open, onOpenChange, onCloseAutoFocus }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: (event: Event) => void }) {
