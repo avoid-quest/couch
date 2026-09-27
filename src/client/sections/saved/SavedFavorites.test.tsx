@@ -152,7 +152,7 @@ test("Saved keeps saved collections together without a separate history destinat
   }
   await act(async () => view.rerender(<QueryClientProvider client={client}><Saved /></QueryClientProvider>));
 
-  expect(document.body.textContent).toContain("Shared on Couch");
+  expect(document.body.textContent).toContain("Saved on Couch");
   expect(await screen.findByRole("button", { name: "Play Saved local movie" })).toBeEnabled();
   expect(screen.getByRole("tab", { name: /For later/ }).textContent).toContain("1");
   await userEvent.click(screen.getByRole("tab", { name: /Channels & stations/ }));

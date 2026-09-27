@@ -16,7 +16,7 @@ const button = (name: string) => screen.getByRole("button", { name });
 let user: ReturnType<typeof userEvent.setup>;
 const click = (node: HTMLElement) => user.click(node);
 // The session's Undo toast, as SessionGate offers it.
-const session = { state: null as { targetId: string | null } | null, rendererTargetId: null as string | null, run: async (_action: unknown) => true, offerUndo: (text: string, undo: () => Promise<void>, duration = 6_000) => toast(text, { duration, action: { label: "Undo", onClick: () => void undo() } }) };
+const session = { state: null as { deviceIds: string[] } | null, rendererTargetId: null as string | null, run: async (_action: unknown) => true, offerUndo: (text: string, undo: () => Promise<void>, duration = 6_000) => toast(text, { duration, action: { label: "Undo", onClick: () => void undo() } }) };
 const render = async (queueCount = 1) => {
   const { SavedPlaylists } = await import("./SavedPlaylists");
   await act(async () => view.rerender(<QueryClientProvider client={queryClient}><SessionGateContext.Provider value={session as never}><SavedPlaylists origin="http://localhost" token="paired" connected canPlay queueCount={queueCount} /></SessionGateContext.Provider></QueryClientProvider>));
@@ -63,12 +63,12 @@ test("Lists opens a list, queues it and offers Undo after deletion", async () =>
 });
 
 test("Play selects an offered renderer before loading a list", async () => {
-  session.state = { targetId: null }; session.rendererTargetId = "browser";
+  session.state = { deviceIds: [] }; session.rendererTargetId = "browser";
   const selections: unknown[] = [];
   session.run = async action => { selections.push(action); expect(writes).toEqual([]); return true; };
   await render();
   await click(button("Play Friday night"));
-  expect(selections).toEqual([{ type: "selectTarget", targetId: "browser" }]);
+  expect(selections).toEqual([{ type: "assignDevices", deviceIds: ["browser"] }]);
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "play" } }]);
 });
 

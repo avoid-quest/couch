@@ -188,14 +188,14 @@ test("browsing does not name Core when a disconnected browser disappears from di
 
 test("a restored checkpoint asks for an output without describing a missing player", async () => {
   await render("unavailable", false, false, undefined, undefined, [], "checkpoint");
-  expect(screen.getByText("Choose devices to resume paused.")).toBeInTheDocument();
+  expect(screen.getByText("Choose a device to resume playback.")).toBeInTheDocument();
   expect(screen.queryByText(/Player not running/)).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-test("a stopped checkpoint asks for an output without promising resume", async () => {
+test("a stopped checkpoint does not imply device setup", async () => {
   await render("unavailable", false, false, undefined, undefined, [], "checkpoint", true);
-  expect(screen.getByText("Choose devices to play.")).toBeInTheDocument();
+  expect(screen.queryByText(/Choose a device/)).toBeNull();
 });
 
 test("a disconnected destination asks for reconnection before transfer", async () => {

@@ -17,7 +17,7 @@ const button = (label: string) => screen.getByRole("button", { name: label });
 const click = async (label: string) => userEvent.click(await screen.findByRole("button", { name: label }));
 const toasts = () => toast.getToasts().map(item => "title" in item ? item.title : "");
 // The session's Undo toast, as SessionGate offers it.
-const session = { state: null as { targetId: string | null } | null, rendererTargetId: null as string | null, run: async (_action: unknown) => true, offerUndo: (text: string, undo: () => Promise<void>, duration = 6_000) => toast(text, { duration, action: { label: "Undo", onClick: () => void undo() } }) };
+const session = { state: null as { deviceIds: string[] } | null, rendererTargetId: null as string | null, run: async (_action: unknown) => true, offerUndo: (text: string, undo: () => Promise<void>, duration = 6_000) => toast(text, { duration, action: { label: "Undo", onClick: () => void undo() } }) };
 const undo = async () => {
   const latest = toast.getToasts().at(-1);
   const action = latest && "action" in latest ? latest.action : undefined;
@@ -74,19 +74,19 @@ test("saved shared items display without queue writes; explicit actions retain t
 });
 
 test("Play selects this browser before loading a saved item, while Queue does not", async () => {
-  session.state = { targetId: null }; session.rendererTargetId = "browser";
+  session.state = { deviceIds: [] }; session.rendererTargetId = "browser";
   const selections: unknown[] = [];
   session.run = async action => { selections.push(action); expect(calls.filter(call => call.method === "POST")).toHaveLength(1); return true; };
   await render();
   await click("Queue Evening movie");
   expect(selections).toEqual([]);
   await click("Play Evening movie");
-  expect(selections).toEqual([{ type: "selectTarget", targetId: "browser" }]);
+  expect(selections).toEqual([{ type: "assignDevices", deviceIds: ["browser"] }]);
   expect(calls.filter(call => call.method === "POST").map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
 });
 
 test("failed local selection leaves the saved item and queue untouched", async () => {
-  session.state = { targetId: null }; session.rendererTargetId = "browser"; session.run = async () => false;
+  session.state = { deviceIds: [] }; session.rendererTargetId = "browser"; session.run = async () => false;
   await render();
   await click("Play Evening movie");
   expect(calls.filter(call => call.method === "POST")).toEqual([]);
