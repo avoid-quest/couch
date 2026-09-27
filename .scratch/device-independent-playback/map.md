@@ -141,3 +141,11 @@ Jellyfin browser/group transfers pass. Timing is explicitly estimated; software
 sink captures do not establish physical speaker synchronization. Sendspin, Core
 service deployment, demonstrated provider adaptation and independent sessions remain
 in the existing backlog. See validation for actual counts and retained evidence.
+
+Snapcast is draft [PR #622](https://github.com/avoid-quest/couch/pull/622). Exact
+commit `52e09f46` passed the real 18-check group journey and Linux `verify --remote`,
+including 25 compiled-browser checks, with clean before/after identity.
+
+The independent Linux Core service slice adds a systemd unit and operator guide,
+reusing the existing compiled server and authorization paths. Exact process/act
+qualification follows its commit. Systemd boot on the intended host remains separate.

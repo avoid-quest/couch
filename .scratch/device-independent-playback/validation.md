@@ -455,3 +455,12 @@ not a native checkpoint journey or abrupt-process-kill browser qualification.
 - Group dialog DOM/actions have focused UI coverage. The preview's saved screenshot
   was stale, so no new screenshot-based visual qualification is claimed. No physical
   speaker synchronization, hardware silence or distributed TV lip-sync is qualified.
+
+### Clean Snapcast qualification
+
+Exact `52e09f469542cceeb645c06ee7f9163c0ce63a2b`: the actual 18-check Snapcast
+journey passed with clean source before/after. Linux `verify --remote` produced an
+eligible receipt: typecheck, 1717 core tests, three clock tests, production build
+and 25 compiled-browser checks passed. Ten core tests skipped for their recorded
+environment conditions. Evidence: `.artifacts/device-independent-playback/`
+`snapcast-integration/exact-52e09f4/` (receipt, logs, PCM and source hashes).

@@ -1,0 +1,27 @@
+[Unit]
+Description=Couch Core
+After=network.target
+
+[Service]
+Type=exec
+User=couch-core
+Group=couch-core
+StateDirectory=couch-core
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/couch-core
+Environment=HOME=/var/lib/couch-core
+Environment=COUCH_DATA_DIR=/var/lib/couch-core
+Environment=COUCH_HOST=127.0.0.1
+Environment=COUCH_PORT=4100
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/etc/couch-core/core.env
+EnvironmentFile=-/etc/couch-core/bootstrap.env
+ExecStart=/usr/bin/env COUCH_NATIVE=0 /usr/local/lib/couch-core/couch-server
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
