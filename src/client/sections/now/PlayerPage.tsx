@@ -29,7 +29,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, nativeHost, localHost, nativeReceiver, rendererTargetId, tvPresentation, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, rendererTargetId, tvPresentation, videoQualityPreference } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -53,9 +53,12 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
   const audioOnly = current?.kind === "radio" || !!current?.source.startsWith("radio:") || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
-  const browserHere = !nativeHost && !!rendererTargetId && state?.targetId === rendererTargetId;
-  const nativeHere = nativeHost && nativeReceiver && !!rendererTargetId && state?.targetId === rendererTargetId;
-  const elsewhere = !(browserHere || nativeHere || localHost && (!state?.targetId || state.targetId === "native")) && (active || ended);
+  const playbackState = state as typeof state & { devices?: { id: string; name: string }[]; deviceIds?: string[] };
+  const deviceIds = playbackState?.deviceIds ?? [];
+  const selectedDevices = deviceIds.map(id => playbackState?.devices?.find(device => device.id === id)?.name).filter(Boolean);
+  const here = !!rendererTargetId && deviceIds.includes(rendererTargetId);
+  const browserHere = !nativeHost && here;
+  const elsewhere = !here && (active || ended);
   const artworkStage = audioOnly || elsewhere;
   const autoHide = playing && !artworkStage;
   useBottomBar(band, !!current && shown);
@@ -63,7 +66,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
   useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
-  const name = state?.targets?.find(target => target.id === state.targetId)?.name ?? deviceName(state?.installationName);
+  const couchName = deviceName(state?.installationName);
+  const name = selectedDevices.join(", ") || couchName;
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
   const live = !!(current?.live || current?.kind === "radio" || current?.source.startsWith("radio:"));
@@ -137,7 +141,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.source.startsWith("file:") || current?.source.startsWith("library:") ? "The file is missing from its folder." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
-  const status = !current ? null : unavailable ? { title: `Player not running on ${state?.targets && state.targetId !== "native" ? state.targets.find(target => target.id === state.targetId)?.name ?? "the selected playback output" : localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
+  const status = !current ? null : unavailable ? { title: selectedDevices.length ? `Player not running on ${name}` : deviceIds.length ? "Player not running on the selected device" : "Choose devices to resume playback", detail: "Browsing and Up next still work." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }
     : retry ? { title: `Reconnecting to ${current.title}`, detail: `Retrying in ${retrySeconds} s (${retry.attempt} of ${retry.maximum})`, busy: true }
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
@@ -168,7 +172,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
           <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${name}` : current.title}</span>}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
-          {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
+          {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(couchName)}</p>}
         </div>
       </div>}
     {current && status && <div data-player-status className={cn("pointer-events-none absolute inset-0 z-10 grid place-items-center px-(--gutter)", !artworkStage && "pb-48")}>
@@ -192,7 +196,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
       <div className="mx-auto grid max-w-6xl gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto size-11 shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
+        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(couchName)}</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto size-11 shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
         {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-control-row">
           {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}

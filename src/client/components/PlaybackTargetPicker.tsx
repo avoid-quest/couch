@@ -15,10 +15,9 @@ export function PlaybackTargetPicker() {
     selectPlayback: (id: string) => void;
     assignDevices: (ids: string[], takeover?: boolean) => Promise<boolean>;
     newPlayback: (deviceId: string) => Promise<boolean>;
-    activateDeviceAudio: () => void;
     setDeviceVolume: (deviceId: string, volume: number, muted: boolean) => Promise<boolean>;
   };
-  const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, activateDeviceAudio, setDeviceVolume } = gate;
+  const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, setDeviceVolume } = gate;
   const model = state as typeof state & { devices?: Device[]; playbacks?: Playback[]; deviceIds?: string[] };
   const [open, setOpen] = useState(false);
   const [replace, setReplace] = useState<Device | null>(null);
@@ -58,7 +57,6 @@ export function PlaybackTargetPicker() {
                 {!occupied && !assigned && device.connected && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { void newPlayback(device.id).then(ok => { if (ok) setOpen(false); }); }}>{local ? "New playback here" : "New playback"}</Button>}
               </div>
               {assigned && device.audio && <div className="flex items-center gap-2 pt-2"><Slider key={`${device.volume}:${device.muted}`} aria-label={`${device.name} volume`} defaultValue={[device.volume]} min={0} max={100} step={1} disabled={disabled || !device.connected} onValueCommit={([volume]) => { void setDeviceVolume(device.id, volume!, device.muted); }} /><Button size="sm" variant="ghost" disabled={disabled || !device.connected} onClick={() => { void setDeviceVolume(device.id, device.volume, !device.muted); }}>{device.muted ? "Unmute" : "Mute"}</Button></div>}
-              {assigned && local && device.requiresGesture && <Button size="sm" variant="ghost" disabled={disabled} onClick={activateDeviceAudio}>Listen here</Button>}
             </div>;
           })}
           {!devices.length && <p className="py-3 text-muted-foreground">No devices available yet.</p>}

@@ -115,6 +115,13 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
   };
   const registry = {
     get targets() { return [...endpoints.values()].map(endpoint => descriptor(endpoint)); },
+    deviceState(id: string) { return endpoints.get(id)?.player; },
+    volume(id: string, volume: number) {
+      const endpoint = endpoints.get(id);
+      if (!endpoint?.target.connected) throw new Error("This device is disconnected.");
+      endpoint.authorize?.();
+      endpoint.send({ type: "volume", volume });
+    },
     rename(id: string, name: string) {
       const endpoint = endpoints.get(id);
       if (endpoint && endpoint.target.name !== name) { endpoint.target.name = name; changed(); }
@@ -253,6 +260,22 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
         register: registry.register,
         registerReceiver: registry.registerReceiver,
         registerGroup: registry.registerGroup,
+        async detach(authorize = () => {}) {
+          if (binding.busy) throw new Error("Wait for the device change to finish.");
+          const source = binding.assigned;
+          if (!source) return;
+          authorize(); binding.busy = true;
+          const original = session().state.player;
+          binding.assigned = undefined;
+          try {
+            if (source.target.connected) await wait(binding, source, { type: "stop" }, player => player.playbackId === null && player.status === "idle");
+            else if (source.receiver && now() < source.receiver.unsafeUntil || source.target.kind === "group" && original.playbackId) throw new Error("The previous device cannot confirm it stopped.");
+            release(binding, source);
+            binding.assigned = { target: { id: "checkpoint", name: "Playback", kind: "endpoint", backend: "native", connected: false }, player: original, send() {}, attempts: new Set() };
+            session().rendererDisconnected();
+          } catch (error) { binding.assigned = source; session().rendererDisconnected(); throw error; }
+          finally { binding.busy = false; changed(); }
+        },
         async move(targetId: string, authorize = () => {}, { takeover = false }: { takeover?: boolean } = {}) {
           if (closed || binding.closed) throw new Error("Couch is shutting down.");
           if (binding.busy) throw new Error("Playback is moving. Wait for it to finish.");

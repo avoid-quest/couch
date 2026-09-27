@@ -58,15 +58,6 @@ test("occupied device offers view-only Control and confirms replacement before m
   expect(assigned).toEqual([[["kitchen"], true]]);
 });
 
-test("browser audio activation is explicit on the assigned device", async () => {
-  const activated: string[] = [];
-  renderPicker({ state: { ...state, devices: [{ ...devices[0], requiresGesture: true }] }, activateDeviceAudio: () => activated.push("activated") });
-  await userEvent.click(screen.getByRole("button", { name: "Devices" }));
-  await userEvent.click(screen.getByRole("button", { name: "Listen here" }));
-  expect(activated).toEqual(["activated"]);
-  expect(screen.queryByRole("button", { name: "New playback here" })).toBeNull();
-});
-
 test("without a selected playback, destinations remain available for a new one", async () => {
   const created: string[] = [];
   renderPicker({ state: { ...state, sessionId: null, deviceIds: [], playbacks: [] }, newPlayback: async (id: string) => { created.push(id); return true; } });

@@ -10,11 +10,12 @@ test("a fresh local Core is set up in the browser without an external code", asy
   const previousUrl = location.href;
   const previousName = localStorage.getItem("couch.device-name");
   testWindow.happyDOM.setURL(origin);
+  Object.defineProperty(navigator, "userAgentData", { configurable: true, value: { platform: "macOS", mobile: false, brands: [{ brand: "Google Chrome" }] } });
   const savePairing = mock(() => {});
   const fetch = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     expect(String(input)).toBe(`${origin}/api/setup-local`);
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body)).name).toBe("Couch browser");
+    expect(JSON.parse(String(init?.body)).name).toBe("Mac · Chrome");
     return Response.json({ token: "first-owner", installationId: "installation" });
   }) as typeof globalThis.fetch);
   try {
@@ -25,6 +26,7 @@ test("a fresh local Core is set up in the browser without an external code", asy
     expect(fetch).toHaveBeenCalledTimes(1);
   } finally {
     fetch.mockRestore();
+    Reflect.deleteProperty(navigator, "userAgentData");
     testWindow.happyDOM.setURL(previousUrl);
     if (previousName === null) localStorage.removeItem("couch.device-name");
     else localStorage.setItem("couch.device-name", previousName);

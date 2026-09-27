@@ -20,13 +20,12 @@ import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useLocalUpdateActivity } from "@/update-activity";
 import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
-import { SoundControls } from "./PlaybackStatus";
 import { Onboarding } from "./Onboarding";
 import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 
 export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
+type Device = Choice & { defaultDeviceName: string | null; pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -34,6 +33,7 @@ export const usePlaybackDevice = () => useContext(Context);
 export function NativeModeGate({ children }: PropsWithChildren) {
   const native = isNativeHost();
   const [choice, setChoice] = useState<Choice | null>(null);
+  const [defaultDeviceName, setDefaultDeviceName] = useState<string | null>(null);
   const [pending, setPending] = useState(native);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -47,7 +47,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!native) return;
     let disposed = false;
-    void invoke<Choice>("playback_device").then(value => { if (!disposed) setChoice(value); })
+    void invoke<Choice & { defaultDeviceName?: string }>("playback_device").then(value => { if (!disposed) { setChoice(value); setDefaultDeviceName(value.defaultDeviceName ?? null); } })
       .catch(reason => { if (!disposed) setError(message(reason)); })
       .finally(() => { if (!disposed) setPending(false); });
     return () => { disposed = true; };
@@ -86,7 +86,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     <Onboarding title="Couch">{error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button></AlertAction></Alert> : <StatusLine busy>Loading…</StatusLine>}</Onboarding>
   </main>;
   const device: Device = {
-    ...choice, pending, error,
+    ...choice, defaultDeviceName, pending, error,
     choose: async (mode, address, confirm = false) => {
       if (busy.current) return false;
       busy.current = true; setPending(true); setError(null); sequence.current++;
@@ -222,7 +222,7 @@ function DeviceForm() {
   </div>;
 }
 
-export function PlaybackDevice({ credentials = null, connected = false, installationName, state = null, run, updates = false }: {
+export function PlaybackDevice({ credentials = null, connected = false, installationName, updates = false }: {
   credentials?: Credentials | null;
   connected?: boolean;
   installationName?: string;
@@ -264,10 +264,10 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   return <>
     <Popover open={open} onOpenChange={value => { setOpen(value); if (value) device.show(); else if (!dialog) device.dismiss(); }}>
-      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{device.mode === "local" ? "Playing here" : <><span className="max-sm:sr-only">Playing on </span>{target}</>}</span></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{device.mode === "local" ? "Couch on this computer" : `Connected to ${target}`}</span></Button></PopoverTrigger>
       <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="w-96 gap-4">
-        <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>
-        <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
+        <PopoverHeader><PopoverTitle>Couch connection</PopoverTitle></PopoverHeader>
+        <RadioGroup aria-label="Couch connection" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
           <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>This computer</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>
           {targets.map((target, index) => {
             const named = nameOf(target);
@@ -276,7 +276,6 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
-        <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={close} />
         {updates && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" onClick={() => openDialog("updates")}>Update Couch on this computer</Button>}
       </PopoverContent>
     </Popover>

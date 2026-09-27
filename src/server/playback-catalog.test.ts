@@ -28,6 +28,8 @@ test("legacy playback stores survive catalog migration and default rotation", ()
     expect(catalog.assign(next.id, ["living-room", "kitchen"]).deviceIds).toEqual(["living-room", "kitchen"]);
     const host = catalog.create(null);
     expect(host).toMatchObject({ owner: null, storageKey: host.id });
+    catalog.select("client-a", next.id);
+    catalog.select(null, host.id);
     expect(catalog.defaultFor("client-a").id).toBe(next.id);
     expect(catalog.defaultFor(null).id).toBe(host.id);
     expect(catalog.defaultFor("client-b").id).toBe("personal:client-b");

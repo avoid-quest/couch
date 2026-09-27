@@ -3,13 +3,10 @@ import { parseCommand } from "./validation";
 
 const parse = (action: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "test", action }), false);
 
-test("audio group controls accept opaque member identities and bound membership and volume", () => {
-  expect(parse({ type: "groupMembers", targetId: "sendspin-group", memberIds: ["00:11:22:33:44:55#2"] }).action.type).toBe("groupMembers");
-  expect(parse({ type: "groupReconnect", targetId: "sendspin-group" }).action.type).toBe("groupReconnect");
-  expect(parse({ type: "groupVolume", targetId: "sendspin-group", memberId: "00:11:22:33:44:55#2", volume: 25, muted: true }).action.type).toBe("groupVolume");
-  expect(parse({ type: "groupMembers", targetId: "sendspin-group", memberIds: [] }).action.type).toBe("groupMembers");
-  for (const memberIds of [["same", "same"], ["bad\nmember"], [""], Array.from({ length: 33 }, (_, index) => `member-${index}`)]) expect(() => parse({ type: "groupMembers", targetId: "sendspin-group", memberIds })).toThrow();
-  for (const volume of [-1, 101, "25", null]) expect(() => parse({ type: "groupVolume", targetId: "sendspin-group", memberId: "room", volume, muted: false })).toThrow();
+test("device assignment and volume reject malformed requests", () => {
+  expect(parse({ type: "assignDevices", deviceIds: ["browser-a", "receiver-b"] }).action.type).toBe("assignDevices");
+  for (const deviceIds of [["same", "same"], ["bad\ndevice"], [""], Array.from({ length: 33 }, (_, index) => `device-${index}`)]) expect(() => parse({ type: "assignDevices", deviceIds })).toThrow();
+  for (const volume of [-1, 101, "25", null]) expect(() => parse({ type: "deviceVolume", deviceId: "room", volume, muted: false })).toThrow();
 });
 
 test("provider albums accept a public link and discard client-supplied track lists and secrets", () => {

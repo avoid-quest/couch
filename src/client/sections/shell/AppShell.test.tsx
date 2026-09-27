@@ -73,12 +73,14 @@ test("the local host's update page offers its controls", async () => {
   expect(screen.getByLabelText("Install updates")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string, target?: SessionState["targets"], targetId?: string, checkpointStopped = false) {
+async function render(status: "playing" | "unavailable" | "idle" | "ended", remoteOffline = false, emptyQueue = false, activity?: SessionState["activity"], controllerId?: string, target?: SessionState["targets"], targetId?: string, checkpointStopped = false, activateDeviceAudio?: () => Promise<boolean>) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
   if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { metadata: { currentWindow: { label: "main" } }, invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
-  const state: SessionState = {
-    installationName: "Desk Couch", activity, targets: target, targetId: targetId ?? (target ? target[0]?.id ?? "browser:phone" : undefined),
+  const state = {
+    installationName: "Desk Couch", activity,
+    devices: (target ?? [{ id: "native", name: "this computer", connected: true }]).map(device => ({ id: device.id, name: device.name, connected: device.connected, volume: 50, muted: false, audio: false })),
+    deviceIds: targetId === "checkpoint" ? [] : [targetId ?? (target ? target[0]?.id ?? "browser:phone" : "native")],
     activeProfile: { id: "household", name: "Household" },
     queue: status === "unavailable" || emptyQueue ? [] : [{ id: "movie", title: "Movie", source: "library:movie" }],
     currentEntryId: status === "playing" || status === "ended" || targetId === "checkpoint" && !checkpointStopped ? "movie" : null,
@@ -91,6 +93,7 @@ async function render(status: "playing" | "unavailable" | "idle" | "ended", remo
     connected: !remoteOffline, active: status === "playing", current: status === "playing" || status === "ended" ? state.queue[0] : null,
     available: status !== "unavailable", section: "Find", tv: { browsing: true, controlsVisible: false },
     run: async () => true, reconnect: () => {}, host: null, remoteControlEnabled: false, pairingRequired: false,
+    audioActivationRequired: !!activateDeviceAudio, activateDeviceAudio,
     sourcesOpen: false, onlineRequest: null, remoteOpen: false, setRemoteOpen: () => {},
     sectionUrl: () => "/find", recentRadio: [],
     openPlayer: (panel?: "queue") => { playerPanels.push(panel); },
@@ -143,7 +146,7 @@ test("browsing does not allocate a native video rectangle", async () => {
 test("a missing player is a quiet status line while browsing Find", async () => {
   await render("unavailable");
   expect(screen.queryByLabelText("Video playback")).toBeNull();
-  expect(screen.getByRole("button", { name: "Playing here" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Couch on this computer" })).toBeDefined();
   expect(screen.getByText("Player not running on this computer.")).toBeInTheDocument();
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
@@ -175,12 +178,12 @@ for (const [actorId, controllerId, expected] of [["host", undefined, 0], ["phone
 
 test("browsing names the unavailable renderer instead of the local Core", async () => {
   await render("unavailable", false, false, undefined, undefined, [{ id: "browser:phone", name: "Kitchen phone", kind: "endpoint", backend: "browser", connected: false }]);
-  expect(screen.getByText("Player not running on Kitchen phone.")).toBeInTheDocument();
+  expect(screen.getByText("Reconnect Kitchen phone from Devices to resume playback.")).toBeInTheDocument();
 });
 
 test("browsing does not name Core when a disconnected browser disappears from discovery", async () => {
   await render("unavailable", false, false, undefined, undefined, []);
-  expect(screen.getByText("Player not running on the selected playback output.")).toBeInTheDocument();
+  expect(screen.getByText("Player not running on the selected devices.")).toBeInTheDocument();
 });
 
 test("a restored checkpoint asks for an output without describing a missing player", async () => {
@@ -195,7 +198,16 @@ test("a stopped checkpoint asks for an output without promising resume", async (
   expect(screen.getByText("Choose devices to play.")).toBeInTheDocument();
 });
 
-test("an uncertain audio group asks for reconnection before transfer", async () => {
+test("a disconnected destination asks for reconnection before transfer", async () => {
   await render("unavailable", false, false, undefined, undefined, [{ id: "rooms", name: "Home speakers", kind: "group", backend: "sendspin", connected: false }], "rooms");
-  expect(screen.getByText("Reconnect Home speakers from Devices before moving playback.")).toBeInTheDocument();
+  expect(screen.getByText("Reconnect Home speakers from Devices to resume playback.")).toBeInTheDocument();
+});
+
+
+test("a device audio request is actionable before playback is assigned", async () => {
+  let activations = 0;
+  await render("unavailable", false, false, undefined, undefined, [], "checkpoint", false, async () => { activations++; return true; });
+  expect(screen.getByText("Enable audio on this device to continue playback.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Enable audio" }));
+  expect(activations).toBe(1);
 });

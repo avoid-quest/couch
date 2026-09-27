@@ -5,6 +5,7 @@ import { createNativeBluetooth } from "./server/bluetooth-native";
 import { createNativeDisplay } from "./server/display-native";
 import { createNativeSound } from "./server/sound-native";
 import { Database } from "bun:sqlite";
+import { hostname } from "node:os";
 type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
 import { createNativeReadiness } from "./server/readiness-native";
 import { loadedBuild } from "./shared/build";
@@ -93,6 +94,7 @@ hub = createHub({
   hostname: process.env.COUCH_HOST ?? "0.0.0.0",
   port: Number(process.env.COUCH_PORT ?? 4100),
   databasePath: join(dataDir, "couch.sqlite"),
+  initialName: hostname().split(".")[0]?.trim().slice(0, 60) || "Couch",
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   frontend, assets,

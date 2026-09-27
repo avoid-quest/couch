@@ -10,16 +10,18 @@ setupUiTests();
 let view: ReturnType<typeof renderUI>;
 const actions: unknown[] = [];
 let leaves = 0;
-const state: SessionState = {
+const state = {
   queue: [{ id: "current", title: "Evening movie", source: "library:movie", duration: 100 }],
   currentEntryId: "current",
+  devices: [{ id: "browser", name: "This browser", connected: true, volume: 40, muted: false, audio: false }],
+  deviceIds: ["browser"],
   activeProfile: { id: "household", name: "Household" },
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 40, seekable: true, error: null },
-};
+} as SessionState & { devices: unknown[]; deviceIds: string[] };
 const shell = {
   state, credentials: { origin: "http://localhost", token: "paired" }, connected: true,
   run: async (action: unknown) => { actions.push(action); return true; },
-  available: true, nativeHost: false, localHost: true, active: true,
+  available: true, nativeHost: false, localHost: true, rendererTargetId: "browser", active: true,
   current: state.queue[0], programme: null, videoQualityPreference: { quality: "auto" },
   leavePlayer: () => { leaves++; },
 } as unknown as ShellValue;
@@ -479,21 +481,21 @@ test("TV Space still pauses when controls are visible", async () => {
 
 test("unavailable browser playback names its renderer even in the local native shell", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  const unavailable = { ...state, targetId: "browser:phone", targets: [{ id: "browser:phone", name: "Kitchen phone", kind: "endpoint" as const, backend: "browser" as const, connected: false }], player: { ...state.player, status: "unavailable" as const } };
+  const unavailable = { ...state, deviceIds: ["browser:phone"], devices: [{ id: "browser:phone", name: "Kitchen phone", connected: false, volume: 40, muted: false, audio: false }], player: { ...state.player, status: "unavailable" as const } };
   await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: unavailable }}><PlayerPage /></ShellProviders>));
   expect(screen.getByText("Player not running on Kitchen phone")).toBeInTheDocument();
 });
 
 test("a disconnected browser removed from target discovery is not named as the Core", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  const unavailable = { ...state, targetId: "browser:phone", targets: [], player: { ...state.player, status: "unavailable" as const } };
+  const unavailable = { ...state, deviceIds: ["browser:phone"], devices: [], player: { ...state.player, status: "unavailable" as const } };
   await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: unavailable }}><PlayerPage /></ShellProviders>));
-  expect(screen.getByText("Player not running on the selected playback output")).toBeInTheDocument();
+  expect(screen.getByText("Player not running on the selected device")).toBeInTheDocument();
 });
 
 test("enrolled native playback keeps the native video stage instead of browser video", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  const receiver = { ...state, targetId: "receiver", targets: [{ id: "receiver", name: "Desktop", kind: "endpoint" as const, backend: "native" as const, connected: true }] };
+  const receiver = { ...state, deviceIds: ["receiver"], devices: [{ id: "receiver", name: "Desktop", connected: true, volume: 40, muted: false, audio: false }] };
   await act(async () => view.rerender(<ShellProviders value={{ ...shell, state: receiver, nativeHost: true, localHost: false, nativeReceiver: true, rendererTargetId: "receiver" }}><PlayerPage /></ShellProviders>));
   expect(screen.getByLabelText("Video playback")).toBeInTheDocument();
   expect(screen.getByRole("region", { name: "Player" })).not.toHaveAttribute("data-browser-video");

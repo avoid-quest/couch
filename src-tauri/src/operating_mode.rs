@@ -31,6 +31,31 @@ pub enum Mode {
     Remote,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceChoice {
+    #[serde(flatten)]
+    choice: Choice,
+    default_device_name: String,
+}
+
+fn machine_name() -> String {
+    #[cfg(unix)]
+    let name = {
+        let mut bytes = [0u8; 256];
+        if unsafe { libc::gethostname(bytes.as_mut_ptr().cast(), bytes.len()) } == 0 {
+            String::from_utf8_lossy(&bytes[..bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len())]).into_owned()
+        } else {
+            String::new()
+        }
+    };
+    #[cfg(windows)]
+    let name = std::env::var("COMPUTERNAME").unwrap_or_default();
+    let short = name.split('.').next().unwrap_or("").trim();
+    let value: String = short.chars().filter(|ch| !ch.is_control()).take(60).collect();
+    if value.is_empty() { "Couch computer".into() } else { value }
+}
+
 pub struct Modes {
     path: PathBuf,
     choice: Mutex<Choice>,
@@ -420,9 +445,9 @@ fn update_allows_mode_change(status: &serde_json::Value) -> Result<(), String> {
 pub async fn playback_device(
     window: tauri::WebviewWindow,
     app: tauri::AppHandle,
-) -> Result<Choice, String> {
+) -> Result<DeviceChoice, String> {
     trusted(&window)?;
-    Ok(app.state::<Modes>().current())
+    Ok(DeviceChoice { choice: app.state::<Modes>().current(), default_device_name: machine_name() })
 }
 
 #[tauri::command]

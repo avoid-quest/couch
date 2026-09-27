@@ -300,6 +300,11 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (startsPlayback && before && !(before.deviceIds?.length ?? 0) && localDeviceId) {
         if (!await assignDevices([localDeviceId]) || !current()) return false;
       }
+      if (before?.player.status === "unavailable" && before.deviceIds?.length && (startsPlayback || action.type === "pause" && !action.paused)) {
+        if (!await assignDevices(before.deviceIds) || !current()) return false;
+        const resumed = readObservation()?.player.playbackId;
+        if (action.type === "pause" && resumed) action = { ...action, playbackId: resumed };
+      }
       await command(action);
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";

@@ -44,7 +44,13 @@ export type PlayerState = {
   positionEstimated?: boolean;
 };
 
+export type PlaybackDevice = { id: string; name: string; connected: boolean; playbackId?: string; volume: number; muted: boolean; audio: boolean; requiresGesture?: boolean };
+export type PlaybackSummary = { id: string; title: string; status: PlayerState["status"]; deviceIds: string[] };
+
 export type SessionState = {
+  devices?: PlaybackDevice[];
+  deviceIds?: string[];
+  playbacks?: PlaybackSummary[];
   sessionMode?: "household" | "personal";
   sessionId?: string;
   targetId?: string;
@@ -76,10 +82,9 @@ export type SessionState = {
 };
 
 export type Action =
+  | { type: "assignDevices"; deviceIds: string[]; takeover?: true }
+  | { type: "deviceVolume"; deviceId: string; volume: number; muted: boolean }
   | { type: "selectTarget"; targetId: string; takeover?: true }
-  | { type: "groupReconnect"; targetId: string }
-  | { type: "groupMembers"; targetId: string; memberIds: string[] }
-  | { type: "groupVolume"; targetId: string; memberId: string; volume: number; muted: boolean }
   | { type: "navigate"; key: NavigationKey }
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
   | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
@@ -108,9 +113,10 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string };
 
+export type PlaybackSelectionMessage = { type: "selectPlayback"; playbackId: string };
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
-export type ServerMessage =
+export type ServerMessage = { type: "audioActivationRequired" }
   | { type: "nativeLease"; nonce: string }
   | { type: "rendererRegistered"; targetId: string; sessionId: string; attached?: boolean }
   | { type: "rendererCommand"; sessionId: string; command: PlaybackCommand }
@@ -123,7 +129,7 @@ export type PlaybackCommand =
   | { type: "audioPause" }
   | { type: "audioOutput"; output: string }
   | { type: "prepare"; playbackId: string; next?: { playbackId: string; source: string; headers?: Record<string, string>; preferences: ProfilePlaybackPreferences & { audioDelay: number } } }
-  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; duration?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
+  | { type: "load"; audioOnly?: boolean; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; duration?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
@@ -143,7 +149,8 @@ export type PlaybackTarget = { id: string; name: string; kind: "endpoint" | "gro
   handoffSafety?: "buffer-drain" | "unverified";
   members?: { id: string; deviceId?: string; name: string; connected: boolean; volume: number; muted: boolean; joined: boolean }[] };
 export type BrowserMediaCapabilities = { mp4H264Aac: boolean; mp3: boolean };
-export type RendererMessage = { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }
+export type RendererMessage = { type: "deviceAudioReady"; ready: boolean }
+  | { type: "registerRenderer"; capabilities?: BrowserMediaCapabilities }
   | { type: "registerNativeRenderer"; nonce: string }
   | { type: "nativeLease"; nonce: string }
   | { type: "rendererObservation"; sessionId: string; state: PlayerState };

@@ -23,6 +23,8 @@ import { parseRendererMessage } from "./renderer-validation";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { createSessionStore } from "./session-store";
+import { openPlaybackCatalog, type PlaybackRecord } from "./playback-catalog";
+import { createPlaybackDevices } from "./playback-devices";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
 import { createMediaFolders } from "./media-folders";
@@ -77,6 +79,7 @@ type HubOptions = {
   onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
+  initialName?: string;
   hostToken: string;
   pairingCode?: string;
   remoteControlEnabled?: boolean;
@@ -111,7 +114,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   return url.origin;
 };
 type Runtime = { id: string; mode: "household" | "personal"; owner: string | null; disposed: boolean; sourceGeneration: number; store: ReturnType<typeof createSessionStore>; privateStore?: ReturnType<typeof openStore>; session: ReturnType<typeof createSession>; targets: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["bind"]>; subtitles: ReturnType<typeof createSubtitles>; radioProgramme: ReturnType<typeof createRadioProgramme>; playback: ReturnType<ReturnType<typeof createJellyfin>["createPlayback"]>; catalog: ReturnType<typeof createCatalog> };
-type SocketData = { runtime: Runtime; rendererSessionId?: string; renderer?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type SocketData = { runtime: Runtime; audioReady?: boolean; rendererSessionId?: string; renderer?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["register"]>; receiver?: ReturnType<ReturnType<typeof createPlaybackTargetRegistry>["registerReceiver"]>; playbackClock: boolean; trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
@@ -122,18 +125,35 @@ export function createHub(options: HubOptions) {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
     return url.origin;
   });
-  const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
+  const store = openStore(options.databasePath, options.remoteControlEnabled ?? true, options.initialName);
   const configuredExternally = !!(options.sendspin || options.sendspinConfigError);
   const sendspinConfig: SendspinConfig = options.sendspin ?? { host: "0.0.0.0", port: 8927, name: store.installationName() };
   let sendspinError: string | null = null;
   const sendspinIdentity = openSendspinIdentity(options.databasePath);
   const sessionId = store.installationId();
+  const playbackCatalog = openPlaybackCatalog(options.databasePath, sessionId);
   const runtimes = new Map<string, Runtime>();
   const playbackStates = new Map<string, { status: import("../shared/protocol").PlayerState["status"]; retry: boolean }>();
   const retiring = new Set<Promise<void>>();
   const invalidateAll = (...domains: Domain[]) => { for (const runtime of runtimes.values()) if (!runtime.disposed) runtime.session.invalidate(...domains); };
   const topic = (runtime: Runtime, clock: boolean) => `${clock ? "session-clock" : "session"}:${runtime.id}`;
-  const snapshot = (runtime: Runtime) => ({ ...runtime.session.state, sessionMode: runtime.mode });
+  const snapshot = (runtime: Runtime) => ({ ...runtime.session.state, sessionMode: runtime.mode, ...devices.snapshot(runtime) });
+  let publishQueued = false;
+  const publishPlaybacks = () => {
+    if (publishQueued || closed) return;
+    publishQueued = true;
+    queueMicrotask(() => {
+      publishQueued = false;
+      if (closed) return;
+      for (const runtime of runtimes.values()) {
+        const message = JSON.stringify({ type: "state", state: snapshot(runtime) } satisfies ServerMessage);
+        for (const listener of [server, ...lan?.servers ?? []]) {
+          listener.publish(topic(runtime, false), message);
+          listener.publish(topic(runtime, true), message);
+        }
+      }
+    });
+  };
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Bun.Server<SocketData>>> | undefined;
@@ -173,23 +193,23 @@ export function createHub(options: HubOptions) {
   let sound: ReturnType<typeof createSound> | undefined;
   const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
   registry.rename("native", store.installationName());
-  function createRuntime(owner: string | null): Runtime {
-    const mode = owner ? "personal" : "household";
-    const id = owner ? `personal:${owner}` : sessionId;
+  function createRuntime(record: PlaybackRecord): Runtime {
+    const { id, owner, storageKey } = record;
+    const mode = storageKey ? "personal" : "household";
     const existing = runtimes.get(id);
     if (existing) return existing;
     let privateStore: ReturnType<typeof openStore> | undefined;
-    if (owner) {
+    if (storageKey) {
       if (options.databasePath === ":memory:") privateStore = openStore(":memory:");
       else {
         const directory = join(dirname(options.databasePath), "sessions");
         mkdirSync(directory, { recursive: true, mode: 0o700 });
-        privateStore = openStore(join(directory, `${createHash("sha256").update(`${sessionId}:${owner}`).digest("hex")}.sqlite`));
+        privateStore = openStore(join(directory, `${createHash("sha256").update(`${sessionId}:${storageKey}`).digest("hex")}.sqlite`));
       }
     }
     const viewingStore = createSessionStore(store, privateStore ?? store);
     const playback = jellyfin.createPlayback();
-    const targets = registry.bind(id, () => session, { defaultNative: !owner, kind: mode });
+    const targets = registry.bind(id, () => session, { defaultNative: storageKey === null, kind: mode });
     let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
     const runtime = { id, mode, owner, disposed: false, sourceGeneration: 0, store: viewingStore, privateStore } as Runtime;
     const session = createSession(viewingStore, targets.send, (state, clock) => {
@@ -198,15 +218,17 @@ export function createHub(options: HubOptions) {
       radioProgramme?.observe(state);
       sound?.interrupt();
       if (state.player.error) diagnostics.log.add("Playback", mode === "household" ? state.player.error : "Personal playback reported an error.");
-      if (!closed) {
-        const listeners = [server, ...lan?.servers ?? []];
-        const legacy = listeners.some(listener => listener.subscriberCount(`session:${id}`));
-        const modern = listeners.some(listener => listener.subscriberCount(`session-clock:${id}`));
-        const full = legacy || modern && !clock ? JSON.stringify({ type: "state", state: { ...state, sessionMode: mode } } satisfies ServerMessage) : null;
-        const compact = modern && clock ? JSON.stringify({ type: "clock", ...clock } satisfies ServerMessage) : null;
-        for (const listener of listeners) {
-          if (legacy) listener.publish(`session:${id}`, full!);
-          if (modern) listener.publish(`session-clock:${id}`, compact ?? full!);
+      if (!clock && !closed) {
+        const message = JSON.stringify({ type: "state", state: snapshot(runtime) } satisfies ServerMessage);
+        for (const listener of [server, ...lan?.servers ?? []]) {
+          listener.publish(topic(runtime, false), message);
+          listener.publish(topic(runtime, true), message);
+        }
+        publishPlaybacks();
+      } else if (clock && !closed) {
+        for (const listener of [server, ...lan?.servers ?? []]) {
+          listener.publish(topic(runtime, true), JSON.stringify({ type: "clock", ...clock } satisfies ServerMessage));
+          if (listener.subscriberCount(topic(runtime, false))) listener.publish(topic(runtime, false), JSON.stringify({ type: "state", state: snapshot(runtime) } satisfies ServerMessage));
         }
       }
     }, {
@@ -224,7 +246,7 @@ export function createHub(options: HubOptions) {
         if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
         if (entry.source.startsWith("jellyfin:")) {
           if (browser) throw new Error("Open Jellyfin directly on this device.");
-          return playback.resolve(entry.source.slice(9), playbackId, signal, mode === "personal" || fromStart, preparing).then(media => preparing || destination?.remote ? media : subtitles.prepare(media, playbackId, signal));
+          return playback.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing || destination?.remote ? media : subtitles.prepare(media, playbackId, signal));
         }
         if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
         if (entry.source.startsWith("recording:")) throw new Error(RECORDINGS_UNSUPPORTED);
@@ -264,14 +286,13 @@ export function createHub(options: HubOptions) {
     }
   }
   let sendspin: ReturnType<typeof createSendspin> | undefined;
-  let sendspinTarget: ReturnType<typeof registry.registerGroup> | undefined;
   let sendspinSettingsTail = Promise.resolve();
   const sendspinHostingState = (): SendspinHostingState => ({
-    enabled: store.sendspinEnabled() ?? configuredExternally,
+    enabled: store.sendspinEnabled() ?? true,
     active: !!sendspin?.listening,
     restartRequired: false,
     configuredExternally,
-    error: (store.sendspinEnabled() ?? configuredExternally) ? sendspin?.listenerError ?? sendspinError : null,
+    error: (store.sendspinEnabled() ?? true) ? sendspin?.listenerError ?? sendspinError : null,
   });
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => invalidateAll("playlists"), queue: () => session.state.queue,
     upNext: () => {
@@ -332,21 +353,34 @@ export function createHub(options: HubOptions) {
     },
   });
   const metadata = createProviderMetadata({ store: createSessionStore(store), cachedItem: providers.cachedItem, onChange: () => invalidateAll("progress") });
-  const household = createRuntime(null);
+  const household = createRuntime(playbackCatalog.defaultFor(null));
+  for (const record of playbackCatalog.all()) createRuntime(record);
   const { session, targets } = household;
   const nativeRuntime = () => [...runtimes.values()].find(runtime => !runtime.disposed && runtime.targets.nativeAssigned) ?? household;
-  const retire = (runtime: Runtime) => {
-    if (runtime.disposed) return;
-    try { runtime.session.command({ type: "stop" }); } catch { /* Disconnected endpoints are already fenced. */ }
-    runtime.session.close(); runtime.disposed = true;
-    runtime.subtitles.close(); runtime.radioProgramme.close();
-    for (const [key, inspection] of inspections) if (key.startsWith(`${runtime.id}:`)) { inspection.abort(); inspections.delete(key); }
-    const task = Promise.allSettled([runtime.targets.close(), runtime.playback.close()]).then(() => {
-      runtime.privateStore?.close(); runtime.privateStore = undefined;
-      runtimes.delete(runtime.id); playbackStates.delete(runtime.id); updatePlaybackActivity();
-    });
-    retiring.add(task); void task.finally(() => retiring.delete(task));
+  const resolvePlayback = (selection: string | null, controllerId: string | null) => {
+    const record = selection === "default" || selection === "personal" ? playbackCatalog.defaultFor(controllerId)
+      : selection === null || selection === "household" ? playbackCatalog.get(sessionId) : playbackCatalog.get(selection);
+    if (!record) throw new ControllerError("This playback is no longer available.", 404);
+    const existing = runtimes.get(record.id);
+    const runtime = existing ?? createRuntime(record);
+    if (!existing) runtime.targets.publish();
+    return runtime;
   };
+  const audioSocket = (deviceId: string) => [...sockets].find(socket => socket.data.renderer?.id === deviceId || deviceId === "native" && socket.data.trusted);
+  const devices = createPlaybackDevices({
+    registry, catalog: playbackCatalog, runtimes: () => [...runtimes.values()], host: () => sendspin,
+    changed: publishPlaybacks,
+    ready: deviceId => !!audioSocket(deviceId)?.data.audioReady,
+    activate: async deviceId => {
+      const socket = audioSocket(deviceId);
+      if (!socket) throw new Error("Open Couch on this device before adding it.");
+      if (socket.data.audioReady) return;
+      socket.send(JSON.stringify({ type: "audioActivationRequired" } satisfies ServerMessage));
+      for (let attempt = 0; attempt < 120 && sockets.has(socket) && !socket.data.audioReady; attempt++) await Bun.sleep(250);
+      if (!socket.data.audioReady) throw new Error("Tap Enable audio in Couch on the selected device, then try again.");
+    },
+    localVolume: systemAudio ? (volume, muted, authorize) => muted ? soundRouting!.mute(true, authorize) : soundRouting!.volume(volume, authorize) : undefined,
+  });
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
     if (controller) {
@@ -357,8 +391,6 @@ export function createHub(options: HubOptions) {
     invalidateAll("controllers");
   }, onRevoke: id => {
     for (const clientId of sendspinIdentity?.revoke(id) ?? []) sendspin?.disconnectClient(clientId);
-    const personal = runtimes.get(`personal:${id}`);
-    if (personal) retire(personal);
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
       socket.unsubscribe(topic(socket.data.runtime, socket.data.playbackClock));
@@ -606,7 +638,7 @@ export function createHub(options: HubOptions) {
       const url = new URL(request.url);
       const websocket = url.pathname === "/api/ws";
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
-      if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Couch-Session", "Access-Control-Max-Age": "600" } }));
+      if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Couch-Session, X-Couch-Playback", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
       const trusted = access(request) === "direct" && token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
       if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
@@ -619,13 +651,11 @@ export function createHub(options: HubOptions) {
       };
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
-      const selection = websocket ? url.searchParams.get("session") : request.headers.get("X-Couch-Session");
-      if (selection !== null && selection !== "household" && selection !== "personal") return cors(request, json({ error: "Choose a household or personal session." }, 400));
-      if (selection === "personal" && !caller.controller) return cors(request, json({ error: "Pair this device to use a personal session." }, 403));
-      const freshRuntime = selection === "personal" && !runtimes.has(`personal:${caller.controller!.id}`);
-      const runtime = selection === "personal" ? createRuntime(caller.controller!.id) : household;
+      const selection = websocket ? url.searchParams.get("playback") ?? url.searchParams.get("session") : request.headers.get("X-Couch-Playback") ?? request.headers.get("X-Couch-Session");
+      let runtime: Runtime;
+      try { runtime = resolvePlayback(selection, caller.controller?.id ?? null); }
+      catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Playback is unavailable." }, 404)); }
       const { session, targets, subtitles, catalog } = runtime;
-      if (freshRuntime) targets.publish();
       if (url.pathname === "/api/settings/sharing") {
         if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
         if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
@@ -709,6 +739,7 @@ export function createHub(options: HubOptions) {
         } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/sendspin/enrollment") {
+        if (sendspinHostingState().enabled && !sendspin?.listening) await ensureSendspin();
         if (request.method === "GET" && (!sendspin?.listening || !sendspinHostingState().enabled)) return cors(request, json({ available: false }));
         if (!sendspin?.listening || !sendspinIdentity || !sendspinConfig || !sendspinHostingState().enabled) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
         try {
@@ -733,23 +764,6 @@ export function createHub(options: HubOptions) {
           sendspin.refresh();
           return cors(request, json({ ...configuration, ...enrollment }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Sendspin enrollment failed." }, error instanceof ControllerError ? error.status : 400)); }
-      }
-      if (url.pathname === "/api/sendspin/leave") {
-        if (!sendspin || !sendspinIdentity) return cors(request, json({ error: "Sendspin hosting is not enabled on this Couch." }, 503));
-        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "POST" } }));
-        try {
-          if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
-          const clientId = await settingField(request, "clientId");
-          const current = identity();
-          if (!current) throw new ControllerError("Pair this remote first.", 401);
-          if (typeof clientId !== "string" || sendspinIdentity.owner(clientId) !== (current.controller?.id ?? "host")) throw new ControllerError("This Sendspin player belongs to another device.", 403);
-          const members = sendspinIdentity.members();
-          if (!members.includes(clientId)) return cors(request, json({ ok: true }));
-          const remaining = members.filter(id => id !== clientId);
-          const owning = [...runtimes.values()].find(value => value.targets.owns("sendspin-group")) ?? runtime;
-          await owning.targets.control("sendspin-group", () => sendspin!.setMembers(remaining), remaining);
-          return cors(request, json({ ok: true }));
-        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not leave Sendspin." }, error instanceof ControllerError ? error.status : 409)); }
       }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
@@ -793,8 +807,21 @@ export function createHub(options: HubOptions) {
         const currentIdentity = () => admitted() ? identity() : null;
         const authorize = () => {
           if (!admitted()) throw new ControllerError(UPDATING_PAUSED, 503);
-          if (!identity() || runtime.disposed || runtime.owner && identity()?.controller?.id !== runtime.owner) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
+          if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
         };
+        if (url.pathname === "/api/playbacks" && request.method === "POST") {
+          try {
+            const { deviceId } = await settingFields(request, ["deviceId"], false);
+            if (deviceId !== undefined && (typeof deviceId !== "string" || !devices.snapshot(runtime).devices.some(device => device.id === deviceId))) throw new ControllerError("Choose an available device.");
+            authorize();
+            const next = createRuntime(playbackCatalog.create(caller.controller?.id ?? null));
+            next.targets.publish();
+            if (typeof deviceId === "string") await devices.assign(next, [deviceId], authorize);
+            playbackCatalog.select(caller.controller?.id ?? null, next.id);
+            publishPlaybacks();
+            return cors(request, json({ id: next.id }));
+          } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not create playback." }, 409)); }
+        }
         if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
           ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
           : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: VERSION_MISMATCH }, 409));
@@ -866,9 +893,10 @@ export function createHub(options: HubOptions) {
         let command;
         try {
           const value = JSON.parse(message);
-          if (value?.type === "selectSession") {
-            if (value.mode !== "household" && value.mode !== "personal" || value.mode === "personal" && !socket.data.controllerId) throw new Error("Invalid playback selection.");
-            const next = value.mode === "personal" ? createRuntime(socket.data.controllerId!) : household;
+          if (value?.type === "selectPlayback" || value?.type === "selectSession") {
+            const selection = value.type === "selectPlayback" ? value.playbackId : value.mode;
+            if (typeof selection !== "string") throw new Error("Invalid playback selection.");
+            const next = resolvePlayback(selection, socket.data.controllerId);
             socket.unsubscribe(topic(runtime, socket.data.playbackClock));
             socket.data.runtime = next;
             socket.subscribe(topic(next, socket.data.playbackClock));
@@ -883,7 +911,11 @@ export function createHub(options: HubOptions) {
               if (socket.send(JSON.stringify({ type: "rendererCommand", sessionId: socket.data.rendererSessionId!, command } satisfies ServerMessage)) === 0) throw new Error("The renderer disconnected.");
             };
             if (renderer.type === "registerNativeRenderer" || renderer.type === "registerRenderer") socket.data.rendererSessionId ??= sessionId;
-            if (renderer.type === "registerNativeRenderer") {
+            if (renderer.type === "deviceAudioReady") {
+              if (!socket.data.renderer && !socket.data.trusted) throw new Error("Unregistered audio device.");
+              socket.data.audioReady = renderer.ready;
+              publishPlaybacks();
+            } else if (renderer.type === "registerNativeRenderer") {
               if (!socket.data.controllerId || socket.data.renderer) throw new Error("Native receiver enrollment requires its own paired connection.");
               store.markNativeReceiverUsed();
               socket.data.receiver = registry.registerReceiver(socket.data.controllerId, playbackActor(socket.data.controllerId)?.name ?? "Couch computer", sendRenderer, socket.data.authorize, () => socket.close(4000, "Native receiver lease expired."));
@@ -922,25 +954,14 @@ export function createHub(options: HubOptions) {
           if (enqueued) {
             await enqueued;
             if (closed) return;
+          } else if (action.type === "assignDevices") {
+            await devices.assign(runtime, action.deviceIds, authorize, action.takeover);
+          } else if (action.type === "deviceVolume") {
+            await devices.volume(runtime, action.deviceId, action.volume, action.muted, authorize);
           } else if (action.type === "selectTarget") {
-            const generation = runtime.sourceGeneration;
-            await targets.move(action.targetId, () => {
-              authorize();
-              if (generation !== runtime.sourceGeneration) throw new Error("The source changed while playback was moving.");
-            }, { takeover: action.takeover });
-          } else if (action.type === "groupMembers" || action.type === "groupVolume" || action.type === "groupReconnect") {
-            const group = action.targetId === "sendspin-group" ? sendspin : undefined;
-            if (!group) throw new Error("That audio group is not configured.");
-            if (targets.busy) throw new Error("Playback is moving. Wait for it to finish.");
-            authorize();
-            await targets.control(action.targetId, async () => {
-              authorize();
-              if (action.type === "groupReconnect") await group.reconnect();
-              else if (action.type === "groupMembers") await group.setMembers(action.memberIds);
-              else await group.setMemberVolume(action.memberId, action.volume, action.muted);
-            }, action.type === "groupMembers" ? action.memberIds : undefined);
+            await devices.assign(runtime, [action.targetId], authorize, action.takeover);
           } else if (action.type === "navigate") {
-            if (runtime.mode !== "household") throw new Error("TV navigation belongs to the household session.");
+            if (!targets.nativeAssigned) throw new Error("Select playback on this computer to control its TV interface.");
             const listeners = [server, ...lan?.servers ?? []];
             if (!listeners.some(listener => listener.subscriberCount("navigation"))) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             const navigation = JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage);
@@ -1033,6 +1054,7 @@ export function createHub(options: HubOptions) {
     const results = await Promise.allSettled([...retiring, ...[...runtimes.values()].map(runtime => runtime.playback.close()), toolsStopped, updates.close(), library.close(), jellyfin.close(), sendspinSettingsTail.then(() => sendspin?.close()), lan?.close(), server.stop(true)]);
     diagnostics.close();
     sendspinIdentity?.close();
+    playbackCatalog.close();
     for (const runtime of runtimes.values()) runtime.privateStore?.close();
     store.close();
     if (progressError) throw progressError;
@@ -1040,7 +1062,7 @@ export function createHub(options: HubOptions) {
     if (failed?.status === "rejected") throw failed.reason;
   })();
 
-  targets.publish();
+  for (const runtime of runtimes.values()) runtime.targets.publish();
   async function stopSendspin() {
     const host = sendspin;
     if (!host) return;
@@ -1055,16 +1077,12 @@ export function createHub(options: HubOptions) {
     try { validateSendspinConfig(sendspinConfig); }
     catch (error) { sendspinError = error instanceof Error ? error.message : "Invalid Sendspin host configuration."; return; }
     if (!sendspinIdentity) { sendspinError = "Sendspin identity is unavailable."; return; }
-    if (!sendspinTarget) sendspinTarget = registry.registerGroup({ id: "sendspin-group", name: sendspinConfig.name, kind: "group", backend: "sendspin", connected: false, handoffSafety: "unverified" }, command => {
-      if (!sendspin?.listening) throw new Error("Sendspin is disabled.");
-      sendspin.send(command);
-    });
     store.markBufferedOutputUsed();
     let settled = false;
     const ready = Promise.withResolvers<void>();
     const timeout = setTimeout(() => { if (!settled) { settled = true; ready.resolve(); } }, 3000);
     let host: ReturnType<typeof createSendspin>;
-    try { host = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() && (store.sendspinEnabled() ?? configuredExternally) ? sendspinIdentity.lookup(clientId) : null,
+    try { host = createSendspin(sendspinConfig, { identity: sendspinIdentity.privateKey, lookupPsk: clientId => admitted() && store.remoteControlEnabled() && (store.sendspinEnabled() ?? true) ? sendspinIdentity.lookup(clientId) : null,
       isQualified: clientId => sendspinIdentity.softwareOutputQualified(clientId) || !!sendspinConfig.qualifiedClientIds?.includes(clientId),
       describeClient: clientId => {
         const deviceId = sendspinIdentity.deviceId(clientId);
@@ -1072,13 +1090,13 @@ export function createHub(options: HubOptions) {
         const owner = sendspinIdentity.owner(clientId);
         return { deviceId, name: owner === "host" ? store.installationName() : owner ? store.controller(owner)?.name : undefined };
       },
-      initialMembers: sendspinIdentity.members(), membersChanged: sendspinIdentity.saveMembers, changed: sendspinTarget.update, observe: sendspinTarget.observe,
+      devicesChanged: publishPlaybacks,
       listenerChanged: () => { invalidateAll("controllers"); if (!settled) { settled = true; ready.resolve(); } },
-      control: async (clientId, command) => {
+      control: async (runtimeId, clientId, command) => {
         const owner = sendspinIdentity.owner(clientId);
-        const runtime = [...runtimes.values()].find(value => value.targets.owns("sendspin-group"));
-        if (!owner || !admitted() || !runtime || runtime.mode === "personal" && runtime.owner !== owner) throw new Error("This client cannot control that playback session.");
-        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled() || !(store.sendspinEnabled() ?? configuredExternally)) throw new Error("This client's access was revoked."); };
+        const runtime = runtimes.get(runtimeId);
+        if (!owner || !admitted() || !runtime) throw new Error("This client cannot control that playback session.");
+        const authorize = () => { if (!admitted() || sendspinIdentity.owner(clientId) !== owner || !store.remoteControlEnabled() || !(store.sendspinEnabled() ?? true)) throw new Error("This client's access was revoked."); };
         const playbackId = runtime.session.state.player.playbackId;
         if (command === "stop") runtime.session.command({ type: "stop" }, authorize);
         else if (playbackId && command === "next") runtime.session.command({ type: "next", playbackId }, authorize);
@@ -1092,11 +1110,14 @@ export function createHub(options: HubOptions) {
     sendspinError = host.listenerError ?? "Sendspin did not start listening in time.";
     await stopSendspin();
   }
-  if (store.sendspinEnabled() ?? configuredExternally) sendspinSettingsTail = startSendspin().catch(error => {
-    sendspinError = error instanceof Error ? error.message : "Sendspin could not start.";
-  });
+  function ensureSendspin() {
+    const start = sendspinSettingsTail.then(() => startSendspin());
+    sendspinSettingsTail = start.catch(error => { sendspinError = error instanceof Error ? error.message : "Audio sharing could not start."; });
+    return sendspinSettingsTail;
+  }
+  if (configuredExternally && sendspinHostingState().enabled) void ensureSendspin();
   return {
-    server, session: { ...session, get state() { return session.state; }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
+    server, session: { ...session, get state() { return snapshot(household); }, observe: registry.observeNative }, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
     prepareRestart: () => {
       if (!admitted()) throw new Error("Already updating or restarting.");

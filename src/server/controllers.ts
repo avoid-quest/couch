@@ -17,7 +17,7 @@ export function controllerName(value: unknown) {
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "no-store" } });
 
-export async function settingFields(request: Request, fields: readonly string[]) {
+export async function settingFields(request: Request, fields: readonly string[], required = true) {
   if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new ControllerError("Send a JSON object.", 415);
   if (Number(request.headers.get("Content-Length")) > 8192) throw new ControllerError("The request is too large.", 413);
   const reader = request.body?.getReader();
@@ -38,7 +38,7 @@ export async function settingFields(request: Request, fields: readonly string[])
   } finally { reader.releaseLock(); }
   let value: unknown;
   try { value = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new ControllerError("Invalid JSON body."); }
-  if (!value || typeof value !== "object" || Array.isArray(value) || !fields[0] || !(fields[0] in value) || Object.keys(value).some(key => !fields.includes(key))) throw new ControllerError(`Send only ${fields.join(" and ")}.`);
+  if (!value || typeof value !== "object" || Array.isArray(value) || !fields[0] || required && !(fields[0] in value) || Object.keys(value).some(key => !fields.includes(key))) throw new ControllerError(`Send only ${fields.join(" and ")}.`);
   return value as Record<string, unknown>;
 }
 

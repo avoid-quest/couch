@@ -177,11 +177,13 @@ function useShellValue() {
   const player = state?.player;
   const programme = connected ? state?.radioProgramme : null;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
-  const available = connected && !!player && (player.status !== "unavailable" || !!state?.targets && !state.targetId);
+  const playbackState = state as typeof state & { devices?: { id: string; name: string; connected: boolean }[]; deviceIds?: string[] };
+  const assignedIds = playbackState?.deviceIds ?? [];
+  const available = connected && !!player && (player.status !== "unavailable" || assignedIds.length === 0 && !!playbackState?.devices?.some(device => device.connected));
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
-  // Terse, stable labels for the header's screen-reader status and the Play on popover.
+  // Terse, stable labels for the header's screen-reader status and the Couch connection popover.
   const statusLabel = booting ? "Starting" : {
-    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" && state?.targetId ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
+    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" && assignedIds.length ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
   }[status];
 
   return {
@@ -236,18 +238,22 @@ function ConnectionStatus() {
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
   if (!credentials || status === "pairing-required") return null;
   if (!connected) return null;
-  if (state?.targets && !state.targetId) return <StatusLine>Choose devices to play.</StatusLine>;
-  if (state?.player.status === "unavailable" && state.targetId === "checkpoint") return <StatusLine>{state.currentEntryId ? "Choose devices to resume paused." : "Choose devices to play."}</StatusLine>;
-  const group = state?.targets?.find(target => target.id === state.targetId && target.kind === "group");
-  if (state?.player.status === "unavailable" && group) return <StatusLine>{group.connected ? state.currentEntryId ? "Choose devices to resume paused." : "Choose devices to play." : `Reconnect ${group.name} from Devices before moving playback.`}</StatusLine>;
-  if (state?.player.status === "unavailable") return <StatusLine>Player not running on {state.targets?.find(target => target.id === state.targetId)?.name ?? (state.targets && state.targetId !== "native" ? "the selected playback output" : localHost ? "this computer" : name)}.</StatusLine>;
+  const playbackState = state as typeof state & { devices?: { id: string; name: string; connected: boolean }[]; deviceIds?: string[] };
+  const assignedIds = playbackState?.deviceIds ?? [];
+  if (playbackState?.devices && !assignedIds.length) return state?.currentEntryId ? <StatusLine>Choose a device to resume playback.</StatusLine> : null;
+  if (state?.player.status === "unavailable") {
+    const assigned = assignedIds.map(id => playbackState?.devices?.find(device => device.id === id));
+    const disconnected = assigned.filter(device => device && !device.connected);
+    if (disconnected.length) return <StatusLine>Reconnect {disconnected.map(device => device!.name).join(", ")} from Devices to resume playback.</StatusLine>;
+    return <StatusLine>Player not running on {assigned.map(device => device?.name).filter(Boolean).join(", ") || "the selected devices"}.</StatusLine>;
+  }
   return null;
 }
 
 export function PairingPage() {
   const { localHost, credentials, details, booting, retryHost, status, savePairing } = useSessionGate();
   const device = usePlaybackDevice();
-  const setup = useMutation({ mutationFn: (origin: string) => requestLocalSetup(origin, clientDeviceName()), onSuccess: value => { rememberClientDeviceName(clientDeviceName()); savePairing(value); } });
+  const setup = useMutation({ mutationFn: ({ origin, name }: { origin: string; name: string }) => requestLocalSetup(origin, name), onSuccess: (value, { name }) => { rememberClientDeviceName(name); savePairing(value); } });
   if (localHost) return <Onboarding title="Starting Couch">
     {booting ? <StatusLine busy>Starting…</StatusLine> : <><p className="text-sm text-muted-foreground">Couldn't start Couch on this computer. If it keeps failing, restart this computer.</p><Button className="self-start" onClick={retryHost}>{TRY_AGAIN}</Button></>}
   </Onboarding>;
@@ -255,7 +261,7 @@ export function PairingPage() {
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
   if (details?.localSetupAvailable && device?.mode !== "remote" && !credentials) return <Onboarding title="Set up Couch on this computer" description="This browser will manage Couch on this computer. You can pair other devices from Settings → Devices.">
-    <Button className="self-start" disabled={setup.isPending} onClick={() => setup.mutate(origin)}>{setup.isPending ? "Setting up…" : "Set up Couch"}</Button>
+    <Button className="self-start" disabled={setup.isPending} onClick={() => setup.mutate({ origin, name: clientDeviceName() })}>{setup.isPending ? "Setting up…" : "Set up Couch"}</Button>
     {setup.error && <Alert variant="destructive"><AlertDescription>{errorText(setup.error)}</AlertDescription></Alert>}
   </Onboarding>;
   return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Devices → Pair a remote, then enter the code shown there.`}>
@@ -268,7 +274,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
-  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled } = useSessionGate();
+  const gate = useSessionGate() as ReturnType<typeof useSessionGate> & { audioActivationRequired?: boolean; activateDeviceAudio?: () => Promise<boolean> };
+  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled, audioActivationRequired, activateDeviceAudio } = gate;
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
@@ -298,6 +305,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
+  const audioPrompt = paired && connected && audioActivationRequired && activateDeviceAudio && <Alert><AlertDescription>Enable audio on this device to continue playback.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => { void activateDeviceAudio(); }}>Enable audio</Button></AlertAction></Alert>;
 
   if (setupPending) return <div className="app-shell flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
@@ -324,8 +332,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
               <DigitalClock className="ml-2 max-sm:hidden" />
             </div>
           </header>
-          {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
-          {onPlayer && error && <div className="fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
+          {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{audioPrompt}{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
+          {onPlayer && (audioPrompt || error) && <div className="fixed inset-x-0 top-0 z-40 grid gap-3 bg-background px-(--gutter) py-3">{audioPrompt}{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
           {!paired ? <PairingPage /> : <>
             {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>

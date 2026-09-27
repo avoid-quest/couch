@@ -346,7 +346,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const timer = setTimeout(() => {
         pending.current.delete(requestId);
         reject(new Error("No reply from Couch. Check before retrying."));
-      }, action.type === "selectTarget" ? 60_000 : ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
+      }, (action.type === "selectTarget" || action.type === "assignDevices") ? 60_000 : ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
       pending.current.set(requestId, { resolve, reject, timer });
       const message: ClientMessage = { type: "command", requestId, action };
       try {

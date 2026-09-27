@@ -7,6 +7,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/comp
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { clientDeviceName, rememberClientDeviceName } from "@/session/device-name";
+import { usePlaybackDevice } from "./PlaybackDevice";
 
 export async function requestPairing(origin: string, code: string, name: string) {
   const response = await fetch(`${origin}/api/pair`, {
@@ -34,12 +35,14 @@ const slot = "h-8 touch:h-11 min-w-0 w-auto flex-1 text-sm";
 // The shell remounts per connection, so a pairing that outlives its form never applies.
 export function PairForm() {
   const { pairingOrigin, linkedPairingCode, savePairing, setError } = useSessionGate();
+  const nativeName = usePlaybackDevice()?.defaultDeviceName ?? undefined;
   const [pairingCode, setPairingCode] = useState(linkedPairingCode);
-  const pairing = useMutation({ mutationFn: () => requestPairing(pairingOrigin, pairingCode.trim(), clientDeviceName()) });
+  const pairing = useMutation({ mutationFn: (name: string) => requestPairing(pairingOrigin, pairingCode.trim(), name) });
   const pair = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    pairing.mutate(undefined, { onSuccess: credentials => { rememberClientDeviceName(clientDeviceName()); setPairingCode(""); savePairing(credentials); } });
+    const name = clientDeviceName(undefined, nativeName);
+    pairing.mutate(name, { onSuccess: credentials => { rememberClientDeviceName(name); setPairingCode(""); savePairing(credentials); } });
   };
   return (
     <form onSubmit={pair} className="pair-form grid max-w-md gap-6">

@@ -178,6 +178,18 @@ test("installation names persist separately from watching profiles and controlle
   expect(open(file).installationName()).toBe("Café TV");
 });
 
+test("the computer name seeds only a fresh installation", () => {
+  const file = path();
+  const first = openStore(file, false, "Study Mac");
+  opened.add(first);
+  expect(first.installationName()).toBe("Study Mac");
+  first.renameInstallation("Living room");
+  close(first);
+  const reopened = openStore(file, false, "Another Mac");
+  opened.add(reopened);
+  expect(reopened.installationName()).toBe("Living room");
+});
+
 test("device management persists names and roles and permits removing the final administrator", () => {
   const file = path();
   const store = open(file);

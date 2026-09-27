@@ -52,7 +52,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const status = !connected ? offline(state.installationName)
     : player.status === "error" ? `Can't play ${current.title}`
     : player.status === "loading" ? "Loading…"
-    : player.status === "unavailable" ? "Player unavailable"
+    : player.status === "unavailable" ? (state as typeof state & { deviceIds?: string[] })?.deviceIds?.length === 0 ? "Choose devices" : "Player unavailable"
     : player.status === "ended" ? "Finished"
     : player.status === "idle" ? "Ready to play"
     : paused ? "Paused"

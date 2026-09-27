@@ -63,7 +63,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   const upNext = queue.slice(cursorIndex + 1);
   const current = currentIndex >= 0 ? queue[currentIndex] : null;
   const currentLabel = !connected ? offline(state?.installationName) : state?.player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished"
-    : state?.player.status === "loading" ? "Loading…" : state?.player.status === "error" ? `Can't play ${current?.title ?? "this item"}` : state?.player.status === "unavailable" ? "Player unavailable"
+    : state?.player.status === "loading" ? "Loading…" : state?.player.status === "error" ? `Can't play ${current?.title ?? "this item"}` : state?.player.status === "unavailable" ? (state as typeof state & { deviceIds?: string[] })?.deviceIds?.length === 0 ? "Choose devices" : "Player unavailable"
     : state?.player.status === "idle" ? "Ready to play" : state?.player.status === "paused" ? "Paused" : "Playing";
   const currentLength = current ? current.live ? null : playbackClock.duration ?? knownLength(current) : 0;
   let startsIn = currentLength == null ? null : Math.max(0, currentLength - (playbackClock.position ?? 0)) / (state?.player.speed || 1);

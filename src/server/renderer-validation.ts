@@ -4,6 +4,7 @@ import type { PlayerState, RendererMessage } from "../shared/protocol";
 export function parseRendererMessage(value: unknown): RendererMessage | null {
   if (!value || typeof value !== "object") return null;
   const message = value as Partial<RendererMessage>;
+  if (message.type === "deviceAudioReady") { if (typeof message.ready !== "boolean") throw new Error("Invalid audio readiness."); return { type: message.type, ready: message.ready }; }
   if (message.type === "registerNativeRenderer" || message.type === "nativeLease") {
     if (typeof message.nonce !== "string" || !/^[a-f\d-]{36}$/i.test(message.nonce)) throw new Error("Invalid receiver lease.");
     return { type: message.type, nonce: message.nonce };

@@ -41,9 +41,13 @@ export function openPlaybackCatalog(databasePath: string, installationId: string
       return db.transaction(() => {
         const id = `playback:${crypto.randomUUID()}`;
         db.query("INSERT INTO playback_catalog (id, owner, storageKey) VALUES (?, ?, ?)").run(id, clientId, id);
-        db.query("UPDATE playback_defaults SET playbackId = ? WHERE clientKey = ?").run(id, defaultKey(clientId));
         return get(id)!;
       }).immediate();
+    },
+    select(clientId: string | null, id: string) {
+      if (!get(id)) throw new Error("This playback is unavailable.");
+      defaultFor(clientId);
+      db.query("UPDATE playback_defaults SET playbackId = ? WHERE clientKey = ?").run(id, defaultKey(clientId));
     },
     get,
     all(): PlaybackRecord[] { return db.query<Row, []>("SELECT id, owner, storageKey, deviceIds FROM playback_catalog ORDER BY rowid").all().map(view); },

@@ -59,7 +59,7 @@ function profileName(value: unknown) {
   return name;
 }
 
-export function openStore(path: string, remoteControlEnabled = false) {
+export function openStore(path: string, remoteControlEnabled = false, initialName = "Couch") {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const db = new Database(path, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -124,7 +124,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
     );
     CREATE TABLE IF NOT EXISTS streamingcommunity_origin (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
-    INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS native_receiver_recovery (id INTEGER PRIMARY KEY CHECK (id = 1));
     CREATE TABLE IF NOT EXISTS buffered_output_recovery (id INTEGER PRIMARY KEY CHECK (id = 1));
@@ -135,6 +134,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
+  db.query("INSERT OR IGNORE INTO installation VALUES (1, ?)").run(controllerName(initialName));
   db.query("UPDATE streamingcommunity_origin SET origin = ? WHERE origin = 'https://streamingcommunityz.academy'").run(streamingCommunityOrigin);
 
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());

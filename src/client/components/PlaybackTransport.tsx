@@ -78,7 +78,8 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
 
 export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className }: Props & { showSlider?: boolean; showValue?: boolean; className?: string }) {
   const { available, audioReady } = playbackCapabilities(state, connected);
-  const target = deviceName(state.installationName);
+  const playbackState = state as typeof state & { devices?: { id: string; name: string }[]; deviceIds?: string[] };
+  const target = playbackState.deviceIds?.map(id => playbackState.devices?.find(device => device.id === id)?.name).filter(Boolean).join(", ") || deviceName(state.installationName);
   const muted = state.systemAudio?.muted;
   return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} role="group" aria-label={`${target} volume`}>
     {state.systemAudio ? <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio.muteWritable === false} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" className="size-4 shrink-0" />}

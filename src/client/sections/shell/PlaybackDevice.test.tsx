@@ -49,7 +49,7 @@ async function render(sharing = false) {
 }
 
 async function openUpdates() {
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   await user.click(button("Update Couch on this computer"));
 }
 
@@ -75,7 +75,7 @@ test("Another Couch survives restart and offers local playback only by explicit 
   await render();
   expect(button("Try again")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Use this computer" })).toBeInTheDocument();
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   expect(screen.getByRole("radio", { name: "This computer" })).not.toBeChecked();
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(false);
 });
@@ -150,7 +150,7 @@ test("a selected remote stays in the bundled app shell with one playback device 
   connectionError = "Cannot reach that Couch.";
   await render();
   expect(screen.getByText("Local installation")).toBeInTheDocument();
-  expect(screen.getAllByRole("button", { name: "Playing on 192.168.1.10:4100" })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Connected to 192.168.1.10:4100" })).toHaveLength(1);
 });
 
 test("TV remote input cannot open or select a playback device, but local clicks can", async () => {
@@ -158,9 +158,9 @@ test("TV remote input cannot open or select a playback device, but local clicks 
   // Happy DOM has no layout; navigation needs rendered controls to receive input.
   spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(0, 0, 100, 30)] as unknown as DOMRectList);
   await render();
-  const trigger = button("Playing here");
+  const trigger = button("Couch on this computer");
   await act(async () => { trigger.focus(); applyTvNavigation("select"); });
-  expect(screen.queryByRole("radiogroup", { name: "Play on" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("radiogroup", { name: "Couch connection" })).not.toBeInTheDocument();
   await user.click(trigger);
   const remote = screen.getByRole("radio", { name: "http://192.168.1.10:4100" });
   await act(async () => { remote.focus(); applyTvNavigation("select"); });
@@ -174,7 +174,7 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   interruption = "sharing";
   await render();
-  await user.click(button("Playing here"));
+  await user.click(button("Couch on this computer"));
   await user.click(screen.getByRole("radio", { name: "http://192.168.1.10:4100" }));
   expect(screen.getByText(/Remotes can't reach this computer/)).toBeInTheDocument();
   expect(screen.queryByText(/Playback here stops/)).toBeNull();
@@ -213,47 +213,47 @@ test("closing the device chooser reconnects the same remote and restores trigger
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   await render();
   const initial = invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial);
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial + 1);
   expect(choice.mode).toBe("remote");
-  await waitFor(() => expect(button("Playing on 192.168.1.10:4100")).toHaveFocus());
+  await waitFor(() => expect(button("Connected to 192.168.1.10:4100")).toHaveFocus());
 });
 
-test("a route change closes Play on and resumes the selected remote connection", async () => {
+test("a route change closes Couch connection and resumes the selected remote connection", async () => {
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   const { NativeModeGate, PlaybackDevice } = await import("./PlaybackDevice");
   const { QueryClientProvider } = await import("@tanstack/react-query");
   const client = createTestQueryClient();
   const screenFor = (path: string) => <NativeModeGate><QueryClientProvider client={client}><PlaybackDevice key={path} /></QueryClientProvider></NativeModeGate>;
   const view = renderReact(screenFor("/find"));
-  await screen.findByRole("button", { name: "Playing on 192.168.1.10:4100" });
+  await screen.findByRole("button", { name: "Connected to 192.168.1.10:4100" });
   const attempts = () => invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
   const initial = attempts();
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   expect(attempts()).toBe(initial);
   view.rerender(screenFor("/now"));
   await waitFor(() => expect(attempts()).toBe(initial + 1));
 });
 
-test("Play on marks the current computer and switches directly to a remembered Couch", async () => {
+test("Couch connection marks the current computer and switches directly to a remembered Couch", async () => {
   localStorage.setItem("couch.target-names", JSON.stringify({ "http://192.168.1.20:4100": { invalid: "name" } }));
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100", "http://192.168.1.20:4100"], localSetupComplete: true };
   await render();
-  await user.click(button("Playing here"));
+  await user.click(button("Couch on this computer"));
   expect(screen.getByRole("radio", { name: "This computer" })).toBeChecked();
   expect(screen.getByRole("radio", { name: "http://192.168.1.20:4100" })).not.toBeChecked();
   await user.click(screen.getByRole("radio", { name: "http://192.168.1.20:4100" }));
   expect(choice.address).toBe("http://192.168.1.20:4100");
   expect(screen.queryByRole("button", { name: "Stop and switch" })).toBeNull();
-  expect(button("Playing on 192.168.1.20:4100")).toBeInTheDocument();
+  expect(button("Connected to 192.168.1.20:4100")).toBeInTheDocument();
 });
 
-test("Another Couch address is entered inline in Play on", async () => {
+test("Another Couch address is entered inline in Couch connection", async () => {
   choice.mode = "local"; choice.localSetupComplete = true;
   await render();
-  await user.click(button("Playing here"));
+  await user.click(button("Couch on this computer"));
   await user.type(screen.getByRole("textbox", { name: "Another Couch address" }), "192.168.1.20:4100");
   await user.click(button("Connect"));
   expect(choice.address).toBe("192.168.1.20:4100");
@@ -331,19 +331,19 @@ test("forgetting a saved Couch removes only its address and pairing after confir
   localStorage.setItem(`couch.pairing:${retained}`, "current pairing");
   localStorage.setItem("couch.target-names", JSON.stringify({ [forgotten]: "Living room", [retained]: "Kitchen" }));
   await render();
-  await user.click(button("Playing on 192.168.1.20:4100"));
+  await user.click(button("Connected to 192.168.1.20:4100"));
   await user.click(button("Forget Living room"));
   expect(invoke.mock.calls.some(([name]) => name === "forget_playback_device")).toBe(false);
   await user.click(button("Cancel"));
   expect(localStorage.getItem(`couch.pairing:${forgotten}`)).toBe("old pairing");
-  await user.click(button("Playing on 192.168.1.20:4100"));
+  await user.click(button("Connected to 192.168.1.20:4100"));
   await user.click(button("Forget Living room"));
   await user.click(button("Forget"));
   expect(choice).toMatchObject({ mode: "remote", address: retained, targets: [retained] });
   expect(localStorage.getItem(`couch.pairing:${forgotten}`)).toBeNull();
   expect(localStorage.getItem(`couch.pairing:${retained}`)).toBe("current pairing");
   expect(JSON.parse(localStorage.getItem("couch.target-names")!)).toEqual({ [retained]: "Kitchen" });
-  await user.click(button("Playing on 192.168.1.20:4100"));
+  await user.click(button("Connected to 192.168.1.20:4100"));
   expect(screen.queryByRole("radio", { name: forgotten })).toBeNull();
 });
 
@@ -353,7 +353,7 @@ test("forgetting the selected Couch persists a neutral choice without starting l
   localStorage.setItem(`couch.pairing:${forgotten}`, "old pairing");
   localStorage.setItem("couch.connection", JSON.stringify({ origin: forgotten, details: { name: "Living room", urls: [forgotten] } }));
   await render();
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   await user.click(button("Forget 192.168.1.10:4100"));
   await user.click(button("Forget"));
   expect(choice).toMatchObject({ mode: null, address: null, targets: [retained], localSetupComplete: true });
@@ -372,7 +372,7 @@ test("a native forget failure retains the target and pairing and displays the er
   choice = { mode: "remote", address: target, targets: [target], localSetupComplete: true };
   localStorage.setItem(`couch.pairing:${target}`, "pairing");
   await render();
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   await user.click(button("Forget 192.168.1.10:4100"));
   invoke.mockRejectedValueOnce(new Error("Couldn't save playback devices."));
   await user.click(button("Forget"));
@@ -387,7 +387,7 @@ test("unavailable name storage cannot keep a forgotten native Couch selected", a
   choice = { mode: "remote", address: target, targets: [target], localSetupComplete: true };
   localStorage.setItem(`couch.pairing:${target}`, "pairing");
   await render();
-  await user.click(button("Playing on 192.168.1.10:4100"));
+  await user.click(button("Connected to 192.168.1.10:4100"));
   await user.click(button("Forget 192.168.1.10:4100"));
   spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
   await user.click(button("Forget"));

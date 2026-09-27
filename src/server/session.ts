@@ -456,7 +456,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
         const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy);
-        send({ type: "load", playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, duration: currentEntry.duration, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
+        send({ type: "load", audioOnly: sourceAudioOnly, playbackId, ...(nativeTarget() && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, duration: currentEntry.duration, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
         broadcast();
       };
@@ -634,6 +634,11 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       state.systemAudio = nativeTarget() ? nativeSystemAudio : undefined;
       state.targetId = targetId; state.targets = targets; state.handoff = handoff; broadcast();
     },
+    get audioOnly() {
+      const entry = state.queue.find(item => item.id === state.currentEntryId);
+      return audioOnly || !!entry && (entry.kind === "radio" || entry.source.startsWith("radio:") || /\.(mp3|m4a|aac|ogg|opus|wav|flac)(?:[?#]|$)/i.test(entry.source))
+        || !!state.player.tracks?.some(track => track.kind === "audio") && !state.player.tracks.some(track => track.kind === "video");
+    },
     get restoredCheckpoint() { return restoredCheckpoint; },
     selectIdleTarget(player: PlayerState) { restoredCheckpoint = false; state.player = { ...player, ...(options.systemAudio && nativeTarget() ? { volume: nativeSystemAudio?.volume ?? player.volume } : {}), playbackId: null, status: "idle", error: null }; broadcast(); },
     get handoffPaused() { return pendingPause ?? state.player.status !== "playing"; },
@@ -653,7 +658,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       catch (error) { options.releaseHandoff?.(playbackId); throw error; }
       finally { clearTimeout(timeout); if (handoffResolution === controller) handoffResolution = null; }
       const { metadata: _metadata, expiry: _expiry, audioOnly: _audioOnly, subtitleWarning: _warning, ...delivery } = media;
-      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, playbackId, duration: state.player.duration ?? media.metadata?.duration ?? entry.duration, paused: true,
+      return { delivery: { expiry: media.expiry, webRetried: false, audioOnly: media.audioOnly === true && !media.segment, subtitleWarning: media.subtitleWarning ?? null }, command: { type: "load", ...delivery, audioOnly: media.audioOnly, playbackId, duration: state.player.duration ?? media.metadata?.duration ?? entry.duration, paused: true,
         ...(!browser && !destination.remote && options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}),
         startPosition: entry.live || state.player.live || media.radio ? undefined : state.player.position,
         preferences: { ...state.preferences!.profile, speed: state.player.speed ?? state.preferences!.profile.speed, audioDelay: browser || destination.remote ? 0 : state.preferences!.device.audioDelay } } };
@@ -833,7 +838,7 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       assertNotMoving();
       authorize();
       switch (action.type) {
-        case "selectTarget": case "groupReconnect": case "groupMembers": case "groupVolume": throw new Error("Select a target through the connected coordinator.");
+        case "assignDevices": case "deviceVolume": case "selectTarget": throw new Error("Select a target through the connected coordinator.");
         case "enqueue":
           if (action.playNow) available();
           if (state.queue.length >= 500) throw new Error(QUEUE_FULL);
