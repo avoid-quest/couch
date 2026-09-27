@@ -317,9 +317,16 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
               ? await wait(binding, source, { type: "pause", playbackId: original.playbackId, paused: true }, player => player.playbackId === original.playbackId && player.status === "paused")
               : original;
             if (checkpoint.speed !== undefined && ready.speed !== checkpoint.speed) ready = await wait(binding, destination, { type: "speed", playbackId: load.playbackId, speed: checkpoint.speed }, player => player.playbackId === load.playbackId && player.speed === checkpoint.speed);
-            if (checkpoint.seekable) {
+            const validRange = (range: PlayerState["seekRange"]) => range && Number.isFinite(range.start) && Number.isFinite(range.end) && range.end >= range.start;
+            const live = checkpoint.live || ready.live;
+            const position = live
+              ? checkpoint.live && ready.live && validRange(checkpoint.seekRange) && validRange(ready.seekRange)
+                ? Math.max(ready.seekRange!.start, Math.min(ready.seekRange!.end, ready.seekRange!.end - Math.max(0, checkpoint.seekRange!.end - checkpoint.position)))
+                : undefined
+              : checkpoint.position;
+            if (checkpoint.seekable && position !== undefined) {
               if (!ready.seekable) throw new Error("The destination cannot seek this source. Keep playback here.");
-              ready = await wait(binding, destination, { type: "seek", playbackId: load.playbackId, position: checkpoint.position }, player => player.playbackId === load.playbackId && player.status === "paused" && Math.abs(player.position - checkpoint.position) < 1);
+              ready = await wait(binding, destination, { type: "seek", playbackId: load.playbackId, position }, player => player.playbackId === load.playbackId && player.status === "paused" && Math.abs(player.position - position) < 1);
             }
             authorize();
             // Source is known paused before the new attempt owns progress or can start.

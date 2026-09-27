@@ -29,6 +29,8 @@ export type PlayerState = {
   duration: number | null;
   volume: number;
   seekable: boolean;
+  live?: boolean;
+  seekRange?: { start: number; end: number };
   error: string | null;
   tracks?: MediaTrack[];
   audioTracksKnown?: boolean;

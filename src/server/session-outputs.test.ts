@@ -10,13 +10,13 @@ afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await c
 function player() {
   let state = { ...idle }, observe = (_state: PlayerState) => {};
   const peer = {
-    commands: [] as PlaybackCommand[], holdStop: false, refuseStart: false,
+    commands: [] as PlaybackCommand[], loadState: {} as Partial<PlayerState>, holdStop: false, refuseStart: false,
     get state() { return state; },
     connect(callback: typeof observe) { observe = callback; },
     report(next: Partial<PlayerState>) { state = { ...state, ...next }; observe(state); },
     send(command: PlaybackCommand) {
       peer.commands.push(command);
-      if (command.type === "load") state = { ...idle, playbackId: command.playbackId, status: command.paused ? "paused" : "playing", duration: 120, seekable: true, position: command.startPosition ?? 0 };
+      if (command.type === "load") state = { ...idle, playbackId: command.playbackId, status: command.paused ? "paused" : "playing", duration: 120, seekable: true, position: command.startPosition ?? 0, ...peer.loadState };
       else if (command.type === "pause") state = { ...state, status: !command.paused && peer.refuseStart ? "error" : command.paused ? "paused" : "playing" };
       else if (command.type === "seek") state = { ...state, position: command.position };
       else if (command.type === "stop") { if (peer.holdStop) return; state = { ...idle }; }
@@ -239,3 +239,24 @@ test("source invalidation during destination retirement cannot restore or resume
   expect(first.session.state.player.playbackId).not.toBe(f.native.commands.find(command => command.type === "load")?.playbackId);
   expect(first.targets.owns("native")).toBe(false);
 });
+
+for (const [position, sourceRange, destinationRange, expected] of [
+  [33.53, { start: 20, end: 38.53 }, { start: 0, end: 10 }, 5],
+  [20, { start: 20, end: 40 }, { start: 5, end: 10 }, 5],
+  [42, { start: 20, end: 40 }, { start: 0, end: 10 }, 10],
+  [33.53, undefined, { start: 0, end: 10 }, undefined],
+  [33.53, { start: 20, end: 40 }, undefined, undefined],
+  [33.53, { start: 20, end: 40 }, { start: 10, end: 0 }, undefined],
+] as const) {
+  test(`live handoff maps offset into destination window (${position}, ${JSON.stringify(destinationRange)}, ${expected})`, async () => {
+    const f = fixture(), first = f.bind("first", true), destination = f.browser();
+    await play(first.session, "live");
+    f.native.report({ live: true, position, seekRange: sourceRange });
+    destination.peer.loadState = { live: true, position: 10, seekRange: destinationRange };
+    await first.targets.move(destination.endpoint.id);
+    const seeks = destination.peer.commands.filter(command => command.type === "seek");
+    expect(seeks).toEqual(expected === undefined ? [] : [{ type: "seek", playbackId: destination.peer.state.playbackId!, position: expected }]);
+    expect(first.session.state.player.status).toBe("playing");
+    expect(first.session.state.player.position).toBe(expected ?? 10);
+  });
+}
