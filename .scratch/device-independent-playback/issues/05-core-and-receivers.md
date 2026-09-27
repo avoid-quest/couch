@@ -120,3 +120,9 @@ Fresh exact-revision compiled-process and unit checks also pass at `f38c3bc`.
 The user confirms no Linux device is available; an isolated systemd PID1 probe
 exits 255 before launch. [Current evidence and host/hardware next actions](../boundaries-2026-09-27.md)
 separate these external qualification blockers from completed implementation.
+
+The hosting-settings continuation adds persisted opt-in hosting to the same Core
+process; enabling requires restart and disabling stops output immediately. The
+compiled macOS application was exercised across restart. Linux container verification
+does not qualify systemd boot. Follow the exact physical-host next actions in
+[local workflow qualification](../local-workflow-2026-09-27.md) when a Linux device is available.

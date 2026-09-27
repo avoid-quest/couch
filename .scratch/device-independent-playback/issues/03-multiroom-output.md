@@ -2,7 +2,7 @@
 
 Type: task
 Status: both roles implemented; actual software boundaries qualified
-Remaining software: settings-based hosting and bounded retries after denied admission
+Remaining software: none in the local continuation
 Remaining qualification: physical outputs; third-party PIN onboarding is deferred
 
 ## Scope
@@ -26,9 +26,15 @@ revocation, reconnect and output-silence safeguards remain.
 - Independent maintained TypeScript PSK peers, reconnect, revocation and actual
   decoded PCM pass in the recorded fixtures.
 - The client retains waiting/reconnect status and Leave when Core is unavailable.
+- Administrators enable hosting in Settings → Remotes, with a saved choice and
+  explicit restart requirement. Disabling immediately stops group output. Existing
+  file configuration is inherited until overridden; startup failures remain visible.
+- Seven automatic reconnects are allowed per explicit Join, including successful
+  transient reconnects. Denied encrypted admission stops with a recoverable error;
+  Leave cancels retries and a new Join renews the budget. Revoked keys stay denied.
 
 See [configuration](../../../docs/sendspin.md) and the exact observations in
-[boundary qualification](../boundaries-2026-09-27.md). Software graph silence is not
+[local workflow qualification](../local-workflow-2026-09-27.md). Software graph silence is not
 physical speaker qualification; transfers remain gated by the output's qualification.
 
 ## Remaining limits and next actions

@@ -60,3 +60,15 @@ pass unchanged. No window model, navigation or player layout was replaced.
 External-server qualification additionally fixed missing Sendspin waiting/reconnect
 status after the SDK's connection promise resolves. Pairing and Leave remain usable;
 real UI and repeated focused regressions pass. See [current boundary receipt](../boundaries-2026-09-27.md).
+
+## Hosting settings and admission recovery — 2026-09-27
+
+Settings → Remotes now exposes administrator-only Sendspin hosting through existing
+flat settings rows, Switch and Alert components. Saved enablement clearly requires
+a Core restart; disabling stops output immediately. Existing configuration, read/write
+failures and bind/startup errors are visible. The Sendspin dialog shows a terminal
+reconnect error with Leave, followed by a fresh explicit Join to recover.
+Actual compiled-app pairing, hosting restart, group selection, playback, pause/resume
+and disable were exercised in two Couch browser contexts. See
+[local workflow qualification](../local-workflow-2026-09-27.md). Physical desktop/TV
+checks remain separate; the window model, navigation and player layout are preserved.

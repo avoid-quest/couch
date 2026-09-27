@@ -24,7 +24,7 @@ It is not an implementation dependency or a priority for future agents.
 | --- | --- | --- |
 | [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
 | [02 Client sources](issues/02-remote-source-compatibility.md) | Implemented | Physical/platform qualification remains separate. |
-| [03 Groups](issues/03-multiroom-output.md) | Both roles implemented; real browser/group transfer and external PSK peers qualified | Settings-based hosting and bounded admission retries; physical speaker timing is separate. |
+| [03 Groups](issues/03-multiroom-output.md) | Both roles, administrator hosting settings and bounded admission retries implemented | Physical speaker timing and device qualification only. |
 | [04 Adaptation](issues/04-media-adaptation.md) | Client HLS/DASH adaptation and caps implemented | Further webpage rendition selection waits for a demonstrated provider need. |
 | [05 Core/receivers](issues/05-core-and-receivers.md) | Compiled independent startup/recovery and unit syntax pass | Real systemd boot and physical/platform qualification; no Linux device available. |
 | [06 Independent sessions](issues/06-independent-sessions.md) | Implemented | Disk/HTTP/WS isolation and real browser workflows pass. |
@@ -34,8 +34,8 @@ It is not an implementation dependency or a priority for future agents.
 ## Coordination
 
 The active PR chain includes independent sessions #629, TypeScript Sendspin hosting
-#631 and official JS Sendspin client #632, validation #633, and the local/Sendspin-only
-retirement layer. This layer depends on the completed replacement host and client. The Python
+#631 and official JS Sendspin client #632, historical validation #633, local/Sendspin-only
+scope #634, hosting settings #635 and the local-qualification layer. The Python
 Sendspin experiment (#628) is closed and preserved on
 `archive/sendspin-python-20260927`; it is removed from the application. The user
 requires both independent optional roles: clients join an existing server, and Core
@@ -50,8 +50,9 @@ media workload. Ordinary direct playback keeps provider traffic on renderers. Ho
 group PCM is 192 kB/s per receiver before overhead. Do not infer physical performance
 or total decoding cost from the Core-only process measurements below.
 
-Current results, full decoder/browser/network workload measurements, exact-revision
-gate location and each external blocker's next action:
+Current software results, exact-revision gate location and each hardware check's
+next action: [local workflow qualification](local-workflow-2026-09-27.md).
+Earlier decoder/browser/network measurements remain in
 [boundary qualification](boundaries-2026-09-27.md). The user confirms no external
 Sendspin server or Linux device is available. Physical-output and systemd-boot
 checks require those environments. Third-party PIN onboarding is explicitly deferred

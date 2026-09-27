@@ -1,3 +1,10 @@
+## Current local workflow — 2026-09-27
+
+[Local workflow qualification](local-workflow-2026-09-27.md) owns the hosting settings,
+bounded denied-admission retries, compiled application observations and final Linux
+gate location. PIN onboarding is explicitly deferred and outside scope, not a blocker.
+Earlier entries below retain their original revisions and historical limitations.
+
 ## Local-only, Sendspin-only retirement — 2026-09-27
 
 The user retired Internet deployment and Snapcast. The new scope layer removes the
