@@ -138,8 +138,8 @@ export function createPlaybackDevices(options: Options) {
         if (target && target !== "checkpoint") {
           restore.push(() => resume(target));
           await other.targets.detach(guard);
-          commit(other, []);
-        }
+        } else restore.push(async () => { commit(other, before); });
+        commit(other, before.filter(id => !ids.includes(id)));
       }
     }
     if (!ids.length) {

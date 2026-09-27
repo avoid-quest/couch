@@ -262,6 +262,7 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const assignDevices = useCallback(async (deviceIds: string[], takeover = false) => {
     const owner = currentCredentials.current;
+    setError(null);
     if (localDeviceId && deviceIds.includes(localDeviceId)) void activateDeviceAudio();
     try { await command({ type: "assignDevices", deviceIds, ...(takeover ? { takeover: true as const } : {}) }); return owner === currentCredentials.current; }
     catch (reason) { if (owner === currentCredentials.current) setError(errorText(reason)); return false; }
