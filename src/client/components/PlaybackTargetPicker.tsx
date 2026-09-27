@@ -1,63 +1,62 @@
 import { useRef, useState } from "react";
-import { MonitorSpeaker } from "lucide-react";
+import { MonitorSpeaker, MoreHorizontal } from "lucide-react";
 import { Button } from "./ui/button";
-import { Checkbox } from "./ui/checkbox";
 import { Slider } from "./ui/slider";
-import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "./ui/popover";
+import { Switch } from "./ui/switch";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { useSessionGate } from "../session/session-context";
 
 type Device = { id: string; name: string; connected: boolean; playbackId?: string; volume: number; muted: boolean; audio: boolean; requiresGesture?: boolean };
-type Playback = { id: string; title: string; status: string; deviceIds: string[] };
 
 export function PlaybackTargetPicker() {
-  const gate = useSessionGate();
-  const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, setDeviceVolume } = gate;
-  const model = state;
+  const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, setDeviceVolume, activateDeviceAudio, error } = useSessionGate();
   const [open, setOpen] = useState(false);
   const [replace, setReplace] = useState<Device | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  if (!model) return null;
-  const devices = model.devices ?? [];
-  const playbacks = model.playbacks ?? [];
-  const selected = playbacks.find(playback => playback.id === model.sessionId);
-  const assignedIds = model.deviceIds ?? selected?.deviceIds ?? [];
-  const selectedNames = assignedIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean);
-  const label = model.handoff ? "Moving playback…" : selectedNames.length === 1 ? selectedNames[0] : selectedNames.length ? `${selectedNames.length} devices` : "Devices";
-  const disabled = !connected || !!model.handoff;
-  const move = (ids: string[], takeover = false) => {
-    void assignDevices(ids, takeover).then(ok => { if (ok) setOpen(false); });
+  const devices = state?.devices ?? [];
+  const playbacks = state?.playbacks ?? [];
+  const selected = playbacks.find(playback => playback.id === state?.sessionId);
+  const assignedIds = state?.deviceIds ?? selected?.deviceIds ?? [];
+  const disabled = !connected || !!state?.handoff;
+  const assign = (ids: string[], takeover = false, close = true) => {
+    void assignDevices(ids, takeover).then(ok => { if (ok && close) setOpen(false); });
   };
   return <>
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button ref={trigger} variant="ghost" className="min-w-11" disabled={!connected} aria-label="Devices"><MonitorSpeaker aria-hidden="true" /><span className="max-sm:hidden">{label}</span></Button></PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(25rem,calc(100vw-1rem))] max-h-[min(80vh,36rem)] overflow-y-auto" onCloseAutoFocus={event => { if (replace) event.preventDefault(); }}>
-        <PopoverHeader><PopoverTitle>Devices</PopoverTitle><p className="text-muted-foreground">{selected?.title ?? "Choose playback to control"}</p></PopoverHeader>
-        {playbacks.some(playback => playback.id !== model.sessionId) && <section aria-label="Playbacks" className="divide-y border-t">
-          {playbacks.filter(playback => playback.id !== model.sessionId).map(playback => <div key={playback.id} className="flex items-center gap-2 py-2"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div>{playback.id === model.sessionId ? <span className="text-xs text-muted-foreground">Selected</span> : <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button>}</div>)}
-        </section>}
-        <section aria-label="Available devices" className="divide-y border-t">
-          {devices.map(device => {
-            const local = device.id === rendererTargetId;
-            const assigned = assignedIds.includes(device.id);
-            const occupied = !!device.playbackId && device.playbackId !== model.sessionId;
-            const otherPlayback = playbacks.find(playback => playback.id === device.playbackId);
-            const canAssign = !!selected && !disabled && device.connected && !occupied;
-            return <div key={device.id} className="py-2">
-              <div className="flex min-w-0 items-center gap-2">
-                {selected && device.audio && !occupied && <Checkbox aria-label={`${assigned ? "Remove" : "Add"} ${device.name}`} checked={assigned} disabled={!canAssign} onCheckedChange={checked => move(checked ? [...assignedIds, device.id] : assignedIds.filter(id => id !== device.id))} />}
-                <div className="min-w-0 flex-1"><p className="truncate font-medium">{device.name}</p><p className="text-xs text-muted-foreground">{!device.connected ? "Disconnected" : occupied ? `Playing ${otherPlayback?.title ?? "another playback"}` : assigned ? "In this playback" : "Available"}{local && " · This device"}</p></div>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild><Button ref={trigger} variant="ghost" disabled={!state} aria-label="Output"><MonitorSpeaker aria-hidden="true" /><span>Output</span></Button></SheetTrigger>
+      <SheetContent side="bottom" className="max-h-[85dvh] gap-0" onCloseAutoFocus={event => { if (replace) event.preventDefault(); }}>
+        <SheetHeader className="border-b px-6 py-4 pr-16"><SheetTitle>Output</SheetTitle><SheetDescription>{state?.handoff ? "Moving playback…" : selected?.title ?? "Choose where to play"}</SheetDescription></SheetHeader>
+        <div className="overflow-y-auto px-6 pb-6">
+          {playbacks.some(playback => playback.id !== state?.sessionId) && <section aria-label="Other playbacks" className="border-b py-3">
+            {playbacks.filter(playback => playback.id !== state?.sessionId).map(playback => <div key={playback.id} className="flex min-h-11 items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div><Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button></div>)}
+          </section>}
+          <section aria-label="Devices" className="min-w-0">
+            {devices.length ? <div className="flex w-full divide-x overflow-x-auto overscroll-x-contain py-5">{devices.map(device => {
+              const local = device.id === rendererTargetId;
+              const assigned = assignedIds.includes(device.id);
+              const occupied = !!device.playbackId && device.playbackId !== state?.sessionId;
+              const otherPlayback = playbacks.find(playback => playback.id === device.playbackId);
+              const canToggle = !!selected && device.connected && !disabled && !occupied && (assigned || device.audio || assignedIds.length === 0);
+              const volumeEnabled = assigned && device.connected && !disabled;
+              return <div key={device.id} className="flex w-36 shrink-0 flex-col items-center px-4 text-center first:pl-0 last:pr-0">
+                <div className="flex h-8 w-full items-center justify-between gap-1"><span className="text-xs tabular-nums text-muted-foreground">{device.muted ? "Muted" : `${device.volume}%`}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Options for ${device.name}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={disabled || !device.connected || occupied || assigned} onSelect={() => { void newPlayback(device.id).then(ok => { if (ok) setOpen(false); }); }}>New playback here</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>
+                <Slider key={`${device.id}:${device.volume}:${device.muted}`} orientation="vertical" aria-label={`${device.name} volume`} defaultValue={[device.volume]} min={0} max={100} step={1} disabled={!volumeEnabled} className="my-3 h-40" onValueCommit={([volume]) => { void setDeviceVolume(device.id, volume!, device.muted); }} />
+                <p className="w-full truncate font-medium" title={device.name}>{device.name}</p>
+                <p className="min-h-8 text-xs text-muted-foreground">{!device.connected ? "Disconnected" : occupied ? `Playing ${otherPlayback?.title ?? "another playback"}` : assigned ? "In this playback" : "Available"}{local && " · This device"}</p>
+                <label className="mt-2 flex min-h-11 items-center gap-2 text-xs"><Switch aria-label={`${device.name} output`} checked={assigned} disabled={!canToggle} onCheckedChange={checked => assign(checked ? [...assignedIds, device.id] : assignedIds.filter(id => id !== device.id), false, false)} />{assigned ? "On" : "Off"}</label>
+                {assigned && <Button size="sm" variant="ghost" disabled={!volumeEnabled} onClick={() => { void setDeviceVolume(device.id, device.volume, !device.muted); }}>{device.muted ? "Unmute" : "Mute"}</Button>}
+                {assigned && local && device.requiresGesture && <Button size="sm" variant="ghost" onClick={() => { void activateDeviceAudio(); }}>Enable audio</Button>}
                 {occupied && otherPlayback && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(otherPlayback.id); setOpen(false); }}>Control</Button>}
-                {selected && !assigned && device.connected && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => occupied ? (setReplace(device), setOpen(false)) : move([device.id])}>{occupied ? "Replace…" : "Move"}</Button>}
-                {!occupied && !assigned && device.connected && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { void newPlayback(device.id).then(ok => { if (ok) setOpen(false); }); }}>{local ? "New playback here" : "New playback"}</Button>}
-              </div>
-              {assigned && device.audio && <div className="flex items-center gap-2 pt-2"><Slider key={`${device.volume}:${device.muted}`} aria-label={`${device.name} volume`} defaultValue={[device.volume]} min={0} max={100} step={1} disabled={disabled || !device.connected} onValueCommit={([volume]) => { void setDeviceVolume(device.id, volume!, device.muted); }} /><Button size="sm" variant="ghost" disabled={disabled || !device.connected} onClick={() => { void setDeviceVolume(device.id, device.volume, !device.muted); }}>{device.muted ? "Unmute" : "Mute"}</Button></div>}
-            </div>;
-          })}
-          {!devices.length && <p className="py-3 text-muted-foreground">No devices available yet.</p>}
-        </section>
-      </PopoverContent>
-    </Popover>
-    <AlertDialog open={!!replace} onOpenChange={value => { if (!value) setReplace(null); }}><AlertDialogContent onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }}><AlertDialogHeader><AlertDialogTitle>Replace playback on {replace?.name}?</AlertDialogTitle><AlertDialogDescription>This device is playing another playback. Replacing it will move the selected playback here.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (replace) move([replace.id], true); setReplace(null); }}>Replace and move</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                {selected && !assigned && device.connected && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => occupied ? (setReplace(device), setOpen(false)) : assign([device.id])}>{occupied ? "Replace…" : "Move here"}</Button>}
+              </div>;
+            })}</div> : <p className="py-8 text-sm text-muted-foreground">{connected ? "No devices available yet." : "Connecting to devices…"}</p>}
+          </section>
+          {error && <p role="alert" className="border-t py-3 text-sm text-destructive">{error}</p>}
+        </div>
+      </SheetContent>
+    </Sheet>
+    <AlertDialog open={!!replace} onOpenChange={value => { if (!value) setReplace(null); }}><AlertDialogContent onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }}><AlertDialogHeader><AlertDialogTitle>Replace playback on {replace?.name}?</AlertDialogTitle><AlertDialogDescription>This device is playing another playback. Replacing it will move the selected playback here.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (replace) assign([replace.id], true); setReplace(null); }}>Replace and move</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>;
 }

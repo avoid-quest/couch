@@ -26,8 +26,10 @@ separate permission. An independent device keeps its own playback. A client's
 default playback is a convenience pointer, not ownership or control permission.
 
 The player names its assigned devices. Its transport, queue, seek and shared volume
-controls affect that playback. One Devices list shows availability, what is playing,
-and device loudness. It handles these operations directly:
+controls affect that playback. One Output panel shows availability, what is playing,
+and a volume fader for each device. Its on/off switch adds or removes that device;
+zero volume leaves it assigned but silent. Switching off remembers its level. It
+handles these operations directly:
 
 - Play media on this device by default, or choose another available device.
 - Control an existing playback without changing its devices or fetching its media.

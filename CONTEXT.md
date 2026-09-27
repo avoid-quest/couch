@@ -15,6 +15,9 @@ Playback without joining or interrupting it.
 name spans pairing, direct rendering and synchronized audio. Device loudness stays
 with that Device.
 
+**Output**: The player's panel for choosing and adjusting its Devices. It is a view
+of Playback assignments, not another stored object or playback mode.
+
 **Move**: Continue the same Playback on a different Device, preserving its state.
 
 **Add device**: Give a compatible audio Device the existing Playback's timeline.

@@ -32,6 +32,8 @@ export function createPlaybackDevices(options: Options) {
   const { registry, catalog } = options;
   const groups = new Map<string, GroupBinding>();
   const mutedDevices = new Map<string, number>();
+  // Off devices keep their last observed level in the mixer; renderers retain the actual gain.
+  const lastLevels = new Map<string, { volume: number; muted: boolean }>();
   const leases = new Map<string, Set<string>>();
   const lease = async (playbackId: string, id: string, acquire: boolean, retiringPlaybackId?: string) => {
     await options.reserve(id, playbackId, acquire, retiringPlaybackId);
@@ -56,16 +58,19 @@ export function createPlaybackDevices(options: Options) {
     const runtimes = options.runtimes();
     const audioDevices = options.host()?.devices ?? [];
     const devices: PlaybackDevice[] = registry.targets.filter(target => target.kind === "endpoint").map(target => {
-      const selected = runtimes.find(value => assigned(value).includes(target.id));
-      const owner = selected && active(selected) ? selected : undefined;
+      const assignedTo = runtimes.find(value => assigned(value).includes(target.id));
+      const owner = assignedTo && active(assignedTo) ? assignedTo : undefined;
       const audio = audioDevices.find(audio => deviceId(audio) === target.id);
-      const shared = selected?.session.state.targetId?.startsWith("sendspin:");
+      const shared = assignedTo?.session.state.targetId?.startsWith("sendspin:");
       const player = registry.deviceState(target.id);
       const hardware = target.id === "native" ? options.localLevel?.() : undefined;
       const sdkVolume = audio?.volume === undefined ? undefined : audio.deviceId ? fromSendspinVolume(audio.volume) : audio.volume;
+      const observed = { volume: hardware?.volume ?? mutedDevices.get(target.id) ?? (shared ? sdkVolume : assignedTo?.session.state.systemAudio?.volume ?? (assignedTo?.session.state.targetId === target.id ? assignedTo.session.state.player.volume : player?.volume)) ?? 100,
+        muted: hardware?.muted ?? (shared ? audio?.muted ?? false : mutedDevices.has(target.id)) };
+      const level = owner ? observed : lastLevels.get(target.id) ?? observed;
+      if (owner) lastLevels.set(target.id, level);
       return { id: target.id, name: target.name, connected: target.connected || !!audio, playbackId: owner?.id,
-        volume: hardware?.volume ?? mutedDevices.get(target.id) ?? (shared ? sdkVolume : player?.volume ?? selected?.session.state.player.volume) ?? 100,
-        muted: hardware?.muted ?? (shared ? audio?.muted ?? false : mutedDevices.has(target.id)), audio: !!audio,
+        ...level, audio: !!audio,
         requiresGesture: !!audio && !options.ready(target.id) };
     });
     for (const audio of audioDevices) if (!devices.some(device => device.id === deviceId(audio))) {
@@ -74,7 +79,7 @@ export function createPlaybackDevices(options: Options) {
     }
     // Remember disconnected destinations by their persistent identity; never create a second row on reconnect.
     for (const value of runtimes) for (const id of assigned(value)) if (!devices.some(device => device.id === id)) {
-      devices.push({ id, name: options.name(id) ?? "Disconnected device", connected: false, playbackId: active(value) ? value.id : undefined, volume: 100, muted: false, audio: false });
+      devices.push({ id, name: options.name(id) ?? "Disconnected device", connected: false, playbackId: active(value) ? value.id : undefined, ...lastLevels.get(id) ?? { volume: 100, muted: false }, audio: false });
     }
     const playbacks: PlaybackSummary[] = runtimes.filter(value => value.id === runtime.id || assigned(value).length || value.session.state.queue.length || active(value)).map(value => {
       const state = value.session.state;
