@@ -25,8 +25,8 @@ import { Onboarding } from "./Onboarding";
 import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 
-export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean; nativeReceiver?: boolean };
-type Device = Choice & { setNativeReceiver: (enabled: boolean) => Promise<boolean>; pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
+export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
+type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -113,13 +113,6 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       } catch (reason) { setError(message(reason)); return false; }
       finally { busy.current = false; setPending(false); }
     },
-    setNativeReceiver: async enabled => {
-      if (busy.current) return false;
-      busy.current = true; setPending(true); setError(null);
-      try { setChoice(await invoke<Choice>("set_native_receiver", { enabled })); return true; }
-      catch (reason) { setError(message(reason)); return false; }
-      finally { busy.current = false; setPending(false); }
-    },
     retry: () => setAttempt(value => value + 1),
     show: () => { setSelecting(true); setPending(false); },
     dismiss: () => setSelecting(false),
@@ -129,7 +122,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     {choice.mode === "local" ? <Fragment key={`local:${localEpoch}`}>{children}</Fragment>
       : choice.mode === "remote" ? <Fragment key={`remote:${choice.address}:${recoveryEpoch}`}>{children}</Fragment>
       : <main className="flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
-        <Onboarding title="Where do you want to play?"><DeviceForm /></Onboarding>
+        <Onboarding title="Connect to a library"><DeviceForm /></Onboarding>
       </main>}
   </Context.Provider>;
 }
@@ -194,7 +187,7 @@ function DeviceForm() {
   return <div className="grid gap-6">
     <div className="-mx-3 border-t">
       <Button variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
-        <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Play here. Phones can pair as remotes.</span></span>
+        <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Use the library on this computer.</span></span>
         <ChevronRight aria-hidden="true" />
       </Button>
       {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between gap-4 rounded-none border-0 px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}>
@@ -202,7 +195,7 @@ function DeviceForm() {
         <ChevronRight aria-hidden="true" />
       </Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
       <form className="grid gap-3 border-b px-3 py-4" onSubmit={submit}>
-        <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Control a Couch on your network.</p></div>
+        <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Library on another Couch</Label><p className="text-sm text-muted-foreground">Connect to a library on your network.</p></div>
         <div className="flex gap-2"><Input id="playback-address" aria-label="Couch address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
           {!confirm && <Button type="submit" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>}
         </div>

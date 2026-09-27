@@ -19,6 +19,7 @@ pub struct Choice {
     targets: Vec<String>,
     #[serde(default)]
     local_setup_complete: bool,
+    // Legacy preference is retained on disk; remote connections now offer this player automatically.
     #[serde(default)]
     native_receiver: bool,
 }
@@ -758,19 +759,8 @@ mod tests {
 
 pub(crate) fn receiver_authority(app: &tauri::AppHandle, origin: &str) -> Result<(), String> {
     let choice = app.state::<Modes>().current();
-    if choice.mode != Some(Mode::Remote) || !choice.native_receiver || choice.address.as_deref() != Some(origin) {
-        return Err("Enable this receiver for the selected Couch first.".into());
+    if choice.mode != Some(Mode::Remote) || choice.address.as_deref() != Some(origin) {
+        return Err("Connect to the selected Couch first.".into());
     }
     Ok(())
-}
-#[tauri::command]
-pub async fn set_native_receiver(window: tauri::WebviewWindow, app: tauri::AppHandle, enabled: bool) -> Result<Choice, String> {
-    trusted(&window)?;
-    let modes = app.state::<Modes>();
-    let _operation = modes.operation.lock().await;
-    let mut choice = modes.current();
-    if choice.mode != Some(Mode::Remote) || choice.address.is_none() { return Err("Choose another Couch first.".into()); }
-    crate::native_receiver::revoke(&app, None).await?;
-    choice.native_receiver = enabled;
-    modes.save(choice)
 }

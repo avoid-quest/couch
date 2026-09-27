@@ -19,7 +19,7 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 | Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. Independent packaged service installation remains work. |
 | Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. Their lifecycles are still coupled. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
-| Additional native receiver or output group | Another destination controlled by the chosen Core. | Explicit paired native receiver enrollment reuses the Tauri player; Snapcast/Sendspin adapters remain work. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically; Snapcast/Sendspin adapters remain work. |
 
 Server capabilities and target capabilities are separate. Available behavior
 depends on permissions, enabled integrations/helpers, source access and the selected
@@ -33,10 +33,10 @@ capabilities. Native playback means a command channel exists; the target's
 support for every source. `/api/tools` separately reports helper availability.
 Do not infer a renderer from the server's OS or installed media tools.
 
-**This computer** uses the bundled local Core/player; **Another Couch** selects a
-remote Core in the same app window and stops local playback. **Enable playback on
-this computer** separately enrolls that existing native player as a target of the
-selected Core; enrollment alone never selects or starts playback. The installation retains
+**This computer** uses the bundled local Core/player; connecting to a library on
+another Couch selects a remote Core in the same app window and stops local playback.
+After pairing, the native client offers its existing player to that Core automatically;
+enrollment alone never selects or starts playback. The installation retains
 its private maintenance coordinator and updater. Server selection and target
 selection must stay distinct. The serialized `clientOnly` artifact field remains
 `false`; it does not describe whether a particular Core currently has a renderer.

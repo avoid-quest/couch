@@ -54,7 +54,7 @@ async function openUpdates() {
 
 test("first launch chooses a device before requesting local startup", async () => {
   await render();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
   expect(invoke.mock.calls.map(([name]) => name)).toEqual(["playback_device"]);
   expect(screen.queryByText("Local installation")).toBeNull();
   await user.click(button("This computer"));
@@ -64,7 +64,7 @@ test("first launch chooses a device before requesting local startup", async () =
 
 test("Another Couch survives restart and offers local playback only by explicit choice", async () => {
   await render();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
   expect(button("This computer")).toBeInTheDocument();
   await user.type(screen.getByRole("textbox", { name: "Couch address" }), "192.168.1.10:4100");
   await user.click(button("Connect"));
@@ -97,7 +97,7 @@ test("the configured dev origin opens the native chooser only with the native ma
   Object.assign(globalThis, { COUCH_DEV_ORIGIN: "http://localhost:1420" });
   testWindow.happyDOM.setURL("http://localhost:1420");
   await render();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
   expect(invoke.mock.calls.map(([name]) => name)).toEqual(["playback_device"]);
   Object.assign(window, { __COUCH_NATIVE_HOST__: undefined });
   expect(isNativeHost()).toBe(false);
@@ -344,12 +344,12 @@ test("forgetting the selected Couch persists a neutral choice without starting l
   expect(choice).toMatchObject({ mode: null, address: null, targets: [retained], localSetupComplete: true });
   expect(localStorage.getItem(`couch.pairing:${forgotten}`)).toBeNull();
   expect(localStorage.getItem("couch.connection")).toBeNull();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
   expect(button("192.168.1.20:4100")).toBeInTheDocument();
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
   cleanup();
   await render();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
 });
 
 test("a native forget failure retains the target and pairing and displays the error", async () => {
@@ -378,7 +378,7 @@ test("unavailable name storage cannot keep a forgotten native Couch selected", a
   await user.click(button("Forget"));
   expect(localStorage.getItem(`couch.pairing:${target}`)).toBeNull();
   expect(choice.mode).toBeNull();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
 });
 
 
@@ -393,21 +393,9 @@ test("the neutral chooser forgets retained targets without connecting", async ()
   expect(button("This computer")).toHaveFocus();
 });
 
-test("failed receiver enrollment keeps the persisted choice and reports the error", async () => {
-  const { NativeModeGate, usePlaybackDevice } = await import("./PlaybackDevice");
-  choice = { ...choice, mode: "remote", address: "http://core:4100" };
-  let device: NonNullable<ReturnType<typeof usePlaybackDevice>>;
-  function Probe() { device = usePlaybackDevice()!; return null; }
-  await act(async () => { renderWithQueryClient(<NativeModeGate><Probe /></NativeModeGate>); });
-  let reject!: (reason: Error) => void;
-  invoke.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
-  let enrolling!: Promise<boolean>;
-  await act(async () => { enrolling = device.setNativeReceiver(true); });
-  expect(device!.pending).toBe(true);
-  expect(await device!.setNativeReceiver(true)).toBe(false);
-  await act(async () => { reject(new Error("Receiver unavailable")); expect(await enrolling).toBe(false); });
-  expect(device!.nativeReceiver).not.toBe(true);
-  expect(device!.error).toBe("Receiver unavailable");
-  expect(device!.mode).toBe("remote");
-  expect(device!.pending).toBe(false);
+test("connecting to a library keeps the existing setup layout", async () => {
+  await render();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
+  expect(button("This computer")).toBeInTheDocument();
+  expect(screen.getByText("Library on another Couch")).toBeInTheDocument();
 });

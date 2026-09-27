@@ -636,7 +636,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             connection_info,
-            operating_mode::set_native_receiver,
             native_receiver::native_receiver_begin,
             native_receiver::native_receiver_request,
             native_receiver::native_receiver_renew,

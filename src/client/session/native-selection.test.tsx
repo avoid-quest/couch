@@ -2,6 +2,7 @@ import { setupUiTests, act, render, screen, userEvent, waitFor, testWindow } fro
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import * as core from "@tauri-apps/api/core";
 import * as events from "@tauri-apps/api/event";
+import * as nativeRenderer from "./native-renderer";
 import type { ServerMessage } from "../../shared/protocol";
 
 setupUiTests();
@@ -55,6 +56,7 @@ async function renderGate() {
 }
 
 beforeEach(async () => {
+  spyOn(nativeRenderer, "createNativeRenderer").mockImplementation(() => ({ renew() {}, command() {}, report() {}, play() {}, close() {} }));
   installation = "remote-installation";
   remoteRole = "controller";
   remoteProtocol = 1;
@@ -66,10 +68,9 @@ beforeEach(async () => {
   globalThis.WebSocket = Socket as unknown as typeof WebSocket;
   invokeSpy = spyOn(core, "invoke").mockImplementation(async <T,>(command: string, args?: core.InvokeArgs): Promise<T> => {
     if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== 1) throw new Error("incompatible desktop client protocol");
-    if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true } as T;
-    if (command === "select_playback_device") { mode = (args as { mode: typeof mode }).mode; return { mode, address: remote, targets: [remote], localSetupComplete: true } as T; }
+    if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true, nativeReceiver: false } as T;
+    if (command === "select_playback_device") { mode = (args as { mode: typeof mode }).mode; return { mode, address: remote, targets: [remote], localSetupComplete: true, nativeReceiver: false } as T; }
     if (command === "forget_playback_device") { mode = null; return { mode, address: null, targets: [], localSetupComplete: true } as T; }
-    if (command === "set_native_receiver") return { mode, address: remote, targets: [remote], localSetupComplete: true, nativeReceiver: (args as { enabled: boolean }).enabled } as T;
     if (command === "connection_info") return { origin: local, token: "local-owner", pairingCode: "", urls: [] } as T;
     return undefined as T;
   });
@@ -205,7 +206,7 @@ test("forgetting the selected native Couch retires its socket and requires pairi
   await act(async () => { await device.forget(remote); });
   expect(socket.readyState).toBe(3);
   expect(localStorage.getItem(`couch.pairing:${remote}`)).toBeNull();
-  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Connect to a library" })).toBeInTheDocument();
   requests.length = 0;
   await act(async () => { await device.choose("remote", remote); });
   expect(gate.credentials).toBeNull();
@@ -213,12 +214,12 @@ test("forgetting the selected native Couch retires its socket and requires pairi
   expect(requests.every(request => request.authorization === null)).toBe(true);
 });
 
-test("remote native rendering is opt-in and is cleared when selecting the local Core", async () => {
+test("a paired remote offers native playback even with the legacy disabled preference", async () => {
   await act(async () => { await device.choose("remote", remote); });
-  expect(gate.nativeReceiver).toBe(false);
-  expect(invokeSpy.mock.calls.some(([command]: [string]) => command === "set_native_receiver")).toBe(false);
-  await act(async () => { await device.setNativeReceiver(true); });
   expect(gate.nativeReceiver).toBe(true);
+  await pairWith("123456");
+  expect(nativeRenderer.createNativeRenderer).toHaveBeenCalled();
+  expect(invokeSpy.mock.calls.some(([command]: [string]) => command === "set_native_receiver")).toBe(false);
   await act(async () => { await device.choose("local"); });
   expect(gate.nativeReceiver).toBe(false);
 });

@@ -97,7 +97,7 @@ export function useOptionalSessionGate(): SessionGateValue | null {
 export function SessionGate({ children }: PropsWithChildren) {
   const device = usePlaybackDevice();
   const localHost = nativeHost && device?.mode === "local";
-  const nativeReceiver = nativeHost && device?.mode === "remote" && device.nativeReceiver === true;
+  const nativeReceiver = nativeHost && device?.mode === "remote";
   const selectedOrigin = nativeHost && device?.mode === "remote" ? device.address ?? undefined : undefined;
   const [credentials, setCredentials] = useState<Credentials | null>(() => storedCredentials(selectedOrigin));
   const [host, setHost] = useState<ConnectionInfo | null>(null);

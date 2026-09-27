@@ -20,7 +20,6 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "connection_info",
-            "set_native_receiver",
             "native_receiver_begin",
             "native_receiver_request",
             "native_receiver_renew",
