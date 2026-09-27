@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { isNativeHost } from "./native-context";
 import { createSendspinRenderer } from "./sendspin-renderer";
+import { fromSendspinVolume, toSendspinVolume } from "../../shared/audio-volume";
 
 type Hosting = { available: boolean; url?: string; serverId?: string };
 type Enrollment = { url: string; serverId: string; psk: string };
@@ -93,7 +94,7 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
             if (!current()) return;
             connectedRef.current = state.connected; setConnected(state.connected);
             if (!state.connected) ready(false);
-            else if (!isNativeHost()) try { localStorage.setItem("couch.browser-volume", String(state.volume / 100)); } catch { /* Storage is optional. */ }
+            else if (!isNativeHost()) try { localStorage.setItem("couch.browser-volume", String(fromSendspinVolume(state.volume) / 100)); } catch { /* Storage is optional. */ }
           },
           error: () => { if (current()) { ready(false); setError("Shared audio is unavailable on this device."); } },
         });
@@ -108,7 +109,7 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
         const connecting = prepared.connect();
         if (!isNativeHost()) try {
           const saved = localStorage.getItem("couch.browser-volume");
-          if (saved !== null && Number.isFinite(Number(saved))) prepared.setVolume(Math.max(0, Math.min(1, Number(saved))) * 100);
+          if (saved !== null && Number.isFinite(Number(saved))) prepared.setVolume(toSendspinVolume(Math.max(0, Math.min(1, Number(saved))) * 100));
         } catch { /* Storage is optional. */ }
         await connecting;
       } catch {
