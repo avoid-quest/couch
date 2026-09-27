@@ -72,3 +72,13 @@ test("Sendspin dialog requires stopping only this device's active playback", asy
   await userEvent.keyboard("{Escape}");
   expect(screen.getByRole("button", { name: "Playback output" })).toHaveFocus();
 });
+
+for (const snapshot of [null, state]) test(`active Sendspin remains accessible offline with ${snapshot ? "stale" : "absent"} Core state`, async () => {
+  let left = false;
+  renderUI(<ShellProviders value={{ state: snapshot, connected: false, sendspin: { phase: "joined", server: "External server", leave: async () => { left = true; } } }}><PlaybackTargetPicker /></ShellProviders>);
+  await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
+  if (snapshot) expect(screen.getByRole("menuitem", { name: "Continue on Desktop" })).toHaveAttribute("aria-disabled", "true");
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sendspin playback" }));
+  await userEvent.click(screen.getByRole("button", { name: "Leave Sendspin" }));
+  expect(left).toBe(true);
+});
