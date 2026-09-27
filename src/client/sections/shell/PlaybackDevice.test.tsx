@@ -35,6 +35,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
+  Reflect.deleteProperty(window, "__COUCH_TV_PRESENTATION__");
   onlineManager.setOnline(true);
   Reflect.deleteProperty(window, "isTauri");
 });
@@ -77,6 +78,20 @@ test("Another Couch survives restart and offers local playback only by explicit 
   await user.click(button("Playing on 192.168.1.10:4100"));
   expect(screen.getByRole("radio", { name: "This computer" })).not.toBeChecked();
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(false);
+});
+
+test("an offline remote TV can open its own updater with TV input", async () => {
+  spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(0, 0, 100, 30)] as unknown as DOMRectList);
+  Object.assign(window, { __COUCH_TV_PRESENTATION__: true });
+  choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
+  connectionError = "Cannot reach that Couch.";
+  request.mockImplementation(async (input: RequestInfo | URL) => Response.json(new URL(String(input)).pathname.startsWith("/api/updates")
+    ? { running: { version: "0.2.0", revision: "test" }, status: "unavailable", channel: "preview", policy: "manual", currentCheck: false, error: null, installation: { enabled: false, transaction: null } }
+    : { enabled: false }));
+  await render();
+  button("Update this TV").focus();
+  await act(async () => { applyTvNavigation("select"); });
+  expect(screen.getByRole("dialog", { name: "Update Couch on this computer" })).not.toHaveAttribute("data-tv-local-only");
 });
 
 test("an external Tauri page uses browser UI without accessing local commands", async () => {

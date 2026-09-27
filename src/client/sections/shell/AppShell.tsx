@@ -8,7 +8,7 @@ import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { DeviceRecovery, LocalSharingPrompt, PlaybackDevice, useLocalSetupPending, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
+import { DeviceRecovery, LocalSharingPrompt, LocalUpdateAction, PlaybackDevice, useLocalSetupPending, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
@@ -219,7 +219,7 @@ function NativeMediaBridge() { useNativeMediaSession(); return null; }
 
 // Connection and player state as one quiet line; red only for errors that need a decision.
 function ConnectionStatus() {
-  const { nativeHost, localHost, state, status, details, credentials, connected, reconnect } = useSessionGate();
+  const { nativeHost, localHost, tvPresentation, state, status, details, credentials, connected, reconnect } = useSessionGate();
   const device = usePlaybackDevice();
   const remoteApp = nativeHost && !localHost;
   const name = deviceName(state?.installationName ?? details?.name ?? (remoteApp && device?.address ? device.address.replace(/^https?:\/\//i, "") : undefined));
@@ -227,6 +227,7 @@ function ConnectionStatus() {
   const recovery = remoteApp && <>
     <Button variant="ghost" size="sm" onClick={reconnect}>{TRY_AGAIN}</Button>
     <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
+    {tvPresentation && <LocalUpdateAction />}
   </>;
   if (status === "protocol-mismatch") return <Alert variant="destructive"><AlertDescription>{localHost ? PROTOCOL_MISMATCH : `Update this remote or ${name} so both run the same version.`}</AlertDescription>{recovery && <div className="flex flex-wrap gap-1 pt-1">{recovery}</div>}</Alert>;
   if (status === "sharing-disabled") return <StatusLine actions={recovery}>Turn on Allow remote control on {name}.</StatusLine>;

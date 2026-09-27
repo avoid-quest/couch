@@ -14,7 +14,7 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } 
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
 import { acknowledgeFrontend, apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
-import { isNativeHost } from "@/session/native-context";
+import { isNativeHost, isTvPresentation } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useLocalUpdateActivity } from "@/update-activity";
@@ -140,7 +140,13 @@ export function DeviceRecovery() {
   return <StatusLine actions={<>
     <Button variant="ghost" size="sm" onClick={device.retry} disabled={device.pending}>{TRY_AGAIN}</Button>
     <Button variant="ghost" size="sm" onClick={() => void device.choose("local")} disabled={device.pending}>Use this computer</Button>
+    {isTvPresentation() && <LocalUpdateAction />}
   </>}>{device.error}</StatusLine>;
+}
+
+export function LocalUpdateAction() {
+  const [open, setOpen] = useState(false);
+  return <><Button variant="ghost" size="sm" onClick={() => setOpen(true)}>Update this TV</Button><InstallationUpdates open={open} onOpenChange={setOpen} tvNavigable /></>;
 }
 
 /** This app's own updater; the selected Couch updates separately. */
