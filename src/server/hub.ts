@@ -51,6 +51,7 @@ import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
 import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createGuide } from "./iptv";
+import { createRemoteAccess } from "./remote-access";
 
 import { createSoundRouting } from "./sound-routing";
 import { bluetoothSettings } from "./bluetooth";
@@ -66,6 +67,7 @@ type HubOptions = {
   observePlayer?: () => void;
   hostname?: string;
   managedLan?: boolean;
+  remoteAccess?: { origin: string; trustedProxyIps: string[]; pairing?: boolean };
   onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
@@ -107,6 +109,7 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
+  const remoteAccess = createRemoteAccess(options.remoteAccess);
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
@@ -327,7 +330,11 @@ export function createHub(options: HubOptions) {
   let pairAttempts = 0;
 
   const peer = (request: Request): string => server.requestIP(request)?.address ?? lan?.servers.map(listener => listener.requestIP(request)?.address).find(Boolean) ?? "";
+  const access = (request: Request) => remoteAccess.classify(request, peer(request));
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
+    const context = access(request);
+    if (context === "rejected") return false;
+    if (context === "external") return store.remoteControlEnabled() && (!requireOrigin || request.headers.get("origin") === remoteAccess.origin);
     if (options.managedLan && !loopbackPeer(peer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, peer(request)))) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
@@ -469,11 +476,12 @@ export function createHub(options: HubOptions) {
       ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer }, ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: access(request) === "external" ? [remoteAccess.origin] : connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), capabilities: { browserPlayback: true, nativePlayback: !!options.sendPlayer }, ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, desktopClientProtocol, playbackClock: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
           const respond = (body: unknown, status = 200) => cors(request, json(body, status));
+          if (access(request) === "external" && !remoteAccess.pairing) return respond({ error: "External pairing is disabled on this Couch." }, 403);
           if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
           if (!admitted()) return respond({ error: UPDATING_PAUSED }, 503);
           if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
@@ -503,7 +511,7 @@ export function createHub(options: HubOptions) {
       if (media) return cors(request, media);
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-      const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
+      const trusted = access(request) === "direct" && token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
       if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
       const identity = (): ControllerIdentity | null => {
         if (closed) return null;
