@@ -56,9 +56,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const playbackState = state as typeof state & { devices?: { id: string; name: string }[]; deviceIds?: string[] };
   const deviceIds = playbackState?.deviceIds ?? [];
   const selectedDevices = deviceIds.map(id => playbackState?.devices?.find(device => device.id === id)?.name).filter(Boolean);
-  const here = !!rendererTargetId && deviceIds.includes(rendererTargetId);
-  const browserHere = !nativeHost && here;
-  const elsewhere = !here && (active || ended);
+  const videoDeviceId = state?.videoDeviceId;
+  const videoHere = videoDeviceId ? rendererTargetId === videoDeviceId : !!rendererTargetId && deviceIds.includes(rendererTargetId);
+  const browserHere = !nativeHost && videoHere;
+  const elsewhere = !videoHere && (active || ended);
   const artworkStage = audioOnly || elsewhere;
   const autoHide = playing && !artworkStage;
   useBottomBar(band, !!current && shown);

@@ -11,16 +11,18 @@ import { useSessionGate } from "../session/session-context";
 type Device = { id: string; name: string; connected: boolean; playbackId?: string; volume: number; muted: boolean; audio: boolean; requiresGesture?: boolean };
 
 export function PlaybackTargetPicker() {
-  const { state, connected, rendererTargetId, selectPlayback, assignDevices, newPlayback, setDeviceVolume, activateDeviceAudio, error } = useSessionGate();
+  const { state, connected, rendererTargetId, selectPlayback, joinPlayback, assignDevices, newPlayback, setDeviceVolume, activateDeviceAudio, error } = useSessionGate();
   const [open, setOpen] = useState(false);
   const [replace, setReplace] = useState<Device | null>(null);
   const [pending, setPending] = useState<string[] | null>(null);
+  const [joiningPlaybackId, setJoiningPlaybackId] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const devices = state?.devices ?? [];
   const playbacks = state?.playbacks ?? [];
   const selected = playbacks.find(playback => playback.id === state?.sessionId);
+  const videoDeviceId = state?.videoDeviceId;
   const assignedIds = state?.deviceIds ?? selected?.deviceIds ?? [];
-  const disabled = !connected || !!state?.handoff || pending !== null;
+  const disabled = !connected || !!state?.handoff || pending !== null || joiningPlaybackId !== null;
   const waiting = pending && pending.length > 1 ? pending.map(id => devices.find(device => device.id === id)).filter(device => device?.requiresGesture).map(device => device!.name) : [];
   const assign = (ids: string[], takeover = false, close = true) => {
     setPending(ids);
@@ -33,7 +35,12 @@ export function PlaybackTargetPicker() {
         <SheetHeader className="border-b px-6 py-4 pr-16"><SheetTitle>Output</SheetTitle><SheetDescription>{waiting.length ? `Enable audio in Couch on ${waiting.join(", ")} to continue.` : pending !== null ? "Updating devices…" : state?.handoff ? "Moving playback…" : selected?.title ?? "Choose where to play"}</SheetDescription></SheetHeader>
         <div className="overflow-y-auto px-6 pb-6">
           {playbacks.some(playback => playback.id !== state?.sessionId) && <section aria-label="Other playbacks" className="border-b py-3">
-            {playbacks.filter(playback => playback.id !== state?.sessionId).map(playback => <div key={playback.id} className="flex min-h-11 items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div><Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button></div>)}
+            {playbacks.filter(playback => playback.id !== state?.sessionId).map(playback => {
+              const localDevice = devices.find(device => device.id === rendererTargetId);
+              const canJoin = !!rendererTargetId && !!localDevice?.connected && !playback.deviceIds.includes(rendererTargetId);
+              const joining = joiningPlaybackId === playback.id;
+              return <div key={playback.id} className="flex min-h-11 items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{playback.title}</p><p className="text-xs text-muted-foreground">{playback.deviceIds.map(id => devices.find(device => device.id === id)?.name).filter(Boolean).join(", ") || playback.status}</p></div>{canJoin && <Button size="sm" variant="ghost" aria-label={`Join ${playback.title}`} disabled={disabled} onClick={() => { setJoiningPlaybackId(playback.id); void joinPlayback(playback.id).then(ok => { if (ok) setOpen(false); }).finally(() => setJoiningPlaybackId(null)); }}>{joining ? "Joining…" : "Join"}</Button>}<Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(playback.id); setOpen(false); }}>Control</Button></div>;
+            })}
           </section>}
           <section aria-label="Devices" className="min-w-0">
             {devices.length ? <div className="flex w-full divide-x overflow-x-auto overscroll-x-contain py-5">{devices.map(device => {
@@ -47,11 +54,10 @@ export function PlaybackTargetPicker() {
                 <div className="flex h-8 w-full items-center justify-between gap-1"><span className="text-xs tabular-nums text-muted-foreground">{device.muted ? "Muted" : `${device.volume}%`}</span><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Options for ${device.name}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={disabled || !device.connected || occupied || assigned} onSelect={() => { void newPlayback(device.id).then(ok => { if (ok) setOpen(false); }); }}>New playback here</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>
                 <div className="my-3 h-40 w-11 shrink-0"><RangeControl orientation="vertical" label={`${device.name} volume`} value={device.volume} max={100} disabled={!volumeEnabled} onCommit={volume => setDeviceVolume(device.id, volume, device.muted)} /></div>
                 <p className="w-full shrink-0 truncate font-medium" title={device.name}>{device.name}</p>
-                <p className="min-h-8 text-xs text-muted-foreground">{!device.connected ? "Disconnected" : occupied ? `Playing ${otherPlayback?.title ?? "another playback"}` : assigned ? "In this playback" : "Available"}{local && " · This device"}</p>
+                <p className="min-h-8 text-xs text-muted-foreground">{!device.connected ? "Disconnected" : occupied ? `Playing ${otherPlayback?.title ?? "another playback"}` : assigned ? videoDeviceId ? device.id === videoDeviceId ? "Picture and sound" : "Sound" : "In this playback" : "Available"}{local && " · This device"}</p>
                 <label className="mt-2 flex min-h-11 items-center gap-2 text-xs"><Switch aria-label={`${device.name} output`} checked={assigned} disabled={!canToggle} onCheckedChange={checked => assign(checked ? [...assignedIds, device.id] : assignedIds.filter(id => id !== device.id), false, false)} />{assigned ? "On" : "Off"}</label>
                 {assigned && <Button size="sm" variant="ghost" disabled={!volumeEnabled} onClick={() => { void setDeviceVolume(device.id, device.volume, !device.muted); }}>{device.muted ? "Unmute" : "Mute"}</Button>}
                 {assigned && assignedIds.length > 1 && local && device.requiresGesture && <Button size="sm" variant="ghost" onClick={() => { void activateDeviceAudio(); }}>Enable audio</Button>}
-                {occupied && otherPlayback && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { selectPlayback(otherPlayback.id); setOpen(false); }}>Control</Button>}
                 {selected && !assigned && device.connected && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => occupied ? (setReplace(device), setOpen(false)) : assign([device.id])}>{occupied ? "Replace…" : "Move here"}</Button>}
               </div>;
             })}</div> : <p className="py-8 text-sm text-muted-foreground">{connected ? "No devices available yet." : "Connecting to devices…"}</p>}
