@@ -143,11 +143,11 @@ test("browsing does not allocate a native video rectangle", async () => {
   expect(videoRects).toHaveLength(0);
 });
 
-test("a missing player is a quiet status line while browsing Find", async () => {
+test("an idle connected device does not warn while browsing Find", async () => {
   await render("unavailable");
   expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByRole("button", { name: "Couch on this computer" })).toBeDefined();
-  expect(screen.getByText("Player not running on this computer.")).toBeInTheDocument();
+  expect(screen.queryByText(/Player not running/)).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
 });
