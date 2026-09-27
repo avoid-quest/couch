@@ -57,3 +57,18 @@ for (const sessionKind of ["household", "personal"] as const) test(`occupied ${s
   expect(selections).toEqual(sessionKind === "household" ? [["household"]] : []);
   expect(commands).toEqual(sessionKind === "personal" ? [{ type: "selectTarget", targetId: "group", takeover: true }] : []);
 });
+
+test("Sendspin dialog requires stopping only this device's active playback", async () => {
+  const actions: unknown[] = [];
+  const view = renderUI(<ShellProviders value={{ state: { ...state, player: { playbackId: "playing", status: "playing" } }, connected: true, rendererTargetId: "receiver", sendspin: { phase: "idle" }, run: async (action: unknown) => { actions.push(action); } }}><PlaybackTargetPicker /></ShellProviders>);
+  await userEvent.click(screen.getByRole("button", { name: "Playback output" }));
+  await userEvent.click(screen.getByRole("menuitem", { name: "Join Sendspin server…" }));
+  expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "Stop local playback" }));
+  expect(actions).toEqual([{ type: "stop" }]);
+  view.rerender(<ShellProviders value={{ state: { ...state, targetId: "other-output", player: { playbackId: "playing", status: "playing" } }, connected: true, rendererTargetId: "receiver", sendspin: { phase: "idle" } }}><PlaybackTargetPicker /></ShellProviders>);
+  expect(screen.queryByRole("button", { name: "Stop local playback" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await userEvent.keyboard("{Escape}");
+  expect(screen.getByRole("button", { name: "Playback output" })).toHaveFocus();
+});

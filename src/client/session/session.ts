@@ -23,7 +23,7 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, initialMode: SessionMode = "household") {
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number, nativeReceiver = false, rendererEnabled = true, initialMode: SessionMode = "household") {
   const [selection, setSelection] = useState<{ owner: Credentials | null; mode: SessionMode }>({ owner: credentials, mode: initialMode });
   const sessionMode = sameCredentials(selection.owner, credentials) ? selection.mode : initialMode;
   const scopedCredentials = useMemo(() => credentials ? { ...credentials, sessionMode } : null, [credentials, sessionMode]);
@@ -165,13 +165,13 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         }
       };
       const observe = (state: SessionState["player"]) => { if (isCurrent() && attached && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); };
-      const native = isNativeHost() && nativeReceiver && desktopProtocol ? createNativeRenderer(observe, {
+      const native = rendererEnabled && isNativeHost() && nativeReceiver && desktopProtocol ? createNativeRenderer(observe, {
         origin,
         ready: nonce => { nativeNonce = nonce; registerNative(); },
         lease: nonce => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "nativeLease", nonce })); },
         error: () => { if (isCurrent()) connection.close(); },
       }) : null;
-      const rendering = native ?? (browserPlayback && !isNativeHost() ? createBrowserRenderer(observe) : null);
+      const rendering = native ?? (rendererEnabled && browserPlayback && !isNativeHost() ? createBrowserRenderer(observe) : null);
       renderer.current = rendering;
       socket.current = connection;
       socketCredentials.current = credentials;
@@ -285,7 +285,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current = null;
       socketCredentials.current = null;
     };
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, reconnectAttempt]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, nativeReceiver, rendererEnabled, reconnectAttempt]);
 
   const current = sameCredentials(owner, credentials) && ownerMode === sessionMode;
   const snapshot = current ? state : null;

@@ -15,6 +15,7 @@ import { useInterfaceSize } from "../interface-size";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
+import { useSendspinClient } from "../components/SendspinClientDialog";
 import { desktopClientProtocol } from "../../shared/desktop-protocol";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
@@ -60,6 +61,8 @@ export function errorText(error: unknown) {
 type SessionBag = Omit<ReturnType<typeof useSession>, "clock" | "readObservation">;
 
 export type SessionGateValue = SessionBag & {
+  sendspin: ReturnType<typeof useSendspinClient>;
+  sendspinDisabledReason: string | null;
   queryClient: QueryClient;
   nativeHost: boolean;
   localHost: boolean;
@@ -104,6 +107,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   const [hostAttempt, setHostAttempt] = useState(0);
   const [booting, setBooting] = useState(localHost);
   const [error, setError] = useState<string | null>(null);
+  const [sendspinActive, setSendspinActive] = useState(false);
   const [linkedPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
   const videoQualityPreference = useVideoQualityPreference();
 
@@ -116,7 +120,13 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver, localHost ? "household" : "personal");
+  const { sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined, nativeReceiver, !sendspinActive, localHost ? "household" : "personal");
+  const sendspinDisabledReason = nativeHost && (device?.mode !== "remote" || nativeReceiver)
+    ? "Choose Another Couch and disable playback on this computer before joining Sendspin." : null;
+  const sendspin = useSendspinClient({ credentials, allowed: !sendspinDisabledReason, setActive: setSendspinActive, canActivate: () => {
+    const current = readObservation();
+    return connected && !current?.handoff && !(rendererTargetId && current?.targetId === rendererTargetId && current.player.playbackId && !["idle", "ended", "error", "unavailable"].includes(current.player.status));
+  } });
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
@@ -311,9 +321,10 @@ export function SessionGate({ children }: PropsWithChildren) {
   const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
   const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
+    sendspin, sendspinDisabledReason,
     sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, nativeHost, localHost, nativeReceiver, tvPresentation, credentials: scopedCredentials, setCredentials, host, retryHost, booting, error: error ?? sessionSelectionError, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  }), [sendspin, sendspinDisabledReason, sessionMode, selectSession, scopedCredentials, sessionSelectionError, rendererTargetId, playHere, queryClient, localHost, nativeReceiver, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

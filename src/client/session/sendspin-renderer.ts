@@ -1,0 +1,111 @@
+import type { SendspinPlayer, SendspinPlayerConfig, SendspinStorage, ServerStateMetadata, GroupUpdatePayload } from "@sendspin/sendspin-js";
+
+type Library = Pick<typeof import("@sendspin/sendspin-js"), "SendspinPlayer" | "loadSendspinClientIdentity">;
+export type SendspinTransport = "play" | "pause" | "stop" | "next" | "previous";
+export interface SendspinRendererState {
+  connected: boolean;
+  isPlaying: boolean;
+  volume: number;
+  muted: boolean;
+  metadata: ServerStateMetadata | undefined;
+  group: GroupUpdatePayload;
+  supportedCommands: SendspinTransport[];
+}
+export interface SendspinEnrollment { serverId?: string; psk: string }
+export interface SendspinRendererConfig { url: string; name: string; serverId?: string; psk?: string; suite?: "aesgcm" | "chacha" }
+export interface SendspinRendererCallbacks {
+  state(state: SendspinRendererState): void;
+  error(error: Error): void;
+  pairingPin?(pin: string | null, languages?: string[]): void;
+}
+const transports: SendspinTransport[] = ["play", "pause", "stop", "next", "previous"];
+
+// Preload before enabling Connect: unlock must be the first awaited work in its
+// gesture handler. The SDK owns decoding, clock synchronization and Web Audio.
+// https://github.com/Sendspin/sendspin-js#example
+export function createSendspinRenderer(config: SendspinRendererConfig, callbacks: SendspinRendererCallbacks, options: {
+  loadLibrary?: () => Promise<Library>;
+  storage?: SendspinStorage | null;
+} = {}) {
+  let library: Library | undefined;
+  let loading: Promise<void> | undefined;
+  let clientId: string | null = null;
+  let player: SendspinPlayer | undefined;
+  let connecting: Promise<void> | undefined;
+  let disposed = false;
+  let enrollment: SendspinEnrollment | undefined = config.psk ? { psk: config.psk, serverId: config.serverId } : undefined;
+  let supportedCommands: SendspinTransport[] = [];
+  const fail = (reason: unknown) => {
+    const error = reason instanceof Error ? reason : new Error(String(reason));
+    if (!disposed) callbacks.error(error);
+    return error;
+  };
+  const publish: NonNullable<SendspinPlayerConfig["onStateChange"]> = state => {
+    if (disposed) return;
+    supportedCommands = transports.filter(command => state.serverState.controller?.supported_commands?.includes(command));
+    callbacks.state({ connected: player?.isConnected ?? false, isPlaying: state.isPlaying, volume: state.volume, muted: state.muted, metadata: state.serverState.metadata, group: state.groupState, supportedCommands });
+    if (state.playerState === "error") fail(new Error("Sendspin playback failed."));
+  };
+  return {
+    get clientId() { return clientId; },
+    preload() {
+      return loading ??= (options.loadLibrary ?? (() => import("@sendspin/sendspin-js")))().then(loaded => {
+        if (disposed) return;
+        library = loaded;
+        clientId = loaded.loadSendspinClientIdentity(options.storage).clientId;
+      }).catch(reason => { loading = undefined; throw fail(reason); });
+    },
+    setEnrollment(value: SendspinEnrollment) {
+      if (disposed || player) throw new Error("Configure Sendspin enrollment before connecting.");
+      enrollment = value;
+    },
+    connectFromGesture(): Promise<void> {
+      if (disposed) return Promise.reject(new Error("This Sendspin connection is closed."));
+      if (connecting) return connecting;
+      if (player?.isConnected) return Promise.resolve();
+      if (!library) return Promise.reject(fail(new Error("Wait for Sendspin to load, then connect again.")));
+      try {
+        player ??= new library.SendspinPlayer({
+          baseUrl: config.url, clientName: config.name, productName: "Couch", storage: options.storage,
+          correctionMode: "sync", suite: config.suite ?? "aesgcm", unpairedAccess: false,
+          ...(enrollment ? { longTermPsks: [enrollment] } : {}),
+          onStateChange: publish,
+          onPairingPin: (pin, languages) => { if (!disposed) callbacks.pairingPin?.(pin, languages); },
+          reconnect: { maxAttempts: 7, onExhausted: () => { if (!disposed) fail(new Error("Sendspin connection lost. Disconnect and try again.")); } },
+        });
+        const current = player;
+        // Do not await an import, enrollment request or another teardown here.
+        const unlocked = current.unlock();
+        connecting = (async () => {
+          await unlocked;
+          if (disposed) { await current.disconnect("user_request"); return; }
+          await current.connect();
+          if (disposed) await current.disconnect("user_request");
+        })().catch(async reason => {
+          await current.disconnect("user_request");
+          throw fail(reason);
+        }).finally(() => { connecting = undefined; });
+        return connecting;
+      } catch (reason) { return Promise.reject(fail(reason)); }
+    },
+    async disconnect() {
+      disposed = true;
+      supportedCommands = [];
+      callbacks.pairingPin?.(null);
+      // SDK 5 disconnect clears scheduled buffers synchronously but returns void;
+      // it does not expose AudioContext.close completion or physical silence.
+      // This is deliberately not a verified handoff/silence acknowledgement.
+      await player?.disconnect("user_request");
+    },
+    setVolume(volume: number) {
+      if (!disposed && player && Number.isFinite(volume)) player.setVolume(Math.max(0, Math.min(100, volume)));
+    },
+    setMuted(muted: boolean) { if (!disposed) player?.setMuted(muted); },
+    transport(command: SendspinTransport) {
+      if (disposed || !player?.isConnected || !supportedCommands.includes(command)) return false;
+      player.sendCommand(command, undefined);
+      return true;
+    },
+    openPairingWindow() { if (!disposed) player?.openPairingWindow(); },
+  };
+}

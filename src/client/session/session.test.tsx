@@ -23,6 +23,7 @@ let session: ReturnType<typeof useSession>;
 let capability = true;
 let browserPlayback: boolean | undefined;
 let nativeReceiver = false;
+let rendererEnabled = true;
 let desktopProtocol: number | undefined;
 const renderedObservations: Array<SessionState | null> = [];
 let mount: (next: Credentials) => Promise<void>;
@@ -43,7 +44,7 @@ class Socket {
 
 beforeEach(async () => {
   capability = true;
-  nativeReceiver = false; desktopProtocol = undefined;
+  nativeReceiver = false; rendererEnabled = true; desktopProtocol = undefined;
   browserPlayback = undefined;
   sockets.length = timers.length = 0;
   globalThis.WebSocket = Socket as unknown as typeof WebSocket;
@@ -56,7 +57,7 @@ beforeEach(async () => {
   }) as typeof fetch);
   const { useSession } = await import("./session");
   function Probe({ connection }: { connection: Credentials }) {
-    session = useSession(connection, undefined, undefined, desktopProtocol, nativeReceiver);
+    session = useSession(connection, undefined, undefined, desktopProtocol, nativeReceiver, rendererEnabled);
     renderedObservations.push(session.readObservation());
     return <output role="status">{session.status}</output>;
   }
@@ -372,4 +373,26 @@ test("a retired mode's pending local selection cannot report an error in househo
   await act(async () => session.selectSession("household"));
   expect(session.sessionSelectionError).toBeNull();
   expect(session.sessionMode).toBe("household");
+});
+
+test("Sendspin mode retires the local renderer but keeps Core control connected", async () => {
+  spyOn(capabilities, "browserMediaCapabilities").mockResolvedValue({ mp4H264Aac: true, mp3: true });
+  const renderer = { command: () => {}, close: () => {}, report: () => {}, play: () => {} };
+  const create = spyOn(browserRenderer, "createBrowserRenderer").mockReturnValue(renderer);
+  const close = spyOn(renderer, "close");
+  await act(async () => session.reconnect());
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(create).toHaveBeenCalledTimes(1);
+  rendererEnabled = false;
+  await mount(credentials);
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(session.connected).toBe(true);
+  expect(sockets.at(-1)!.sent).toEqual([]);
+  rendererEnabled = true;
+  await mount(credentials);
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, sessionId: "household" } }));
+  expect(create).toHaveBeenCalledTimes(2);
+  expect(sockets.at(-1)!.sent.map(message => String(message.type))).toEqual(["registerRenderer"]);
 });
