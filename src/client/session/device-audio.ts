@@ -35,7 +35,7 @@ export function useDeviceAudio({ credentials, rendererTargetId, enabled, name, o
   const [clientId, setClientId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ready = useCallback((value: boolean, report = latestReady.current) => {
-    if (readyRef.current === value) return;
+    if (!value && !readyRef.current) return;
     readyRef.current = value; setAudioReady(value); report(value);
   }, []);
   const withLease = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
