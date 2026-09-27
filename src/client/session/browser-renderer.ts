@@ -40,7 +40,19 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
       volume: (media?.volume ?? volume) * 100, seekable: (dash ? !!range : !!media?.seekable.length) && !load?.radio,
       speed: dash ? dashSpeed : media?.playbackRate ?? 1, tracks, audioTracksKnown: !!adaptive || audioTracks() !== undefined, buffering, requiresGesture, error: failure ?? (media?.error ? `This browser cannot play the source (${media.error.message || media.error.code}). Try Couch TV.` : null) };
   };
-  const emit = () => report(snapshot());
+  let lastReport = -Infinity;
+  let lastState: PlayerState | null = null;
+  let pending: PlayerState | null = null;
+  let reportTimer: ReturnType<typeof setTimeout> | undefined;
+  const publish = (state: PlayerState) => { lastReport = performance.now(); lastState = state; pending = null; report(state); };
+  const emit = () => {
+    const state = snapshot();
+    if (state.playbackId !== lastState?.playbackId || state.status === "error" && lastState?.status !== "error" || state.requiresGesture && !lastState?.requiresGesture || performance.now() - lastReport >= 100) {
+      clearTimeout(reportTimer); reportTimer = undefined; publish(state); return;
+    }
+    pending = state;
+    reportTimer ??= setTimeout(() => { reportTimer = undefined; if (pending) publish(pending); }, Math.max(0, 100 - (performance.now() - lastReport)));
+  };
   const play = () => {
     if (!media || !load || fatal) return;
     const attempt = load;
@@ -191,6 +203,6 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
         }
       }
     },
-    close() { stop(); media?.remove(); media = null; },
+    close() { stop(); clearTimeout(reportTimer); reportTimer = undefined; if (pending) publish(pending); media?.remove(); media = null; },
   };
 }
