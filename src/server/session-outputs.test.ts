@@ -220,3 +220,22 @@ for (const [recoveringReceiver, groupRecoveryMs, fence] of [[false, undefined, 7
     expect(session.targets.owns(browser.endpoint.id)).toBe(true);
   });
 }
+
+test("source invalidation during destination retirement cannot restore or resume the old delivery", async () => {
+  const f = fixture(), first = f.bind("first", true), destination = f.browser();
+  await play(first.session, "first");
+  destination.peer.refuseStart = true; destination.peer.holdStop = true;
+  let authorized = true;
+  const moving = first.targets.move(destination.endpoint.id, () => { if (!authorized) throw new Error("Source configuration changed"); }).catch(error => error as Error);
+  await Bun.sleep(0);
+  expect(destination.peer.commands.some(command => command.type === "stop")).toBe(true);
+  expect(f.native.state.status).toBe("paused");
+  authorized = false;
+  destination.peer.holdStop = false; destination.peer.report(idle);
+  expect((await moving)?.message).toBe("Source configuration changed");
+  expect(f.native.commands.some(command => command.type === "pause" && command.paused === false)).toBe(false);
+  expect(f.native.state.status).toBe("idle");
+  expect(first.session.state.targetId).toBe(destination.endpoint.id);
+  expect(first.session.state.player.playbackId).not.toBe(f.native.commands.find(command => command.type === "load")?.playbackId);
+  expect(first.targets.owns("native")).toBe(false);
+});

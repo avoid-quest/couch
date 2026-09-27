@@ -340,6 +340,12 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
             // Never resume a source if destination silence is uncertain.
             let silent = !prepared;
             if (prepared) try { await wait(binding, destination, { type: "stop" }, player => player.playbackId === null && player.status === "idle"); silent = true; } catch { /* Keep both sides paused/uncertain. */ }
+            try { authorize(); } catch (canceled) {
+              // Source configuration may change while destination retirement is pending.
+              // Invalidated delivery must never be restored or resumed by rollback.
+              if (source.target.connected) try { await wait(binding, source, { type: "stop" }, player => player.playbackId === null && player.status === "idle"); } catch { /* Retain the uncertain source claim. */ }
+              throw canceled;
+            }
             if (committed && silent && source.target.connected) { binding.assigned = source; session().commitHandoff(source.player, previousDelivery!); }
             if (sourcePaused && silent && source.target.connected && !paused) {
               try { await wait(binding, source, { type: "pause", playbackId: original.playbackId, paused: false }, player => player.playbackId === original.playbackId && player.status === "playing"); } catch { /* Report failure without starting another owner. */ }
