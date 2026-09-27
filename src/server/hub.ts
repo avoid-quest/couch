@@ -168,6 +168,7 @@ export function createHub(options: HubOptions) {
   const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   const registry = createPlaybackTargetRegistry(options.sendPlayer, { observeNative: options.observePlayer, recoveringReceiver: store.nativeReceiverUsed(), recoveringGroup: store.bufferedOutputUsed() });
+  registry.rename("native", store.installationName());
   function createRuntime(owner: string | null): Runtime {
     const mode = owner ? "personal" : "household";
     const id = owner ? `personal:${owner}` : sessionId;
@@ -335,6 +336,10 @@ export function createHub(options: HubOptions) {
   };
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
+    if (controller) {
+      registry.rename(`browser-${controller.id}`, controller.name);
+      registry.rename(`receiver-${controller.id}`, controller.name);
+    } else registry.rename("native", store.installationName());
     invalidateAll("controllers");
   }, onRevoke: id => {
     const personal = runtimes.get(`personal:${id}`);
@@ -778,8 +783,9 @@ export function createHub(options: HubOptions) {
               socket.send(JSON.stringify({ type: "nativeLease", nonce: renderer.nonce } satisfies ServerMessage));
             } else if (renderer.type === "registerRenderer") {
               if (socket.data.receiver) throw new Error("A native receiver cannot also register as a browser.");
-              socket.data.renderer ??= registry.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize);
-              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer.id, sessionId: socket.data.rendererSessionId! } satisfies ServerMessage));
+              const targetId = socket.data.controllerId ? `browser-${socket.data.controllerId}` : undefined;
+              if (!targetId || !registry.targets.some(target => target.id === targetId)) socket.data.renderer ??= registry.register(`${playbackActor(socket.data.controllerId)?.name ?? "Browser"} browser`, sendRenderer, renderer.capabilities, socket.data.authorize, targetId);
+              socket.send(JSON.stringify({ type: "rendererRegistered", targetId: socket.data.renderer?.id ?? targetId!, sessionId: socket.data.rendererSessionId!, attached: !!socket.data.renderer } satisfies ServerMessage));
             } else if (socket.data.renderer && renderer.sessionId === socket.data.rendererSessionId) socket.data.renderer.observe(renderer.state);
             else throw new Error("Unregistered renderer.");
             return;

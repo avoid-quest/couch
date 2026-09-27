@@ -242,7 +242,7 @@ test("a shared source change cancels a busy handoff and still stops another affe
     expect((await request(hub, token, `/api/iptv/channels/${channels[0]!.id}/play`, "personal", "POST")).status).toBe(200);
     await peer.wait(message => message.type === "state" && message.state.player.status === "playing");
   }
-  const destination = new Peer(hub, aToken, "personal");
+  const destination = new Peer(hub, await pair(hub), "personal");
   destination.holdEcho = "seek";
   await destination.wait(message => message.type === "state");
   destination.send({ type: "registerRenderer" });
@@ -307,4 +307,22 @@ test("changing controlled playback preserves the renderer, private progress and 
   expect(a.state.player.position).toBe(54);
   expect(a.targetId).toBe(attachment);
   expect(a.messages.filter(message => message.type === "rendererRegistered")).toHaveLength(1);
+});
+
+
+test("one paired browser has one destination across tabs and reconnects", async () => {
+  const { hub, aToken, a } = await setup();
+  await a.play("one-browser", 17);
+  const targetId = a.targetId;
+  const other = new Peer(hub, aToken);
+  await other.wait(message => message.type === "state");
+  other.send({ type: "registerRenderer" });
+  expect(await other.wait(message => message.type === "rendererRegistered")).toMatchObject({ targetId, attached: false });
+  expect(other.state.targets!.filter(target => target.id === targetId)).toHaveLength(1);
+  expect(a.player.status).toBe("playing");
+  await a.close();
+  const from = other.messages.length;
+  other.send({ type: "registerRenderer" });
+  expect(await other.wait(message => message.type === "rendererRegistered", from)).toMatchObject({ targetId, attached: true });
+  expect(other.player.playbackId).toBeNull();
 });

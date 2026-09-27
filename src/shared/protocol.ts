@@ -112,7 +112,7 @@ export type ClientMessage = { type: "command"; requestId: string; action: Action
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
   | { type: "nativeLease"; nonce: string }
-  | { type: "rendererRegistered"; targetId: string; sessionId: string }
+  | { type: "rendererRegistered"; targetId: string; sessionId: string; attached?: boolean }
   | { type: "rendererCommand"; sessionId: string; command: PlaybackCommand }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }

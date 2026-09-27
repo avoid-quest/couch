@@ -153,6 +153,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const connection = new WebSocket(url);
       let baseline = false;
       let rendererSessionId: string | null = null;
+      let registeredTargetId: string | null = null;
+      let attached = false;
       let nativeNonce: string | null = null;
       let nativeRegistered = false;
       let rendererBaseline = false;
@@ -162,7 +164,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           connection.send(JSON.stringify({ type: "registerNativeRenderer", nonce: nativeNonce }));
         }
       };
-      const observe = (state: SessionState["player"]) => { if (isCurrent() && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); };
+      const observe = (state: SessionState["player"]) => { if (isCurrent() && attached && rendererSessionId && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "rendererObservation", sessionId: rendererSessionId, state })); };
       const native = isNativeHost() && nativeReceiver && desktopProtocol ? createNativeRenderer(observe, {
         origin,
         ready: nonce => { nativeNonce = nonce; registerNative(); },
@@ -192,12 +194,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (message.type === "nativeLease") {
           native?.renew(message.nonce);
         } else if (message.type === "rendererRegistered") {
-          rendererSessionId = message.sessionId; setRendererTargetId(message.targetId); rendering?.report();
+          rendererSessionId = message.sessionId; registeredTargetId = message.targetId; attached = message.attached !== false; setRendererTargetId(message.targetId); if (attached) rendering?.report();
         } else if (message.type === "rendererCommand") {
           const command = message.command;
-          if (rendererSessionId === message.sessionId) rendering?.command(command.type === "load" && /^\/api\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(command.source) ? { ...command, source: new URL(command.source, origin).href } : command);
+          if (attached && rendererSessionId === message.sessionId) rendering?.command(command.type === "load" && /^\/api\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(command.source) ? { ...command, source: new URL(command.source, origin).href } : command);
         } else if (message.type === "state") {
-          if (!baseline && rendering && !native && message.state.sessionId) void browserMediaCapabilities().then(capabilities => {
+          if ((!baseline || registeredTargetId && !attached && !message.state.targets?.some(target => target.id === registeredTargetId)) && rendering && !native && message.state.sessionId) void browserMediaCapabilities().then(capabilities => {
             if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "registerRenderer", capabilities }));
           });
           baseline = true;

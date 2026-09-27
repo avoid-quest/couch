@@ -112,6 +112,10 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
   };
   const registry = {
     get targets() { return [...endpoints.values()].map(endpoint => descriptor(endpoint)); },
+    rename(id: string, name: string) {
+      const endpoint = endpoints.get(id);
+      if (endpoint && endpoint.target.name !== name) { endpoint.target.name = name; changed(); }
+    },
     close() {
       closed = true;
       for (const waiter of [...waiters]) waiter.reject(new Error("Couch is shutting down."));
@@ -127,9 +131,9 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
       if (!native.target.connected) { native.target.connected = true; changed(); }
       observe(native, player);
     },
-    register(name: string, sendCommand: Endpoint["send"], capabilities?: BrowserMediaCapabilities, authorize?: () => void) {
+    register(name: string, sendCommand: Endpoint["send"], capabilities?: BrowserMediaCapabilities, authorize?: () => void, id: string = crypto.randomUUID()) {
       if (closed) throw new Error("Couch is shutting down.");
-      const id: string = crypto.randomUUID();
+      if (endpoints.has(id)) throw new Error("This device already has a playback connection.");
       const endpoint: Endpoint = { target: { id, name, kind: "endpoint", backend: "browser", connected: true }, send: sendCommand, player: idle(), attempts: new Set(), capabilities, authorize };
       endpoints.set(id, endpoint); changed();
       return { id, observe: (player: PlayerState) => { if (endpoints.get(id) === endpoint) observe(endpoint, player); }, close: () => {
