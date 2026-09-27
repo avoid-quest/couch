@@ -18,6 +18,18 @@ test("idle volume is reported and persisted without creating media, then applied
   renderer.close();
 });
 
+test("a later direct load picks up volume changed during shared browser audio", () => {
+  localStorage.setItem("couch.browser-volume", "0.37");
+  const renderer = createBrowserRenderer(() => {});
+  renderer.command({ type: "load", playbackId: "first", source: "https://example.org/video.mp4", paused: true });
+  expect(document.querySelector("video")?.volume).toBe(0.37);
+  renderer.command({ type: "stop" });
+  localStorage.setItem("couch.browser-volume", "0.64");
+  renderer.command({ type: "load", playbackId: "second", source: "https://example.org/video.mp4", paused: true });
+  expect(document.querySelector("video")?.volume).toBe(0.64);
+  renderer.close();
+});
+
 test("unknown browser audio tracks do not invent a selected audio stream", () => {
   const states: PlayerState[] = [];
   const renderer = createBrowserRenderer(state => states.push(state));

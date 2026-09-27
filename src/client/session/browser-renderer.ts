@@ -78,6 +78,7 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
         cleanup();
         const video = element();
         video.pause();
+        try { const saved = Number(localStorage.getItem("couch.browser-volume") ?? volume); if (Number.isFinite(saved)) video.volume = volume = Math.min(1, Math.max(0, saved)); } catch { /* Storage is optional. */ }
         load = command; dash = isAdaptiveSource(command.source); fatal = false; failure = null; requiresGesture = false; initializing = true; initialSeek = false; buffering = false;
         dashSpeed = command.preferences?.speed ?? 1;
         let dashReady = !dash;
