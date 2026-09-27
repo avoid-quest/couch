@@ -17,7 +17,6 @@ import type { Action } from "../../../shared/protocol";
 import { forgetConnection, knownConnection } from "@/session/connection";
 import { deviceName } from "@/copy";
 import { useOptionalSessionGate } from "@/session/session-context";
-import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { StatusDot } from "./StatusLine";
 
 function destinationOrigin(address: string): string | null {
@@ -30,7 +29,7 @@ function destinationOrigin(address: string): string | null {
 const noCredentials = { origin: "", token: "" };
 
 /** Output and volume of the Couch that plays, inside the Play on popover. */
-export function SoundControls({ credentials, connected, open, state, run, onClose }: {
+export function SoundControls({ credentials, connected, open, state, onClose }: {
   credentials: Credentials | null;
   connected: boolean;
   open: boolean;
@@ -62,7 +61,6 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
     <h3 id="sound-controls-title" className="text-sm font-medium">Sound</h3>
     {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={output.isPending || !connected} onValueChange={value => { if (credentials) output.mutate(value); }} className="gap-0">{outputs.map((item, index) => <Field orientation="horizontal" className="items-center py-1.5" key={item.id}><RadioGroupItem id={`quick-output-${index}`} value={item.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{item.name || item.id}</FieldLabel></Field>)}</RadioGroup> : nativeOutput && !forbidden && <p className="text-muted-foreground">{unavailable}</p>}
     {observed && observed.id !== selected && <p className="text-muted-foreground">Playing through {observed.name || observed.id}.</p>}
-    {state && run && <PlaybackVolume state={state} connected={connected} run={run} />}
     {nativeOutput && output.error && <Alert variant="destructive"><AlertDescription>{output.error.message || "Couldn't change the output."}</AlertDescription></Alert>}
     {nativeOutput && credentials && admin && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
   </section>;

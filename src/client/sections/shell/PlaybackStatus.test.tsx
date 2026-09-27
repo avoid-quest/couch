@@ -68,17 +68,13 @@ test("addresses with pairing details or paths cannot become destinations", async
   expect(window.location.origin).toBe(origin);
 });
 
-test("Playing on exposes the same mute and volume commands as the player", async () => {
-  const actions: Action[] = [];
+test("connection details keep playback volume in the player", async () => {
   await render({
     queue: [], currentEntryId: null, installationName: "Living room", activeProfile: { id: "household", name: "Household" },
     player: { status: "idle", playbackId: null, position: 0, duration: null, seekable: false, volume: 40, error: null },
     systemAudio: { selectedOutput: "speakers", observedOutput: "speakers", volume: 40, muted: false, error: null },
-  }, async action => { actions.push(action); return true; });
-  await user.click(screen.getByRole("button", { name: "Mute Living room" }));
-  screen.getByRole("slider", { name: "Volume" }).focus();
-  await user.keyboard("{End}");
-  expect(actions).toEqual([{ type: "mute", muted: true }, { type: "volume", volume: 100 }]);
+  }, async () => true);
+  expect(screen.queryByRole("slider", { name: "Volume" })).toBeNull();
 });
 
 
@@ -103,7 +99,7 @@ for (const targetId of ["browser:phone", "native", undefined]) test(`sound hardw
     targetId, targets: targetId ? [{ id: targetId, name: "Phone", kind: "endpoint", backend: targetId === "native" ? "native" : "browser", connected: true }] : undefined,
     player: { status: "idle", playbackId: null, position: 0, duration: null, seekable: false, volume: 40, error: null },
   }, async () => true);
-  expect(screen.getByRole("slider", { name: "Volume" })).toBeInTheDocument();
+  expect(screen.queryByRole("slider", { name: "Volume" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/sound"))).toBe(targetId !== "browser:phone");
   if (targetId === "browser:phone") expect(screen.queryByText("No outputs.")).toBeNull();
 });

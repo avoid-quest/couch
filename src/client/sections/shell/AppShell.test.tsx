@@ -185,17 +185,17 @@ test("browsing does not name Core when a disconnected browser disappears from di
 
 test("a restored checkpoint asks for an output without describing a missing player", async () => {
   await render("unavailable", false, false, undefined, undefined, [], "checkpoint");
-  expect(screen.getByText("Choose a playback output to resume paused.")).toBeInTheDocument();
+  expect(screen.getByText("Choose devices to resume paused.")).toBeInTheDocument();
   expect(screen.queryByText(/Player not running/)).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
 test("a stopped checkpoint asks for an output without promising resume", async () => {
   await render("unavailable", false, false, undefined, undefined, [], "checkpoint", true);
-  expect(screen.getByText("Choose a playback output.")).toBeInTheDocument();
+  expect(screen.getByText("Choose devices to play.")).toBeInTheDocument();
 });
 
 test("an uncertain audio group asks for reconnection before transfer", async () => {
   await render("unavailable", false, false, undefined, undefined, [{ id: "rooms", name: "Home speakers", kind: "group", backend: "sendspin", connected: false }], "rooms");
-  expect(screen.getByText("Reconnect Home speakers from Playback output before moving playback.")).toBeInTheDocument();
+  expect(screen.getByText("Reconnect Home speakers from Devices before moving playback.")).toBeInTheDocument();
 });

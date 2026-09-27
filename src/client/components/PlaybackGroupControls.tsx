@@ -2,19 +2,18 @@ import { useMutation } from "@tanstack/react-query";
 import type { Action, PlaybackTarget } from "../../shared/protocol";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Slider } from "./ui/slider";
 
-export function PlaybackGroupControls({ target, connected, busy, run, onClose, onCloseAutoFocus }: {
-  target: PlaybackTarget; connected: boolean; busy: boolean; run: (action: Action) => Promise<boolean>; onClose: () => void; onCloseAutoFocus?: (event: Event) => void;
+export function PlaybackGroupControls({ target, connected, busy, run, onClose }: {
+  target: PlaybackTarget; connected: boolean; busy: boolean; run: (action: Action) => Promise<boolean>; onClose: () => void;
 }) {
   const update = useMutation({ mutationFn: run });
   const members = target.members ?? [];
   const joined = members.filter(member => member.joined).map(member => member.id);
   const disabled = !connected || !target.connected || busy || update.isPending;
   const membershipDisabled = !connected || busy || update.isPending || !!target.error;
-  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent onCloseAutoFocus={onCloseAutoFocus}>
-    <DialogHeader><DialogTitle>{target.name}</DialogTitle><DialogDescription>Group playback uses estimated progress. Switching outputs waits for buffered audio to finish.</DialogDescription></DialogHeader>
+  return <section aria-label={`${target.name} devices`} className="border-t pt-3">
+    <div className="flex items-center justify-between"><h3 className="font-medium">{target.name} devices</h3><Button variant="ghost" size="sm" onClick={onClose}>Done</Button></div>
     {!target.connected && <div className="grid justify-items-start gap-2"><p className="text-sm text-muted-foreground">{target.error || "The group is disconnected. Reconnect to try again."}</p><Button variant="outline" disabled={!connected || busy || update.isPending} onClick={() => update.mutate({ type: "groupReconnect", targetId: target.id })}>Reconnect group</Button></div>}
     <div className="divide-y">
       {members.map(member => <div key={member.id} className="grid gap-3 py-3">
@@ -23,5 +22,5 @@ export function PlaybackGroupControls({ target, connected, busy, run, onClose, o
       </div>)}
       {!members.length && <p className="text-sm text-muted-foreground">No speakers available.</p>}
     </div>
-  </DialogContent></Dialog>;
+  </section>;
 }

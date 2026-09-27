@@ -1,39 +1,57 @@
 import { useRef, useState } from "react";
+import { MonitorSpeaker } from "lucide-react";
+import type { PlaybackTarget } from "../../shared/protocol";
 import { PlaybackGroupControls } from "./PlaybackGroupControls";
 import { SendspinClientDialog } from "./SendspinClientDialog";
-import { Monitor, Speaker } from "lucide-react";
 import { Button } from "./ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "./ui/popover";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { useSessionGate } from "../session/session-context";
 
 export function PlaybackTargetPicker() {
   const { state, connected, run, rendererTargetId, playHere, nativeHost, sessionMode = "household", selectSession, sendspin } = useSessionGate();
+  const [open, setOpen] = useState(false);
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [replace, setReplace] = useState<PlaybackTarget | null>(null);
   const [sendspinOpen, setSendspinOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const sendspinActive = !!sendspin && sendspin.phase !== "idle";
   if (!state?.targets && !sendspinActive) return null;
   const targets = state?.targets ?? [];
-  const coreDisabled = !connected || !!state?.handoff;
+  const disabled = !connected || !!state?.handoff;
+  const selected = targets.find(target => target.id === state?.targetId);
   const group = targets.find(target => target.id === groupId && target.kind === "group");
-  const target = targets.find(target => target.id === state?.targetId);
   const here = !!rendererTargetId && state?.targetId === rendererTargetId;
+  const label = state?.handoff ? "Moving playback…" : selected?.name ?? (rendererTargetId ? "This device" : "Choose devices");
+  const move = (target: PlaybackTarget, takeover = false) => {
+    setOpen(false);
+    void run({ type: "selectTarget", targetId: target.id, ...(takeover ? { takeover: true } : {}) });
+  };
   return <>
-    <DropdownMenu><DropdownMenuTrigger asChild><Button ref={trigger} variant="ghost" className="min-w-11" disabled={coreDisabled && !sendspinActive} aria-label="Playback output"><Speaker aria-hidden="true" /><span className="max-sm:hidden">{state?.handoff ? "Moving playback…" : here ? nativeHost ? "This computer" : "This browser" : target?.name ?? "Playback output"}</span></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onCloseAutoFocus={event => { if (groupId || sendspinOpen) event.preventDefault(); }}>
-        {targets.map(target => <DropdownMenuItem key={target.id} disabled={coreDisabled || !target.connected || !!target.occupied || target.id === state?.targetId && state?.player.status !== "unavailable"} onSelect={() => void run({ type: "selectTarget", targetId: target.id })}>
-          <Monitor aria-hidden="true" />{target.id === rendererTargetId ? state?.currentEntryId ? "Move playback here" : nativeHost ? "Play on this computer" : "Play in this browser" : `${state?.currentEntryId ? "Continue on" : "Play on"} ${target.name}`}{!target.connected ? " (disconnected)" : ""}
-        </DropdownMenuItem>)}
-        {selectSession && sessionMode !== "personal" && rendererTargetId && <DropdownMenuItem disabled={coreDisabled} onSelect={() => selectSession("personal", true)}>Play independently here</DropdownMenuItem>}
-        {selectSession && sessionMode === "personal" && <DropdownMenuItem disabled={coreDisabled} onSelect={() => selectSession("household")}>Control household</DropdownMenuItem>}
-        {targets.filter(target => target.connected && target.occupied).map(target => target.kind === "group" && target.sessionKind === "household"
-          ? selectSession && <DropdownMenuItem key={`join:${target.id}`} disabled={coreDisabled} onSelect={() => selectSession("household")}>Join {target.name}</DropdownMenuItem>
-          : <DropdownMenuItem key={`takeover:${target.id}`} disabled={coreDisabled} onSelect={() => void run({ type: "selectTarget", targetId: target.id, takeover: true })}>Take over {target.name}</DropdownMenuItem>)}
-        {targets.filter(target => target.kind === "group" && !target.occupied && target.backend === "sendspin").map(target => <DropdownMenuItem key={`manage:${target.id}`} disabled={coreDisabled} onSelect={() => setGroupId(target.id)}>Manage {target.name}</DropdownMenuItem>)}
-        {sendspin && <DropdownMenuItem onSelect={() => setSendspinOpen(true)}>{sendspin.phase === "idle" ? "Join Sendspin server…" : "Sendspin playback"}</DropdownMenuItem>}
-      </DropdownMenuContent></DropdownMenu>
-    {group && <PlaybackGroupControls key={group.id} target={group} connected={connected} busy={!!state?.handoff} run={run} onClose={() => setGroupId(null)} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} />}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild><Button ref={trigger} variant="ghost" className="min-w-11" disabled={disabled && !sendspinActive} aria-label="Devices"><MonitorSpeaker aria-hidden="true" /><span className="max-sm:hidden">{label}</span></Button></PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1rem))] max-h-[min(80vh,36rem)] overflow-y-auto" onCloseAutoFocus={event => { if (sendspinOpen || replace) event.preventDefault(); }}>
+        <PopoverHeader><PopoverTitle>Devices</PopoverTitle><p className="text-muted-foreground">{sessionMode === "personal" ? "Your playback" : "Shared playback"}{selected ? ` · ${selected.name}` : " · Choose where to play"}</p></PopoverHeader>
+        <div className="divide-y border-t">
+          {targets.map(target => {
+            const current = target.id === state?.targetId;
+            const local = target.id === rendererTargetId;
+            const canMove = !disabled && target.connected && (!current || state?.player.status === "unavailable");
+            return <div key={target.id} className="flex min-w-0 items-center gap-2 py-2">
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{local ? nativeHost ? "This computer" : "This browser" : target.name}</p><p className="text-xs text-muted-foreground">{!target.connected ? "Disconnected" : current ? "Playing here" : target.occupied ? "In use" : target.kind === "group" ? "Shared audio" : "Available"}</p></div>
+              {canMove && <Button size="sm" variant="ghost" onClick={() => target.occupied ? (setReplace(target), setOpen(false)) : move(target)}>{target.occupied ? "Replace…" : current ? "Resume" : state?.currentEntryId ? "Move" : "Choose"}</Button>}
+              {target.kind === "group" && target.backend === "sendspin" && <Button size="sm" variant="ghost" onClick={() => setGroupId(groupId === target.id ? null : target.id)} aria-label={`Adjust ${target.name} devices`}>Adjust</Button>}
+            </div>;
+          })}
+          {!targets.length && <p className="py-3 text-muted-foreground">No devices available yet.</p>}
+        </div>
+        {group && <PlaybackGroupControls key={group.id} target={group} connected={connected} busy={!!state?.handoff} run={run} onClose={() => setGroupId(null)} />}
+        {selectSession && <div className="border-t pt-2"><Button variant="ghost" className="w-full justify-start px-0" disabled={disabled || sessionMode !== "personal" && !rendererTargetId} onClick={() => { if (sessionMode === "personal") selectSession("household"); else selectSession("personal", true); setOpen(false); }}>{sessionMode === "personal" ? "Control shared playback" : "Play separately on this device"}</Button></div>}
+        {sendspin && <div className="border-t pt-2"><Button variant="ghost" className="w-full justify-start px-0" onClick={() => { setOpen(false); setSendspinOpen(true); }}>{sendspinActive ? "Listening together" : "Listen together"}</Button></div>}
+      </PopoverContent>
+    </Popover>
+    <AlertDialog open={!!replace} onOpenChange={value => { if (!value) setReplace(null); }}><AlertDialogContent onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }}><AlertDialogHeader><AlertDialogTitle>Replace playback on {replace?.name}?</AlertDialogTitle><AlertDialogDescription>Playback already using this device will stop. Your selected playback will move there.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (replace) move(replace, true); setReplace(null); }}>Replace and move</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     {sendspin && <SendspinClientDialog open={sendspinOpen} onOpenChange={setSendspinOpen} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} />}
-    {!nativeHost && here && state?.player.requiresGesture && <Button disabled={coreDisabled} onClick={playHere}>Play here</Button>}
+    {!nativeHost && here && state?.player.requiresGesture && <Button disabled={disabled} onClick={playHere}>Listen here</Button>}
   </>;
 }

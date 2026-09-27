@@ -177,11 +177,11 @@ function useShellValue() {
   const player = state?.player;
   const programme = connected ? state?.radioProgramme : null;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
-  const available = connected && !!player && player.status !== "unavailable";
+  const available = connected && !!player && (player.status !== "unavailable" || !!state?.targets && !state.targetId);
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   // Terse, stable labels for the header's screen-reader status and the Play on popover.
   const statusLabel = booting ? "Starting" : {
-    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
+    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" && state?.targetId ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
   }[status];
 
   return {
@@ -236,10 +236,10 @@ function ConnectionStatus() {
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
   if (!credentials || status === "pairing-required") return null;
   if (!connected) return null;
-  if (state?.targets && !state.targetId) return <StatusLine>Choose a playback output.</StatusLine>;
-  if (state?.player.status === "unavailable" && state.targetId === "checkpoint") return <StatusLine>{state.currentEntryId ? "Choose a playback output to resume paused." : "Choose a playback output."}</StatusLine>;
+  if (state?.targets && !state.targetId) return <StatusLine>Choose devices to play.</StatusLine>;
+  if (state?.player.status === "unavailable" && state.targetId === "checkpoint") return <StatusLine>{state.currentEntryId ? "Choose devices to resume paused." : "Choose devices to play."}</StatusLine>;
   const group = state?.targets?.find(target => target.id === state.targetId && target.kind === "group");
-  if (state?.player.status === "unavailable" && group) return <StatusLine>{group.connected ? state.currentEntryId ? "Choose a playback output to resume paused." : "Choose a playback output." : `Reconnect ${group.name} from Playback output before moving playback.`}</StatusLine>;
+  if (state?.player.status === "unavailable" && group) return <StatusLine>{group.connected ? state.currentEntryId ? "Choose devices to resume paused." : "Choose devices to play." : `Reconnect ${group.name} from Devices before moving playback.`}</StatusLine>;
   if (state?.player.status === "unavailable") return <StatusLine>Player not running on {state.targets?.find(target => target.id === state.targetId)?.name ?? (state.targets && state.targetId !== "native" ? "the selected playback output" : localHost ? "this computer" : name)}.</StatusLine>;
   return null;
 }
