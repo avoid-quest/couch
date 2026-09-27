@@ -281,7 +281,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
         register: registry.register,
         registerReceiver: registry.registerReceiver,
         registerGroup: registry.registerGroup,
-        async detach(authorize = () => {}) {
+        async detach(authorize = () => {}, preserveIntent = false) {
           if (binding.busy) throw new Error("Wait for the device change to finish.");
           const source = binding.assigned;
           if (!source) return;
@@ -293,7 +293,7 @@ export function createPlaybackTargetRegistry(nativeSend: Endpoint["send"] | unde
             else if (source.receiver && now() < source.receiver.unsafeUntil || source.target.kind === "group" && original.playbackId) throw new Error("The previous device cannot confirm it stopped.");
             release(binding, source);
             binding.assigned = { target: { id: "checkpoint", name: "Playback", kind: "endpoint", backend: "native", connected: false }, player: original, send() {}, attempts: new Set() };
-            session().rendererDisconnected();
+            session().rendererDisconnected(preserveIntent ? original.status !== "playing" : undefined);
           } catch (error) { binding.assigned = source; session().rendererDisconnected(); throw error; }
           finally { binding.busy = false; changed(); }
         },

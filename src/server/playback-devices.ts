@@ -208,11 +208,17 @@ export function createPlaybackDevices(options: Options) {
         commit(other, before);
       };
       if (group && other.session.state.targetId === group.id) {
+        const binding = groups.get(other.id)!;
+        const oldScreen = binding.screen;
+        const screenTaken = !!oldScreen && ids.includes(oldScreen);
         const members = [...group.members];
         const remaining = members.filter(clientId => { const audio = options.host()?.devices.find(device => device.id === clientId); return audio && !ids.includes(deviceId(audio)); });
-        restore.push(async () => { await group.setMembers(members); await resume(group.id); });
-        if (remaining.length) await other.targets.control(group.id, () => group.setMembers(remaining), remaining);
-        else { await other.targets.detach(guard); await group.setMembers([]); }
+        restore.push(async () => { binding.screen = oldScreen; group.refresh(); await group.setMembers(members); await resume(group.id); });
+        if (screenTaken && active(other) && !other.session.audioOnly || !remaining.length) await other.targets.detach(guard, screenTaken);
+        binding.screen = screenTaken ? undefined : oldScreen;
+        group.refresh();
+        if (other.session.state.targetId === group.id) await other.targets.control(group.id, () => group.setMembers(remaining), remaining);
+        else await group.setMembers(remaining);
         commit(other, before.filter(id => !ids.includes(id)));
       } else {
         const target = other.session.state.targetId;
@@ -224,13 +230,13 @@ export function createPlaybackDevices(options: Options) {
       }
     }
     if (!ids.length) {
-      await runtime.targets.detach(guard);
+      await runtime.targets.detach(guard, true);
       await previous?.setMembers([]);
     } else if (shared || ids[0]!.startsWith("audio-")) {
       const group = groupFor(runtime), before = [...group.members];
       const binding = groups.get(runtime.id)!;
       if (oldScreen && oldScreen !== screen && runtime.session.state.targetId === group.id && active(runtime) && !runtime.session.audioOnly) {
-        await runtime.targets.detach(guard);
+        await runtime.targets.detach(guard, true);
         await group.setMembers([]);
       }
       binding.screen = screen;
@@ -240,7 +246,7 @@ export function createPlaybackDevices(options: Options) {
       try {
         await runtime.targets.control(group.id, () => group.setMembers(clients, initialLevels), clients);
         guard();
-        if (screen && runtime.session.state.targetId === screen && active(runtime) && !runtime.session.audioOnly) await runtime.targets.detach(guard);
+        if (screen && runtime.session.state.targetId === screen && active(runtime) && !runtime.session.audioOnly) await runtime.targets.detach(guard, true);
         await runtime.targets.move(group.id, guard, { takeover: true });
       } catch (error) {
         if (runtime.session.state.targetId !== group.id) await group.setMembers(before).catch(() => {});
@@ -250,7 +256,7 @@ export function createPlaybackDevices(options: Options) {
     } else {
       if (previous && runtime.session.state.targetId === previous.id && !(ids[0] === "native" && options.localVolume)) await directLevel(ids[0]!, requested[0]!.volume, requested[0]!.muted);
       if (previous && runtime.session.state.targetId === previous.id) {
-        await runtime.targets.detach(guard);
+        await runtime.targets.detach(guard, true);
         await previous.setMembers([]);
         if (previousBinding) { previousBinding.screen = undefined; previous.refresh(); }
       }

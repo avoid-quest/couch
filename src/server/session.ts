@@ -734,13 +734,14 @@ export function createSession(store: SessionStore, sendPlayer: (command: Playbac
       return previous;
     },
     releaseHandoff(playbackId: string) { options.releaseHandoff?.(playbackId); },
-    rendererDisconnected() {
+    rendererDisconnected(pausedIntent?: boolean) {
       cancelPlayPreflight();
       persistProgress(() => saveCheckpoint(true));
       persistProgress(progress.checkpoint);
       playIntent++; resolution?.abort(); qualityResolution?.abort(); cancelRadioRetry(); cancelContinuation();
       if (options.transferBusy?.() && state.player.playbackId) options.releaseHandoff?.(state.player.playbackId);
       else options.deactivate?.();
+      if (pausedIntent !== undefined) pendingPause = pausedIntent;
       state.player = { ...state.player, status: "unavailable", error: "The playback device disconnected. Move playback to a connected device to resume." }; broadcast();
     },
     handoffFailed(error: string) { state.player = { ...state.player, status: "error", error }; broadcast(); },
