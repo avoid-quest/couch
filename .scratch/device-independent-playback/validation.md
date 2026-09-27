@@ -1,0 +1,291 @@
+# Browser / TV iteration validation — 2026-09-27
+
+Implemented in this worktree. The native observations below are simulated, not a
+claim of libmpv/TV hardware validation or audible synchronization.
+
+## Working behavior
+
+- One stable household session, connection-owned browser endpoints and the native
+  stdio endpoint. Endpoint/group distinction is explicit; no multiroom backend added.
+- Shared shadcn output menu is separate from server selection. A registered browser
+  creates no media element until selected and sent a private load command.
+- One connection-owned HTML media element persists across React route navigation.
+- Handoff prepares paused, matches supported track choices semantically, requests a
+  fresh paused source checkpoint, seeks, changes playback attempt, confirms the
+  destination, and releases the source. Queue occurrences and session identity persist.
+- Native checkpoint requests use the existing ordered `observe` stdio message;
+  this matters because the native worker suppresses unchanged paused observations.
+- Commands are rejected during transfer. Retired attempts/connections cannot write
+  progress. Autoplay refusal keeps the destination paused with a local Play here button.
+- Destination loudness stays local. A disconnected browser leaves a resumable session;
+  Couch does not automatically start the TV.
+
+## Actual shared-browser checks
+
+Used the T3 collaborative Chromium preview at `http://localhost:1420`, the actual
+shared React application and Bun hub, and the small native peer in
+[runtime/server.ts](runtime/server.ts). That peer follows the command/observation
+pattern in `tests/linux/built-remote.ts`, in process on macOS. It exercises routing,
+not the Rust worker, libmpv, Linux packaging or physical TV output.
+
+1. **Real provider:** selected This browser, then clicked **Play Sygma Radio** on
+   Couch Home. Existing radio lookup resolved `radio:4a80fd10-0064-8227-ab1c-34521192ed92`
+   to `https://radio.syg.ma/audio.mp3`. The HTML player reported playing, readyState 3,
+   advancing time and no media error. Navigation to Settings left the same stream
+   playing at 32.727 seconds. No Couch relay or encoder was introduced.
+2. **Seekable video:** an H.264/AAC 90-second fixture was served by a separate HTTP
+   origin, `http://127.0.0.1:4118/seekable.mp4`, with byte ranges. This tests real
+   browser decoding/network/seek behavior, but is not qualification of an authenticated
+   movie provider, manifests, expiring URLs, or all codecs.
+3. **Paused round trip:** browser → simulated TV → browser observed positions
+   **22.25 → 22.25 → 22.25 seconds** (zero measured position error), speed
+   **1.5 → 1.5 → 1.5**, volume **31 → 80 → 31**, all paused. Queue and session ID
+   unchanged; playback attempt changed each way. Command-to-confirmation time was
+   **35.1 ms outbound / 39.7 ms return** with a warm local fixture and simulated TV.
+   These are development-machine observations, not hardware latency guarantees.
+4. **Playing round trip:** route navigation Home → Find kept the same element and
+   advanced its time 35.745 → 36.107 seconds. Browser → TV completed in 22.5 ms;
+   destination checkpoint 36.10881 was 0.00149 seconds beyond the immediately
+   preceding browser read (the older controller clock was 35.774393). TV → browser
+   completed in 48.3 ms at **54.10881 seconds on both sides**, playing at 1.5×.
+5. **Control only:** a second browser showed the shared queue/timeline with **zero
+   audio/video elements**. After moving playback to TV, the source browser had no
+   `src` attribute and `networkState = NETWORK_EMPTY (0)`. Closing the second browser
+   left TV playback running. This establishes absence of a browser media pipeline;
+   CPU/heap/power profiles were not measured.
+6. **Renderer disconnect:** closing the browser rendering the second queue occurrence
+   at 40 seconds left the same queue/current occurrence unavailable and resumable.
+   Another browser still had zero media elements. Choosing Move playback here recovered
+   that occurrence **paused at 40 seconds**, without automatically starting TV audio.
+7. Browser decoding exposed and led to a fix for `load()` resetting playbackRate;
+   the speed round trip above was repeated after that fix. Seeking reports loading
+   until the media element finishes the seek, rather than confirming from requested time.
+
+## Automated checks
+
+`bun run typecheck` passes. Focused regressions:
+
+```sh
+bun test --isolate \
+  src/server/playback-targets.test.ts src/server/hub.test.ts \
+  src/server/session.test.ts src/server/session-continuity.test.ts \
+  src/server/session-quality.test.ts src/server/session-autoplay.test.ts \
+  src/server/progress.test.ts src/server/subtitles.test.ts \
+  src/server/validation.test.ts src/client/session/session.test.tsx \
+  src/client/session/playback-clock.test.tsx \
+  src/client/sections/now/PlayerPage.test.tsx \
+  src/client/sections/shell/PlaybackStatus.test.tsx \
+  src/client/sections/shell/AppShell.test.tsx \
+  src/client/sections/shell/MiniPlayer.test.tsx
+```
+
+333 passed, 0 failed, 2550 assertions. Log: `.artifacts/device-independent-playback/regressions.log`.
+New tests cover round trips, destination volume, final checkpoint freshness, late
+observations, connection ownership/private delivery, refusals, incompatible tracks,
+concurrent commands, source/destination disconnect, shutdown, autoplay refusal,
+pending Play intent and native suppression of unchanged paused snapshots.
+Autoplay refusal is injected in a regression test; no claim that Chromium blocked
+this particular interactive browser session.
+
+## Limits and next useful work
+
+- Direct progressive formats supported by the destination browser; the later DASH
+  increment below adds public `.mpd` VOD. No managed HLS player, relay, conversion,
+  local-library browser delivery or Jellyfin browser profile yet.
+  Header-dependent sources, split audio/video, segments and external subtitle loads
+  fail explicitly. Native delivery remains intact. Browser audio switching uses
+  actual `audioTracks` metadata where available; subtitles remain off. Unknown audio
+  metadata allows a sole source audio track on a best-effort basis, but cannot prove
+  a selection among multiple tracks. Known incompatibilities prevent handoff.
+  Browser delay/replay-gain/subtitle upload requests fail explicitly.
+- TV is simulated. Run the same paused/playing transfer on actual libmpv hardware,
+  especially native audio-output routing and provider behavior with concurrent access.
+- No sample-accurate or gapless transfer, background-phone guarantee or multiroom claim.
+- Follow issue 02 for source-specific access/format needs discovered from real media.
+  Start with scoped access and existing compatible renditions, not blanket transcoding.
+- No workflow or packaging changes were made; no CI dispatch or `act` run was needed.
+
+## Review fixes — 2026-09-27
+
+- Idle browser volume is retained, persisted and reported before a media element
+  exists, then applied to its first load. Registration reports saved target volume.
+- Handoff commits the newly resolved delivery's private expiry/recovery context;
+  rollback restores the previous context, including an already-consumed retry.
+  Recovery callbacks never enter the renderer command payload.
+- Browser observations report available audio metadata instead of inventing an
+  audio track on video-only media. `audioTracksKnown` distinguishes unavailable
+  metadata from a known-empty list. The compatibility policy above preserves the
+  common TV-to-browser path without claiming verification of unknown tracks.
+- Autoplay uses a structured `requiresGesture` observation instead of parsing the
+  user-facing error message.
+
+After these fixes, the parent independently ran the 15-file command above plus
+`src/client/session/browser-renderer.test.ts`: **347 passed, 0 failed, 2582
+assertions across 16 files**. `bun run typecheck` and `git diff --check` pass.
+New regressions exercise idle volume, delivery recovery/rollback, video-only media,
+unknown versus empty audio metadata, multiple-track refusal and autoplay state.
+These fixes were exercised with simulated endpoint peers and happy-dom. The earlier
+real-browser playback observations above predate the fixes; no new physical TV or
+audible multiroom qualification is claimed. A supplementary Chromium module check
+could not run through preview evaluation; a subsequent read confirmed zero media
+elements and unchanged saved volume. It is not counted as playback validation.
+
+## Core-only iteration — 2026-09-27
+
+The branch now includes main at `3bd72c7d`, including the desktop remote-reachability
+fix. Its one overlapping session-hook conflict was resolved retaining both upstream
+connection/sharing behavior and browser renderer controls. No new window model or
+navigation was introduced; the agreed constraints live in `docs/architecture.md`.
+
+- Core-only startup omits the native command channel/target and publishes capabilities.
+  Browser registration is idle until explicit output selection. Native startup retains
+  its target and marks it connected on observation. HTTP/WebSocket tests cover both.
+- A control-only browser connection still accepts commands without registering a
+  renderer. Enabled and legacy capability responses register once after the baseline.
+- Browser buffering reports loading and resets between sources. Registering or losing
+  another target during a handoff no longer clears the handoff-in-progress state.
+- Disconnect → handoff → expiry recovery has regression coverage. Previously fixed
+  idle volume, audio metadata, structured autoplay and delivery rollback still pass.
+- Before output selection, both commands and the existing shell prompt say
+  “Choose a playback output.” rather than implying Core needs a desktop player.
+
+`bun run typecheck` passes. The earlier 15-file regression command plus
+`src/server/session-handoff.test.ts`, `src/client/session/browser-renderer.test.ts`
+and `src/client/session/native-selection.test.tsx` passed **364 tests, 0 failures,
+2676 assertions across 18 files**. Log:
+`.artifacts/device-independent-playback/core-only-regressions.log`.
+After the final shell-copy change, typecheck and all **15 AppShell tests** passed
+again (`core-only-shell.log`). `git diff --check` passes.
+
+A fresh Core-only Bun hub on port 4117, using the isolated existing fixture database,
+and Vite on 1420 were checked through the collaborative Chromium preview. The UI
+retained Home/Find/Saved/Settings. Discovery returned browser playback enabled and
+native playback disabled; the output menu contained browser targets only. No media
+element existed before or immediately after selecting “This browser.” Playing Sygma
+Radio loaded `https://radio.syg.ma/audio.mp3` directly, reported `readyState = 3`,
+`paused = false`, advancing time and no media error. Home → Find retained the same
+element and advanced 25.284 → 25.657 seconds. Stop released the source. This checks
+real remote browser playback and navigation, not audible output or native hardware.
+
+Independent packaged service lifecycle, receiver enrollment and multiroom remain
+unfinished. The native/TV handoff evidence remains simulated as described above.
+
+## Reproduce the browser fixture
+
+```sh
+ffmpeg -hide_banner -loglevel error \
+  -f lavfi -i testsrc2=size=640x360:rate=24 \
+  -f lavfi -i sine=frequency=440:sample_rate=48000 -t 90 \
+  -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart \
+  .scratch/device-independent-playback/runtime/seekable.mp4
+bun .scratch/device-independent-playback/runtime/server.ts
+# In another terminal:
+COUCH_PORT=4117 bun run client:dev
+```
+
+Pair at localhost:1420 with code 123456, select the browser output and play a radio
+station. The video fixture can be enqueued through the authenticated household queue
+as the direct HTTP source above. The runtime database/media are ignored artifacts;
+the fixture is explicitly a local development service with a simulated native peer.
+
+Implementation references: [HTMLMediaElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement),
+[play() promise / autoplay handling](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/play),
+[shadcn menu catalog](https://ui.shadcn.com/docs/components/radix/dropdown-menu).
+The output picker reuses Couch's existing shadcn components; no custom menu framework
+or card container was introduced.
+
+## Direct DASH VOD increment — 2026-09-27
+
+Current main was fetched and remained `3bd72c7d`, already integrated. Existing tracked
+and untracked work was retained. This increment changes the browser renderer and adds
+Shaka Player 5.2.12; no UI, window/navigation/player layout, shared protocol, Core
+authority, packaging or workflow changes were needed.
+
+### Demonstrated gap and result
+
+The public Angel One manifest from Shaka's official basic-usage example,
+`https://storage.googleapis.com/shaka-demo-assets/angel-one/dash.mpd`, failed native
+Chromium media loading with error **4**, readyState **0**. The public hls.js example
+loaded natively on this Chromium, so HLS was not claimed as the demonstrated failure.
+
+The renderer now lazily loads Shaka only for HTTP(S) URLs whose pathname ends in
+`.mpd` (query strings supported). Provider manifest/audio/video resources stay direct,
+including the manifest's separately hosted audio/video streams. Existing progressive
+and native-HLS behavior stays intact. Header-dependent delivery and separately supplied
+`audioSource` remain rejected. Shaka retains adaptive renditions under `maxVideoHeight`.
+
+Paused preparation, seeking, speed, output-local volume and the existing autoplay
+flow are retained. DASH observations report intended speed while Shaka may temporarily
+set the effective element rate to zero for buffering. Critical errors report only a
+code and destroy the adapter. Replacement waits for asynchronous detach/destroy before
+reusing the element; stop during pending import and previous progressive-source cleanup
+are covered. Unknown DASH audio metadata is explicit; subtitles are disabled.
+
+### Actual shared-app browser evidence
+
+Used the existing Core-only hub on 4117, shared React app/Vite on 1420, isolated
+fixture database and two real collaborative Chromium tabs. No simulated native target
+was involved in these new browser-to-browser checks.
+
+- Angel One played through Couch: readyState **4**, duration **60 seconds**, advancing
+  position, no media error. Network entries showed provider-hosted `.mpd`, VP9 video
+  and AAC audio resources; no Couch relay or encoder was introduced.
+- Home → Find retained the same media element; observed time **17.565798 → 24.238965**.
+- Pause, seek and speed commands reached **22.25 seconds**, paused at **1.5×**.
+- A newly opened controller had **zero audio/video elements and zero Shaka/Angel One
+  resource requests** before selection.
+- Paused handoff to the second browser preserved **22.25 seconds, 1.5×**, queue
+  occurrence and session identity. The first browser had no `src`, no `srcObject`,
+  and `networkState = 0`. Resuming and handing back succeeded while playing at **1.5×**.
+  No precise playing-handoff latency or drift was measured.
+- Reloading the rendering tab after pausing/seeking to **32 seconds** left the same
+  occurrence unavailable at that checkpoint. Selecting the other browser recovered
+  it **paused at 32 seconds, 1.5×**. Stop left Core idle and released the media source.
+
+### Additional real renderer checks
+
+These used the actual renderer module in Chromium, independently of the Core command
+path; distinguish them from the shared-app checks above.
+
+- A **240p** cap selected only the 240p video resources and rendered **300×240**,
+  paused at the requested **10 seconds**.
+- A missing public manifest produced sanitized DASH error **1001**, status **error**,
+  and released its MediaSource (`srcObject = null`, networkState **0**). No provider
+  URL or response body was exposed in the reported error.
+- After the final progressive-source cleanup fix, the capped paused load and Stop
+  were repeated successfully. Evidence: `.artifacts/device-independent-playback/
+  dash-browser-check.json`. Auxiliary renderer instances were closed.
+
+### Final automated checks
+
+`bun run typecheck` and `git diff --check` pass. The earlier regression command plus
+`session-handoff.test.ts`, `browser-renderer.test.ts`, `native-selection.test.tsx` and
+`web-media.test.ts` passed **396 tests, 0 failures, 2899 assertions across 19 files**.
+Log: `.artifacts/device-independent-playback/dash-complete-regressions.log`.
+
+The **15 renderer tests** include delayed import/attach/destruction, stop/close,
+progressive replacement, sanitized fatal failure, zero effective buffering rate,
+speed restoration and cap/paused-start configuration. Test doubles cover library
+lifecycle behavior; the browser checks above establish actual decoding/network use.
+
+`bunx vite build --outDir ../../.artifacts/device-independent-playback/dash-verified-dist`
+succeeds, including PWA generation. Shaka is a separate dynamic chunk (about **815 kB**,
+**269 kB gzip**); Vite reports its standard large-chunk advisory. The generated worker
+precaches it with the existing shell policy; this is not a stream fetch or active
+media pipeline. This frontend build is not packaged desktop qualification. Log:
+`.artifacts/device-independent-playback/dash-verified-build.log`. No CI dispatch or
+workflow/packaging change occurred, so no `act` run was required.
+
+### Remaining qualification
+
+Public DASH VOD is supported; this sample does not establish an authenticated provider
+account. Header/cookie-dependent media, opaque/extensionless manifest URLs, explicit
+DASH audio switching/subtitles, DRM, live/DVR timeline behavior, expiring URLs and
+Jellyfin browser negotiation remain issue 02 work. Safari/native HLS was not tested.
+The new adapter has no physical TV/libmpv qualification; previous native evidence is
+still simulated. Independent Core/native receiver lifecycle and real synchronized
+groups remain issues 05 and 03, with their resolved issue-01 blockers reconciled.
+
+Implementation references: [Shaka basic usage](https://shaka-project.github.io/shaka-player/docs/api/tutorial-basic-usage.html),
+[Shaka Player API](https://shaka-project.github.io/shaka-player/docs/api/shaka.Player.html),
+[Shaka restrictions](https://shaka-project.github.io/shaka-player/docs/api/shaka.extern.html#.Restrictions).

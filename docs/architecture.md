@@ -1,20 +1,97 @@
 # Current architecture
 
-Couch has one TV playback instance and multiple independent browser remotes.
-The Bun coordinator owns the household queue, playback intent, authorization and
-persistent state. Tauri owns the native window and libmpv transport; native
-observations return to the coordinator. A remote never resolves private playback
-URLs or becomes another playback authority.
+Couch separates Core, its UI clients, playback targets and media delivery. The
+browser uses the shared application UI: it can control another target or render
+locally. Desktop/TV presentation, access permissions and playback location are
+independent choices. [The glossary](../CONTEXT.md) defines these terms.
 
-All supported native desktop builds include playback. **This computer** runs
-the local host/player; **Another Couch** controls a selected host in the same
-bundled app window while the local player stays stopped. This installation
-retains its own private maintenance coordinator and updater, independent of the
-selected host's availability and authority. Browser remotes remain controllers;
-Desktop/TV presentation and Controller/Administrator roles are separate choices.
-The serialized `clientOnly` build/artifact field remains fixed to `false` for
-verification compatibility. Retained selections, exact-origin pairings, data,
-legacy desktop protocol markers and historical update journals keep their meaning.
+Preserve the existing app experience: window model, navigation, player layout,
+desktop/TV presentation and design system. Extend those workflows with output
+selection and broader delivery support. Separating runtime responsibilities does
+not call for a new shell, window concept or replacement application.
+
+## Runtime roles
+
+The agreed model supports these compositions on Windows, Linux and macOS:
+
+| Composition | Responsibility | Current implementation |
+| --- | --- | --- |
+| Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. Independent packaged service installation remains work. |
+| Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. Their lifecycles are still coupled. |
+| Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | Separate receiver enrollment and Snapcast/Sendspin adapters remain work. |
+
+Server capabilities and target capabilities are separate. Available behavior
+depends on permissions, enabled integrations/helpers, source access and the selected
+target's formats/controls. Native helpers expose typed operations on their own
+machine; browser requests do not grant arbitrary OS command execution. Output volume,
+HDMI/display/Bluetooth controls and decoder settings belong to the intended target.
+
+`/api/connection` advertises coarse `browserPlayback` and `nativePlayback`
+capabilities. Native playback means a command channel exists; the target's
+`connected` flag reports whether its player has been observed. Neither flag promises
+support for every source. `/api/tools` separately reports helper availability.
+Do not infer a renderer from the server's OS or installed media tools.
+
+**This computer** uses the bundled local Core/player; **Another Couch** selects a
+remote Core in the same app window and stops local playback. It does not yet enroll
+that local native player as a target of the remote Core. The installation retains
+its private maintenance coordinator and updater. Server selection and target
+selection must stay distinct. The serialized `clientOnly` artifact field remains
+`false`; it does not describe whether a particular Core currently has a renderer.
+
+## Playback ownership and delivery
+
+The current implementation has one Core-owned household session. Core owns queue,
+intent, assignment and persisted progress; the assigned renderer supplies observed
+position and playback state. UI clients receive snapshots and compact playback
+clocks over the existing authenticated WebSocket. They do not each own a competing
+queue. Multiple simultaneous/private sessions are a later extension.
+
+| Code | Boundary |
+| --- | --- |
+| `src/server/hub.ts`, `store.ts` | Authorization, integrations, persistence and protocol dispatch. |
+| `src/server/session.ts`, `progress.ts` | Queue policy, resolution, intent and progress continuity. |
+| `src/server/playback-targets.ts` | Optional native endpoint, socket-owned browser endpoints, assignment and handoff. |
+| `src/client/session/session.ts`, `browser-renderer.ts` | UI connection and browser rendering above route lifetime. |
+| `src/main.ts`, `src-tauri/src/player.rs` | Existing private native command/observation path. |
+
+Selecting a browser is explicit. Registering a target does not start playback or
+create a media element. Private delivery commands go only to the selected/preparing
+endpoint; only assigned observations advance session progress. Closing a controller
+leaves another target playing; closing the rendering browser loses that target.
+
+Handoff prepares the destination paused, checks compatible track choices, then takes
+a confirmed source checkpoint before assigning and resuming the destination. The
+queue stays in Core. Playback speed and compatible selections follow the session;
+destination volume stays local. Failure rolls back only when destination silence
+is confirmed. Browser autoplay can require a gesture on the destination. This is
+approximate continuity, not synchronized multiroom playback.
+
+Most sources are remote. Prefer provider-to-renderer delivery; Core does not need
+to carry the media bytes to coordinate playback. Keep idle controllers inexpensive
+through lazy rendering and compact clock updates. Choose an existing compatible
+rendition before adding relay, remuxing or transcoding for a demonstrated need.
+The browser path handles compatible direct HTTP(S) media and public, CORS-enabled
+DASH VOD at `.mpd` URLs through a lazy Shaka Player adapter. DASH keeps upstream
+adaptive renditions under the existing height cap; Core does not relay or encode.
+The adapter releases its pipeline on stop/replacement/fatal failure and preserves
+commanded speed while Shaka temporarily pauses its clock for buffering. Separate
+audio/video URLs, required headers, clip segments and external subtitles are still
+rejected; Jellyfin browser delivery and broader format adaptation remain unfinished.
+DASH audio selection and subtitles are not yet exposed; audio metadata stays unknown
+rather than inventing a track. Those are delivery limits, not a
+reason to design a reduced browser UI.
+
+Future Snapcast/Sendspin groups fit as targets whose backend owns timing and member
+synchronization; Couch keeps queue and intent. Build a backend adapter when needed
+instead of teaching every UI a separate group-control protocol.
+
+For the next source-access gap, consult
+[browser delivery research](research/browser-media-delivery.md). For group adapters,
+consult [multiroom research](research/multiroom-snapcast-sendspin.md). The
+[PWA runtime exploration](research/couch-runtime-options.md) is an alternative
+deployment proposal, not a prerequisite or the current implementation plan.
 
 ## Frontend delivery
 

@@ -1,5 +1,6 @@
 - Follow YAGNI. Prefer small, readable changes and one-liners where sufficient. 
 - Prefer first class solutions. Check official docs.
+- Architecture: read [docs/architecture.md](docs/architecture.md) when changing runtime roles, playback routing, client capabilities, or media delivery.
 - UI work must preserve Couch's design system and prefer shadcn. Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
 - Compose UI with open typography, whitespace, and divided rows. Keep content flat rather than wrapping it in Card or card-like bordered panels, especially on the pairing screen.
 - Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`.
