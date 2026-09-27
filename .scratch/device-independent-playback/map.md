@@ -1,6 +1,6 @@
 # Device-independent playback
 
-Status: active
+Status: implementation complete for supported workflows; qualification limits below
 
 ## Current direction
 
@@ -20,34 +20,41 @@ It is not an implementation dependency or a priority for future agents.
 | --- | --- | --- |
 | [01 Handoff](issues/01-browser-tv-handoff.md) | Implemented | Hardware qualification remains separate. |
 | [02 Client sources](issues/02-remote-source-compatibility.md) | Implemented | Physical/platform qualification remains separate. |
-| [03 Groups](issues/03-multiroom-output.md) | Snapcast implemented | Sendspin adapter, pairing and qualified recovery/transfer. |
-| [04 Adaptation](issues/04-media-adaptation.md) | Revised scope | Client capability/rendition selection; conversion only for a new demonstrated need. |
+| [03 Groups](issues/03-multiroom-output.md) | Snapcast and optional Sendspin host/client implemented | Physical speaker drift/latency and arbitrary receiver qualification. |
+| [04 Adaptation](issues/04-media-adaptation.md) | Client HLS/DASH adaptation and caps implemented | Further webpage rendition selection waits for a demonstrated provider need. |
 | [05 Core/receivers](issues/05-core-and-receivers.md) | Implemented | Host boot and physical/platform qualification remain separate. |
 | [06 Independent sessions](issues/06-independent-sessions.md) | Implemented | Disk/HTTP/WS isolation and real browser workflows pass. |
 | [07 External access](issues/07-internet-access.md) | Admission/proxy implemented | Actual browser topology qualification. |
-| [08 UI parity](issues/08-shared-ui-parity.md) | Existing flows checked | Extend checks for new session/group controls. |
+| [08 UI parity](issues/08-shared-ui-parity.md) | Session/group flows checked | Physical desktop/TV platform qualification remains separate. |
 
 ## Coordination
 
-The active native stack is #630, through independent-session PR #629. The Python
+The active PR chain includes independent sessions #629, TypeScript Sendspin hosting
+#631 and official JS Sendspin client #632, followed by this validation handoff. The Python
 Sendspin experiment (#628) is closed and preserved on
 `archive/sendspin-python-20260927`; it is removed from the application. The user
-requires both optional Sendspin roles within TypeScript/Rust: clients join an
-existing server, and Core can host groups. Planned owning layers are Sendspin host
-then Sendspin client. Official SDK client interoperability with a TypeScript host
-library is being qualified. Nothing is merged or released.
+requires both independent optional roles: clients join an existing server, and Core
+can host groups. Both are implemented. Hosting is opt-in; Couch enrollment provisions
+owner-bound PSKs. Host interoperability uses AES-GCM; its library lacks PIN server
+onboarding. The client uses official pairing when connecting to an external server.
+Nothing is merged or released. Existing main remains `3bd72c7d` after fetch.
 
 Runtime costs: client video decoding/rendering is the main direct-play workload.
 Core source resolution is transient; group PCM decoding/distribution is the central
-media workload. Measure concurrent sessions and idle controllers after integration,
-including CPU, memory, Core network traffic and command latency. Do not infer
-performance from passing functional tests.
+media workload. Ordinary direct playback keeps provider traffic on renderers. Hosted
+group PCM is 192 kB/s per receiver before overhead. Do not infer physical performance
+or total decoding cost from the Core-only process measurements below.
 
 Detailed existing receipts and unqualified environments: [validation.md](validation.md).
 
-Current receipts: 1,771 core tests pass, ten environment/network tests skip; typecheck
-passes. Real browser tests cover independent VOD/live playback, mode roundtrips,
-explicit takeover, move back and unchanged desktop/TV-sized layouts. Coordination
+Current code receipt `07f91ecf`: 1,804 core tests plus three clock tests pass, ten
+environment/network tests skip; typecheck and production build pass. Compiled macOS
+Core accepts the encrypted SDK and serves all 58 embedded assets byte-identically.
+Real browser tests cover independent VOD/live playback, mode roundtrips, explicit
+takeover, move back, existing desktop/TV-sized layouts, Sendspin group controls,
+explicit join/leave and Leave while Core is offline. Coordination
 benchmark: two simulated renderers plus 20 idle controllers, 1.01% of one CPU core,
-70.94–73.50 MB RSS, command p95 1.49 ms. These numbers exclude media decoding and
-physical output costs. Detailed receipts remain in validation and ignored artifacts.
+70.94–73.50 MB RSS, command p95 1.49 ms. Actual two-client Sendspin software playback:
+1.74% Core CPU, 115.31–120.80 MB RSS over 15 seconds, excluding FFmpeg/browser CPU.
+Two Web Audio graphs passed pause/seek/speed/Stop; physical speakers remain unqualified.
+Detailed receipts remain in validation and ignored artifacts.

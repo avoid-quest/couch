@@ -1,5 +1,47 @@
 ## Current client-first integration — 2026-09-27
 
+Integrated Sendspin host/client revision `07f91ecf`: typecheck and production build
+pass. Full suite: 1,804 core tests and three clock tests pass, ten core tests skip,
+zero failures. A real compiled arm64 macOS Core enrolled and connected the official
+SDK over AES-GCM; all 58 embedded assets matched `dist` byte for byte. Receipts:
+`.artifacts/sendspin-integrated-build`. This does not qualify Linux packaging.
+
+The active implementation uses `@sonn-audio/node-sendspin` 0.6.2 inside Bun and
+official `@sendspin/sendspin-js` 5.0.0 in the client. Four real protocol/PCM tests,
+five hub enrollment tests and five identity-store tests cover admission, durable
+PSKs, ownership, revocation, sharing disable, command routing and sustained PCM.
+Actual browser qualification caught and fixed integer microsecond timestamps and
+the enrollment payload; existing clock tests caught and fixed context churn.
+
+Two actual official SDK Web Audio graphs passed 15 seconds of sustained playback,
+pause, seek to 30 seconds at 1.25× and Stop. Separate interruption receipts show
+pause/stop graph silence within 53 ms, socket-loss drain within 511 ms and active
+Leave closing its AudioContext in 0.2 ms. Sampling was at 10 ms with a 2,048-frame
+analysis window. These are software observations, not physical output or speaker
+drift measurements. Portable fixture: `tests/linux/sendspin.ts`; receipts:
+`.artifacts/sendspin-webaudio`, including `portable-results.json`.
+
+The integrated UI passed This Couch enrollment/Join, direct-renderer withdrawal,
+first-member selection, group playback, pause/resume, local volume/mute and Leave.
+Leave also worked after Core stopped; restoring the direct endpoint was observed.
+Receipt: `ui-results.json` in the same directory. The preview screenshot was stale,
+so it is not visual evidence. External-server PIN pairing is implemented through
+the SDK but was not independently exercised against another server here.
+
+The production registry/session and real Sendspin host transferred a queue from a
+simulated browser endpoint at 32 seconds/1.25× to two actual SDK Web Audio outputs,
+then back at 51.2008 seconds after 15 seconds of playback. Queue/speed/checkpoint
+were retained, old group observations could not overwrite progress, and both audio
+graphs measured zero RMS after return. Receipt: `registry-handoff-results.json`.
+This qualifies the measured software group, not actual direct-browser handoff or
+physical speakers; the browser edge in this fixture was simulated explicitly.
+
+During the portable fixture's 15.005-second steady-play interval, the Core process
+used 1.74% of one CPU core and RSS rose from 115.31 to 120.80 MB. This excludes the
+FFmpeg child, browser decoding/scheduling and hardware costs. Group network output
+scales with receivers; 48 kHz stereo signed-16 PCM is 192 kB/s per receiver before
+protocol overhead. Direct playback keeps media transfer/decoding on the client.
+
 Independent-session layer: `052094a2`, PR #629. Typecheck passed; full core suite
 1,771 pass / ten skip / zero fail. Focused real-hub/native/external tests 136 pass,
 1,597 assertions. Browser receipts: `.artifacts/independent-browser-proof` and
@@ -9,7 +51,7 @@ actual network/control traffic, not media decoder CPU).
 
 Python Sendspin PR #628 is closed and removed from active code. Its receipts below
 are historical experiments, not the selected implementation. Both optional
-Sendspin roles now target the existing TypeScript/Rust stack.
+Sendspin roles are implemented in the existing TypeScript stack, PRs #631 and #632.
 
 > Scope correction, 2026-09-27: historical Jellyfin browser relay/adaptation results
 > below are archived evidence. That work is abandoned by user instruction. Current

@@ -45,3 +45,14 @@ Source management now uses host/administrator identity consistently with route g
 Typecheck and 68 affected UI tests pass. These are UI regression tests, not physical
 audio routing qualification. Broader source compatibility remains issue 02; receiver
 and group-specific UI can extend these capability rules as those adapters arrive.
+
+## Session and group extension — 2026-09-27
+
+Existing controls now offer personal playback, household control/join and explicit
+takeover. Real browser journeys cover simultaneous VOD/live sessions, mode switches,
+move back, route lifetime and desktop/TV-sized layouts. Sendspin uses the existing
+output menu and a flat shared dialog for This Couch/Another server, gesture-driven
+Join, local volume/mute, transport and Leave. Live checks cover first-member join,
+group playback and Leave with Core offline. Leaving restores direct rendering.
+Clock-only updates still leave browsing/settings shells stable; regression tests
+pass unchanged. No window model, navigation or player layout was replaced.

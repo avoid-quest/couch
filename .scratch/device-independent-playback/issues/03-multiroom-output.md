@@ -1,7 +1,7 @@
 # Play remote audio through a synchronized output group
 
 Type: task
-Status: claimed
+Status: implemented; qualification limits recorded
 Blocked by: none
 
 ## Goal
@@ -54,8 +54,21 @@ returned to Chromium paused at 48.175 seconds/1.25×. The group sink recorded ze
 PCM after transfer. Full check: 1717 core tests passed, ten skipped, three clock
 tests passed, typecheck passed. Exact-revision backend qualification follows commit.
 
-Sendspin's Python helper was rejected by the user and removed on 2026-09-27.
-Preserve its archived commits and evidence; they are not an active implementation.
-Use Couch's existing TypeScript/Rust stack. The official SDKs provide client roles;
-resolve the hosting-versus-client boundary before writing the replacement.
-Physical speaker drift/latency remains unmeasured for both backends.
+## Sendspin implementation — 2026-09-27
+
+Optional TypeScript Core hosting uses `@sonn-audio/node-sendspin` 0.6.2; independent
+client mode uses official `@sendspin/sendspin-js` 5.0.0. Existing output controls
+manage membership and volume. Durable owner-bound enrollment, revocation, encrypted
+admission, bounded PCM, pause/seek/stop, loss recovery and explicit client Leave are
+implemented. See [configuration and interoperability limits](../../../docs/sendspin.md).
+
+Two actual Web Audio clients passed sustained playback, pause, seek, speed and Stop.
+Software graph silence followed pause/stop within 53 ms; socket loss drained within
+511 ms. These measurements do not qualify physical speakers or arbitrary clients.
+The host requires AES-GCM and provisioned PSKs; server-side PIN onboarding is not
+available in its library. Group transfer requires explicit qualification of the
+actual output configuration, not just successful enrollment.
+
+The rejected Python experiment is preserved on `archive/sendspin-python-20260927`
+and closed PR #628, outside active ancestry. Physical speaker drift/latency remains
+unmeasured for both backends. Detailed receipts are in [validation](../validation.md).

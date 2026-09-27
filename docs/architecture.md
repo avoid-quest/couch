@@ -19,7 +19,7 @@ The agreed model supports these compositions on Windows, Linux and macOS:
 | Core only | Library, integrations/tools, persistence, authorization and sessions; no local player required. | `bun src/main.ts` runs without a native command channel and advertises no native target. The compiled executable runs independently with the documented Linux systemd unit. |
 | Core plus local UI/renderer | The same server capabilities, with local screen, HDMI and sound through native playback. | Tauri launches the Bun sidecar and libmpv worker. The bundled sidecar follows the standalone app; an independent Core can serve explicitly enrolled native receivers. |
 | Browser UI, optionally rendering | Full shared browsing/management/control workflows; local playback where delivery and browser support permit it. | Authenticated HTTP/WebSocket client and a connection-owned browser renderer. Source and UI parity remain incremental work. |
-| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. A configured Snapcast group receives bounded PCM; Snapcast owns synchronization. |
+| Additional native receiver or output group | Another destination controlled by the chosen Core. | A paired native client offers its Tauri player automatically. Optional Snapcast and Sendspin groups receive bounded PCM; their backends own synchronization. |
 
 Server capabilities and target capabilities are separate. Available behavior
 depends on permissions, enabled integrations/helpers, source access and the selected
@@ -126,9 +126,21 @@ fences new playback for 750ms after Core restart. Removed speakers are assigned 
 an idle stream, and active foreign groups cannot be silently taken over. See
 [Snapcast configuration and limits](snapcast.md).
 
-Sendspin integration is being revised around Couch's existing TypeScript/Rust stack.
-The Python server-helper experiment is archived. Official JS/Rust libraries expose
-client roles; hosting a group and joining an existing group are separate capabilities.
+Sendspin has two independent optional roles. Core hosts an encrypted group through
+`@sonn-audio/node-sendspin`; a UI client joins this Core or another server through
+the official `@sendspin/sendspin-js` renderer. Hosting is disabled unless configured.
+Joining requires an explicit audio gesture and suspends the client's direct renderer;
+leaving restores it. Connection ownership survives navigation, and active client
+controls remain available when Core is offline. The existing window and player stay
+unchanged. There is no Python runtime.
+
+Core enrolls its own clients with durable, owner-bound PSKs through existing pairing;
+revocation disconnects their encrypted sessions. Bun interoperability currently uses
+AES-GCM. External receivers need compatible PSK provisioning; this host dependency
+does not provide PIN onboarding. The client can use the official pairing flow with
+other servers. A shared PCM decoder feeds one group timeline with bounded buffering.
+Unqualified outputs cannot promise silent handoff; explicitly qualified software
+identities use a one-second drain fence. See [Sendspin roles and limits](sendspin.md).
 
 For client playback API questions, consult
 [browser delivery research](research/browser-media-delivery.md) selectively. Its relay
