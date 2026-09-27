@@ -1,7 +1,7 @@
 # Let people play independently without sharing every queue
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 
 ## Goal
@@ -46,3 +46,19 @@ requires the previous output to stop safely. Opening a client never steals playb
 UI separates independent Play here, Move this session and joining an authorized
 group timeline. Measure two concurrent sessions plus idle controllers after the
 functional isolation tests pass.
+
+## Verified result — 2026-09-27
+
+Private stores, session-owned attempts/subtitles, global output reservations, scoped
+HTTP/WebSocket delivery and existing-UI session selection are implemented. Twelve
+real-hub integration tests cover isolation, disk restart, revocation, diagnostics
+privacy, update-idle retirement, source-change cancellation and live seeking.
+Actual browser checks passed simultaneous VOD/live playback, private/household mode
+roundtrips, explicit takeover and move back. Live handoff preserves distance behind
+the live edge when renderer timelines differ. Viewport checks preserve the existing
+app; native TV hardware remains separate qualification.
+
+The 15-second coordination benchmark used real HTTP/WebSockets, two simulated
+renderers and 20 idle controllers: 1.01% of one CPU core, 70.94–73.50 MB RSS, p50
+0.56 ms / p95 1.49 ms command RTT. Idle controllers fetched no media. Decoder and
+physical output costs are not included.

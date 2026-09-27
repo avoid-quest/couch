@@ -1,3 +1,16 @@
+## Current client-first integration — 2026-09-27
+
+Independent-session layer: `052094a2`, PR #629. Typecheck passed; full core suite
+1,771 pass / ten skip / zero fail. Focused real-hub/native/external tests 136 pass,
+1,597 assertions. Browser receipts: `.artifacts/independent-browser-proof` and
+`.artifacts/browser-manifest-proof`. Performance receipt:
+`.artifacts/independent-sessions-performance-final/report.json` (simulated renderers,
+actual network/control traffic, not media decoder CPU).
+
+Python Sendspin PR #628 is closed and removed from active code. Its receipts below
+are historical experiments, not the selected implementation. Both optional
+Sendspin roles now target the existing TypeScript/Rust stack.
+
 > Scope correction, 2026-09-27: historical Jellyfin browser relay/adaptation results
 > below are archived evidence. That work is abandoned by user instruction. Current
 > direction and active completion criteria are in map.md and the issue files.

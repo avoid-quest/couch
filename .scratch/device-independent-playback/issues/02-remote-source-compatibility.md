@@ -1,7 +1,7 @@
 # Client-first remote playback
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 
 ## Goal
