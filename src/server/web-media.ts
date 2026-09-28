@@ -3,7 +3,7 @@ import type { VideoQuality } from "../shared/protocol";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
-export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; maxVideoHeight?: number; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { source: string; audioSource?: string; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -35,11 +35,6 @@ function headers(value: unknown): Record<string, string> {
 
 function selectedSource(info: Metadata): string {
   if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
-  // A DASH fragment base URL is not a playable media file. Give mpv the manifest.
-  if (info.protocol === "http_dash_segments") {
-    if (typeof info.manifest_url !== "string") throw new Error("This website's segmented format is not supported yet.");
-    return mediaUrl(info.manifest_url);
-  }
   if (info.protocol !== undefined && !["http", "https", "m3u8", "m3u8_native"].includes(String(info.protocol))) throw new Error("This website's media transport is not supported yet.");
   return mediaUrl(info.url);
 }
@@ -68,38 +63,32 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
   return metadata;
 }
 
-function parseMedia(info: Metadata, quality: VideoQuality): WebMediaSource {
+function parseMedia(info: Metadata): WebMediaSource {
   if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
   if (!Array.isArray(selected) || !selected.length || selected.length > 2 || !selected.every(object)) throw new Error("The website returned an unsupported combination of media streams.");
-  const baseHeaders = headers(info.http_headers);
-  const streamHeaders = selected.map(stream => ({ ...baseHeaders, ...headers(stream.http_headers) }));
-  const sharedHeaders = streamHeaders[0]!;
-  // libmpv applies one header map to both URLs, so even an extra header would cross stream boundaries.
-  if (streamHeaders.some(fields => Object.keys(fields).length !== Object.keys(sharedHeaders).length || Object.entries(sharedHeaders).some(([key, value]) => fields[key] !== value))) throw new Error("This website requires different headers for its audio and video streams, which is not supported yet.");
   let source: string;
   let audioSource: string | undefined;
-  const video = selected.find(stream => stream.vcodec !== "none");
   if (selected.length === 1) source = selectedSource(selected[0]!);
   else {
+    const video = selected.find(stream => stream.vcodec !== "none");
     const audio = selected.find(stream => stream.vcodec === "none" && stream.acodec !== "none");
     if (!video || !audio) throw new Error("The website returned an unsupported combination of media streams.");
     source = selectedSource(video);
-    const audioUrl = selectedSource(audio);
-    // The same DASH manifest already contains both sets of tracks.
-    if (audioUrl !== source) audioSource = audioUrl;
+    audioSource = selectedSource(audio);
   }
-  // DASH manifests contain every representation; the native demuxer applies this cap.
-  const maxVideoHeight = video?.protocol === "http_dash_segments" && quality !== "best" ? Number(quality.slice(0, -1)) : undefined;
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(Object.keys(sharedHeaders).length ? { headers: sharedHeaders } : {}), ...(maxVideoHeight !== undefined ? { maxVideoHeight } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  return { source, ...(audioSource ? { audioSource } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
+// Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it).
+const playable = "[protocol!*=dash]";
+
 function formatSelector(quality: VideoQuality): string {
-  if (quality === "best") return "bv*+ba/b";
+  if (quality === "best") return `bv*${playable}+ba${playable}/b${playable}`;
   if (!["1080p", "720p", "480p"].includes(quality)) throw new Error("Choose an available video quality.");
   const filter = `[height<=?${quality.slice(0, -1)}]`;
-  return `bv*${filter}+ba/b${filter}`;
+  return `bv*${filter}${playable}+ba${playable}/b${filter}${playable}`;
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
@@ -114,7 +103,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const sort = youtube && !vp9 ? ["--format-sort", "res,fps,vcodec:h264,acodec:aac"] : youtube && quality === "auto" ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
-    const media = parseMedia(info, selectedQuality);
+    const media = parseMedia(info);
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
     // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
     // its own headers, opens the master playlist instead.
@@ -132,7 +121,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       media.expiry = { at, recover: async cancellation => {
         if (Date.now() < at) return null;
         cancellation.throwIfAborted();
-        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
+        const response = await fetch(media.source, { headers: { ...headers(info.http_headers), Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;

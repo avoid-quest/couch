@@ -147,9 +147,9 @@ export async function createHub(options: HubOptions) {
     systemAudio,
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
-    resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
+    resolveSource: (entry, playbackId, signal, fromStart) => {
       if (entry.source.startsWith("web:")) return streamingCommunityOrigin(entry.source.slice(4)).then(origin => resolveWebMedia(entry.source.slice(4), signal, entry.quality, origin, renderer?.data.vp9 ?? true));
-      if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
+      if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) {
         const station = radio.getPlayable(entry.source.slice(6));
         radioProgramme?.load(playbackId, entry.source, station.source);

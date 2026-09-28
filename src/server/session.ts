@@ -10,9 +10,9 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
-  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
+  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
   // Play starts media on the Device that asked (#644); Core picks that Device's newest tab.
@@ -68,7 +68,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const { player, ...rest } = state;
     const { position, duration, ...details } = player;
     const playerDetails = JSON.stringify(details);
-    // Session fields are replaced by their owners; native track arrays can be
+    // Session fields are replaced by their owners; reported track arrays can be
     // freshly allocated but equal. Never walk or serialize the household queue.
     const clockOnly = observation && published && playerDetails === publishedPlayer
       && Object.keys({ ...published, ...rest }).every(key => Reflect.get(published!, key) === Reflect.get(rest, key));
@@ -302,9 +302,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     finishProgress();
     state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
       if (!admitted()) return;
-      try { play(entry!.id, true, true, () => {}, false, playedBy); } catch { /* The attempt already published its failure. */ }
+      try { play(entry!.id, true, true, () => {}, playedBy); } catch { /* The attempt already published its failure. */ }
     }) : null;
-    // Ignore all later native observations and controls for the failed load, including Stop's idle acknowledgement.
+    // Ignore all later player reports and controls for the failed load, including Stop's idle acknowledgement.
     state.player = {
       ...state.player, playbackId: crypto.randomUUID(), status: state.radioRetry?.retryAt != null ? "loading" : "error",
       nowPlaying: null, seekable: false, tracks: [], chapters: [],
@@ -315,7 +315,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     return true;
   };
   const assertCurrentPlay = (intent: number) => { if (intent !== playIntent) throw new Error(PLAY_CANCELED); };
-  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue, context?: PlaybackContinuation | null, preserveContext = false) => {
+  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue, context?: PlaybackContinuation | null, preserveContext = false) => {
     authorize();
     available();
     options.prepareAudio?.();
@@ -367,10 +367,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       broadcast();
     };
     try {
-      const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart, goLive) ?? { source: entry.source };
+      const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart) ?? { source: entry.source };
       const load = ({ audioOnly: sourceAudioOnly, metadata, radio, subtitleWarning: warning, expiry: sourceExpiry, ...media }: MediaSource) => {
         if (!admitted() || state.player.playbackId !== playbackId) return;
-        audioOnly = sourceAudioOnly === true && !media.segment;
+        audioOnly = sourceAudioOnly === true;
         authorize();
         subtitleWarning = warning ?? null;
         expiry = sourceExpiry;
@@ -404,7 +404,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       && state.currentEntryId === entry!.id && ["playing", "paused"].includes(state.player.status);
     try {
       // Resolve while the old stream continues. Stop, Next or another quality choice cancels this request.
-      const fresh = await options.resolveSource({ ...entry!, quality: action.quality }, playbackId, signal, false, false);
+      const fresh = await options.resolveSource({ ...entry!, quality: action.quality }, playbackId, signal, false);
       if (!current()) throw new Error("Quality change canceled because playback changed.");
       authorize();
       if (fresh.audioOnly || fresh.radio) throw new Error("This source has no video quality to change.");
@@ -466,8 +466,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const following = nextCandidate();
     if (!following) return false;
     const manual = state.queue.some(entry => entry.id === following.id);
-    if (manual) play(following.id, false, false, authorize, false, playedBy, [], state.queue, afterManualEntry(following), true);
-    else play(following.id, false, false, authorize, false, playedBy, [], automaticQueue(following), remainingContinuation());
+    if (manual) play(following.id, false, false, authorize, playedBy, [], state.queue, afterManualEntry(following), true);
+    else play(following.id, false, false, authorize, playedBy, [], automaticQueue(following), remainingContinuation());
     return true;
   };
   const next = (authorize = () => {}, playedBy?: PlaybackActor) => {
@@ -501,7 +501,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     }
     const added = entries.map(entry => ({ ...entry, addedBy: playedBy ? { ...playedBy } : entry.addedBy }));
     options.render?.(playedBy);
-    play(added[0]!.id, fromStart, false, authorize, false, playedBy, added.map(entry => entry.id), [...state.queue, ...added], context);
+    play(added[0]!.id, fromStart, false, authorize, playedBy, added.map(entry => entry.id), [...state.queue, ...added], context);
     return added;
   };
 
@@ -599,7 +599,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) {
       assertCurrentPlay(intent);
       options.render?.(playedBy);
-      play(entryId, fromStart, false, authorize, false, playedBy, selectedEntryIds);
+      play(entryId, fromStart, false, authorize, playedBy, selectedEntryIds);
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();
@@ -610,7 +610,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
       if (!existing && state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
       const entry = existing ?? { ...saved, id: crypto.randomUUID() };
-      if (existing) { options.render?.(playedBy); play(entry.id, fromStart, false, authorize, false, playedBy); }
+      if (existing) { options.render?.(playedBy); play(entry.id, fromStart, false, authorize, playedBy); }
       else playNewEntries([entry], { fromStart, authorize, playedBy });
     },
     close() { if (!quiescing) end(false); },
@@ -747,14 +747,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         }
         case "videoQuality": return changeVideoQuality(action, authorize);
-        case "goLive": {
-          currentPlayback(action.playbackId);
-          const entry = state.queue.find(entry => entry.id === state.currentEntryId);
-          if (!entry?.source.startsWith("iptv:")) throw new Error("Go live is only available for the current guide channel.");
-          play(entry.id, true, false, authorize, true, playedBy);
-          break;
-        }
-        case "play": options.render?.(playedBy); play(action.entryId, action.fromStart, false, authorize, false, playedBy); break;
+        case "play": options.render?.(playedBy); play(action.entryId, action.fromStart, false, authorize, playedBy); break;
         case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);
@@ -858,7 +851,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       radioRetry.observe(player);
       if (player.status === "playing") state.radioRetry = null;
       const current = state.queue.find(entry => entry.id === state.currentEntryId);
-      // Live streams keep growing mpv's demuxer-cache duration. Suppress their
+      // A live stream's duration grows with every playlist reload. Suppress its
       // clock publications, but still publish any other Session change.
       const suppressClock = (isRadio(current) || current?.live === true) && ["playing", "paused"].includes(player.status);
       state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };

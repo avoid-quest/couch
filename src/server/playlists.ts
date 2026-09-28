@@ -77,7 +77,7 @@ function resolvedSource(resolve: Options["resolveSource"], source: PlaylistSourc
 }
 
 // Queue sources are original catalog references or user-selected URLs. Resolved
-// provider streams and headers belong to native loads and never enter this table.
+// provider streams belong to player loads and never enter this table.
 export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
   if (!queue.length) throw new PlaylistError("Add something to the queue before saving it.");
   if (queue.length > 500) throw new PlaylistError("A playlist can contain up to 500 entries.");

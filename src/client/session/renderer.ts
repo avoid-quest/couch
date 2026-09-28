@@ -108,14 +108,16 @@ const apply = () => {
   video.muted = split() || blocked;
   video.volume = audio.volume = volume;
 };
+// An HLS EVENT playlist starts at its first segment; hls.js would start it at the live edge.
+const begin = (command: NonNullable<typeof loading>) => command.startPosition || (command.eventStart ? 0 : undefined);
 // Chromium without native HLS rejects the playlist; hls.js plays it (and not at all on engines without MSE).
 const playlist = async (command: NonNullable<typeof loading>) => {
   const { default: Hls } = await import("hls.js");
   if (command !== loading || !Hls.isSupported()) return fail(video.error?.message || "This media couldn't play here.");
-  hls = new Hls({ startPosition: command.startPosition ?? -1 });
+  hls = new Hls({ startPosition: begin(command) ?? -1 });
   hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) fail(`The stream failed (${data.details}).`); });
   for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, send);
-  // Tracks follow the profile's language preferences, as the native player did.
+  // Tracks follow the profile's language preferences.
   const { audioLanguage = "", subtitleLanguage = "", subtitles = "auto" } = command.preferences ?? {};
   const matches = (lang = "", wanted: string) => !!wanted && lang.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2));
   hls.once(Hls.Events.MANIFEST_PARSED, () => {
@@ -188,7 +190,8 @@ export function play(command: PlaybackCommand) {
       }
       apply();
       for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
-      if (command.startPosition) video.currentTime = command.startPosition;
+      const at = begin(command);
+      if (at !== undefined) video.currentTime = at;
       if (command.preferences?.speed) video.playbackRate = command.preferences.speed;
       audioDelay = command.preferences?.audioDelay ?? 0;
       if (!command.paused) void start(video);

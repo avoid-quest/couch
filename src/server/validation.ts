@@ -61,7 +61,7 @@ function validAction(value: unknown): value is Action {
     case "speed": return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
     case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
     case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
-    case "goLive": case "next": return id(value.playbackId);
+    case "next": return id(value.playbackId);
     case "stop": return value.playbackId === undefined || id(value.playbackId);
     default: return false;
   }
@@ -91,7 +91,6 @@ export function parseCommand(message: string): ClientMessage {
     const { playbackId, quality } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "videoQuality", playbackId, quality } };
   }
-  if (value.action.type === "goLive") return { type: "command", requestId: value.requestId, action: { type: "goLive", playbackId: value.action.playbackId } };
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
   if (value.action.type === "enqueueProvider") {
     const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection } = value.action;

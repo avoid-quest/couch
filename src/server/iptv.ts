@@ -67,9 +67,9 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   };
   const programSelect = "SELECT id, channel_id AS channelId, start, end, title, description FROM iptv_programs";
   function publishSourcesChanged(ids: string[]) {
-    // A disconnected native player cannot undo a committed guide mutation or
+    // A disconnected player cannot undo a committed guide mutation or
     // prevent controllers from receiving its invalidation.
-    try { onSourcesChanged(ids); } catch { /* The session owns native availability. */ }
+    try { onSourcesChanged(ids); } catch { /* The session owns player availability. */ }
     onChange();
   }
 
@@ -156,7 +156,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       const item = channel(id);
       signal.throwIfAborted();
       // Only identified HLS URLs enter this EVENT increment. Other live media
-      // must not wait for a body that may never finish before native playback.
+      // must not wait for a body that may never finish before playback.
       if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal])) };
       let eventStart = false;
       try {
@@ -168,20 +168,6 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       shutdown.signal.throwIfAborted();
       if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
       return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}) };
-    },
-    async getLivePlayable(id: string, signal: AbortSignal) {
-      const item = channel(id);
-      const combined = AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]);
-      try {
-        const media = await guideFetch(item.streamUrl, 512 * 1024, request, combined);
-        combined.throwIfAborted();
-        if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
-        if (!liveHlsPlaylist(Buffer.from(media.bytes).toString("utf8"), media.url)) throw new GuideError("Go live is no longer available for this channel. Use Play.", 409);
-        return { source: item.streamUrl, goLive: true };
-      } catch (error) {
-        if (error instanceof GuideError) throw error;
-        throw new GuideError("Couldn't check this channel's live playlist. Use Play.", 502);
-      }
     },
     async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this remote first.", 401); return value; };
