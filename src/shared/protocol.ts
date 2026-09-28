@@ -118,7 +118,7 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-// Main and Core talk over the utilityProcess parent port (src/app/main.ts, src/main.ts).
+// Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
 export type AppMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "shutdown" };
 export type CoreMessage =
   | { type: "ready"; origin: string; urls: string[]; pairingCode: string }

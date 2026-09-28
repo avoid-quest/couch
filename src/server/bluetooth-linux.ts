@@ -55,13 +55,12 @@ export function linuxBluetooth() {
       if (!action.owner || action.owner.length > 128) throw new Error("Invalid Bluetooth owner.");
       if (action.op === "cancel") {
         if (owner === action.owner && (!action.token || operation?.id === action.token)) { abort?.abort(); if (operation) settle(operation.id, "cancelled", "Bluetooth operation cancelled."); }
-      } else if (action.op === "answer") throw new Error("This pairing prompt has ended.");
-      else if (action.op !== "read") {
+      } else if (action.op !== "read") {
         if (operation?.status === "running") throw new Error("Stop the current Bluetooth operation first.");
         const id = action.token ?? crypto.randomUUID();
         const controller = new AbortController();
         owner = action.owner; abort = controller;
-        operation = { id, device: action.device ?? null, kind: action.op, status: "running", endsAt: Date.now() + limit, message: null, prompt: null };
+        operation = { id, device: action.device ?? null, kind: action.op, status: "running", endsAt: Date.now() + limit, message: null };
         void perform(action, controller.signal).then(() => settle(id, "finished", null), (error: Error) => settle(id, "error", controller.signal.aborted ? "Bluetooth operation cancelled." : error.message));
       }
       return inventory();

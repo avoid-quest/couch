@@ -323,7 +323,7 @@ export async function streamingCommunityList(value: string, signal?: AbortSignal
   return { title: context.name, items };
 }
 
-// Embedded in the signed sidecar; the only directory this extraction can load.
+// Bundled into Core; the only directory this extraction can load.
 export async function streamingCommunityPlugin() {
   const directory = await mkdtemp(join(tmpdir(), "couch-streamingcommunity-"));
   try {

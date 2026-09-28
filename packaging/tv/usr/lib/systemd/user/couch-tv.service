@@ -1,5 +1,5 @@
 [Unit]
-Description=Couch TV native host and coordinator
+Description=Couch TV app
 Wants=pipewire.service pipewire-pulse.service wireplumber.service
 After=pipewire.service pipewire-pulse.service wireplumber.service
 StartLimitIntervalSec=120
