@@ -86,9 +86,10 @@ try {
     ["usr/bin/couch-server", `src-tauri/binaries/couch-server-${build.target}`, "$ORIGIN/../lib"],
     ["usr/lib/Couch/tools/yt-dlp", "src-tauri/resources/tools/yt-dlp", "$ORIGIN"],
     ["usr/lib/Couch/tools/deno", "src-tauri/resources/tools/deno", "$ORIGIN"],
+    ["usr/lib/Couch/tools/ffmpeg", "src-tauri/resources/tools/ffmpeg", "$ORIGIN"],
     ["usr/lib/Couch/tools/ffprobe", "src-tauri/resources/tools/ffprobe", "$ORIGIN"],
   ] as const;
-  await verifyPayload(root, JSON.parse(inventory), build.target, "appimage", ["yt-dlp", "deno", "ffprobe"], [], Object.fromEntries(relocated.map(([path, source]) => [path, source])));
+  await verifyPayload(root, JSON.parse(inventory), build.target, "appimage", ["yt-dlp", "deno", "ffmpeg", "ffprobe"], [], Object.fromEntries(relocated.map(([path, source]) => [path, source])));
   for (const [index, [path, source, rpath]] of relocated.entries()) {
     const copy = join(staging, `relocated-${index}`);
     await copyFile(source, copy);
@@ -110,7 +111,7 @@ try {
     assert.ok(!rpath || rpath.split(":").every(entry => entry.startsWith("$ORIGIN")), `Nonportable loader path: ${path}: ${rpath}`);
     return { path, rpath, needed: inspect("--print-needed").split("\n").filter(Boolean) };
   }
-  const mediaClosure = [elf("usr/bin/couch"), elf("usr/lib/Couch/tools/ffprobe")];
+  const mediaClosure = [elf("usr/bin/couch"), elf("usr/lib/Couch/tools/ffmpeg"), elf("usr/lib/Couch/tools/ffprobe")];
   for (const name of [...mediaNames, "alsa-lib/libasound_module_pcm_pulse"]) {
     const candidates = libraries.filter(file => name.startsWith("alsa-lib/")
       ? file.path === `usr/lib/${name}.so`
@@ -124,8 +125,10 @@ try {
     assert.ok(files.some(file => file.path === `usr/share/doc/couch/debian/${notice}/copyright`), `Missing media library notice: ${notice}`);
     mediaClosure.push(elf(path));
   }
-  assert.ok(mediaClosure[0]!.needed.includes(mediaClosure[2]!.path.split("/").at(-1)!), "The desktop must link its bundled libmpv player");
-  assert.ok(mediaClosure[1]!.needed.includes(mediaClosure[4]!.path.split("/").at(-1)!), "Bundled ffprobe must use the packaged media libraries");
+  const libmpv = mediaClosure.find(file => file.path.startsWith("usr/lib/libmpv.so."))!;
+  const avformat = mediaClosure.find(file => file.path.startsWith("usr/lib/libavformat.so."))!;
+  assert.ok(mediaClosure[0]!.needed.includes(libmpv.path.split("/").at(-1)!), "The desktop must link its bundled libmpv player");
+  for (const decoder of mediaClosure.slice(1, 3)) assert.ok(decoder.needed.includes(avformat.path.split("/").at(-1)!), `Bundled ${decoder.path.split("/").at(-1)} must use the packaged media libraries`);
   for (const list of [files, links, libraries]) list.sort((a, b) => a.path.localeCompare(b.path));
   await Bun.write(".artifacts/appimage-inventory.json", JSON.stringify({ build, release, files, links, libraries, mediaClosure, sha256: await hash(archive) }, null, 2) + "\n");
   console.log(`Verified ${archive}: ${files.length} files, ${libraries.length} native library paths and packaged helpers`);

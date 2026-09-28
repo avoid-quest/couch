@@ -14,6 +14,15 @@ control. Legacy `household`/`personal` selectors are storage/migration aliases,
 not active user workflows. The old global Sendspin group and Listen together dialog
 are superseded by assigning audio Devices to an individual Playback.
 
+## Latest stop point — 2026-09-28
+
+The user reports mobile playback **is not working** and requested this pass stop
+after packaging the current work. [Source handoff](source-delivery-handoff-2026-09-28.md)
+records current provider failures, delivery constraints and next work. Core media
+processing must not be required for playback; the current PCM/Sendspin path violates
+that clarified requirement. Earlier successful phone checks remain historical
+observations, not acceptance of the current provider stack.
+
 ## Built-app acceptance matrix
 
 A row is **PARTIAL** when a built-app journey covers some of it; it stays open until
@@ -39,7 +48,7 @@ observations, software-output results and unavailable physical checks.
 | Audio/video Move | Move ongoing audio and video both directions; verify queue occurrence, position/live distance, pause intent, speed and compatible tracks. Confirm destination readiness before source retirement. | PARTIAL — live radio both directions; unoccupied HLS moved both ways at 392.1 s, paused, 1.5× and compatible tracks. Native destination opened the correct Playback and user confirmed video picture. Intermittent readiness failure and retry speed loss remain open. |
 | Occupation and failure | Replace an occupied Device explicitly; refuse incompatible combinations contextually; recover preparation, autoplay gesture, disconnect and uncertain-silence failures without duplicate playback. | PARTIAL — occupied Replace shown and failed HLS move kept browser paused at 247.122 s / 1.5×. Broader failures remain open. |
 | Lifecycle | Navigate, close renderer/controller, revoke access and restart Core; reconnect with accurate resumable state, no stale command or unexpected autoplay. | PARTIAL — controller Quit/reopen preserved browser playback. Shared-video host restart retained the item, 379.4821 s and three assigned Devices without autoplay; offline membership stayed visible. Removing an offline output exposed a UI restriction, now corrected. Revocation and complete recovery coverage remain open. |
-| Sources and efficiency | Real supported native/provider/direct browser/HLS/DASH/live-DVR sources, audio/subtitle tracks and quality limits, with actionable capability failures; measure startup, seek, Move, cleanup, decoders and traffic. | PARTIAL — Sygma and Mux HLS observed, shared producer exited after Move. One native radio reopen stayed Loading; DASH/provider/track/quality coverage remains open. |
+| Sources and efficiency | Real supported native/provider/direct browser/HLS/DASH/live-DVR sources, audio/subtitle tracks and quality limits, with actionable capability failures; measure startup, seek, Move, cleanup, decoders and traffic. | PARTIAL / FAILING — built 84e926c0 played Bandcamp, YouTube and StreamingCommunity with Mac + browser selected; browser picture and seek observed. Twitch LAN browser delivery returned 403; RaiPlay live picture stalled. User reports mobile failing. Core producer placement, DASH, tracks/quality, cleanup and performance qualification remain open; see source handoff. |
 | Physical audio | Measure speaker timing and output behavior on actual available devices. Software PCM/SDK evidence remains labeled separately. | PARTIAL — user confirmed phone and Mac audible together with no pop on 7b6be47a after the first-block fade. Timing/synchronization remain unmeasured. |
 
 Implementation includes the Playback catalog, per-Playback Sendspin producers,

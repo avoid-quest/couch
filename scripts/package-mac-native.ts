@@ -34,11 +34,13 @@ type FormulaInfo = {
 async function discoverNative() {
   const mpv = join(run(["brew", "--prefix", "mpv"]), "lib", "libmpv.2.dylib");
   const mpvExecutable = join(run(["brew", "--prefix", "mpv"]), "bin", "mpv");
-  const ffprobe = join(run(["brew", "--prefix", "ffmpeg"]), "bin", "ffprobe");
+  const ffmpegPrefix = run(["brew", "--prefix", "ffmpeg"]);
+  const ffmpeg = join(ffmpegPrefix, "bin", "ffmpeg");
+  const ffprobe = join(ffmpegPrefix, "bin", "ffprobe");
   const cellar = "/opt/homebrew/Cellar/";
   const sources = new Map<string, string>([[realpathSync(mpv), mpv]]);
   const visited = new Set<string>();
-  const queue = [mpv, mpvExecutable, ffprobe];
+  const queue = [mpv, mpvExecutable, ffmpeg, ffprobe];
   while (queue.length) {
     const path = queue.pop()!;
     const actual = realpathSync(path);
@@ -75,7 +77,9 @@ async function discoverNative() {
   const mpvVersion = formulas.find(formula => formula.name === "mpv")!.version;
   const probeVersion = run([ffprobe, "-version"]).match(/^ffprobe version (\S+)/)?.[1];
   assert.ok(probeVersion, "Cannot read ffprobe version");
-  return { target: "aarch64-apple-darwin", mpvVersion, mpv: { source: mpvExecutable, sha256: await sha256(mpvExecutable) }, ffprobe: { source: ffprobe, sha256: await sha256(ffprobe), version: probeVersion }, formulas, libraries };
+  const ffmpegVersion = run([ffmpeg, "-version"]).match(/^ffmpeg version (\S+)/)?.[1];
+  assert.ok(ffmpegVersion, "Cannot read ffmpeg version");
+  return { target: "aarch64-apple-darwin", mpvVersion, mpv: { source: mpvExecutable, sha256: await sha256(mpvExecutable) }, ffmpeg: { source: ffmpeg, sha256: await sha256(ffmpeg), version: ffmpegVersion }, ffprobe: { source: ffprobe, sha256: await sha256(ffprobe), version: probeVersion }, formulas, libraries };
 }
 
 async function download(input: { url: string; sha256: string }, path: string) {
@@ -135,14 +139,16 @@ export async function stageMacNative() {
     run(["codesign", "--force", "--sign", "-", destination]);
     staged.push({ ...library, bundledSha256: await sha256(destination) });
   }
-  const probe = join(tools, "ffprobe");
-  assert.equal(await sha256(native.ffprobe.source), native.ffprobe.sha256, "Changed Homebrew ffprobe");
-  await cp(realpathSync(native.ffprobe.source), probe);
-  await chmod(probe, 0o755);
-  for (const dependency of links(native.ffprobe.source)) if (dependency.startsWith("/opt/homebrew/")) {
-    run(["install_name_tool", "-change", dependency, `@executable_path/../../Frameworks/${expected.get(realpathSync(dependency))!.name}`, probe]);
+  for (const name of ["ffmpeg", "ffprobe"] as const) {
+    const source = native[name].source, executable = join(tools, name);
+    assert.equal(await sha256(source), native[name].sha256, `Changed Homebrew ${name}`);
+    await cp(realpathSync(source), executable);
+    await chmod(executable, 0o755);
+    for (const dependency of links(source)) if (dependency.startsWith("/opt/homebrew/")) {
+      run(["install_name_tool", "-change", dependency, `@executable_path/../../Frameworks/${expected.get(realpathSync(dependency))!.name}`, executable]);
+    }
+    run(["codesign", "--force", "--sign", "-", executable]);
   }
-  run(["codesign", "--force", "--sign", "-", probe]);
   const player = join(tools, "mpv");
   await cp(realpathSync(native.mpv.source), player);
   await chmod(player, 0o755);
@@ -159,15 +165,16 @@ export async function stageMacNative() {
   await cp(".artifacts/package-tools/deno", join(tools, "deno"));
   await chmod(join(tools, "deno"), 0o755);
   run(["codesign", "--force", "--sign", "-", join(tools, "deno")]);
-  for (const name of ["ffprobe", "yt-dlp", "deno"] as const) assert.ok((await binaryArchitectures(join(tools, name))).includes("aarch64"), `Wrong helper architecture: ${name}`);
+  for (const name of ["ffmpeg", "ffprobe", "yt-dlp", "deno"] as const) assert.ok((await binaryArchitectures(join(tools, name))).includes("aarch64"), `Wrong helper architecture: ${name}`);
   assert.ok((await binaryArchitectures(player)).includes("aarch64"), "Wrong mpv architecture");
   const helpers = {
     "yt-dlp": { version: "2026.08.19", sha256: await sha256(join(tools, "yt-dlp")), archiveSha256: inputs.macTools["yt-dlp_macos"].sha256 },
     deno: { version: "2.9.6", sha256: await sha256(join(tools, "deno")), archiveSha256: inputs.macTools["deno-aarch64-apple-darwin.zip"].sha256 },
-    ffprobe: { version: native.ffprobe.version, sha256: await sha256(probe), archiveSha256: "" },
+    ffmpeg: { version: native.ffmpeg.version, sha256: await sha256(join(tools, "ffmpeg")), archiveSha256: "" },
+    ffprobe: { version: native.ffprobe.version, sha256: await sha256(join(tools, "ffprobe")), archiveSha256: "" },
   };
   await Bun.write(join(resources, "tools.json"), JSON.stringify(helpers, null, 2));
-  await Bun.write(join(resources, "mac-native.json"), JSON.stringify({ ...native, libraries: staged, mpv: { ...native.mpv, bundledSha256: await sha256(player) }, ffprobe: { ...native.ffprobe, bundledSha256: helpers.ffprobe.sha256 } }, null, 2));
+  await Bun.write(join(resources, "mac-native.json"), JSON.stringify({ ...native, libraries: staged, mpv: { ...native.mpv, bundledSha256: await sha256(player) }, ffmpeg: { ...native.ffmpeg, bundledSha256: helpers.ffmpeg.sha256 }, ffprobe: { ...native.ffprobe, bundledSha256: helpers.ffprobe.sha256 } }, null, 2));
   await mkdir(notices, { recursive: true });
   await Bun.write(join(notices, "sources.json"), JSON.stringify(native.formulas, null, 2));
   for (const formula of native.formulas) {

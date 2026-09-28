@@ -56,7 +56,7 @@ try {
   const inventory = await Bun.file(join(staging, "usr/lib/Couch/payload.json")).text();
   assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
   const payload = JSON.parse(inventory);
-  await verifyPayload(staging, payload, build.target, "deb", ["yt-dlp", "deno", "ffprobe"], release.host.packages);
+  await verifyPayload(staging, payload, build.target, "deb", ["yt-dlp", "deno", "ffmpeg", "ffprobe"], release.host.packages);
   verifyBundledNativeLibraries(payload, files.map(file => file.path));
   await verifyPackageHelpers(join(staging, "usr/lib/Couch/tools"), build.helpers);
   await Bun.write(".artifacts/deb-inventory.json", JSON.stringify({ build, depends, files: files.sort((a, b) => a.path.localeCompare(b.path)), sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(archive).arrayBuffer()).digest("hex") }, null, 2) + "\n");

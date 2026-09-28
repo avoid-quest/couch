@@ -343,6 +343,7 @@ impl Player {
                 preferences,
                 subtitles,
                 radio,
+                live,
                 go_live,
                 event_start,
             } => {
@@ -371,6 +372,7 @@ impl Player {
                     &preferences,
                     &subtitles,
                     radio,
+                    live,
                     go_live,
                     event_start,
                 )
@@ -525,6 +527,7 @@ impl Player {
         preferences: &PlaybackPreferences,
         subtitles: &[ExternalSubtitle],
         radio: bool,
+        live: bool,
         go_live: bool,
         event_start: bool,
     ) -> Result<(), String> {
@@ -545,6 +548,7 @@ impl Player {
             "preferences": preferences,
             "subtitles": subtitles,
             "radio": radio,
+            "live": live,
             "goLive": go_live,
             "eventStart": event_start,
             "backend": "mpv",

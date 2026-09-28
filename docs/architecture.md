@@ -117,11 +117,16 @@ application's lifetime: explicit Quit stops it. Installing and managing an indep
 background Core through the desktop UI remains unimplemented.
 
 Ordinary selected clients fetch and decode supported media; control-only clients
-fetch no media. Native playback retains its provider paths. The browser uses direct
-compatible HTTP(S) media and maintained HLS/DASH playback with track, quality and
-live/DVR limits. Unsupported sources remain explicit. New Jellyfin relay/adaptation
-is outside the contract. Core may decode bounded PCM for Sendspin audio; the
-maintained host and client dependencies own encryption, protocol and synchronization.
+fetch no media. Native playback retains its provider paths. The browser uses direct compatible HTTP(S) media, hls.js for HLS (including
+software AES on LAN HTTP), and Shaka for DASH. Extractor resolution selects a
+browser-compatible rendition; paired HLS video/audio URLs use a client Blob master
+playlist whose media requests remain direct to the upstream provider. Unsupported sources remain explicit. New Jellyfin relay/adaptation
+is outside the contract. **Current mismatch with the product contract:** Core decodes PCM and fans it out
+through Sendspin for shared audio. This makes Core media processing mandatory and
+does not satisfy the user’s latest client-first performance requirement. Do not add
+a Core proxy to work around provider CORS. The next architecture iteration must
+resolve producer/host placement with maintained Sendspin capabilities. The maintained
+host and client dependencies own encryption, protocol and synchronization.
 The Sendspin host tracks devices globally but creates one producer per Playback.
 Normal hosting uses an OS-assigned port returned by authenticated enrollment, so
 another library on the same computer needs no manual port coordination. Explicit
@@ -132,6 +137,12 @@ The client SDK has no stream-start fade option. The PCM adapter therefore applie
 a 10 ms fade to each new listener's first block, keeping its timestamp and every
 ongoing listener's samples unchanged. The user confirmed phone and Mac radio were
 audible without the earlier pop on build `7b6be47a`; this is not a timing measurement.
+
+The source-delivery layer also bundles FFmpeg with desktop packages. Shared live
+audio keeps the first decoded source PTS; silent native video disables mpv timestamp
+rebasing and hls.js picture playback subtracts its own INIT_PTS offset. This is a
+software timeline mapping, not measured physical synchronization; native-HLS mobile
+fallback, live discontinuities and transfer continuity remain unqualified.
 
 ## Qualification still open
 

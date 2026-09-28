@@ -36,7 +36,12 @@ function follow(readClock: ReadClock, ready: () => boolean, attach: (timing: ITi
 
 export function followBrowserVideo(video: HTMLVideoElement, readClock: ReadClock) {
   video.muted = true;
-  return follow(readClock, () => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA, (timing, sync) => sync.setTimingsrc(video, timing));
+  return follow(() => {
+    const sample = readClock();
+    if (!sample || video.dataset.sourcePtsTimeline !== "live") return sample;
+    const offset = Number(video.dataset.sourcePtsOffset);
+    return Number.isFinite(offset) ? { ...sample, positionMs: sample.positionMs - offset * 1000 } : null;
+  }, () => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA, (timing, sync) => sync.setTimingsrc(video, timing));
 }
 
 /** Native mpv keeps its own observed state; this adapter only coalesces synchronizer writes. */

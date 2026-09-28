@@ -93,7 +93,7 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
     const pcm = await active.read();
     if (epoch !== generation || closed) return;
     if (!pcm.length) throw new Error("The audio source has no decodable samples.");
-    prepared = pcm; state = { ...state, status: "paused" }; observe();
+    prepared = pcm; state = { ...state, position: active.firstTimestampSeconds ?? state.position, status: "paused" }; observe();
   };
   const startStream = (clientId: string) => {
     env.core.sendStreamStart(clientId, { codec: AudioCodec.PCM, sampleRate: 48000, channels: 2, bitDepth: 16 });
@@ -118,6 +118,8 @@ export function createSendspinPlayback(id: string, env: SendspinPlaybackEnvironm
             clear(); state = { ...state, position: Math.min(state.duration ?? Infinity, startPosition + sentSeconds * speed), status: "ended" }; observe(); return;
           }
           if (!startedUs) {
+            startPosition = active.firstTimestampSeconds ?? startPosition;
+            state = { ...state, position: startPosition };
             startedUs = serverNowUs() + leadUs;
             for (const clientId of selected) startStream(clientId);
             void delay(leadUs / 1000).then(() => { if (epoch === generation && !closed) { metadataAt = 0; observe(); } });

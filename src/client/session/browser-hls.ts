@@ -6,6 +6,12 @@ export async function createHlsPlayer(video: HTMLVideoElement): Promise<DashPlay
   const { default: HlsLibrary } = await import("hls.js");
   const hls: Hls | null = HlsLibrary.isSupported() ? new HlsLibrary() : null;
   if (!hls && !video.canPlayType("application/vnd.apple.mpegurl")) throw new Error("HLS is unavailable in this browser.");
+  if (!hls) delete video.dataset.sourcePtsTimeline;
+  hls?.on(HlsLibrary.Events.INIT_PTS_FOUND, (_event, data) => {
+    if (data.id !== "main" || !Number.isFinite(data.initPTS) || !Number.isFinite(data.timescale) || !data.timescale) return;
+    // hls.js has already subtracted frag.start when computing initPTS.
+    video.dataset.sourcePtsOffset = String(data.initPTS / data.timescale);
+  });
   let maxHeight: number | undefined;
   let preferredAudio = "";
   let preferredText = "";
@@ -64,6 +70,6 @@ export async function createHlsPlayer(video: HTMLVideoElement): Promise<DashPlay
     seekRange() { const ranges = video.seekable; return ranges.length ? { start: ranges.start(0), end: ranges.end(ranges.length - 1) } : { start: 0, end: 0 }; },
     isLive() { return hls ? !!hls.levels[Math.max(0, hls.currentLevel, hls.loadLevel)]?.details?.live : video.duration === Infinity; },
     isInProgress() { return false; },
-    async destroy() { pendingReject?.(new Error("HLS playback stopped.")); hls?.destroy(); if (!hls) { video.removeAttribute("src"); video.load(); } },
+    async destroy() { pendingReject?.(new Error("HLS playback stopped.")); hls?.destroy(); delete video.dataset.sourcePtsOffset; delete video.dataset.sourcePtsTimeline; if (!hls) { video.removeAttribute("src"); video.load(); } },
   };
 }

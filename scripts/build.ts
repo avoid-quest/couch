@@ -73,7 +73,7 @@ if (packaged) {
   const hostFile = Bun.file("src-tauri/resources/host.json");
   const host = await hostFile.exists() ? await hostFile.json() : { target, os: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux", architecture: process.arch };
   if (host.target !== target) throw new Error(`Package resources target ${host.target}, build target ${target}`);
-  const payload = await createPayload(target, format, `src-tauri/binaries/couch-server-${target}${target === "x86_64-pc-windows-msvc" ? ".exe" : ""}`, "src-tauri/resources", helpers ? ["yt-dlp", "deno", "ffprobe"] : [], host.packages ?? []);
+  const payload = await createPayload(target, format, `src-tauri/binaries/couch-server-${target}${target === "x86_64-pc-windows-msvc" ? ".exe" : ""}`, "src-tauri/resources", helpers ? ["yt-dlp", "deno", "ffmpeg", "ffprobe"] : [], host.packages ?? []);
   const inventory = JSON.stringify(payload);
   await Bun.write("src-tauri/resources/payload.json", inventory);
   await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, packageFormat: format, host, payloadSha256: new Bun.CryptoHasher("sha256").update(inventory).digest("hex") }));

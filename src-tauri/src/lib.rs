@@ -523,6 +523,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
     for (variable, name) in [
         ("COUCH_YT_DLP", "yt-dlp"),
         ("COUCH_DENO", "deno"),
+        ("COUCH_FFMPEG", "ffmpeg"),
         ("COUCH_FFPROBE", "ffprobe"),
         #[cfg(target_os = "macos")]
         ("COUCH_MPV", "mpv"),

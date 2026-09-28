@@ -102,6 +102,8 @@ pub enum PlaybackCommand {
         #[serde(default)]
         radio: bool,
         #[serde(default)]
+        live: bool,
+        #[serde(default)]
         go_live: bool,
         #[serde(default)]
         event_start: bool,

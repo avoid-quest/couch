@@ -46,10 +46,10 @@ export async function stageWindowsNative() {
   run(["unzip", "-o", "-q", denoArchive, "deno.exe", "-d", staging]);
   await cp(join(staging, "deno.exe"), join(tools, "deno.exe"));
 
-  const ffmpegArchive = await download(inputs.windowsTools.ffprobe, "ffmpeg.tar.gz");
+  const ffmpegArchive = await download(inputs.windowsTools.ffmpeg, "ffmpeg.tar.gz");
   run(["tar", "-xzf", ffmpegArchive, "-C", staging]);
   const runtimeDlls = ["libvpl-2.dll", "libwinpthread-1.dll", "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libopenh264-7.dll"];
-  for (const name of ["ffprobe.exe", ...runtimeDlls]) await cp(join(staging, name), join(tools, name));
+  for (const name of ["ffmpeg.exe", "ffprobe.exe", ...runtimeDlls]) await cp(join(staging, name), join(tools, name));
   for (const name of ["COPYING.LGPLv2.1", "SOURCE.txt", "LIBVPL-LICENSE.txt", "LIBWINPTHREAD-LICENSE.txt", "LIBOPENH264-LICENSE.txt", "GCC-LICENSE.txt"]) await cp(join(staging, name), join(notices, name));
   for (const [name, source] of [["LICENSE.LGPL", "72b672113d642cbb8ef5dcc76938db801983c56e50b1400ab930f1a64d6dc8d9"], ["Copyright", "bfe9ee4cceabcb8ecbfadf208d04156f73d801e6a57369a5606bb8341e204a23"]] as const) {
     const url = `https://raw.githubusercontent.com/mpv-player/mpv/c64675679925df40c3cbecb49bdfb9c93f918745/${name}`;
@@ -59,14 +59,15 @@ export async function stageWindowsNative() {
     const notice = inputs.notices.find(input => input.name === name)!;
     await cp(await download(notice, name), join(resources, "notices", name));
   }
-  for (const name of ["yt-dlp.exe", "deno.exe", "ffprobe.exe", ...runtimeDlls]) assert.deepEqual(await binaryArchitectures(join(tools, name)), ["x86_64"], `Wrong architecture: ${name}`);
+  for (const name of ["yt-dlp.exe", "deno.exe", "ffmpeg.exe", "ffprobe.exe", ...runtimeDlls]) assert.deepEqual(await binaryArchitectures(join(tools, name)), ["x86_64"], `Wrong architecture: ${name}`);
   assert.deepEqual(await binaryArchitectures(mpv), ["x86_64"], "Wrong libmpv architecture");
   const helpers = {
     "yt-dlp": { version: "2026.08.19", sha256: await hash(join(tools, "yt-dlp.exe")), archiveSha256: inputs.windowsTools["yt-dlp"].sha256 },
     deno: { version: "2.9.6", sha256: await hash(join(tools, "deno.exe")), archiveSha256: inputs.windowsTools.deno.sha256 },
-    ffprobe: { version: "8.1.2", sha256: await hash(join(tools, "ffprobe.exe")), archiveSha256: inputs.windowsTools.ffprobe.sha256 },
+    ffmpeg: { version: "8.1.2", sha256: await hash(join(tools, "ffmpeg.exe")), archiveSha256: inputs.windowsTools.ffmpeg.sha256 },
+    ffprobe: { version: "8.1.2", sha256: await hash(join(tools, "ffprobe.exe")), archiveSha256: inputs.windowsTools.ffmpeg.sha256 },
   };
   await Bun.write(join(resources, "tools.json"), JSON.stringify(helpers, null, 2));
-  await Bun.write(join(resources, "windows-native.json"), JSON.stringify({ mpv: { url: inputs.windowsTools.mpv.url, archiveSha256: inputs.windowsTools.mpv.sha256, revision: "c64675679925df40c3cbecb49bdfb9c93f918745", bundledSha256: await hash(mpv) }, ffprobe: inputs.windowsTools.ffprobe, runtimeDlls: await Promise.all(runtimeDlls.map(async name => ({ name, sha256: await hash(join(tools, name)) }))) }, null, 2));
+  await Bun.write(join(resources, "windows-native.json"), JSON.stringify({ mpv: { url: inputs.windowsTools.mpv.url, archiveSha256: inputs.windowsTools.mpv.sha256, revision: "c64675679925df40c3cbecb49bdfb9c93f918745", bundledSha256: await hash(mpv) }, ffmpeg: inputs.windowsTools.ffmpeg, runtimeDlls: await Promise.all(runtimeDlls.map(async name => ({ name, sha256: await hash(join(tools, name)) }))) }, null, 2));
   return { mpv, helpers };
 }

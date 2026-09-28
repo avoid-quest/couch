@@ -41,7 +41,7 @@ for (const [target, format] of [
     await write(sidecar, executable(target));
     await chmod(sidecar, 0o755);
     const helpers: Record<string, { sha256: string }> = {};
-    for (const name of ["yt-dlp", "deno", "ffprobe"]) {
+    for (const name of ["yt-dlp", "deno", "ffmpeg", "ffprobe"]) {
       const binary = executable(target);
       await write(join(resources, "tools", name + suffix), binary);
       await chmod(join(resources, "tools", name + suffix), 0o755);
@@ -54,7 +54,8 @@ for (const [target, format] of [
       await chmod(join(resources, "mac-libraries", "libmpv.2.dylib"), 0o755);
       await write(join(resources, "tools", "mpv"), library);
       await chmod(join(resources, "tools", "mpv"), 0o755);
-      await write(join(resources, "mac-native.json"), JSON.stringify({ mpv: { bundledSha256: new Bun.CryptoHasher("sha256").update(library).digest("hex") }, libraries: [{ name: "libmpv.2.dylib", bundledSha256: new Bun.CryptoHasher("sha256").update(library).digest("hex") }] }));
+      const sha256 = new Bun.CryptoHasher("sha256").update(library).digest("hex");
+      await write(join(resources, "mac-native.json"), JSON.stringify({ mpv: { bundledSha256: sha256 }, ffmpeg: { bundledSha256: helpers.ffmpeg.sha256 }, libraries: [{ name: "libmpv.2.dylib", bundledSha256: sha256 }] }));
     }
     if (format === "nsis") {
       const library = executable(target);
@@ -66,7 +67,7 @@ for (const [target, format] of [
     for (const name of ["build-inputs.json", "build-packages.tsv"]) await write(join(resources, name), "{}\n");
     await write(join(resources, "notices", "NOTICE"), "Couch notices\n");
     const hostPackages = format === "deb" ? ["libmpv2"] : [];
-    const payload = await createPayload(target, format, sidecar, resources, ["yt-dlp", "deno", "ffprobe"], hostPackages);
+    const payload = await createPayload(target, format, sidecar, resources, ["yt-dlp", "deno", "ffmpeg", "ffprobe"], hostPackages);
     expect(payload.native).toEqual({ bundledLibraries: format === "dmg" ? ["Contents/Frameworks/libmpv.2.dylib"] : format === "nsis" ? ["libmpv-2.dll", "tools/libwinpthread-1.dll"] : [], declaredHostPackages: hostPackages });
     if (format === "deb") expect(() => verifyBundledNativeLibraries(payload, payload.files.map(file => file.path).concat("usr/lib/Couch/libmpv.so.2"))).toThrow("Bundled native libraries differ");
     if (format === "nsis") expect(payload.files.map(file => file.path)).toEqual(expect.arrayContaining([
@@ -74,7 +75,7 @@ for (const [target, format] of [
     ]));
     if (format === "nsis") expect(payload.files.some(file => file.path.startsWith("resources/"))).toBe(false);
     const installed = join(directory, "installed");
-    const verify = (candidate = payload) => verifyPayload(installed, candidate, target, format, ["yt-dlp", "deno", "ffprobe"], hostPackages);
+    const verify = (candidate = payload) => verifyPayload(installed, candidate, target, format, ["yt-dlp", "deno", "ffmpeg", "ffprobe"], hostPackages);
     for (const file of payload.files) {
       const source = file.path === paths.sidecar ? sidecar : file.path === "libmpv-2.dll" ? join(resources, "windows-native", file.path) : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.startsWith("Contents/Frameworks/") ? join(resources, "mac-libraries", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
       const path = join(installed, file.path);
@@ -98,9 +99,9 @@ for (const [target, format] of [
       patched[90] = 1;
       await write(join(installed, paths.sidecar), patched);
       await expect(verify()).rejects.toThrow("Missing or changed payload file");
-      await verifyPayload(installed, payload, target, format, ["yt-dlp", "deno", "ffprobe"], [], { [paths.sidecar]: sidecar });
+      await verifyPayload(installed, payload, target, format, ["yt-dlp", "deno", "ffmpeg", "ffprobe"], [], { [paths.sidecar]: sidecar });
       await write(join(installed, paths.sidecar), executable("aarch64-unknown-linux-gnu"));
-      await expect(verifyPayload(installed, payload, target, format, ["yt-dlp", "deno", "ffprobe"], [], { [paths.sidecar]: sidecar })).rejects.toThrow("Wrong architecture");
+      await expect(verifyPayload(installed, payload, target, format, ["yt-dlp", "deno", "ffmpeg", "ffprobe"], [], { [paths.sidecar]: sidecar })).rejects.toThrow("Wrong architecture");
       await write(join(installed, paths.sidecar), executable(target));
     }
     if (format === "deb") await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();

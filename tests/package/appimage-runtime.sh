@@ -33,7 +33,7 @@ for binary in couch couch-server; do
   env LD_LIBRARY_PATH="$library_path" ldd "$appdir/usr/bin/$binary" > "/evidence/$binary-linkage.txt"
   ! grep -q 'not found' "/evidence/$binary-linkage.txt"
 done
-for binary in yt-dlp deno ffprobe; do
+for binary in yt-dlp deno ffmpeg ffprobe; do
   env LD_LIBRARY_PATH="$library_path" ldd "$appdir/usr/lib/Couch/tools/$binary" > "/evidence/$binary-linkage.txt"
   ! grep -q 'not found' "/evidence/$binary-linkage.txt"
 done
@@ -41,11 +41,13 @@ env LD_LIBRARY_PATH="$library_path" ldd "$appdir/usr/lib/libmpv.so.2" > /evidenc
 ! grep -q 'not found' /evidence/libmpv-linkage.txt
 grep -F "$appdir/usr/lib/libmpv.so.2" /evidence/couch-linkage.txt
 grep -F "$appdir/usr/lib/libavformat.so." /evidence/ffprobe-linkage.txt
+grep -F "$appdir/usr/lib/libavformat.so." /evidence/ffmpeg-linkage.txt
 runuser -u qualifier -- env HOME=/home/qualifier LD_LIBRARY_PATH="$library_path" "$appdir/usr/lib/Couch/tools/yt-dlp" --ignore-config --no-plugin-dirs --version > /evidence/yt-dlp-version.txt
 runuser -u qualifier -- env HOME=/home/qualifier LD_LIBRARY_PATH="$library_path" "$appdir/usr/lib/Couch/tools/deno" eval 'console.log(6 * 7)' > /evidence/deno-result.txt
 grep -qx 42 /evidence/deno-result.txt
 runuser -u qualifier -- env HOME=/home/qualifier LD_LIBRARY_PATH="$library_path" "$appdir/usr/lib/Couch/tools/ffprobe" -v error -show_format -show_streams /qualification/sample.mp4 > /evidence/ffprobe-media.txt
 grep -q codec_name=h264 /evidence/ffprobe-media.txt
+runuser -u qualifier -- env HOME=/home/qualifier LD_LIBRARY_PATH="$library_path" "$appdir/usr/lib/Couch/tools/ffmpeg" -v error -i /qualification/sample.mp4 -f null -
 for command in bun node cargo rustc gcc g++ make; do
   if command -v "$command"; then echo "Unexpected development tool: $command" >&2; exit 1; fi
 done

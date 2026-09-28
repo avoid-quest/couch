@@ -79,7 +79,7 @@ assert.deepEqual(release.readableDataFormats, [1]);
 assert.equal(release.packaged, true);
 assert.equal(release.clientOnly, false);
 assert.deepEqual(release.host, { target, os: "windows", architecture: "x64", packages: [] });
-assert.deepEqual(Object.keys(release.helpers).sort(), ["deno", "ffprobe", "yt-dlp"]);
+assert.deepEqual(Object.keys(release.helpers).sort(), ["deno", "ffmpeg", "ffprobe", "yt-dlp"]);
 
 // Tauri's compatible ZIP carries the installer. Add Couch's signed manifest so
 // the desktop updater can check target and data format before replacement.
@@ -119,7 +119,7 @@ try {
   // NSIS extracts its own plugins only while installing; they are not app DLLs.
   const bundledDlls = files.filter(file => file.toLowerCase().endsWith(".dll") && !file.startsWith("$PLUGINSDIR/"));
   for (const file of bundledDlls) assert.ok(!systemDlls.has(basename(file).toLowerCase()), `Bundled DLL shadows Windows: ${file}`);
-  const imports = Object.fromEntries<string[]>(["couch.exe", "couch-server.exe", "tools/yt-dlp.exe", "tools/deno.exe", "tools/ffprobe.exe", ...bundledDlls].map(file => [file, peImports(join(installed, file))]));
+  const imports = Object.fromEntries<string[]>(["couch.exe", "couch-server.exe", "tools/yt-dlp.exe", "tools/deno.exe", "tools/ffmpeg.exe", "tools/ffprobe.exe", ...bundledDlls].map(file => [file, peImports(join(installed, file))]));
   for (const [file, names] of Object.entries(imports)) {
     const folder = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
     const available = new Set([...systemDlls, ...bundledDlls.filter(dll => dll.startsWith(folder) && !dll.slice(folder.length).includes("/")).map(dll => basename(dll).toLowerCase())]);

@@ -75,6 +75,8 @@ pub struct NativeOpenRequest {
     pub subtitles: Vec<NativeSubtitle>,
     #[serde(default)]
     pub radio: bool,
+    #[serde(default)]
+    pub live: bool,
     /// Host-verified explicit IPTV live return. Ordinary loads keep demuxer defaults.
     #[serde(default)]
     pub go_live: bool,

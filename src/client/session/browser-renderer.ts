@@ -91,6 +91,9 @@ export function createBrowserRenderer(report: (state: PlayerState) => void, impo
         const video = element();
         video.pause();
         video.dataset.playbackOwner = command.videoOnly ? command.playbackOwner ?? "" : "";
+        delete video.dataset.sourcePtsOffset;
+        if (command.videoOnly && command.live && (command.sourceType === "hls" || /\.m3u8(?:$|[?#])/i.test(command.source))) video.dataset.sourcePtsTimeline = "live";
+        else delete video.dataset.sourcePtsTimeline;
         video.muted = !!command.videoOnly;
         try { const saved = Number(localStorage.getItem("couch.browser-volume") ?? volume); if (Number.isFinite(saved)) video.volume = volume = Math.min(1, Math.max(0, saved)); } catch { /* Storage is optional. */ }
         load = command; dash = isAdaptiveSource(command.source, command.sourceType); fatal = false; failure = null; requiresGesture = false; initializing = true; initialSeek = false; buffering = false;

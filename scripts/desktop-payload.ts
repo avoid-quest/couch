@@ -25,7 +25,7 @@ export function payloadPaths(target: string, format: string) {
 
 export type PayloadFile = { path: string; sha256: string; architecture?: string };
 export type Payload = { target: string; format: string; enabledHelpers: string[]; native: { bundledLibraries: string[]; declaredHostPackages: string[] }; files: PayloadFile[] };
-const helperNames = ["yt-dlp", "deno", "ffprobe"] as const;
+const helperNames = ["yt-dlp", "deno", "ffmpeg", "ffprobe"] as const;
 export const isNativeLibrary = (path: string) => /\.(?:so(?:\.\d+)*|dylib|dll)$/i.test(path);
 export function verifyBundledNativeLibraries(payload: Payload, packagePaths: string[]) {
   assert.deepEqual(packagePaths.filter(isNativeLibrary).sort(), [...payload.native.bundledLibraries].sort(), "Bundled native libraries differ from payload inventory");
@@ -132,6 +132,7 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
     if (expectedFormat === "dmg") {
       const native = await Bun.file(join(root, paths.resources, "mac-native.json")).json();
       assert.equal(payload.files.find(file => file.path === posix.join(paths.resources, "tools", "mpv"))?.sha256, native.mpv.bundledSha256, "Mac mpv provenance mismatch");
+      assert.equal(payload.files.find(file => file.path === posix.join(paths.resources, "tools", "ffmpeg"))?.sha256, native.ffmpeg.bundledSha256, "Mac ffmpeg provenance mismatch");
       assert.deepEqual([...payload.native.bundledLibraries].sort(), native.libraries.map((library: { name: string }) => `Contents/Frameworks/${library.name}`).sort());
       for (const library of native.libraries) assert.equal(payload.files.find(file => file.path === `Contents/Frameworks/${library.name}`)?.sha256, library.bundledSha256, `Native provenance mismatch: ${library.name}`);
     }

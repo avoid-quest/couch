@@ -11,6 +11,6 @@ javascript.json and native.txt list the packaged JavaScript and Rust dependency
 licenses. The installer uses the Windows WebView2 runtime provided or installed
 by Microsoft rather than bundling a fixed runtime.
 
-windows-native.json records the pinned LGPL libmpv build and ffprobe source,
+windows-native.json records the pinned LGPL libmpv build and FFmpeg source,
 hashes and runtime DLLs. windows-native/ contains their bundled license and
 source notices. yt-dlp and Deno notices are alongside this file.

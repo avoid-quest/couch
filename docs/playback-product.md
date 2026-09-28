@@ -77,8 +77,11 @@ and installation maintenance name and affect the correct machine. Home-network s
 works with virtual Mac interfaces; ambiguity is resolved in the app. Normal setup
 requires no JSON, environment variables, protocol enrollment or role coordination.
 
-Core coordinates ordinary media intent, authorization and library access; selected
-clients fetch and decode supported media. Preserve sources and native behavior, direct
+Core coordinates media intent, authorization and library access; selected clients
+fetch and decode supported media. Prefer the most efficient supported client path.
+Playback must not require Core to fetch, decode or relay the actual media to clients,
+including as the mandatory shared-audio path. The current Core PCM producer does
+not satisfy this requirement and remains an architecture blocker. Preserve sources and native behavior, direct
 browser audio/video, maintained HLS/DASH clients, tracks, quality limits and live/DVR.
 Existing Internet sources—including YouTube, Twitch, StreamingCommunity, Bandcamp,
 RaiPlay, radio and IPTV—must also play with several devices selected. Choosing
@@ -87,8 +90,8 @@ browser-compatible rendition selection belong inside playback, without extra set
 Jellyfin and local files are excluded from the current source-qualification pass.
 Sendspin is the synchronized-audio adapter, with protocol/crypto/synchronization kept in
 maintained dependencies. Optional external audio-server connections live in device
-settings. Core audio hosting can be disabled explicitly; its default operation needs
-no separate playback setup.
+settings. Optional Core hosting remains available, but must not make Core media processing
+a prerequisite for shared playback. Normal operation needs no separate playback setup.
 
 Access is local computer/home-network only. Internet media providers remain sources.
 Public deployment, Snapcast, Python Sendspin and new Jellyfin adaptation are outside

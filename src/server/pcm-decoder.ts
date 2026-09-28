@@ -25,13 +25,36 @@ async function bounded<T>(promise: Promise<T>, cancellation: AbortSignal, messag
   try { return await Promise.race([promise, delay(timeoutMs, undefined, { signal: AbortSignal.any([timer.signal, cancellation]) }).then(() => { throw new Error(message); })]); }
   finally { timer.abort(); }
 }
+async function firstAudioTimestamp(stderr: ReadableStream<Uint8Array>, found: (seconds: number) => void) {
+  const reader = stderr.getReader(), decoder = new TextDecoder();
+  let remainder = "", captured = false;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const lines = (remainder + decoder.decode(value, { stream: true })).split("\n");
+      remainder = lines.pop()!.slice(-4096);
+      if (captured) continue; // Still drain FFmpeg's stderr so a live decoder cannot block.
+      for (const line of lines) {
+        if (line.length > 4096) continue;
+        const match = /^\[Parsed_ashowinfo_\d+ @ [^\]]+\] n:\s*0\b.*\bpts_time:\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)/.exec(line);
+        const seconds = Number(match?.[1]);
+        if (match && Number.isFinite(seconds)) { captured = true; found(seconds); break; }
+      }
+    }
+  } finally { reader.releaseLock(); }
+}
 /** Pull-based raw 48 kHz, 16-bit stereo. Read serially; close releases the private decoder. */
 export function createPcmDecoder(command: Load, options: { position: number; speed: number; ffmpeg?: string; signal: AbortSignal }) {
   const start = options.position, rate = options.speed;
   if (!Number.isFinite(start) || start < 0 || !Number.isFinite(rate) || rate < 0.25 || rate > 4) throw new Error("Invalid audio playback timing.");
   const { source, headers } = validatePcmSource(command);
+  const timestamped = command.live === true && !command.radio;
   const cancellation = new AbortController();
   const filters = rate < 0.5 ? `atempo=0.5,atempo=${rate / 0.5}` : rate > 2 ? `atempo=2,atempo=${rate / 2}` : `atempo=${rate}`;
+  let firstTimestampSeconds: number | null = null;
+  const timestamp = timestamped ? Promise.withResolvers<number>() : null;
+  void timestamp?.promise.catch(() => {});
   let resolveReader!: (reader: Socket) => void;
   let rejectReader!: (error: Error) => void;
   let resolveExit!: (code: number) => void;
@@ -58,10 +81,14 @@ export function createPcmDecoder(command: Load, options: { position: number; spe
     try {
       // A private loopback pipe avoids Bun's stdout batching and child-pipe lifetime.
       // The paused socket provides bounded OS/Readable backpressure on every platform.
-      worker.child = Bun.spawn({ cmd: [options.ffmpeg ?? process.env.COUCH_FFMPEG ?? "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-        "-protocol_whitelist", "http,https,tcp,tls,crypto", "-rw_timeout", "10000000", ...(headers ? ["-headers", headers] : []),
-        ...(!!command.duration && command.duration > 0 && !command.radio && !command.live && start > 0 ? ["-ss", String(start)] : []), "-i", source, "-map", "0:a:0", "-vn", "-sn", "-dn", "-af", filters,
-        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", "-f", "s16le", `tcp://127.0.0.1:${port}`], stdin: "ignore", stdout: "ignore", stderr: "ignore", signal: cancellation.signal, killSignal: "SIGKILL" });
+      worker.child = Bun.spawn({ cmd: [options.ffmpeg ?? process.env.COUCH_FFMPEG ?? "ffmpeg", "-hide_banner", "-loglevel", timestamped ? "info" : "error", "-nostdin",
+        "-protocol_whitelist", "http,https,tcp,tls,crypto", "-rw_timeout", "10000000", ...(headers ? ["-headers", headers] : []), ...(timestamped ? ["-copyts"] : []),
+        ...(!!command.duration && command.duration > 0 && !command.radio && !command.live && start > 0 ? ["-ss", String(start)] : []), "-i", source, "-map", "0:a:0", "-vn", "-sn", "-dn", "-af", timestamped ? `ashowinfo,${filters}` : filters,
+        "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", "-f", "s16le", `tcp://127.0.0.1:${port}`], stdin: "ignore", stdout: "ignore", stderr: timestamped ? "pipe" : "ignore", signal: cancellation.signal, killSignal: "SIGKILL" });
+      if (timestamp) void firstAudioTimestamp(worker.child.stderr as ReadableStream<Uint8Array>, seconds => {
+        firstTimestampSeconds = seconds; timestamp.resolve(seconds);
+      }).then(() => { if (firstTimestampSeconds === null) timestamp.reject(new Error("The audio decoder did not provide a timestamp.")); },
+        () => timestamp.reject(new Error("The audio decoder did not provide a timestamp.")));
       void worker.child.exited.then(code => { resolveExit(code); if (!worker.reader) rejectReader(new Error("The audio decoder failed.")); });
     } catch { resolveExit(1); rejectReader(new Error("Could not start the audio decoder.")); }
   });
@@ -72,10 +99,12 @@ export function createPcmDecoder(command: Load, options: { position: number; spe
   void accepted.catch(() => {});
   let closing: Promise<void> | null = null;
   return {
+    get firstTimestampSeconds() { return firstTimestampSeconds; },
     async read() {
       try {
         const pcm = await block(worker);
         if (!pcm.length && await bounded(exited, cancellation.signal, "The decoder did not finish.") !== 0) throw new Error("The audio decoder failed.");
+        if (pcm.length && timestamp) await bounded(timestamp.promise, cancellation.signal, "The audio decoder did not provide a timestamp.");
         return pcm;
       } catch (error) { cancellation.abort(); throw error; }
     },

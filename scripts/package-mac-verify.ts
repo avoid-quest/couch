@@ -71,7 +71,7 @@ try {
     const inventory = await Bun.file(join(root, "Contents/Resources/payload.json")).text();
     assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
     const payload = JSON.parse(inventory);
-    await verifyPayload(root, payload, build.target, "dmg", ["yt-dlp", "deno", "ffprobe"], []);
+    await verifyPayload(root, payload, build.target, "dmg", ["yt-dlp", "deno", "ffmpeg", "ffprobe"], []);
     const files: string[] = [];
     async function walk(directory: string) {
       for (const name of await readdir(directory)) {
@@ -87,7 +87,7 @@ try {
     files.sort();
     verifyBundledNativeLibraries(payload, files);
     assert.ok(run(["otool", "-l", join(root, "Contents/MacOS/couch")]).includes("path @executable_path/../Frameworks"), "The app cannot resolve bundled libmpv");
-    for (const path of ["Contents/MacOS/couch", "Contents/MacOS/couch-server", ...["mpv", "yt-dlp", "deno", "ffprobe"].map(name => `Contents/Resources/tools/${name}`), ...payload.native.bundledLibraries]) {
+    for (const path of ["Contents/MacOS/couch", "Contents/MacOS/couch-server", ...["mpv", "yt-dlp", "deno", "ffmpeg", "ffprobe"].map(name => `Contents/Resources/tools/${name}`), ...payload.native.bundledLibraries]) {
       const executable = join(root, path);
       assert.ok((await binaryArchitectures(executable)).includes("aarch64"), `Wrong Mac architecture: ${path}`);
       assert.match(codeSignature(executable), /Signature=adhoc/, `Unsigned nested code: ${path}`);
@@ -109,7 +109,7 @@ try {
     assert.deepEqual(sources, info.formulas);
     for (const formula of info.formulas) assert.ok(files.some(path => path.startsWith(`Contents/Resources/notices/macos-native/${formula.name}/`)), `Missing native license: ${formula.name}`);
     assert.ok(runIsolated([join(root, "Contents/Resources/tools/mpv"), "--no-config", "--version"]), "mpv cannot run from the mounted bundle");
-    for (const name of ["yt-dlp", "deno", "ffprobe"]) assert.ok(runIsolated([join(root, "Contents/Resources/tools", name), ...(name === "ffprobe" ? ["-version"] : ["--version"])]), `${name} cannot run from the mounted bundle`);
+    for (const name of ["yt-dlp", "deno", "ffmpeg", "ffprobe"]) assert.ok(runIsolated([join(root, "Contents/Resources/tools", name), ...(["ffmpeg", "ffprobe"].includes(name) ? ["-version"] : ["--version"])]), `${name} cannot run from the mounted bundle`);
     const hashes: { path: string; sha256: string }[] = [];
     for (const path of files) hashes.push({ path, sha256: await hash(join(root, path)) });
     return { files: hashes, release };
