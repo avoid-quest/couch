@@ -33,7 +33,7 @@ export function StreamingCommunitySettings({ credentials, connected, canManage }
   }
 
   return (
-    <SettingsSection aria-label="StreamingCommunity settings" description="If the site moves, update its address here." data-tv-local-only>
+    <SettingsSection aria-label="StreamingCommunity settings" description="Couch follows the site when it moves. An address saved here is used while it works." data-tv-local-only>
       {available && page.isPending && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>}
       {canManage ? <SettingsRow label="Site address" htmlFor="streamingcommunity-origin">
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>

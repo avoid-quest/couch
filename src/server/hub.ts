@@ -1,6 +1,7 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
 import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
+import { healStreamingCommunityOrigin } from "./streamingcommunity";
 import { createStartup } from "./startup";
 import { requestPeer, serve, type Listener, type Socket, type Upgrade } from "./http";
 import { createFrontend } from "./frontend";
@@ -8,7 +9,7 @@ import { randomInt } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
 import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
-import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
+import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
@@ -98,6 +99,10 @@ export async function createHub(options: HubOptions) {
   // A client that stops reading is dropped rather than buffered without limit.
   const send = (socket: Socket<SocketData>, message: string) => socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message);
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
+  // Checked at start so saved pages load from the current address; afterwards only
+  // StreamingCommunity requests wait for the check.
+  void healStreamingCommunityOrigin(store);
+  const streamingCommunityOrigin = async (url: string) => providerForUrl(url) === "streamingcommunity" ? healStreamingCommunityOrigin(store) : undefined;
   const startup = createStartup(async () => null);
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const systemAudio = !!options.native && process.platform === "linux";
@@ -115,7 +120,7 @@ export async function createHub(options: HubOptions) {
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
-      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
+      if (entry.source.startsWith("web:")) return streamingCommunityOrigin(entry.source.slice(4)).then(origin => resolveWebMedia(entry.source.slice(4), signal, entry.quality, origin));
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) {
         const station = radio.getPlayable(entry.source.slice(6));
@@ -157,7 +162,7 @@ export async function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => healStreamingCommunityOrigin(store) });
   const forLater = createForLater({
     webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
     databasePath: options.databasePath, onChange: () => session.invalidate("for-later"),
@@ -279,7 +284,7 @@ export async function createHub(options: HubOptions) {
         if (inspectUrl) {
           const controller = new AbortController();
           inspections.set(entry.id, controller);
-          void inspectWebMedia(inspectUrl, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
+          void streamingCommunityOrigin(inspectUrl).then(origin => inspectWebMedia(inspectUrl, controller.signal, origin)).then(metadata => {
             if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(entry.id, entry.source, metadata); }
           }).catch(() => {}).finally(() => {
             if (inspections.get(entry.id) === controller) inspections.delete(entry.id);

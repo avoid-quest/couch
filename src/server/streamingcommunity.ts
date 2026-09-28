@@ -5,17 +5,55 @@ import extractor from "../../vendor/streamingcommunity/streamingcommunity.py" wi
 import type { BrowseRequest, ProviderItem, ProviderPage, StreamingCommunityPreview } from "../shared/providers";
 import { isStreamingCommunityHost, streamingCommunityOrigin, validStreamingCommunityOrigin } from "../shared/streamingcommunity";
 import { ProviderError, providerItemId, withProviderItem } from "./providers/http";
-const SC_MOVED = "StreamingCommunity moved. Update its site address in Settings → Sources.";
+const SC_MOVED = "StreamingCommunity moved and Couch couldn't find its new address. Set it in Settings → Sources.";
 
-export function streamingCommunityLink(source: string, origin = streamingCommunityOrigin): boolean {
+// Links keep working when the site moves: the same path is played from the current origin.
+export function streamingCommunityLink(source: string, origin = streamingCommunityOrigin): string | undefined {
   const url = new URL(source);
+  if (!/stream\w*unity/i.test(url.hostname)) return;
   if (!validStreamingCommunityOrigin(origin)) throw new Error("StreamingCommunity needs a valid site address in Settings → Sources.");
-  if (url.origin !== origin) {
-    if (/stream\w*unity/i.test(url.hostname)) throw new Error(SC_MOVED);
-    return false;
-  }
   if (url.username || url.password || url.hash || !/^\/(?:[a-z]{2}\/)?(?:watch\/\d+|titles\/\d+(?:-[\w-]+)?)$/.test(url.pathname) || (url.search && !/^\?e=\d+$/.test(url.search))) throw new Error("Paste a StreamingCommunity film or episode link. Browsing, series and season links are not supported.");
-  return true;
+  return origin + url.pathname + url.search;
+}
+
+// Pages that publish the site's current address, read only when the stored origin stops
+// serving it: the telegra.ph page StreamingCommunity sends its users to, and the tracker
+// VibraVid (AstraeLabs) keeps for its downloader. A candidate is kept only if it serves the site.
+const addressPages = ["https://telegra.ph/Link-Aggiornato-StreamingCommunity-09-29", "https://domains-tracker.server66.workers.dev/get"];
+let checked = { origin: "", at: 0 };
+let healing: Promise<string> | undefined;
+
+async function servingOrigin(origin: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(origin, { headers: { "User-Agent": userAgent }, signal: AbortSignal.timeout(10_000) });
+    const current = new URL(response.url).origin;
+    if (response.ok && validStreamingCommunityOrigin(current) && parseInertiaPage(await response.text())) return current;
+    await response.body?.cancel();
+  } catch { /* Not serving the site. */ }
+}
+
+// The stored origin, healed: a moved site is followed through its redirect, and a dead one is
+// replaced by the first published address that serves the site. A saved origin that still
+// serves the site is kept. Each origin is checked at most every ten minutes.
+export function healStreamingCommunityOrigin(store: { streamingCommunityOrigin(): string; saveStreamingCommunityOrigin(origin: string): void }): Promise<string> {
+  const stored = store.streamingCommunityOrigin();
+  if (checked.origin === stored && Date.now() - checked.at < 600_000) return Promise.resolve(stored);
+  return healing ??= (async () => {
+    let found = await servingOrigin(stored);
+    for (const page of addressPages) {
+      if (found) break;
+      const text = await fetch(page, { headers: { "User-Agent": userAgent }, signal: AbortSignal.timeout(10_000) }).then(response => response.text(), () => "");
+      for (const candidate of new Set(text.toLowerCase().match(/https:\/\/[a-z0-9.-]+/g))) {
+        if (validStreamingCommunityOrigin(candidate) && (found = await servingOrigin(candidate))) break;
+      }
+    }
+    if (found && found !== stored) {
+      store.saveStreamingCommunityOrigin(found);
+      console.error(`Couch: StreamingCommunity moved from ${stored} to ${found}.`);
+    }
+    checked = { origin: found ?? stored, at: Date.now() };
+    return checked.origin;
+  })().finally(() => { healing = undefined; });
 }
 
 // Catalogue client over StreamingCommunity's Inertia web pages (see
@@ -50,6 +88,8 @@ export function parseInertiaPage(html: string): InertiaPage {
 }
 
 async function streamingCommunityBody(url: URL, init: RequestInit, signal: AbortSignal | undefined, request: typeof fetch): Promise<string> {
+  // Pages captured on an earlier address load from the current one.
+  if (checked.origin && url.origin !== checked.origin) url = new URL(url.pathname + url.search, checked.origin);
   let response: Response;
   try {
     response = await request(url, { credentials: "omit", redirect: "error", signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)]), ...init, headers: { "User-Agent": userAgent, Accept: "text/html, application/json", ...init.headers } });
@@ -298,8 +338,8 @@ export async function streamingCommunityPreview(id: number, origin = streamingCo
   };
 }
 
-// Saved source lists keep their captured origin: like saved links, they are
-// never retargeted to the configured one.
+// Saved source lists keep their captured origin in their items; their pages load
+// from the current origin.
 export async function streamingCommunityList(value: string, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   let url: URL;
