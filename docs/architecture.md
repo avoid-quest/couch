@@ -21,8 +21,16 @@ mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
 
-No renderer plays yet: libmpv left with Tauri and the app window becomes an
-ordinary renderer in #644 ticket 6.
+The Full-mode app window renders its Core's playback
+(`src/client/session/renderer.ts`). Core sends `{ type: "player", command }` over
+the window's host-token WebSocket, and the window reports its player state back
+with `{ type: "player", state }`. Only the host socket may report; if it closes, the
+player becomes unavailable. The window plays URLs in `<video>`. YouTube's separate
+audio plays in an `<audio>` element that follows the video. Playlists that Chromium
+won't open (StreamingCommunity's) go through hls.js. Main caps googlevideo's
+open-ended `Range` requests at 10 MB, because YouTube sends those at about playback
+speed. Tracks, delays, subtitles and gapless preparation are not rendered yet. #644
+ticket 6 makes every Device a renderer.
 
 Sources are external internet media only: yt-dlp sites (YouTube, Twitch,
 RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.

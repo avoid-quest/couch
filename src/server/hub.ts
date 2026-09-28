@@ -13,7 +13,7 @@ import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality }
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
-import { parseCommand } from "./validation";
+import { parseCommand, parsePlayer } from "./validation";
 import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
 import { createRadioProgramme } from "./radio-programme";
@@ -50,7 +50,6 @@ type HubOptions = {
   pairingCode?: string;
   remoteControlEnabled?: boolean;
   adminRecoveryCode?: string;
-  sendPlayer: (command: PlaybackCommand) => void;
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   native?: boolean;
@@ -108,7 +107,13 @@ export async function createHub(options: HubOptions) {
   const systemAudio = !!options.native && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const session = createSession(store, options.sendPlayer, (state, clock) => {
+  // The app window's socket renders playback (#644 ticket 4). Its newest report wins.
+  let renderer: Socket<SocketData> | null = null;
+  const sendPlayer = (command: PlaybackCommand) => {
+    if (!renderer) throw new Error("The Couch app isn't connected.");
+    send(renderer, JSON.stringify({ type: "player", command } satisfies ServerMessage));
+  };
+  const session = createSession(store, sendPlayer, (state, clock) => {
     radioProgramme?.observe(state);
     sound?.interrupt();
     if (!closed && sockets.size) {
@@ -193,7 +198,7 @@ export async function createHub(options: HubOptions) {
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
     active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
-    pin: output => options.sendPlayer({ type: "audioOutput", output }),
+    pin: output => sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
@@ -442,13 +447,22 @@ export async function createHub(options: HubOptions) {
         sockets.add(socket);
         send(socket, JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
       },
-      close(socket: Socket<SocketData>) { sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
+      close(socket: Socket<SocketData>) {
+        sockets.delete(socket);
+        if (socket === renderer) {
+          renderer = null;
+          session.observe({ playbackId: null, status: "unavailable", position: 0, duration: null, volume: session.state.player.volume, seekable: false, error: "The Couch app disconnected." });
+        }
+        if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {});
+      },
       async message(socket: Socket<SocketData>, message: string | null) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         if (socket.data.controllerId) store.touchController(socket.data.controllerId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
         if (message === null) { socket.close(1003, "JSON text messages required."); return; }
+        const player = socket.data.trusted ? parsePlayer(message) : null;
+        if (player) { renderer = socket; session.observe(player); return; }
         let command;
         try { command = parseCommand(message); } catch {
           socket.close(1008, "Invalid command or unsupported media source.");
@@ -474,7 +488,7 @@ export async function createHub(options: HubOptions) {
             if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
             else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
-              if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
+              if (soundRouting && action.type === "pause" && !action.paused) sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
               await session.command(action, authorize, playedBy);
             }
           }

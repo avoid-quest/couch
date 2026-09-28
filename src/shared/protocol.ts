@@ -89,11 +89,14 @@ export type Action =
   | { type: "stop"; playbackId?: string };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
+// The app window plays what Core sends it and reports back (#644 ticket 4; ticket 6 opens this to every Device).
+export type PlayerMessage = { type: "player"; state: PlayerState };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
+  | { type: "player"; command: PlaybackCommand }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 export type PlaybackCommand =

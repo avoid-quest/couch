@@ -42,8 +42,6 @@ const hub = await createHub({
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
-  // No renderer takes playback commands yet; the app window becomes one in #644 ticket 6.
-  sendPlayer() {},
 });
 
 if (app) app.postMessage({ type: "ready", origin: hub.origin, urls: hub.urls, pairingCode: hub.pairingCode });

@@ -1,4 +1,4 @@
-import type { Action, ClientMessage, QueueEntry } from "../shared/protocol";
+import type { Action, ClientMessage, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
@@ -65,6 +65,19 @@ function validAction(value: unknown): value is Action {
     case "stop": return value.playbackId === undefined || id(value.playbackId);
     default: return false;
   }
+}
+
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const playerStatuses = ["idle", "loading", "playing", "paused", "ended", "error"];
+// null when the message is not a valid player report.
+export function parsePlayer(message: string): PlayerState | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "player" || !object(value.state)) return null;
+  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed } = value.state;
+  if (!(playbackId === null || id(playbackId)) || !playerStatuses.includes(status as string) || typeof buffering !== "boolean" || !finite(position) || !(duration === null || finite(duration))
+    || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed)) return null;
+  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error?.slice(0, 300) ?? null, speed };
 }
 
 export function parseCommand(message: string): ClientMessage {

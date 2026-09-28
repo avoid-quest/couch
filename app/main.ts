@@ -315,6 +315,12 @@ else {
     }
     screen.on("display-added", () => { if (tv && !preview) present(); });
     screen.on("display-removed", () => { if (tv && !preview) present(); });
+    // googlevideo sends open-ended ranges at about playback speed and bounded ones at full
+    // speed, so YouTube's picture asks for 10 MB at a time (#644 ticket 4).
+    session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ["https://*.googlevideo.com/*"] }, ({ requestHeaders }, callback) => {
+      const start = /^bytes=(\d+)-$/.exec(requestHeaders.Range ?? "")?.[1];
+      callback({ requestHeaders: start === undefined ? requestHeaders : { ...requestHeaders, Range: `bytes=${start}-${Number(start) + 10_485_759}` } });
+    });
     createWindow();
     if (app.isPackaged && !tv) updater.autoUpdater.checkForUpdatesAndNotify().catch(error => console.error(`Update check failed: ${error.message}`));
   });
