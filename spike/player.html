@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Couch spike player</title>
+<style>html, body { margin: 0; height: 100%; background: #000; } video { width: 100%; height: 100%; }</style>
+<script src="/hls.js"></script>
+<script src="/mpegts.js"></script>
+<script>
+// Plays one source the way the map's delivery table says: native element, MSE for YouTube's split streams, hls.js, or mpegts.js.
+const log = [];
+let element;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function support() {
+  const types = ['video/mp4; codecs="avc1.64002a"', 'video/webm; codecs="vp09.00.41.08"', 'video/mp4; codecs="av01.0.09M.08"', 'video/mp4; codecs="hvc1.1.6.L120.90"', 'video/mp4; codecs="mp4v.61"', 'video/mp2t',
+    'audio/mp4; codecs="mp4a.40.2"', 'audio/webm; codecs="opus"', 'audio/mpeg', 'audio/mp4; codecs="mp4a.6B"', 'audio/mp4; codecs="ac-3"', 'audio/mp4; codecs="ec-3"'];
+  return Object.fromEntries(types.map(type => [type, { mse: MediaSource.isTypeSupported(type), element: document.createElement("video").canPlayType(type) || "no" }]));
+}
+
+async function append(buffer, data) {
+  buffer.appendBuffer(data);
+  await new Promise((resolve, reject) => { buffer.onupdateend = resolve; buffer.onerror = reject; });
+}
+
+// YouTube serves 1080p only as separate video and audio streams: fetch each in ranges and append it to one MediaSource.
+async function feed(buffer, url) {
+  const length = Number(new URL(url).searchParams.get("clen"));
+  for (let position = 0; position < length;) {
+    while (buffer.buffered.length && buffer.buffered.end(buffer.buffered.length - 1) - element.currentTime > 30) await sleep(500);
+    const end = Math.min(position + (4 << 20), length) - 1;
+    const response = await fetch(`${url}&range=${position}-${end}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status} for a range`);
+    const data = await response.arrayBuffer();
+    await append(buffer, data);
+    position += data.byteLength;
+  }
+}
+
+async function play(source) {
+  element = document.createElement(source.kind);
+  document.body.append(element);
+  element.onerror = () => log.push(`element error ${element.error?.code} ${element.error?.message}`);
+  if (source.delivery === "native") element.src = source.url;
+  if (source.delivery === "mse") {
+    const media = new MediaSource();
+    element.src = URL.createObjectURL(media);
+    await new Promise(resolve => media.addEventListener("sourceopen", resolve, { once: true }));
+    const video = media.addSourceBuffer(source.mime), audio = media.addSourceBuffer(source.audioMime);
+    Promise.all([feed(video, source.url), feed(audio, source.audioUrl)]).then(() => media.endOfStream(), error => log.push(`feed ${error.message}`));
+  }
+  if (source.delivery === "hls") {
+    const hls = new Hls();
+    hls.on(Hls.Events.ERROR, (_event, data) => log.push(`hls.js ${data.fatal ? "fatal " : ""}${data.details} ${data.response?.code ?? ""} ${data.error?.message ?? ""}`.trim()));
+    hls.loadSource(source.url);
+    hls.attachMedia(element);
+  }
+  if (source.delivery === "mpegts") {
+    const player = mpegts.createPlayer({ type: "mpegts", isLive: true, url: source.url });
+    player.on(mpegts.Events.ERROR, (type, detail, info) => log.push(`mpegts.js ${type} ${detail} ${info?.msg ?? ""}`));
+    player.on(mpegts.Events.MEDIA_INFO, info => log.push(`mpegts.js media ${info.mimeType} audio=${info.hasAudio} video=${info.hasVideo}`));
+    player.attachMediaElement(element);
+    player.load();
+  }
+  element.play().catch(error => log.push(`play() ${error.name} ${error.message}`));
+  const deadline = performance.now() + 45_000;
+  while (performance.now() < deadline) {
+    if (element.error) return { error: `media error ${element.error.code} ${element.error.message}`, log };
+    if (!element.paused && element.readyState >= 3 && element.currentTime > 0) return { startedAfterMs: Math.round(45_000 - (deadline - performance.now())) };
+    await sleep(200);
+  }
+  return { error: "did not start within 45 s" };
+}
+
+function stats() {
+  if (!element) return { log };
+  return { visibility: document.visibilityState, currentTime: element.currentTime, paused: element.paused, videoWidth: element.videoWidth ?? 0, videoHeight: element.videoHeight ?? 0,
+    quality: element.getVideoPlaybackQuality && (({ totalVideoFrames, droppedVideoFrames }) => ({ totalVideoFrames, droppedVideoFrames }))(element.getVideoPlaybackQuality()), error: element.error ? `media error ${element.error.code} ${element.error.message}` : undefined, log };
+}
+</script>
