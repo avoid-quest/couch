@@ -39,8 +39,10 @@ const send = () => { reportedAt = performance.now(); report?.(state()); };
 
 const follow = (resync = true) => {
   if (!split()) return;
-  audio.playbackRate = video.playbackRate;
-  if (Math.abs(audio.currentTime - video.currentTime) > (resync ? 0.1 : 0.5)) audio.currentTime = video.currentTime;
+  // Small drift is corrected by playing the audio 5% faster or slower, large drift by seeking.
+  const drift = video.currentTime - audio.currentTime;
+  if (Math.abs(drift) > (resync ? 0.1 : 0.5)) audio.currentTime = video.currentTime;
+  audio.playbackRate = video.playbackRate * (Math.abs(drift) > 0.03 ? 1 + Math.sign(drift) * 0.05 : 1);
   if (video.paused || !ready || waiting()) audio.pause(); else void audio.play().catch(() => {});
 };
 const fail = (element: HTMLMediaElement) => {
@@ -95,8 +97,12 @@ export function play(command: PlaybackCommand) {
       reset();
       playbackId = command.playbackId;
       loading = command;
-      video.src = command.source;
-      if (command.audioSource) audio.src = command.audioSource;
+      // The app allows googlevideo in CORS mode (app/main.ts).
+      for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
+        if (!source) continue;
+        element.crossOrigin = new URL(source).hostname.endsWith(".googlevideo.com") ? "anonymous" : null;
+        element.src = source;
+      }
       apply();
       if (command.startPosition) video.currentTime = command.startPosition;
       if (command.preferences?.speed) video.playbackRate = command.preferences.speed;
