@@ -131,7 +131,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a></Button>}
   </>;
   const unavailable = connected && player?.status === "unavailable";
-  const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.source.startsWith("file:") || current?.source.startsWith("library:") ? "The file is missing from its folder." : current?.live ? "This stream has ended." : "This video is unavailable.";
+  const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
   const status = !current ? null : unavailable ? { title: `Player not running on ${localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }

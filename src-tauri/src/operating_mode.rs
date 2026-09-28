@@ -192,7 +192,7 @@ fn addresses(url: &Url) -> Result<Vec<SocketAddr>, String> {
 }
 
 fn connection_client() -> reqwest::ClientBuilder {
-    // Remote mode can make its first request before the updater initializes TLS.
+    // Whichever of remote mode and now-playing artwork runs first installs the TLS provider.
     let _ = rustls::crypto::ring::default_provider().install_default();
     reqwest::Client::builder()
         .no_proxy()

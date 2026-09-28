@@ -99,7 +99,7 @@ async fn connection_info(
     tokio::time::timeout(Duration::from_secs(15), async move {
         loop {
             if let Some(result) = connection.borrow().clone() {
-                // The local player uses Vite's fixed proxy; maintenance has its own ephemeral port.
+                // The local player uses Vite's fixed proxy in development.
                 #[cfg(dev)]
                 let result = result.map(|info| frontend_connection(info, host.local_running.load(Ordering::Relaxed), _app.config().build.dev_url.as_ref()));
                 return result;

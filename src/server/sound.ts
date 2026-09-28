@@ -97,7 +97,7 @@ export function createSound(options: Options) {
         return json({ error: "Couldn't read sound settings." }, 503);
       }
     },
-    interrupt() { if (!options.idle()) finish("stopped", "Playback or maintenance started; the sound test stopped."); },
+    interrupt() { if (!options.idle()) finish("stopped", "Playback started; the sound test stopped."); },
     close() { closed = true; finish("stopped", options.platform === "mac" ? "Couch is closing. The sound test stopped." : "The TV is closing; the sound test stopped."); },
   };
 }

@@ -154,7 +154,7 @@ has room to read. Keep the parser's safe URL handling and omit raw HTML.
 
 Messages:
 
-- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity, diagnostic results and unexpected outcomes; routine user-triggered actions stay quiet. One line, at most one action.
+- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity and unexpected outcomes; routine user-triggered actions stay quiet. One line, at most one action.
 - **Alert** for a persistent problem on the page. `variant="destructive"` for
   errors; put Try again in `AlertAction`.
 - **Empty** for empty states. Say what goes here and offer the next step.
