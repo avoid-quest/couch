@@ -1,10 +1,9 @@
 node_modules/
 dist/
+build/
 .data/
 src-tauri/target/
 src-tauri/gen/
-src-tauri/binaries/*
-!src-tauri/binaries/.gitkeep
 .DS_Store
 .artifacts/
 src-tauri/build-info.json

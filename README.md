@@ -28,15 +28,15 @@ the same app window. Browser remotes connect on your local network.
 
 ## Develop
 
-Couch uses React for the TV and browser remote, Bun for the shared queue and
-SQLite storage, and Tauri with libmpv for native playback.
+Couch uses React for the TV and browser remote, Core on Node for the shared queue
+and SQLite storage, and Tauri with libmpv for native playback.
 
 ```sh
 bun install --frozen-lockfile
-bun run desktop   # Native development app, Vite hot reload and owned Bun server
+bun run desktop   # Native development app, Vite hot reload and owned Core
 bun run dev       # Browser UI and server, without native playback
 bun run typecheck
-bun run build     # Frontend assets and native Bun sidecar
+bun run build     # Frontend assets and the Core bundle (build/core.mjs)
 ```
 
 See [usage and development](docs/usage.md) for prerequisites, ports and data

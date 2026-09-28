@@ -1,7 +1,7 @@
 # Control Couch from Mac or Windows
 
 Open the playback computer's address in a browser. The selected Couch owns
-playback and the shared queue. You do not need Bun, Rust,
+playback and the shared queue. You do not need Node, Bun, Rust,
 Docker or a native Couch package on the controller computer.
 
 ## Connect
@@ -33,7 +33,7 @@ another player.
 ## Native desktop app
 
 Every supported desktop build includes **This computer** and **Another Couch**
-modes. This computer owns a local Bun host, trusted Settings access and local
+modes. This computer owns a local Core, trusted Settings access and local
 playback. The local owner or a paired Administrator can select its output and
 control volume and mute; Couch also shows external changes.
 

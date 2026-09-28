@@ -1,7 +1,7 @@
 # Current architecture
 
 Couch has one TV playback instance and multiple independent browser remotes.
-The Bun coordinator owns the household queue, playback intent, authorization and
+Core, the Node coordinator, owns the household queue, playback intent, authorization and
 persistent state. Tauri owns the native window and libmpv transport; native
 observations return to the coordinator. A remote never resolves private playback
 URLs or becomes another playback authority.
@@ -22,16 +22,15 @@ Couch serves no local files. The rebuild plan is
 ```
 src/client -- Vite (one transform / route / worker build) --> dist
                                                            |-- Tauri frontendDist
-                                                           `-- Bun file imports --> compiled sidecar
+                                                           `-- Core serves it from disk
+src/main.ts -- Bun.build --target=node --> build/core.mjs (one ESM file, run by Node 24)
 ```
 
-`bun run build` writes the build identity, runs Vite once, and replaces
-`src/frontend.ts` during the sidecar build with exact-byte file imports of `dist`.
-Bun does not process the generated HTML, JavaScript or CSS again. The executable
-contains all emitted assets, the manifest and worker; it does not read a mutable
-`dist` directory after installation. The hub serves the known page paths and
-explicit assets, leaving authentication, unknown requests and WebSockets with
-the existing coordinator handlers. Tauri still packages `dist` directly.
+`bun run build` writes the build identity, runs Vite once, and bundles Core with
+its dependencies into `build/core.mjs`. Core reads `dist` beside it at startup and
+serves the known page paths and emitted files; `/api` routes, authentication,
+unknown requests and WebSockets stay with the coordinator handlers. Tauri still
+packages `dist` directly.
 
 Both delivery paths use root-relative URLs. Only browser remotes in a supported
 secure context register `/sw.js` with root scope. Tauri never registers it.
@@ -43,6 +42,7 @@ is still checked before opening the control WebSocket.
 
 `bun run desktop` uses Tauri's `beforeDevCommand`, `devUrl`, and source watcher
 for native development. `bun run dev` is the separate browser-only loop: it
-starts the source-mode Bun coordinator and Vite together. Vite runs on port
+rebuilds Core on every source change, runs it under `node --watch`, and starts
+Vite. Vite runs on port
 1420 with an API proxy to the coordinator on port 4100 (`COUCH_PORT`).
 [scripts/build.ts](../scripts/build.ts) describes current delivery.

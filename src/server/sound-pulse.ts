@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import type { SoundInventory, SoundOutput, SoundProfile } from "../shared/sound";
 
 type Card = { index: number; name: string; active_profile?: string; properties?: Record<string, string>; profiles?: Record<string, { description?: string; sinks?: number; sources?: number; available?: boolean }> };
@@ -53,8 +53,10 @@ export function pulseSound(): SoundBackend {
       return { outputs: soundOutputs(JSON.parse(sinks), JSON.parse(cards)), defaultOutput: selected || null, profiles: soundProfiles(JSON.parse(cards)) };
     },
     start(output) {
-      const child = Bun.spawn(["/usr/bin/paplay", "--raw", "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=50", "--volume=65536", `--device=${output}`, "--client-name=Couch sound test", "--stream-name=Couch sound test"], { env: environment(), stdin: testTone(), stdout: "ignore", stderr: "ignore" });
-      return { pid: child.pid, exited: child.exited, stop: () => { child.kill("SIGKILL"); } };
+      const child = spawn("/usr/bin/paplay", ["--raw", "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=50", "--volume=65536", `--device=${output}`, "--client-name=Couch sound test", "--stream-name=Couch sound test"], { env: environment(), stdio: ["pipe", "ignore", "ignore"] });
+      const exited = new Promise<number>(resolve => { child.once("error", () => resolve(-1)); child.once("close", code => resolve(code ?? -1)); });
+      child.stdin.on("error", () => {}).end(testTone());
+      return { pid: child.pid ?? -1, exited, stop: () => { child.kill("SIGKILL"); } };
     },
     async route(pid) {
       const [inputs, sinks] = await Promise.all([querySound(["--format=json", "list", "sink-inputs"]), querySound(["--format=json", "list", "sinks"])]);

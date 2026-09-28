@@ -15,7 +15,8 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "types": [
-      "bun"
+      "node",
+      "vite/client"
     ],
     "paths": {
       "@/*": [
@@ -25,7 +26,6 @@
   },
   "include": [
     "src",
-    "scripts",
     "vite.config.ts"
   ]
 }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { HistoryItem } from "../shared/viewing";
 import type { PlaybackActor, PlayerState, QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
@@ -8,7 +9,7 @@ export class ViewingError extends Error {
 
 export function playbackMediaId(entry: QueueEntry): string | null {
   if (entry.live || entry.kind === "radio" || /^(radio|iptv):/.test(entry.source)) return null;
-  if (/^(web:https?:|https?:)/.test(entry.source)) return `media:${new Bun.CryptoHasher("sha256").update(entry.source).digest("hex")}`;
+  if (/^(web:https?:|https?:)/.test(entry.source)) return `media:${createHash("sha256").update(entry.source).digest("hex")}`;
   return null;
 }
 
