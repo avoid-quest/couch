@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { requireAdministrator } from "./-administrator";
 import { ConnectionsPage } from "../../sections/settings/device/ConnectionsPage";
 
 // /settings/connection comes from settings-pages, the single path truth.
+// Every Device sees the Devices page; admin actions stay admin-only.
 export const Route = createFileRoute("/settings/connection")({
-  beforeLoad: ({ context }) => context.identity?.claimAvailable ? undefined : requireAdministrator({ context }),
   component: ConnectionsPage,
 });

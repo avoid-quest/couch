@@ -13,6 +13,8 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } 
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
+import { deviceId } from "@/session/device-id";
+import { defaultDeviceName } from "../../../shared/devices";
 import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { ChevronRight } from "lucide-react";
@@ -218,19 +220,23 @@ export function useLocalSetupPending(credentials: Credentials | null) {
   return !!credentials && device?.mode === "local" && !device.localSetupComplete;
 }
 
-// The server bumps the controllers revision, which refreshes remoteControlEnabled.
+// The server bumps the devices revision, which refreshes remoteControlEnabled.
+// The app window is this Couch's Device, so its name is asked here, once.
 export function LocalSharingPrompt({ credentials }: { credentials: Credentials | null }) {
   const device = usePlaybackDevice();
   const pending = useLocalSetupPending(credentials);
+  const [name, setName] = useState("");
   const sharing = useMutation({
     mutationFn: async (enabled: boolean) => {
+      await apiSend(credentials!, "/api/settings", { name: name.trim() || defaultDeviceName(deviceId()) }, "POST", 10_000);
       await apiSend(credentials!, "/api/settings/sharing", { enabled }, "POST", 10_000);
       await device!.completeLocalSetup();
     },
   });
   if (!pending) return null;
   const setSharing = (enabled: boolean) => { if (!sharing.isPending) sharing.mutate(enabled); };
-  return <Onboarding title="Allow remotes?" description="Phones on your network can pair and control playback. Change it in Settings → Remotes." data-tv-navigation-scope>
+  return <Onboarding title="Allow remotes?" description="Phones on your network can pair and control playback. Change it in Settings → Devices." data-tv-navigation-scope>
+    <Field><FieldLabel htmlFor="host-name">Name this computer</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>
     {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}
     <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Allow</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
   </Onboarding>;

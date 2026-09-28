@@ -89,7 +89,17 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
   const invalidate = (...domains: Domain[]) => {
     if (!admitted()) return;
-    if (domains.includes("controllers")) {
+    if (domains.includes("devices")) {
+      // A rename reaches every place that shows a Device's name.
+      const renamed = (actor: PlaybackActor) => {
+        const name = store.device(actor.deviceId)?.name;
+        return name && name !== actor.name ? { ...actor, name } : actor;
+      };
+      if (state.playedBy) state.playedBy = renamed(state.playedBy);
+      if (state.queue.some(entry => entry.addedBy && renamed(entry.addedBy) !== entry.addedBy)) {
+        state.queue = state.queue.map(entry => entry.addedBy ? { ...entry, addedBy: renamed(entry.addedBy) } : entry);
+        try { store.saveQueue(state.queue, state.queueCursorEntryId); } catch { /* The saved queue keeps the old name until its next save. */ }
+      }
       state.installationName = store.installationName();
       state.setupStep = store.setupStep();
       state.administratorClaimed = store.administratorExists();

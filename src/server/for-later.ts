@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ForLaterReference } from "../shared/for-later";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
-import { ControllerError, settingField } from "./controllers";
+import { ControllerError, settingField } from "./devices";
 import { capturePlaylistEntries } from "./playlists";
 import { CHANGED_ELSEWHERE, PLAY_CANCELED } from "./messages";
 

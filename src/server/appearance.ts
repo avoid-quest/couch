@@ -1,6 +1,6 @@
 import { isInterfaceSize, type TvAppearance } from "../shared/appearance";
-import type { ControllerIdentity } from "../shared/controllers";
-import { ControllerError, settingField } from "./controllers";
+import type { DeviceIdentity } from "../shared/devices";
+import { ControllerError, settingField } from "./devices";
 import type { Store } from "./store";
 import { ADMIN_ONLY, STORAGE_ERROR } from "./messages";
 
@@ -16,7 +16,7 @@ export function createAppearance(store: Store, publish: (appearance: TvAppearanc
   const cancel = () => { clearTimeout(timer); preview = null; publish(state()); };
 
   return {
-    async handle(request: Request, identity: () => ControllerIdentity | null) {
+    async handle(request: Request, identity: () => DeviceIdentity | null) {
       const authorize = () => {
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this remote first.", 401);

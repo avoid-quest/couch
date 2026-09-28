@@ -235,8 +235,8 @@ function PairingPage() {
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
-  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Remotes → Pair a remote, then enter the code shown there.`}>
-    {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This remote was removed. Pair again."}</AlertDescription></Alert>}
+  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Devices → Pair a device, then enter the code shown there.`}>
+    {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This device was removed. Pair again."}</AlertDescription></Alert>}
     <PairForm />
   </Onboarding>;
 }
@@ -264,11 +264,11 @@ export function ShellChrome({ children }: PropsWithChildren) {
     if (!state?.activity) return;
     if (activityToast.current) toast.dismiss(activityToast.current);
     activityToast.current = null;
-    if (identity && state.activity.actor.deviceId !== (identity.controller?.id ?? "host")) {
+    if (identity && state.activity.actor.deviceId !== (identity.device?.id ?? "host")) {
       activityToast.current = `activity-${state.activity.id}`;
       toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
     }
-  }, [state?.activity?.id, identity?.controller?.id]);
+  }, [state?.activity?.id, identity?.device?.id]);
   const pairingRef = useRef<HTMLButtonElement>(null);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
@@ -293,7 +293,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               {paired && !!state?.queue.length && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
               {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} />}
-              {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
+              {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a device</Button>}
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>
               {paired && !tvPresentation && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}

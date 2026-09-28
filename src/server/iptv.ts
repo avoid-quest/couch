@@ -2,13 +2,13 @@ import type { PlaybackActor } from "../shared/protocol";
 import { Database } from "./sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ControllerIdentity } from "../shared/controllers";
+import type { DeviceIdentity } from "../shared/devices";
 import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shared/iptv";
 import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
 import { ADMIN_ONLY } from "./messages";
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
-type Identity = () => ControllerIdentity | null;
+type Identity = () => DeviceIdentity | null;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
 const publicChannel = ({ streamUrl: _stream, logoUrl: _logo, ...channel }: PrivateChannel): GuideChannel => channel;

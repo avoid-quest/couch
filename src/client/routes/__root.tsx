@@ -1,6 +1,6 @@
 import { createRootRouteWithContext, Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
-import type { ControllerIdentity } from "../../shared/controllers";
+import type { DeviceIdentity } from "../../shared/devices";
 import { useEffect } from "react";
 import { AppShell } from "../sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ function NotFound() {
   return null;
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: ControllerIdentity | null; connected: boolean }>()({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: DeviceIdentity | null; connected: boolean }>()({
   component: AppShell,
   errorComponent: RootError,
   notFoundComponent: NotFound,

@@ -16,7 +16,7 @@ export type ExternalSubtitle = { source: string; title: string; language?: strin
 export type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
-export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "controllers" | "settings" | "sound" | "bluetooth" | "display";
+export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "devices" | "settings" | "sound" | "bluetooth" | "display";
 export type NavigationKey ="up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 
 export type PlayerState = {

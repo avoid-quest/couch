@@ -1,4 +1,4 @@
-import type { ConnectionDetails } from "../../shared/controllers";
+import type { ConnectionDetails } from "../../shared/devices";
 
 type KnownConnection = { origin: string; details: ConnectionDetails };
 const key = "couch.connection";

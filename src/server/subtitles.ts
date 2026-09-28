@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
-import { ControllerError } from "./controllers";
+import { ControllerError } from "./devices";
 import { STORAGE_ERROR } from "./messages";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;

@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaylistLoadMode, PlaylistSource, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
-import { ControllerError } from "./controllers";
+import { ControllerError } from "./devices";
 import { ProviderError } from "./providers/http";
 import { CHANGED_ELSEWHERE, QUEUE_FULL } from "./messages";
 

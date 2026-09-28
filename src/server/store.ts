@@ -6,8 +6,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
 import type { HistoryItem, WatchingProfile } from "../shared/viewing";
-import type { Controller } from "../shared/controllers";
-import { ControllerError, controllerName } from "./controllers";
+import { defaultDeviceName, isDeviceId, type Device } from "../shared/devices";
+import { ControllerError, deviceName } from "./devices";
 import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 import { CHANGED_ELSEWHERE } from "./messages";
@@ -87,7 +87,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     );
     CREATE TABLE IF NOT EXISTS streamingcommunity_origin (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
-    INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
+    INSERT OR IGNORE INTO installation (id, name) VALUES (1, 'Couch');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
@@ -100,13 +100,25 @@ export function openStore(path: string, remoteControlEnabled = false) {
 
   const stored = db.query<{ queue: string; volume: number }, []>("SELECT queue, volume FROM session WHERE id = 1").get()!;
   const hash = (token: string) => createHash("sha256").update(token).digest("hex");
-  const controllerColumns = "id, name, role, createdAt, lastSeenAt";
-  const controller = (id: string) => db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE id = ?`).get(id);
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(installation)").all().some(column => column.name === "deviceId")) {
+    db.exec("ALTER TABLE installation ADD COLUMN deviceId TEXT");
+  }
+  // Each row is a paired Device; the app window that runs this Couch is the
+  // installation's Device, named by the installation name (#644 ticket 5).
+  const deviceColumns = "id, name, role, createdAt, lastSeenAt";
+  const pairedDevice = (id: string) => db.query<Device, [string]>(`SELECT ${deviceColumns} FROM devices WHERE id = ?`).get(id);
+  const installation = () => db.query<{ name: string; deviceId: string | null }, []>("SELECT name, deviceId FROM installation WHERE id = 1").get()!;
+  const hostDevice = (): Device | null => {
+    const { name, deviceId } = installation();
+    return deviceId ? { id: deviceId, name, role: "host", createdAt: null, lastSeenAt: null } : null;
+  };
+  const device = (id: string) => hostDevice()?.id === id ? hostDevice() : pairedDevice(id);
+  const deviceForToken = (token: string) => token.length <= 128 ? db.query<Device, [string]>(`SELECT ${deviceColumns} FROM devices WHERE token_hash = ?`).get(hash(token)) : null;
   const administratorExists = () => db.query("SELECT 1 FROM devices WHERE role = 'administrator' LIMIT 1").get() !== null;
-  const requireController = (id: string) => {
-    const device = controller(id);
-    if (!device) throw new ControllerError("This remote is no longer paired.", 404);
-    return device;
+  const requireDevice = (id: string) => {
+    const found = pairedDevice(id);
+    if (!found) throw new ControllerError("This device is no longer paired.", 404);
+    return found;
   };
   db.exec("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
   db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
@@ -331,45 +343,70 @@ export function openStore(path: string, remoteControlEnabled = false) {
     saveVolume(volume: number) {
       db.query("UPDATE session SET volume = ? WHERE id = 1").run(volume);
     },
-    pair(name?: unknown) {
-      const label = controllerName(name === undefined ? "Remote" : name);
+    /** Pairs the Device whose key is `id`, or gives an already paired key a new token. */
+    pair(id: unknown, name?: unknown) {
+      if (!isDeviceId(id)) throw new ControllerError("Update Couch on this device, then pair again.");
+      if (id === installation().deviceId) throw new ControllerError("This device already runs this Couch.", 409);
+      const label = name === undefined || name === "" ? defaultDeviceName(id) : deviceName(name);
       const token = crypto.randomUUID() + crypto.randomUUID();
       const now = Date.now();
       db.transaction(() => {
-        const role = db.query("SELECT 1 FROM devices LIMIT 1").get() ? "controller" : "administrator";
-        db.query("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), crypto.randomUUID(), label, role, now, now);
+        if (pairedDevice(id)) db.query("UPDATE devices SET token_hash = ?, name = ?, lastSeenAt = ? WHERE id = ?").run(hash(token), label, now, id);
+        else {
+          const role = db.query("SELECT 1 FROM devices LIMIT 1").get() ? "controller" : "administrator";
+          db.query("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), id, label, role, now, now);
+        }
       }).immediate();
       return token;
     },
-    isPaired(token: string) {
-      return token.length <= 128 && db.query("SELECT 1 FROM devices WHERE token_hash = ?").get(hash(token)) !== null;
+    /**
+     * A connected Device presents its key. Pairings made before keys were IDs,
+     * and Devices whose key changed, take the presented key as their ID. Returns
+     * whether anything changed.
+     */
+    identify(token: string | null, id: unknown) {
+      if (!isDeviceId(id)) return false;
+      if (token === null) {
+        if (installation().deviceId === id || pairedDevice(id)) return false;
+        db.query("UPDATE installation SET deviceId = ? WHERE id = 1").run(id);
+        return true;
+      }
+      const current = deviceForToken(token);
+      if (!current || current.id === id || device(id)) return false;
+      db.query("UPDATE devices SET id = ? WHERE id = ?").run(id, current.id);
+      return true;
     },
-    controller,
-    controllers() { return db.query<Controller, []>(`SELECT ${controllerColumns} FROM devices ORDER BY createdAt, id`).all(); },
-    renameController(id: string, value: unknown) {
-      const name = controllerName(value);
-      requireController(id);
-      db.query("UPDATE devices SET name = ? WHERE id = ?").run(name, id);
-      return controller(id)!;
+    device,
+    hostDevice,
+    devices(): Device[] {
+      const host = hostDevice();
+      return [...host ? [host] : [], ...db.query<Device, []>(`SELECT ${deviceColumns} FROM devices ORDER BY createdAt, id`).all()];
     },
-    setControllerRole(id: string, role: unknown) {
+    renameDevice(id: string, value: unknown) {
+      const name = deviceName(value);
+      if (hostDevice()?.id === id) db.query("UPDATE installation SET name = ? WHERE id = 1").run(name);
+      else {
+        requireDevice(id);
+        db.query("UPDATE devices SET name = ? WHERE id = ?").run(name, id);
+      }
+      return device(id)!;
+    },
+    setDeviceRole(id: string, role: unknown) {
       if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose Remote or Admin.");
       return db.transaction(() => {
-        requireController(id);
+        requireDevice(id);
         db.query("UPDATE devices SET role = ? WHERE id = ?").run(role, id);
-        return controller(id)!;
+        return pairedDevice(id)!;
       }).immediate();
     },
-    revokeController(id: string) {
+    revokeDevice(id: string) {
       db.transaction(() => {
-        requireController(id);
+        requireDevice(id);
         db.query("DELETE FROM devices WHERE id = ?").run(id);
       }).immediate();
     },
-    controllerForToken(token: string) {
-      return token.length <= 128 ? db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE token_hash = ?`).get(hash(token)) : null;
-    },
-    touchController(id: string) {
+    deviceForToken,
+    touchDevice(id: string) {
       const now = Date.now();
       db.query("UPDATE devices SET lastSeenAt = ? WHERE id = ? AND (lastSeenAt IS NULL OR lastSeenAt <= ?)").run(now, id, now - 60_000);
     },
@@ -387,22 +424,22 @@ export function openStore(path: string, remoteControlEnabled = false) {
         return { expiresAt: row.expiresAt, consumed: !!row.consumed };
       }).immediate();
     },
-    consumeControllerClaim(id: string, code: string): Controller {
+    consumeControllerClaim(id: string, code: string): Device {
       return db.transaction(() => {
-        const device = controller(id);
-        if (!device) throw new ControllerError("Pair this remote first.", 401);
-        if (device.role !== "controller") throw new ControllerError("This remote is already an admin.", 409);
+        const claimant = pairedDevice(id);
+        if (!claimant) throw new ControllerError("Pair this remote first.", 401);
+        if (claimant.role !== "controller") throw new ControllerError("This remote is already an admin.", 409);
         const claim = claimRow(code);
         if (!claim || claim.consumed || claim.expiresAt <= Date.now()) throw new ControllerError("This admin code is wrong or expired.", 401);
         if (!claim.recovery && administratorExists()) throw new ControllerError("This Couch already has an admin.", 409);
         db.query("UPDATE devices SET role = 'administrator' WHERE id = ?").run(id);
         db.query("UPDATE controller_claims SET consumed = 1 WHERE code_hash = ?").run(hash(code));
-        return controller(id)!;
+        return pairedDevice(id)!;
       }).immediate();
     },
     installationName() { return db.query<{ name: string }, []>("SELECT name FROM installation WHERE id = 1").get()!.name; },
     renameInstallation(value: unknown) {
-      const name = controllerName(value);
+      const name = deviceName(value);
       db.query("UPDATE installation SET name = ? WHERE id = 1").run(name);
       return name;
     },

@@ -27,8 +27,8 @@ import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createForLater } from "./for-later";
 import { createPlaylists } from "./playlists";
-import { ControllerError, createControllers, settingField } from "./controllers";
-import type { ControllerIdentity } from "../shared/controllers";
+import { ControllerError, createDevices, settingField } from "./devices";
+import type { DeviceIdentity } from "../shared/devices";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
@@ -66,7 +66,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
   return url.origin;
 };
-type SocketData = { trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+type SocketData = { trusted: boolean; deviceId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -185,12 +185,12 @@ export async function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry }, authorize, playedBy);
     },
   });
-  const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
-    if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
-    session.invalidate("controllers");
+  const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
+    if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
+    session.invalidate("devices");
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
-    for (const socket of sockets) if (socket.data.controllerId === id) {
+    for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
       socket.close(4001, "This remote's access was revoked. Pair again.");
     }
@@ -227,9 +227,10 @@ export async function createHub(options: HubOptions) {
     return response;
   };
 
-  const playbackActor = (controllerId: string | null): PlaybackActor | undefined => {
-    if (controllerId === null) return { deviceId: "host", name: store.installationName() };
-    const device = store.controller(controllerId);
+  // null is the app window that runs this Couch.
+  const playbackActor = (deviceId: string | null): PlaybackActor | undefined => {
+    if (deviceId === null) return { deviceId: store.hostDevice()?.id ?? "host", name: store.installationName() };
+    const device = store.device(deviceId);
     return device ? { deviceId: device.id, name: device.name } : undefined;
   };
 
@@ -340,9 +341,9 @@ export async function createHub(options: HubOptions) {
       if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
       if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
       try {
-        const token = store.pair("name" in body ? body.name : undefined);
-        session.invalidate("controllers");
-        return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
+        const token = store.pair("id" in body ? body.id : undefined, "name" in body ? body.name : undefined);
+        session.invalidate("devices");
+        return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
       } catch (error) {
         return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this remote") }, error instanceof ControllerError ? error.status : 500);
       }
@@ -356,13 +357,15 @@ export async function createHub(options: HubOptions) {
     const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
     const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(requestPeer(request)));
     if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
-    const identity = (): ControllerIdentity | null => {
+    const identity = (): DeviceIdentity | null => {
       if (closed) return null;
-      if (trusted) return { controller: null, authority: "host", claimAvailable: controllers.claimAvailable() };
+      if (trusted) return { device: store.hostDevice(), authority: "host", claimAvailable: devices.claimAvailable() };
       if (!store.remoteControlEnabled()) return null;
-      const controller = store.controllerForToken(token);
-      return controller ? { controller, authority: controller.role, claimAvailable: controllers.claimAvailable() } : null;
+      const device = store.deviceForToken(token);
+      return device ? { device, authority: device.role, claimAvailable: devices.claimAvailable() } : null;
     };
+    // Each connection presents its Sendspin key, the Device's one ID (#644 ticket 5).
+    if (websocket && store.identify(trusted ? null : token, url.searchParams.get("device"))) session.invalidate("devices");
     const caller = identity();
     if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
     if (url.pathname === "/api/settings/sharing") {
@@ -378,7 +381,7 @@ export async function createHub(options: HubOptions) {
           sockets.delete(socket);
           socket.close(4003, "Remotes are off. Your pairing is remembered.");
         }
-        session.invalidate("controllers");
+        session.invalidate("devices");
         return cors(request, json({ enabled }));
       } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
     }
@@ -406,15 +409,15 @@ export async function createHub(options: HubOptions) {
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
-    if (url.pathname === "/api/controllers/me" && request.method === "GET") return cors(request, await controllers.handle(request, identity));
+    if (url.pathname === "/api/devices/me" && request.method === "GET") return cors(request, await devices.handle(request, identity));
     {
-      const playedBy = caller.controller ? { deviceId: caller.controller.id, name: caller.controller.name } : playbackActor(null);
+      const playedBy = playbackActor(trusted ? null : caller.device!.id);
       const currentIdentity = identity;
       const authorize = () => {
         if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
       };
       if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: VERSION_MISMATCH }, 409));
-      if (caller.controller) store.touchController(caller.controller.id);
+      if (!trusted) store.touchDevice(caller.device!.id);
       if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
       if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
       if (!websocket && /^\/api\/bluetooth(?:\/|$)/.test(url.pathname)) return cors(request, await bluetoothSettings(request, currentIdentity, options.nativeBluetooth));
@@ -422,11 +425,11 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
-      if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await controllers.handle(request, currentIdentity));
+      if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-      return upgrade({ trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
   });
   const serveOptions = {
@@ -453,11 +456,11 @@ export async function createHub(options: HubOptions) {
           renderer = null;
           session.observe({ playbackId: null, status: "unavailable", position: 0, duration: null, volume: session.state.player.volume, seekable: false, error: "The Couch app disconnected." });
         }
-        if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {});
+        if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
       },
       async message(socket: Socket<SocketData>, message: string | null) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
-        if (socket.data.controllerId) store.touchController(socket.data.controllerId);
+        if (socket.data.deviceId) store.touchDevice(socket.data.deviceId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
         if (message === null) { socket.close(1003, "JSON text messages required."); return; }
@@ -470,7 +473,7 @@ export async function createHub(options: HubOptions) {
         }
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
         try {
-          const playedBy = playbackActor(socket.data.controllerId);
+          const playedBy = playbackActor(socket.data.deviceId);
           const authorize = socket.data.authorize;
           const action = command.action;
           const before = session.state;

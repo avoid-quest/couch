@@ -1,10 +1,11 @@
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
-import type { ConnectionDetails, ControllerIdentity } from "../../shared/controllers";
+import type { ConnectionDetails, DeviceIdentity } from "../../shared/devices";
 import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play } from "./renderer";
+import { deviceId } from "./device-id";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
@@ -26,7 +27,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const [owner, setOwner] = useState(credentials);
   const currentCredentials = useRef(credentials);
   currentCredentials.current = credentials;
-  const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
+  const [identity, setIdentity] = useState<DeviceIdentity | null>(null);
   const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<ClientSessionState | null>(null);
   const observation = useRef<SessionState | null>(null);
@@ -105,12 +106,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
             }
             try { sessionStorage.removeItem(`couch.asset-refresh:${origin}`); } catch { /* Storage is optional after the build matches. */ }
           }
-          const response = await fetch(`${origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+          const response = await fetch(`${origin}/api/devices/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
           if (disposed) return;
           if (response.status === 401) { pairingRequired(); return; }
           if (response.status === 403) { setStatus("connection-rejected"); return; }
           if (!response.ok) throw new Error("Server unavailable");
-          const caller = await response.json() as ControllerIdentity;
+          const caller = await response.json() as DeviceIdentity;
           if (disposed) return;
           setIdentity(caller);
           setCredentialRejected(false);
@@ -123,6 +124,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
+      url.searchParams.set("device", deviceId());
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -254,15 +256,15 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (controller.signal.aborted || !sameCredentials(credentials, currentCredentials.current)) return;
       setConnectionDetails({ origin: credentials.origin, details: next });
       if (credentials.installationId && next.installationId !== credentials.installationId) { socket.current?.close(4001, "Pair again"); return; }
-      const response = await fetch(`${credentials.origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+      const response = await fetch(`${credentials.origin}/api/devices/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
       if (controller.signal.aborted) return;
       if (response.status === 401) { socket.current?.close(4001, "Pair again"); return; }
       if (!response.ok) return;
-      const caller = await response.json() as ControllerIdentity;
+      const caller = await response.json() as DeviceIdentity;
       if (!controller.signal.aborted && sameCredentials(credentials, currentCredentials.current)) setIdentity(caller);
     })().catch(() => {});
     return () => controller.abort();
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.controllers]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.devices]);
 
   // Command/Undo readers see observations synchronously, before React commits a tick.
   const readObservation = useCallback(() => sameCredentials(credentials, currentCredentials.current) && sameCredentials(credentials, socketCredentials.current) && ready.current ? observation.current : null, [credentials?.origin, credentials?.token, credentials?.installationId]);
