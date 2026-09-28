@@ -1,0 +1,321 @@
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
+import updater from "electron-updater";
+import { randomBytes, randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { isIP } from "node:net";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import type { DisplayAction, DisplayState } from "../src/shared/display";
+import type { AppMessage, CoreMessage } from "../src/shared/protocol";
+
+// Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
+// Development runs use .data unless COUCH_DATA_DIR says otherwise.
+const { identifier } = JSON.parse(readFileSync(join(app.getAppPath(), "package.json"), "utf8")) as { identifier: string };
+const base = process.platform === "linux" ? process.env.XDG_DATA_HOME?.startsWith("/") ? process.env.XDG_DATA_HOME : join(homedir(), ".local/share") : app.getPath("appData");
+const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(base, identifier) : ".data"));
+mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+// Chromium's profile, and with it the single-instance lock, lives beside Core's data.
+app.setPath("userData", join(dataDir, "app"));
+const tv = process.env.COUCH_TV_PRESENTATION === "1";
+const port = Number(process.env.COUCH_PORT ?? 4100);
+// Twitch rejects Origin 127.0.0.1 but accepts localhost (#644 ticket 1).
+const localOrigin = `http://localhost:${port}`;
+const icons = join(app.getAppPath(), "packaging/icons");
+
+const readJson = (path: string) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; } };
+const readText = (path: string) => { try { return readFileSync(path, "utf8").trim() || null; } catch { return null; } };
+const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
+
+// Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
+type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
+const modePath = join(dataDir, "operating-mode.json");
+let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
+const save = (next: Choice) => {
+  next.targets = [...new Set([...next.targets, ...next.address ? [next.address] : []])];
+  write(modePath, JSON.stringify(next));
+  return choice = next;
+};
+
+let window: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let quitting = false;
+
+type Ready = Extract<CoreMessage, { type: "ready" }>;
+let core: { child: UtilityProcess; token: string; ready: Promise<Ready>; stopping: boolean } | null = null;
+let urls: string[] = [];
+
+function startCore() {
+  if (core) return core.ready;
+  const token = randomBytes(32).toString("hex");
+  const child = utilityProcess.fork(join(import.meta.dirname, "core.mjs"), [], {
+    serviceName: "Couch Core",
+    env: { ...process.env, COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dataDir, COUCH_PORT: String(port) },
+  });
+  const current = { child, token, stopping: false, ready: new Promise<Ready>((resolve, reject) => {
+    child.on("message", (message: CoreMessage) => {
+      if (message.type === "ready") { urls = message.urls; resolve(message); }
+      else if (message.type === "addresses") { urls = message.urls; window?.webContents.send("couch:addresses", urls); }
+      else if (message.type === "display") void display(message.action).then(
+        state => child.postMessage({ type: "display", requestId: message.requestId, state } satisfies AppMessage),
+        (error: Error) => child.postMessage({ type: "display", requestId: message.requestId, error: error.message } satisfies AppMessage));
+    });
+    child.once("exit", code => {
+      reject(new Error(`Couch stopped with code ${code}.`));
+      if (core === current) core = null;
+      if (current.stopping || quitting) return;
+      // An unexpected stop ends the app, like the Tauri host did; the TV's service restarts it.
+      console.error(`Couch Core exited with code ${code}`);
+      if (!tv) dialog.showErrorBox("Couch stopped", `Couch stopped unexpectedly (code ${code}). Open Couch again.`);
+      app.exit(1);
+    });
+  }) };
+  core = current;
+  return current.ready;
+}
+
+async function stopCore() {
+  const current = core;
+  if (!current) return;
+  current.stopping = true;
+  const exited = new Promise(resolve => current.child.once("exit", resolve));
+  current.child.postMessage({ type: "shutdown" } satisfies AppMessage);
+  await Promise.race([exited, sleep(10_000)]);
+  current.child.kill();
+}
+
+// What stopping Core would interrupt, as the Tauri host asked before switching to Client mode.
+async function interruption() {
+  if (!core) return null;
+  const details = await (await fetch(`http://127.0.0.1:${port}/api/connection`, { signal: AbortSignal.timeout(3_000) })).json() as { player: string; remoteControlEnabled: boolean };
+  const playing = !["idle", "stopped", "ended", "error", "unavailable"].includes(details.player);
+  return playing && details.remoteControlEnabled ? "playback,sharing" : playing ? "playback" : details.remoteControlEnabled ? "sharing" : null;
+}
+
+const lan = (ip: string) => /^(10\.|127\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip.replace(/^::ffff:/i, "")) || /^(::1$|f[cd]|fe[89ab])/i.test(ip);
+async function lanOrigin(input: unknown) {
+  const text = typeof input === "string" ? input.trim() : "";
+  let url: URL;
+  try { url = new URL(text.includes("://") ? text : `http://${text}`); } catch { throw new Error("Enter the LAN address shown on that Couch."); }
+  if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Use a Couch LAN address without a path, password or query.");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  const addresses = isIP(host) ? [host] : await Promise.race([lookup(host, { all: true }).then(found => found.map(entry => entry.address)), sleep(4_000).then(() => null)])
+    .catch(() => { throw new Error("Can't find that address. Check the current address on that Couch."); });
+  if (!addresses) throw new Error("Finding that Couch timed out.");
+  if (!addresses.length || !addresses.every(lan)) throw new Error("App remote control is available only for LAN addresses. Custom domains must resolve to your LAN.");
+  return url.origin;
+}
+
+// Full mode loads Core's own UI; Client mode loads the other Couch's own UI, so versions always match.
+async function load() {
+  if (!window) return;
+  if (choice.mode !== "remote") {
+    if (!await startCore().catch(() => null)) return;
+    await window.loadURL(`${localOrigin}/`).catch(error => console.error(`Couldn't load Couch: ${error.message}`));
+    return;
+  }
+  await stopCore();
+  const address = choice.address!;
+  for (;;) {
+    try { return void await window.loadURL(address); } catch (error) {
+      if (!window || choice.address !== address || choice.mode !== "remote") return;
+      // Keep trying in the background; a successful probe closes the prompt and loads the page.
+      const reachable = new AbortController();
+      let answered = false;
+      void (async () => {
+        while (!answered) {
+          await sleep(5_000);
+          if (!answered && await fetch(new URL("/api/connection", address), { signal: AbortSignal.timeout(3_000) }).then(response => response.ok, () => false)) return reachable.abort();
+        }
+      })();
+      show();
+      const { response } = await dialog.showMessageBox(window, { type: "warning", message: `Can't reach ${new URL(address).host}`, detail: `${(error as Error).message}\nCouch keeps trying.`, buttons: ["Try again", "Use this computer"], defaultId: 0, cancelId: 0, signal: reachable.signal });
+      answered = true;
+      if (response === 1) { save({ ...choice, mode: "local" }); return load(); }
+    }
+  }
+}
+
+// TV presentation: the fullscreen window stays on the saved screen, else the first external one.
+const displayPath = join(dataDir, "display-output");
+let preview: { token: string; previous: string | null; expiresAt: number; timer: NodeJS.Timeout } | null = null;
+let notice: string | null = null;
+const currentDisplay = () => window ? String(screen.getDisplayMatching(window.getBounds()).id) : null;
+function present(id?: string | null) {
+  if (!window) return;
+  const displays = screen.getAllDisplays();
+  const target = displays.find(display => String(display.id) === id) ?? displays.find(display => String(display.id) === readText(displayPath))
+    ?? displays.find(display => !display.internal) ?? screen.getPrimaryDisplay();
+  window.setFullScreen(false);
+  window.setBounds(target.bounds);
+  window.setFullScreen(true);
+}
+async function display(action: DisplayAction): Promise<DisplayState> {
+  if (!tv || !window) throw new Error("Only in Couch's TV presentation.");
+  if (action.op === "preview") {
+    if (preview) throw new Error("Finish the current display preview first.");
+    if (!screen.getAllDisplays().some(display => String(display.id) === action.output)) throw new Error("That screen is disconnected or disabled.");
+    const previous = currentDisplay();
+    preview = { token: randomUUID(), previous, expiresAt: Date.now() + 20_000, timer: setTimeout(() => { preview = null; notice = "Preview ended. Restored the previous screen."; present(previous); }, 20_000) };
+    notice = null;
+    present(action.output);
+  } else if (action.op !== "read") {
+    if (preview?.token !== action.token) throw new Error("This preview has ended. Choose a screen to try again.");
+    clearTimeout(preview.timer);
+    if (action.op === "confirm") write(displayPath, currentDisplay()!);
+    else present(preview.previous);
+    notice = action.op === "cancel" ? "Restored the previous screen." : null;
+    preview = null;
+  }
+  return {
+    outputs: screen.getAllDisplays().map((display, index) => ({ id: String(display.id), name: display.label || `Screen ${index + 1}`, connected: true,
+      width: Math.round(display.size.width * display.scaleFactor), height: Math.round(display.size.height * display.scaleFactor), x: display.bounds.x, y: display.bounds.y,
+      refresh: display.displayFrequency ? Math.round(display.displayFrequency) : null })),
+    saved: readText(displayPath), current: currentDisplay(), notice, preview: preview && { token: preview.token, expiresAt: preview.expiresAt },
+  };
+}
+
+// window-state.json keeps Tauri's physical pixels.
+const statePath = join(dataDir, "window-state.json");
+function savedBounds(): Rectangle | undefined {
+  const saved = readJson(statePath).main as Rectangle | undefined;
+  if (!saved?.width || !saved.height) return;
+  for (const display of screen.getAllDisplays()) {
+    const [x, y, width, height] = [saved.x, saved.y, saved.width, saved.height].map(value => Math.round(value / display.scaleFactor)) as [number, number, number, number];
+    const { bounds } = display;
+    if (x >= bounds.x && x < bounds.x + bounds.width && y >= bounds.y && y < bounds.y + bounds.height) return { x, y, width, height };
+  }
+}
+function saveBounds() {
+  if (!window || tv) return;
+  const bounds = window.getNormalBounds();
+  const scale = screen.getDisplayMatching(bounds).scaleFactor;
+  write(statePath, JSON.stringify({ main: { ...Object.fromEntries(Object.entries(bounds).map(([key, value]) => [key, Math.round(value * scale)])), maximized: window.isMaximized() } }));
+}
+
+function show() {
+  if (!window) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
+function createWindow() {
+  window = new BrowserWindow({
+    ...tv ? { fullscreen: true, frame: false } : { width: 1280, height: 800, ...savedBounds() },
+    minWidth: 800, minHeight: 600, show: false, title: "Couch", backgroundColor: "#000000",
+    ...process.platform === "linux" ? { icon: join(icons, "icon.png") } : {},
+    webPreferences: {
+      preload: join(import.meta.dirname, "preload.cjs"),
+      autoplayPolicy: "no-user-gesture-required",
+      backgroundThrottling: false,
+      additionalArguments: tv ? ["--couch-tv-presentation"] : [],
+    },
+  });
+  if (!tv && readJson(statePath).main?.maximized) window.maximize();
+  if (tv) present();
+  window.once("ready-to-show", show);
+  window.on("leave-full-screen", () => { if (tv) window?.setFullScreen(true); });
+  window.on("close", event => {
+    saveBounds();
+    if (quitting || tv) return;
+    // Couch keeps hosting in the background; the tray, dock or a second launch shows it again.
+    event.preventDefault();
+    if (process.platform === "linux") window?.minimize(); else window?.hide();
+  });
+  window.on("closed", () => { window = null; });
+  const contents = window.webContents;
+  contents.on("will-navigate", (event, url) => { if (new URL(url).origin !== new URL(contents.getURL()).origin) event.preventDefault(); });
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  void load();
+}
+
+// The preload bridge (app/preload.ts). Only this window's top frame may call it.
+function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown) {
+  ipcMain.handle(`couch:${name}`, async (event, ...args) => {
+    try {
+      if (!window || event.sender !== window.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("Only the Couch window can do this.");
+      return { value: await run(event, ...args) };
+    } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+  });
+}
+handle("mode", () => choice);
+handle("choose", async (event, mode, address, confirm) => {
+  if (mode === "remote") {
+    const origin = await lanOrigin(address);
+    const reason = confirm ? null : await interruption().catch(() => "unknown");
+    if (reason) throw new Error(`confirmation-required:${reason}`);
+    save({ ...choice, mode, address: origin });
+  } else if (mode === "local") {
+    const here = choice.mode !== "remote" && new URL(event.senderFrame!.url).origin === localOrigin;
+    save({ ...choice, mode });
+    if (here) return choice;
+  } else throw new Error("Choose This computer or another Couch.");
+  // The window loads the chosen Couch; the page asking goes away.
+  void load();
+  return null;
+});
+handle("forget", async (_event, address) => {
+  if (typeof address !== "string") throw new Error("Choose a Couch to forget.");
+  const current = choice.address === address;
+  save({ ...choice, targets: choice.targets.filter(target => target !== address), ...current ? { address: null, mode: choice.mode === "remote" ? null : choice.mode } : {} });
+  // Its pairing lives in that origin's storage.
+  await session.defaultSession.clearStorageData({ origin: address, storages: ["localstorage"] }).catch(() => {});
+  if (!current || choice.mode !== null) return choice;
+  void load();
+  return null;
+});
+handle("complete-local-setup", () => {
+  if (choice.mode !== "local") throw new Error("Choose This computer first.");
+  return save({ ...choice, localSetupComplete: true });
+});
+handle("connection", async event => {
+  if (choice.mode === "remote" || new URL(event.senderFrame!.url).origin !== localOrigin) throw new Error("Only this computer's Couch can connect as its host.");
+  const ready = await startCore();
+  return { origin: localOrigin, token: core!.token, pairingCode: ready.pairingCode, urls };
+});
+handle("interface-size", (_event, size) => {
+  const sizes = [1, 1.15, 1.3];
+  const path = join(dataDir, "desktop-interface-size");
+  if (size === undefined) return sizes.find(value => value === Number(readText(path))) ?? 1;
+  if (!sizes.includes(size as number)) throw new Error("Choose a supported interface size.");
+  write(path, String(size));
+  return size;
+});
+
+// Quit is deliberate (closing the window only hides it), and a SIGTERM from
+// systemd or logout arrives here too, so nothing asks for confirmation.
+async function quit() {
+  quitting = true;
+  saveBounds();
+  await stopCore();
+  app.quit();
+}
+
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  app.on("second-instance", show);
+  app.on("activate", show);
+  app.on("before-quit", event => { if (!quitting) { event.preventDefault(); void quit(); } });
+  void app.whenReady().then(() => {
+    if (process.platform !== "darwin") Menu.setApplicationMenu(null);
+    if (!tv) {
+      const icon = process.platform === "darwin"
+        ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), { scaleFactor: 2 })
+        : nativeImage.createFromPath(join(icons, "icon.png")).resize({ width: 32, height: 32 });
+      icon.setTemplateImage(process.platform === "darwin");
+      tray = new Tray(icon);
+      tray.setToolTip("Couch");
+      tray.setContextMenu(Menu.buildFromTemplate([{ label: "Show Couch", click: show }, { label: "Quit Couch", click: () => app.quit() }]));
+      if (process.platform !== "darwin") tray.on("click", show);
+    }
+    screen.on("display-added", () => { if (tv && !preview) present(); });
+    screen.on("display-removed", () => { if (tv && !preview) present(); });
+    createWindow();
+    if (app.isPackaged && !tv) updater.autoUpdater.checkForUpdatesAndNotify().catch(error => console.error(`Update check failed: ${error.message}`));
+  });
+}

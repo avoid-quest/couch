@@ -1,0 +1,16 @@
+pipewire-audio
+wireplumber
+adduser
+lightdm
+lightdm-gtk-greeter
+xserver-xorg
+openbox
+x11-utils
+bluez
+libspa-0.2-bluetooth
+dbus-user-session
+libpam-systemd
+procps
+polkitd
+x11-xserver-utils
+va-driver-all

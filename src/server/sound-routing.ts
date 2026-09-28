@@ -13,10 +13,6 @@ type Options = {
   pin: (output: string) => void;
   lost: (error: string) => void;
   changed: (state: SoundRouteState) => void;
-  backend?: ReturnType<typeof pulseRouting>;
-  subscribe?: (onEvent: () => void) => { stop: () => void };
-  platform?: "linux" | "mac" | "windows";
-  setSystemDefault?: boolean;
 };
 
 // One long-lived `pactl subscribe` replaces the 500ms poll that spawned 3-5
@@ -33,9 +29,9 @@ function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => 
 }
 
 export function createSoundRouting(options: Options) {
-  const backend = options.backend ?? pulseRouting();
+  const backend = pulseRouting();
   let selected = options.saved();
-  let snapshot: SoundRouteState = { selectedOutput: selected, observedOutput: null, volume: null, muted: false, error: `Checking the ${options.platform === "mac" ? "Mac" : options.platform === "windows" ? "Windows" : "TV"} audio session.` };
+  let snapshot: SoundRouteState = { selectedOutput: selected, observedOutput: null, volume: null, muted: false, error: "Checking the TV audio session." };
   let closed = false, busy = false, changing = false;
   const publish = (value: SoundRouteState) => {
     if (closed) return;
@@ -75,12 +71,11 @@ export function createSoundRouting(options: Options) {
     if (missingProfile) options.save(sink.id, missingProfile);
     // Ubuntu's volume keys address its default sink. Reconcile that default
     // after restart/hotplug so those keys still control the saved TV output.
-    if (options.setSystemDefault !== false && inventory.defaultOutput !== selected) await backend.default(selected!);
+    if (inventory.defaultOutput !== selected) await backend.default(selected!);
     const observed = await backend.route();
     if (closed) return;
     if (observed && observed !== selected) { lost("Couch left the selected audio output. Playback stopped. Choose an output and resume explicitly."); return; }
-    publish({ selectedOutput: selected, observedOutput: observed, volume: sink.volume, muted: sink.muted, error: null,
-      ...(options.platform === "mac" || options.platform === "windows" ? { platform: options.platform, volumeWritable: sink.volumeWritable, muteWritable: sink.muteWritable } : {}) });
+    publish({ selectedOutput: selected, observedOutput: observed, volume: sink.volume, muted: sink.muted, error: null });
   };
   const check = async () => {
     pollWhileActive();
@@ -113,14 +108,12 @@ export function createSoundRouting(options: Options) {
         }
       }
       authorize();
-      if (options.setSystemDefault !== false) {
-        await backend.default(name);
-        if ((await backend.inventory()).defaultOutput !== name) throw new ControllerError("The audio server did not confirm the default output.", 503);
-      }
+      await backend.default(name);
+      if ((await backend.inventory()).defaultOutput !== name) throw new ControllerError("The audio server did not confirm the default output.", 503);
       authorize(); options.save(name, profileFor(inventory, name)); selected = name;
     } catch (error) {
       if (previous) options.pin(previous);
-      if (options.setSystemDefault !== false && inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
+      if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
       throw error;
     } finally { changing = false; }
   };
@@ -141,13 +134,12 @@ export function createSoundRouting(options: Options) {
   };
   const listen = () => {
     if (closed) return;
-    subscription = options.subscribe?.(wake) ?? pactlSubscribe(wake, () => {
+    subscription = pactlSubscribe(wake, () => {
       subscription = undefined;
       if (!closed) { respawn = setTimeout(listen, 1_000); respawn.unref?.(); }
     });
   };
-  if (options.platform === "mac" || options.platform === "windows") setTimeout(() => void check(), 0);
-  else void check();
+  void check();
   listen();
   return {
     get state() { const address = options.savedProfile?.()?.bluetoothAddress; return { ...snapshot, ...(address ? { selectedBluetoothAddress: address } : {}) }; },

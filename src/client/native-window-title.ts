@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type { ClientSessionState } from "@/session/session";
 
 export function nativeWindowTitle(state: ClientSessionState | null, connected: boolean, fallbackName?: string) {
@@ -15,6 +14,6 @@ export function useNativeWindowTitle(nativeHost: boolean, state: ClientSessionSt
   const title = nativeWindowTitle(state, connected, fallbackName);
   useEffect(() => {
     if (!nativeHost) return;
-    void invoke("set_native_window_title", { title }).catch(console.error);
+    document.title = title;
   }, [nativeHost, title]);
 }

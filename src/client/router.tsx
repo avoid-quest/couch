@@ -1,5 +1,4 @@
 import { createRouter } from "@tanstack/react-router";
-import { createAppHistory } from "./app-history";
 import { routeTree } from "./routeTree.gen";
 
 // SessionGate supplies the current client and identity through RouterProvider.
@@ -7,7 +6,6 @@ import { routeTree } from "./routeTree.gen";
 export const router = createRouter({
   routeTree,
   context: { queryClient: undefined!, identity: null, connected: false },
-  history: createAppHistory(),
   scrollRestoration: true,
   scrollToTopSelectors: [".tv-browser"],
   defaultPreload: "intent",

@@ -32,21 +32,17 @@ another player.
 
 ## Native desktop app
 
-Every supported desktop build includes **This computer** and **Another Couch**
-modes. This computer owns a local Core, trusted Settings access and local
-playback. The local owner or a paired Administrator can select its output and
-control volume and mute; Couch also shows external changes.
+The Couch app for macOS, Windows and Linux runs in **This computer** (Full) or
+**Another Couch** (Client) mode. This computer runs a local Core with trusted
+Settings access. Another Couch keeps the local Core stopped and loads that Couch's
+own page, which pairs like a browser and keeps its pairing.
 
-Another Couch uses the selected host in the same bundled app window, with that
-host's paired role. It keeps the local player and coordinator stopped.
-
-The app remembers the selected device, targets and exact-address pairings. If
-it is unreachable, use **Try again**, check its address or choose **Use this
-computer**; Couch does not switch hosts or start playback on its own. Desktop
-Close keeps the app running when a reopen path is available. On Mac, reopen it
-from the Dock or **Show Couch** in the app menu; **Quit Couch** ends the app and
-its owned local coordinator after any interruption confirmation. See the
-[current architecture](architecture.md) and [native Mac source workflow](usage.md#native-mac-development).
+The app remembers the chosen mode and addresses. If the other Couch is
+unreachable, the app keeps trying and offers **Try again** or **Use this
+computer**; it never switches on its own. Closing the window keeps Couch running
+(minimized on Linux); reopen it from the tray, the Dock or by starting it again.
+**Quit Couch** in the tray or app menu stops the app and its Core. See the
+[current architecture](architecture.md).
 
 ## Keep a shortcut
 

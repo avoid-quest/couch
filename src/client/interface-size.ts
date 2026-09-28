@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { couchApp } from "./session/native-context";
 import { defaultTvAppearance, isInterfaceSize, type InterfaceSize, type TvAppearance } from "../shared/appearance";
 
 const key = "couch.remote-interface-size";
@@ -14,9 +14,9 @@ let current = read();
 let subscribers = 0;
 let nativeRequest = 0;
 const refreshNative = () => {
-  if (!isTauri()) return;
+  if (!couchApp) return;
   const request = ++nativeRequest;
-  void invoke<InterfaceSize>("desktop_interface_size").then(value => {
+  void couchApp.interfaceSize().then(value => {
     if (request === nativeRequest && isInterfaceSize(value) && current !== value) {
       current = value;
       window.dispatchEvent(new Event(changed));
@@ -24,7 +24,7 @@ const refreshNative = () => {
   }).catch(() => {});
 };
 const subscribe = (listener: () => void) => {
-  const native = isTauri();
+  const native = !!couchApp;
   if (native && subscribers++ === 0) {
     refreshNative();
     window.addEventListener("focus", refreshNative);
@@ -48,7 +48,7 @@ export async function saveRemoteInterfaceSize(value: InterfaceSize) {
   current = value;
   let saved = true;
   try {
-    if (isTauri()) await invoke("desktop_interface_size", { size: value });
+    if (couchApp) await couchApp.interfaceSize(value);
     else localStorage.setItem(key, String(value));
   } catch { saved = false; }
   window.dispatchEvent(new Event(changed));

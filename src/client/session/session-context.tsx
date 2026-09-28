@@ -1,19 +1,15 @@
-import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
-import { isNativeHost, isTvPresentation } from "./native-context";
+import { couchApp, isNativeHost, isTvPresentation } from "./native-context";
 import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useInterfaceSize } from "../interface-size";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
-import { desktopClientProtocol } from "../../shared/desktop-protocol";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
@@ -24,14 +20,8 @@ const nativeHost = isNativeHost();
 const tvPresentation = isTvPresentation();
 let cacheSequence = 0;
 
-const pairingKey = (origin: string) => `couch.pairing:${origin}`;
-function storedCredentials(selectedOrigin?: string): Credentials | null {
+function storedCredentials(): Credentials | null {
   try {
-    if (nativeHost) {
-      if (!selectedOrigin) return null;
-      const value = JSON.parse(localStorage.getItem(pairingKey(selectedOrigin)) ?? "null") as { token?: string; installationId?: string } | null;
-      return value?.token && value.installationId ? { origin: selectedOrigin, token: value.token, installationId: value.installationId } : null;
-    }
     const token = localStorage.getItem(tokenKey) ?? localStorage.getItem("modern-kodi.remote-token");
     if (token) { localStorage.setItem(tokenKey, token); localStorage.removeItem("modern-kodi.remote-token"); }
     const installationId = localStorage.getItem(installationKey);
@@ -93,9 +83,9 @@ export function useOptionalSessionGate(): SessionGateValue | null {
 
 export function SessionGate({ children }: PropsWithChildren) {
   const device = usePlaybackDevice();
+  // In Full mode this page is this computer's Core and connects as its host.
   const localHost = nativeHost && device?.mode === "local";
-  const selectedOrigin = nativeHost && device?.mode === "remote" ? device.address ?? undefined : undefined;
-  const [credentials, setCredentials] = useState<Credentials | null>(() => storedCredentials(selectedOrigin));
+  const [credentials, setCredentials] = useState<Credentials | null>(() => localHost ? null : storedCredentials());
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
   const [booting, setBooting] = useState(localHost);
@@ -112,7 +102,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
+  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
@@ -157,9 +147,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   useInterfaceSize(tvPresentation, state?.appearance);
 
   useEffect(() => {
-    if (!localHost) return;
-    const listener = listen<string[]>("connection-addresses", event => setHost(current => current ? { ...current, urls: event.payload } : current));
-    return () => { void listener.then(stop => stop()); };
+    if (localHost) return couchApp!.onAddresses(urls => setHost(current => current ? { ...current, urls } : current));
   }, [localHost]);
 
   useEffect(() => {
@@ -168,7 +156,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     if (!localHost) return;
     let disposed = false;
     setBooting(true);
-    void invoke<ConnectionInfo>("connection_info").then((info) => {
+    void couchApp!.connection().then((info) => {
       if (disposed) return;
       setHost(info);
       setCredentials({ origin: info.origin, token: info.token });
@@ -180,30 +168,6 @@ export function SessionGate({ children }: PropsWithChildren) {
     });
     return () => { disposed = true; };
   }, [localHost, hostAttempt, setCredentials]);
-
-  useEffect(() => {
-    if (!tvPresentation) return;
-    const appWindow = getCurrentWindow();
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    const refresh = async () => {
-      try {
-        const value = await appWindow.isFullscreen();
-        if (!disposed && !value) await appWindow.setFullscreen(true);
-      } catch (reason) {
-        if (!disposed) setError(errorText(reason));
-      }
-    };
-    void refresh();
-    void appWindow.onResized(() => void refresh()).then((stop) => {
-      if (disposed) stop();
-      else unlisten = stop;
-    }).catch((reason) => { if (!disposed) setError(errorText(reason)); });
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
 
   const currentCredentials = useRef(credentials);
   const commandAttempt = useRef(0);
@@ -269,24 +233,22 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const savePairing = useCallback((value: Required<Credentials>) => {
     try {
-      if (selectedOrigin) localStorage.setItem(pairingKey(value.origin), JSON.stringify({ token: value.token, installationId: value.installationId }));
-      else { localStorage.setItem(tokenKey, value.token); localStorage.setItem(installationKey, value.installationId); }
+      localStorage.setItem(tokenKey, value.token); localStorage.setItem(installationKey, value.installationId);
     } catch { /* Pairing still works for this tab. */ }
     setCredentials(value);
-  }, [selectedOrigin]);
+  }, []);
 
   const unpair = useCallback(() => {
     try {
-      if (selectedOrigin) localStorage.removeItem(pairingKey(selectedOrigin));
-      else { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token"); }
+      localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token");
     } catch { /* Storage may be disabled. */ }
-    forgetConnection(selectedOrigin ?? location.origin);
+    forgetConnection(location.origin);
     setCredentials(null);
     setError(null);
-  }, [selectedOrigin]);
+  }, []);
 
   const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
-  const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
+  const pairingOrigin = credentials?.origin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,

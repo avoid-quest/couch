@@ -1,15 +1,24 @@
+import type { InterfaceSize } from "../../shared/appearance";
+import type { ConnectionInfo } from "../../shared/protocol";
+
+// Full mode ("local") hosts Couch on this computer; Client mode ("remote") shows another Couch.
+export type AppMode = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
+export type CouchApp = {
+  tvPresentation: boolean;
+  mode(): Promise<AppMode>;
+  // null: the window is loading the chosen Couch.
+  choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;
+  forget(address: string): Promise<AppMode | null>;
+  completeLocalSetup(): Promise<AppMode>;
+  connection(): Promise<ConnectionInfo>;
+  interfaceSize(size?: InterfaceSize): Promise<InterfaceSize>;
+  onAddresses(listener: (urls: string[]) => void): () => void;
+};
 declare global {
-  interface Window { __COUCH_NATIVE_HOST__?: boolean; __COUCH_TV_PRESENTATION__?: boolean }
-}
-declare const COUCH_DEV_ORIGIN: string | null;
-
-// Tauri also marks external pages as isTauri. Only our bundled main window gets this marker.
-// Native command permissions enforce authority independently of this presentation check.
-export function isNativeHost() {
-  return typeof window !== "undefined" && window.__COUCH_NATIVE_HOST__ === true
-    && (location.protocol === "tauri:" && location.hostname === "localhost"
-      || ["http:", "https:"].includes(location.protocol) && location.hostname === "tauri.localhost" && !location.port
-      || typeof COUCH_DEV_ORIGIN !== "undefined" && COUCH_DEV_ORIGIN !== null && location.origin === COUCH_DEV_ORIGIN);
+  interface Window { couchApp?: CouchApp }
 }
 
-export const isTvPresentation = () => isNativeHost() && window.__COUCH_TV_PRESENTATION__ === true;
+// The Couch app's preload (app/preload.ts) adds this bridge to its own window only.
+export const couchApp = typeof window === "undefined" ? undefined : window.couchApp;
+export const isNativeHost = () => !!couchApp;
+export const isTvPresentation = () => couchApp?.tvPresentation === true;

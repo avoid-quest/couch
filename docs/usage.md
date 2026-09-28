@@ -1,8 +1,8 @@
 # Couch usage and development
 
 Couch plays internet media on a TV or computer and lets every phone on the LAN
-control it. Tauri embeds libmpv; Core (Node) owns the shared queue, catalogs and paired
-remotes. The rebuild into one Electron app is tracked in
+control it. The Electron app shows it; Core (Node) owns the shared queue, catalogs
+and paired remotes. The rebuild is tracked in
 [#644](https://github.com/avoid-quest/couch/issues/644).
 
 ## Sources
@@ -51,7 +51,7 @@ Bash terminal in a source checkout, entering the secret at the hidden prompt:
 ```bash
 read -rsp 'Recovery secret: ' COUCH_ADMIN_RECOVERY_CODE
 export COUCH_ADMIN_RECOVERY_CODE
-bun run desktop
+bun run app
 unset COUCH_ADMIN_RECOVERY_CODE
 ```
 
@@ -68,34 +68,28 @@ QR code.
 
 ## Run from source
 
-Install Bun 1.4.x, Node 24 or later, and Rust stable with [rustup](https://rustup.rs). On macOS
-install Apple's command-line tools (`xcode-select --install`) and Homebrew `mpv`
-for libmpv. On Linux install the
-[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#linux) plus
-`libmpv-dev`. yt-dlp (and a JavaScript runtime for YouTube) come from `PATH`, or
-run `bun run setup:media` to download pinned copies into the data directory.
+Install Bun 1.4.x and Node 24 or later. yt-dlp (and a JavaScript runtime for
+YouTube) come from `PATH` until Couch manages its helpers (#644 ticket 4).
 
 ```sh
 bun install --frozen-lockfile
-bun run desktop
+bun run app
 ```
 
-- Vite serves the UI on port 1420 and proxies `/api` to the coordinator on port
-  4100 (`COUCH_PORT`).
-- `COUCH_DATA_DIR` selects the data directory. The default is the Tauri app data
-  directory (`~/Library/Application Support/quest.avoid.couch` on macOS), which
-  an installed Couch shares. To keep a development run apart from an installed
-  Couch, also pass another identifier:
-
-  ```sh
-  COUCH_DATA_DIR=/tmp/couch-dev bun scripts/desktop.ts dev \
-    --config src-tauri/tauri.dev.conf.json --config '{"identifier":"quest.avoid.couch.dev"}'
-  ```
-
-- Edits under `src/client` hot reload. Edits under `src/server`, `src/shared` and
-  `src-tauri` rebuild Core (`build/core.mjs`) and restart the app.
-- `bun run dev` runs the browser-only loop: Core under `node --watch` and Vite.
+- `bun run app` builds everything and starts the Electron app from the checkout.
+  Its data defaults to `.data`; `COUCH_DATA_DIR` and `COUCH_PORT` (default 4100)
+  select another scratch directory and port. An installed app uses the Tauri
+  app's data directory instead: `~/Library/Application Support/quest.avoid.couch`
+  on macOS, `%APPDATA%\quest.avoid.couch` on Windows and
+  `$XDG_DATA_HOME/quest.avoid.couch` (`~/.local/share/...`) on Linux.
+- `bun run dev` runs the browser-only loop: Core under `node --watch` and Vite
+  on port 1420, which proxies `/api` to Core.
 - `bun run build && bun run start` runs Core alone under Node and serves the
   built UI on port 4100.
+- `bun run package --mac dmg` (or `--win nsis`, `--linux AppImage deb`) builds
+  installers into `.artifacts/app` with electron-builder. The
+  [Package](../.github/workflows/package.yml) workflow builds all three.
+  electron-updater checks the repository's GitHub releases on start; nothing is
+  published.
 
 See [checks](ci.md) for typecheck and build.

@@ -1,6 +1,5 @@
 import type { ClientSessionState } from "@/session/session";
-import { Fragment, createContext, useContext, useEffect, useEffectEvent, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -14,7 +13,7 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } 
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
-import { isNativeHost } from "@/session/native-context";
+import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
@@ -23,62 +22,29 @@ import { Onboarding } from "./Onboarding";
 import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 
-export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
+export type Choice = AppMode;
+type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void> };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
 
+// The app window shows this computer's Couch (Full mode) or another Couch's own
+// page (Client mode). Switching reloads the window, so the page never outlives its mode.
 export function NativeModeGate({ children }: PropsWithChildren) {
-  const native = isNativeHost();
   const [choice, setChoice] = useState<Choice | null>(null);
-  const [pending, setPending] = useState(native);
+  const [pending, setPending] = useState(!!couchApp);
   const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [localEpoch, setLocalEpoch] = useState(0);
-  const [recoveryEpoch, setRecoveryEpoch] = useState(0);
-  const [selecting, setSelecting] = useState(false);
-  const sequence = useRef(0);
   const busy = useRef(false);
-  const failedPreflight = useRef(false);
   useEffect(() => {
-    if (!native) return;
+    if (!couchApp) return;
     let disposed = false;
-    void invoke<Choice>("playback_device").then(value => { if (!disposed) setChoice(value); })
+    void couchApp.mode().then(value => { if (!disposed) setChoice(value); })
       .catch(reason => { if (!disposed) setError(message(reason)); })
       .finally(() => { if (!disposed) setPending(false); });
     return () => { disposed = true; };
-  }, [native]);
-  useEffect(() => {
-    if (!choice?.mode || selecting) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let failures = 0;
-    const connect = async () => {
-      const current = ++sequence.current;
-      setPending(true);
-      try {
-        await invoke("retry_playback_device");
-        if (!disposed && current === sequence.current) {
-          setError(null);
-          if (choice.mode === "remote" && failedPreflight.current) {
-            failedPreflight.current = false;
-            setRecoveryEpoch(value => value + 1);
-          }
-        }
-      } catch (reason) {
-        if (!disposed && current === sequence.current) {
-          failedPreflight.current = true;
-          setError(message(reason));
-          // Automatic retries stay with the chosen remote; only the user can select local mode.
-          if (choice.mode === "remote") timer = setTimeout(() => void connect(), Math.min(2_000 * 2 ** failures++, 15_000));
-        }
-      } finally { if (!disposed && current === sequence.current) setPending(false); }
-    };
-    void connect();
-    return () => { disposed = true; clearTimeout(timer); sequence.current++; };
-  }, [choice?.mode, choice?.address, attempt, selecting]);
-  if (!native) return children;
+  }, []);
+  if (!couchApp) return children;
+  const app = couchApp;
   if (!choice) return <main className="flex min-h-dvh flex-col bg-background">
     <Onboarding title="Couch">{error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button></AlertAction></Alert> : <StatusLine busy>Loading…</StatusLine>}</Onboarding>
   </main>;
@@ -86,41 +52,37 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     ...choice, pending, error,
     choose: async (mode, address, confirm = false) => {
       if (busy.current) return false;
-      busy.current = true; setPending(true); setError(null); sequence.current++;
+      busy.current = true; setPending(true); setError(null);
       try {
-        const next = await invoke<Choice>("select_playback_device", { mode, address: address ?? null, confirmInterrupt: confirm });
-        setChoice(next); setSelecting(false); setAttempt(value => value + 1); if (mode === "local") setLocalEpoch(value => value + 1); return true;
-      } catch (reason) { const text = message(reason); setError(text); if (text.startsWith("confirmation-required:")) throw reason; return false; }
-      finally { busy.current = false; setPending(false); }
+        // No answer means the window is loading the chosen Couch.
+        const next = await app.choose(mode, address ?? null, confirm);
+        if (next) { setChoice(next); setPending(false); }
+        return true;
+      } catch (reason) { const text = message(reason); setError(text); setPending(false); if (text.startsWith("confirmation-required:")) throw reason; return false; }
+      finally { busy.current = false; }
     },
     forget: async address => {
       if (busy.current) return false;
-      busy.current = true; setPending(true); setError(null); sequence.current++;
+      busy.current = true; setPending(true); setError(null);
       try {
-        const next = await invoke<Choice>("forget_playback_device", { address });
+        const next = await app.forget(address);
         try {
-          localStorage.removeItem(`couch.pairing:${address}`);
           const names = targetNames();
           delete names[address];
           localStorage.setItem(namesKey, JSON.stringify(names));
-        } catch { /* Storage may be unavailable. The native target is still forgotten. */ }
+        } catch { /* Storage may be unavailable. The app still forgets the address. */ }
         forgetConnection(address);
-        setChoice(next);
+        if (next) setChoice(next);
         return true;
       } catch (reason) { setError(message(reason)); return false; }
       finally { busy.current = false; setPending(false); }
     },
-    retry: () => setAttempt(value => value + 1),
-    show: () => { setSelecting(true); setPending(false); },
-    dismiss: () => setSelecting(false),
-    completeLocalSetup: async () => setChoice(await invoke<Choice>("complete_local_setup")),
+    completeLocalSetup: async () => setChoice(await app.completeLocalSetup()),
   };
   return <Context.Provider value={device}>
-    {choice.mode === "local" ? <Fragment key={`local:${localEpoch}`}>{children}</Fragment>
-      : choice.mode === "remote" ? <Fragment key={`remote:${choice.address}:${recoveryEpoch}`}>{children}</Fragment>
-      : <main className="flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
-        <Onboarding title="Where do you want to play?"><DeviceForm /></Onboarding>
-      </main>}
+    {choice.mode ? children : <main className="flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
+      <Onboarding title="Where do you want to play?"><DeviceForm /></Onboarding>
+    </main>}
   </Context.Provider>;
 }
 
@@ -129,16 +91,6 @@ const hostOf = (address: string) => address.replace(/^https?:\/\//i, "").replace
 const namesKey = "couch.target-names";
 const targetNames = (): Record<string, string> => { try { return Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(namesKey) || "{}") ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string")); } catch { return {}; } };
 const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and its remotes disconnect." : reason === "playback" ? "Playback here stops." : "Remotes can't reach this computer until you switch back.";
-
-/** Recovery for an unreachable remote Couch, shown as the shell's status line. */
-export function DeviceRecovery() {
-  const device = usePlaybackDevice();
-  if (device?.mode !== "remote" || !device.error || device.error.startsWith("confirmation-required:")) return null;
-  return <StatusLine actions={<>
-    <Button variant="ghost" size="sm" onClick={device.retry} disabled={device.pending}>{TRY_AGAIN}</Button>
-    <Button variant="ghost" size="sm" onClick={() => void device.choose("local")} disabled={device.pending}>Use this computer</Button>
-  </>}>{device.error}</StatusLine>;
-}
 
 function DeviceForm() {
   const device = usePlaybackDevice()!;
@@ -194,7 +146,6 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const [address, setAddress] = useState("");
   const [warning, setWarning] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
-  const dismiss = useEffectEvent(() => device?.dismiss());
   const [names, setNames] = useState(targetNames);
   useEffect(() => {
     if (device?.mode !== "remote" || !device.address || !installationName || names[device.address] === installationName) return;
@@ -202,9 +153,8 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
     setNames(next);
     try { localStorage.setItem(namesKey, JSON.stringify(next)); } catch { /* Names are a convenience; addresses still work. */ }
   }, [device?.mode, device?.address, installationName, names]);
-  useEffect(() => () => dismiss(), []);
   if (!device) return null;
-  const close = () => { setOpen(false); setDialog(null); device.dismiss(); };
+  const close = () => { setOpen(false); setDialog(null); };
   const openDialog = (value: NonNullable<typeof dialog>) => { setOpen(false); setDialog(value); };
   const select = async (mode: "local" | "remote", target?: string, confirmed = false) => {
     try {
@@ -220,7 +170,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   return <>
-    <Popover open={open} onOpenChange={value => { setOpen(value); if (value) device.show(); else if (!dialog) device.dismiss(); }}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{device.mode === "local" ? "Playing here" : <><span className="max-sm:sr-only">Playing on </span>{target}</>}</span></Button></PopoverTrigger>
       <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="w-96 gap-4">
         <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>

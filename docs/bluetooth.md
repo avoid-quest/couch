@@ -1,30 +1,23 @@
 # Bluetooth
 
-## Operation guidance
+Bluetooth settings work on Linux, where Core calls BlueZ's own
+[`bluetoothctl`](https://github.com/bluez/bluez/blob/master/doc/bluetoothctl.rst)
+(`src/server/bluetooth-linux.ts`). On macOS and Windows the page reports that
+Bluetooth isn't available on this Couch; pair devices in the system settings.
 
-Native inventories optionally include `support`: `powerUnavailableReason`, `connectUnavailableReason`, `disconnectUnavailableReason`, `forgetUnavailableReason`, and `pairingNotice`. These describe the current Couch adapter implementation, separately from permission errors, absent/off/blocked hardware and operation progress. Missing or null reasons keep the existing action behavior for older protocol-1 hosts. Inventory reads and mutation reconciliation replace support from the selected playback host while retaining device order. This information grants no authority; Administrator, owner, prompt, cancellation and timeout checks remain in the existing handlers.
+Administrators search for nearby devices in Settings → Bluetooth and pair,
+connect, disconnect or forget any listed device. Discovery lasts 30 seconds and
+every operation stops within 60 seconds. Cancelling, leaving the page, losing
+the connection or losing administrator access stops the pending operation.
 
-The shared settings rows show macOS power/Forget and Windows connect/disconnect guidance before any request or destructive confirmation. Linux actions and Windows Forget retain their existing behavior. Windows pairing remains supported, with advance notice that consent happens in a local prompt on the playback host's desktop and that cancelling in Couch may not dismiss it. This follows the existing [BluetoothAuthenticateDeviceEx](https://learn.microsoft.com/en-us/windows/win32/api/bluetoothapis/nf-bluetoothapis-bluetoothauthenticatedeviceex) call with no out-of-band data; Forget uses [BluetoothRemoveDevice](https://learn.microsoft.com/en-us/windows/win32/api/bluetoothapis/nf-bluetoothapis-bluetoothremovedevice) or WinRT UnpairAsync. The limitations describe this adapter, not permanent OS restrictions.
+Pairing registers a `NoInputNoOutput` agent for that one `bluetoothctl` call, so
+BlueZ accepts the Just Works pairing that speakers and headphones use, then
+trusts and connects the device. Devices that ask for a PIN or passkey can't pair
+from Couch.
 
-The UI reuses the existing flat shadcn `SettingsRow`, Button and AlertDialog components. The [official Item catalog](https://ui.shadcn.com/docs/components/item) was checked; the existing row already provides the required description/actions layout, so no new component or custom panel is needed.
+Paired, connected and selected for playback are separate states. A connected
+output appears in Sound, correlated by the audio card's Bluetooth address. Couch
+makes one reconnect attempt for the selected output's address on startup.
 
-
-## Mac desktop
-
-On a Mac playback host, Bluetooth uses the same paired Administrator endpoint and operation state as Linux. The native host uses maintained `objc2-io-bluetooth` bindings for Classic discovery, pairing callbacks and paired-device baseband connection. Search and pairing stop on cancellation, page exit, remote disconnect, revocation, timeout or app close. A prompt answer requires the current owner, operation ID and prompt ID. Connect and Disconnect finish only after `isConnected` reports the requested state; Disconnect retries once if the first successful close leaves the link connected, within the same 60-second deadline. A cancelled new connection uses the same bounded close and readback, and reports an error if it stays connected. If a new request replaces the cancelled operation before cleanup finishes, the old error message is lost; inventory still reports the live connection. That readback is baseband state, not proof of an active audio output.
-
-The public Mac API supports PIN entry, numeric comparison confirmation and passkey display in Couch. The checked public pairing class has no numeric passkey entry reply. Bluetooth power and bond removal lack a supported public operation, so those actions say "Check in System Settings on the playback host." An absent adapter and denied Bluetooth permission are reported separately. Apple's Bluetooth privacy description is in the Mac bundle's `Info.plist`.
-
-
-## Linux TV
-
-Administrators can search for nearby Bluetooth devices in Settings → Bluetooth and connect any listed device. Paired and discovered devices share one list, with connection status beside each name. Selecting a device during your search stops discovery before pairing or connecting it. Discovery lasts 30 seconds; all Bluetooth operations stop within 60 seconds. The initiating remote answers confirmation, PIN or numeric passkey requests. Leaving the page, losing its connection, revoking its administrator access, cancelling, or closing Couch cancels its pending pairing and discovery. Expired prompt tokens cannot authorize another operation.
-
-Couch uses the official [BlueZ Rust binding, bluer 0.17.4](https://github.com/bluez/bluer). Its application-owned [pairing agent](https://bluez.readthedocs.io/en/latest/agent-api/) exists only during an initiated pairing request. It never becomes the default agent and does not enable adapter discoverability. BlueZ owns device bonds and Trusted persistence. Discovery uses both supported transports without a service UUID filter. Devices remain visible before BlueZ resolves their services, including speakers that advertise no UUIDs until pairing. Explicit pairing and connection use [Device1.Pair and Device1.Connect](https://bluez.readthedocs.io/en/latest/device-api/), letting BlueZ connect the device's supported profiles. The temporary pairing agent authorizes only the selected device. Sound output selection still requires an audio output from the sound server.
-
-Paired, connected and selected for playback are separate states. A connected output appears in Sound, correlated by the audio card's Bluetooth address. Sound selects and tests the output and exposes available output-only A2DP profiles. It retains the saved address even while that output is missing. Couch makes one bounded reconnect attempt for that selected address on startup; it does not reconnect every remembered nearby device. A failed attempt appears in Bluetooth progress and can be retried with Connect. No reconnect resumes media. Existing Sound behavior pauses seekable playback or stops live media when its selected output disappears.
-
-The TV setup requires `bluez` and `libspa-0.2-bluetooth` alongside its existing PipeWire, WirePlumber, logind and session packages. Bluetooth and audio run as the existing `couch-tv` login, without another daemon, elevated application privileges or a separate audio server. WirePlumber 0.4.17's [logind module](https://github.com/PipeWire/wireplumber/blob/0.4.17/modules/module-logind.c) checks whether the user is active; an SSH administrator can also qualify. Two active users can therefore connect a speaker into the administrator's audio graph while Couch sees no output.
-
-
-[Pair and reconnect Bluetooth speakers or headphones](https://github.com/avoid-quest/couch/issues/15) retains the real-device acceptance.
+The TV setup installs `bluez` and `libspa-0.2-bluetooth` with PipeWire and
+WirePlumber; Bluetooth and audio run as the `couch-tv` login.

@@ -8,7 +8,7 @@ import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { DeviceRecovery, LocalSharingPrompt, PlaybackDevice, useLocalSetupPending, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
+import { LocalSharingPrompt, PlaybackDevice, useLocalSetupPending, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
@@ -36,7 +36,7 @@ import { PairForm } from "./PairForm";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { useNativeWindowTitle } from "@/native-window-title";
-import { useNativeMediaSession } from "@/session/native-media";
+import { useMediaSession } from "@/session/media-session";
 
 const navItems = ["Home", "Find", "Saved", "Settings"];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -46,7 +46,6 @@ function subscribeReducedMotion(onChange: () => void) {
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
 }
-const PROTOCOL_MISMATCH = "This Couch runs a different version. Update one of them.";
 
 export type ShellValue = ReturnType<typeof useShellValue>;
 export { useShell, useOptionalShell } from "./shell-context";
@@ -172,7 +171,7 @@ function useShellValue() {
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   // Terse, stable labels for the header's screen-reader status and the Play on popover.
   const statusLabel = booting ? "Starting" : {
-    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "sharing-disabled": "Remote control off", "connection-rejected": "Access refused", "build-mismatch": "Couch updated", "protocol-mismatch": "Versions don't match",
+    connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Access refused", "build-mismatch": "Couch updated",
   }[status];
 
   return {
@@ -203,10 +202,10 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><DetailFocusRestoration /><NativeMediaBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  return <ShellErrorBoundary><DetailFocusRestoration /><MediaSessionBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
-function NativeMediaBridge() { useNativeMediaSession(); return null; }
+function MediaSessionBridge() { useMediaSession(); return null; }
 
 // Connection and player state as one quiet line; red only for errors that need a decision.
 function ConnectionStatus() {
@@ -214,13 +213,10 @@ function ConnectionStatus() {
   const device = usePlaybackDevice();
   const remoteApp = nativeHost && !localHost;
   const name = deviceName(state?.installationName ?? details?.name ?? (remoteApp && device?.address ? device.address.replace(/^https?:\/\//i, "") : undefined));
-  if (remoteApp && device?.error && !device.error.startsWith("confirmation-required:")) return <DeviceRecovery />;
   const recovery = remoteApp && <>
     <Button variant="ghost" size="sm" onClick={reconnect}>{TRY_AGAIN}</Button>
     <Button variant="ghost" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>
   </>;
-  if (status === "protocol-mismatch") return <Alert variant="destructive"><AlertDescription>{localHost ? PROTOCOL_MISMATCH : `Update this remote or ${name} so both run the same version.`}</AlertDescription>{recovery && <div className="flex flex-wrap gap-1 pt-1">{recovery}</div>}</Alert>;
-  if (status === "sharing-disabled") return <StatusLine actions={recovery}>Turn on Allow remote control on {name}.</StatusLine>;
   if (status === "connection-rejected") return <Alert variant="destructive"><AlertDescription>{name} refused this address. Open Couch at the address it shows.</AlertDescription></Alert>;
   if (status === "build-mismatch") return <StatusLine actions={<Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button>}>{name} was updated.</StatusLine>;
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
@@ -241,7 +237,7 @@ function PairingPage() {
   const name = deviceName(details?.name);
   return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Remotes → Pair a remote, then enter the code shown there.`}>
     {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This remote was removed. Pair again."}</AlertDescription></Alert>}
-    {status !== "protocol-mismatch" && status !== "sharing-disabled" && <PairForm />}
+    <PairForm />
   </Onboarding>;
 }
 
