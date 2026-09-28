@@ -38,7 +38,7 @@
   "bundle": {
     "active": true,
     "shortDescription": "Shared media player for your TV, controlled from any phone",
-    "longDescription": "Couch plays your files, Jellyfin library, online video, music and radio on your TV or this computer. Pair phones and laptops as remotes and build one queue together.",
+    "longDescription": "Couch plays online video, music, live TV and radio on your TV or this computer. Pair phones and laptops as remotes and build one queue together.",
     "macOS": {
       "minimumSystemVersion": "14.0"
     },
@@ -64,10 +64,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": ""
-    }
   }
 }

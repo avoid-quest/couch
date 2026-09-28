@@ -4,17 +4,17 @@ import { ControllerError, settingField } from "./controllers";
 import { pulseSound, type SoundBackend, type SoundProcess } from "./sound-pulse";
 import { ADMIN_ONLY } from "./messages";
 
-type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; testAvailable?: boolean; idle: () => boolean; begin: () => () => void; backend?: SoundBackend; platform?: "linux" | "mac" | "windows" };
+type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; testAvailable?: boolean; idle: () => boolean; backend?: SoundBackend; platform?: "linux" | "mac" | "windows" };
 export function createSound(options: Options) {
   const backend = options.backend ?? pulseSound();
   let test: SoundTest | null = null;
-  let active: { process: SoundProcess; timer: ReturnType<typeof setTimeout>; monitor: ReturnType<typeof setInterval>; release: () => void } | null = null;
+  let active: { process: SoundProcess; timer: ReturnType<typeof setTimeout>; monitor: ReturnType<typeof setInterval>} | null = null;
   let starting = false;
   let closed = false;
   const finish = (status: SoundTest["status"], message: string | null = null) => {
     if (!active) return;
     const current = active; active = null;
-    current.process.stop(); clearTimeout(current.timer); clearInterval(current.monitor); current.release();
+    current.process.stop(); clearTimeout(current.timer); clearInterval(current.monitor);
     if (test) test = { ...test, status, message };
   };
   const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), ...(options.testAvailable === false ? { testUnavailableReason: "Sound test isn't available here." } : {}), canTest: (options.testAvailable ?? options.available) && !closed && !starting && !active && options.idle() });
@@ -86,7 +86,7 @@ export function createSound(options: Options) {
             } catch { if (active && test?.id === id) finish("error", "Couldn't verify the test output. The test stopped."); }
             finally { checking = false; }
           };
-          active = { process: child, release: options.begin(), timer: setTimeout(() => finish(test?.observedOutput ? "finished" : "error", test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "The audio server never confirmed the test route."), 3_000), monitor: setInterval(() => void check(), 100) };
+          active = { process: child, timer: setTimeout(() => finish(test?.observedOutput ? "finished" : "error", test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "The audio server never confirmed the test route."), 3_000), monitor: setInterval(() => void check(), 100) };
           void child.exited.then(code => { if (active?.process === child) finish(code === 0 && test?.observedOutput ? "finished" : "error", code === 0 && test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "Couldn't finish the sound test."); });
           void check();
           return json(await state());

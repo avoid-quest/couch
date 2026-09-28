@@ -2,26 +2,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
-import type { MediaSource } from "./session";
 import { ControllerError } from "./controllers";
 import { STORAGE_ERROR } from "./messages";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
-
-function validPgs(bytes: Buffer) {
-  let composition = false, object = false, last = 0;
-  for (let position = 0; position < bytes.length;) {
-    if (position + 13 > bytes.length || bytes.readUInt16BE(position) !== 0x5047) return false;
-    const type = bytes[position + 10]!, size = bytes.readUInt16BE(position + 11);
-    if (![0x14, 0x15, 0x16, 0x17, 0x80].includes(type) || position + 13 + size > bytes.length) return false;
-    if (type === 0x80 ? size !== 0 : size === 0) return false;
-    composition ||= type === 0x16 && size >= 11;
-    object ||= type === 0x15 && size >= 4;
-    last = type;
-    position += 13 + size;
-  }
-  return composition && object && last === 0x80;
-}
 
 /** Browser uploads contain bytes from that controller, never a path on the TV. */
 export function createSubtitles(player: () => PlayerState, attach: (playbackId: string, subtitle: ExternalSubtitle) => void) {
@@ -34,56 +18,6 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
   const remove = (path: string) => { rmSync(path, { force: true }); files.delete(path); };
   const retain = (playbackId: string | null) => { for (const [path, owner] of files) if (owner !== playbackId) remove(path); };
   return {
-    async prepare(media: MediaSource, playbackId: string, signal: AbortSignal): Promise<MediaSource> {
-      if (!media.subtitles?.length) return media;
-      const downloaded: Array<ExternalSubtitle | undefined> = [];
-      const paths: string[] = [];
-      const timeout = AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(8_000)]);
-      let failed = media.subtitles.length > 20;
-      let index = 0;
-      try {
-        await Promise.all(Array.from({ length: Math.min(4, media.subtitles.length) }, async () => {
-          while (index < Math.min(20, media.subtitles!.length)) {
-            const currentIndex = index++;
-            const subtitle = media.subtitles![currentIndex]!;
-            try {
-              const url = new URL(subtitle.source);
-              if (!["http:", "https:"].includes(url.protocol) || url.origin !== new URL(media.source).origin) throw new Error();
-              const response = await fetch(url, { headers: media.headers, signal: timeout, redirect: "error" });
-              if (!response.ok || !response.body || Number(response.headers.get("Content-Length")) > subtitleSizeLimit) { await response.body?.cancel(); throw new Error(); }
-              const reader = response.body.getReader();
-              const chunks: Uint8Array[] = [];
-              let size = 0;
-              try {
-                for (;;) {
-                  const { value, done } = await reader.read();
-                  timeout.throwIfAborted();
-                  if (done) break;
-                  size += value.length;
-                  if (size > subtitleSizeLimit) throw new Error();
-                  chunks.push(value);
-                }
-              } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-              if (!size || closed) throw new Error();
-              signal.throwIfAborted();
-              const upstreamExtension = extname(url.pathname).toLowerCase();
-              if (![".srt", ".ass", ".ssa", ".vtt", ".pgssub"].includes(upstreamExtension)) throw new Error();
-              const extension = upstreamExtension === ".pgssub" ? ".sup" : upstreamExtension;
-              const bytes = Buffer.concat(chunks);
-              if (extension === ".sup" && !validPgs(bytes)) throw new Error();
-              const path = join(directory, `${crypto.randomUUID()}${extension}`);
-              writeFileSync(path, bytes, { mode: 0o600, flag: "wx" });
-              paths.push(path);
-              files.set(path, playbackId);
-              downloaded[currentIndex] = { ...subtitle, source: path };
-            } catch { failed = true; }
-          }
-        }));
-        signal.throwIfAborted();
-        if (closed) throw new Error("The player is shutting down.");
-        return { ...media, subtitles: downloaded.filter((subtitle): subtitle is ExternalSubtitle => !!subtitle), ...(failed ? { subtitleWarning: [media.subtitleWarning, "Couldn't load some subtitles. Try again or add a subtitle file."].filter(Boolean).join(" ") } : {}) };
-      } catch (error) { paths.forEach(remove); throw error; }
-    },
     async handle(request: Request, authorize = () => {}) {
       const json = (body: unknown, status = 200) => Response.json(body, { status });
       if (request.method !== "POST") return json({ error: "Use POST to add a subtitle file." }, 405);

@@ -5,29 +5,21 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { librarySourcesQuery, metadataProviderQuery } from "@/api/library";
-import { jellyfinQuery } from "@/api/jellyfin";
 import { radioSourcesQuery } from "@/api/radio";
 import { streamingCommunityQuery } from "@/api/settings";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { FolderSettings } from "./sources/FolderSettings";
 import { IptvSettings } from "./sources/IptvSettings";
-import { JellyfinSettings } from "./sources/JellyfinSettings";
-import { MetadataSettings } from "./sources/MetadataSettings";
 import { RadioSettings } from "./sources/RadioSettings";
 import { StreamingCommunitySettings } from "./sources/StreamingCommunitySettings";
 import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
-const sourcePages: SourceKind[] = ["folders", "jellyfin", "iptv", "radio", "streaming-community", "metadata"];
+const sourcePages: SourceKind[] = ["iptv", "radio", "streaming-community"];
 const plural = (count: number, one: string) => `${count.toLocaleString()} ${one}${count === 1 ? "" : "s"}`;
 
 export function SettingsSources({ source, ...props }: SourceSettingsProps & { source?: SourceKind }) {
-  if (source === "folders") return <FolderSettings {...props} />;
-  if (source === "jellyfin") return <JellyfinSettings {...props} />;
   if (source === "radio") return <RadioSettings {...props} />;
-  if (source === "metadata") return <MetadataSettings {...props} />;
   if (source === "streaming-community") return <StreamingCommunitySettings {...props} />;
   if (source === "iptv") return <IptvSettings {...props} />;
   return <SourcesOverview {...props} />;
@@ -36,23 +28,16 @@ export function SettingsSources({ source, ...props }: SourceSettingsProps & { so
 function SourcesOverview({ credentials, connected, canManage }: SourceSettingsProps) {
   const available = connected && !!credentials;
   const empty = { origin: "", token: "" };
-  const folders = useQuery({ ...librarySourcesQuery(credentials ?? empty), enabled: available });
   const iptv = useQuery({ ...iptvSourcesQuery(credentials ?? empty), enabled: available });
-  const jellyfin = useQuery({ ...jellyfinQuery(credentials ?? empty, canManage), enabled: available });
   const radio = useQuery({ ...radioSourcesQuery(credentials ?? empty), enabled: available && canManage });
-  const metadata = useQuery({ ...metadataProviderQuery(credentials ?? empty), enabled: available && canManage });
   const streaming = useQuery({ ...streamingCommunityQuery(credentials ?? empty), enabled: available && canManage });
-  const folderSources = folders.data?.sources;
   const radioSources = radio.data?.sources.filter(item => item.id !== avoidRadioPlaylistId);
-  const queries = [folders, iptv, jellyfin, ...(canManage ? [radio, metadata, streaming] : [])];
+  const queries = [iptv, ...(canManage ? [radio, streaming] : [])];
   const failed = queries.filter(query => query.isError);
   const status: Record<SourceKind, string | undefined> = {
-    folders: folderSources && (folderSources.length ? `${plural(folderSources.length, "folder")} · ${plural(folderSources.reduce((total, item) => total + item.itemCount, 0), "item")}` : "Not set up"),
-    jellyfin: jellyfin.data && (jellyfin.data.connected ? jellyfin.data.serverName || "Connected" : "Not set up"),
     iptv: iptv.data && (iptv.data.sources.length ? `${plural(iptv.data.sources.length, "list")} · ${plural(iptv.data.sources.reduce((total, item) => total + item.channelCount, 0), "channel")}` : "Not set up"),
     radio: !canManage ? "Admin only" : radioSources && (radioSources.length ? plural(radioSources.length, "playlist") : "Built in only"),
     "streaming-community": !canManage ? "Admin only" : streaming.data?.origin,
-    metadata: !canManage ? "Admin only" : metadata.data && (metadata.data.configured ? "Set up" : "Not set up"),
   };
 
   return (

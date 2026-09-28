@@ -8,10 +8,4 @@ export type SourceSettingsProps = {
   hostName?: string;
 };
 
-export type SourceKind =
-  | "folders"
-  | "jellyfin"
-  | "radio"
-  | "metadata"
-  | "streaming-community"
-  | "iptv";
+export type SourceKind = "radio" | "streaming-community" | "iptv";

@@ -7,7 +7,7 @@ declare module "@tanstack/react-router" {
   interface HistoryState { detailFocus?: FocusTarget }
 }
 
-export const itemLocation = (kind: "history" | "saved" | "radio" | "library" | "jellyfin", id: string) => `/item${defaultStringifySearch({ kind, id })}`;
+export const itemLocation = (kind: "history" | "saved" | "radio", id: string) => `/item${defaultStringifySearch({ kind, id })}`;
 export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url">) => `/collection?${new URLSearchParams({ provider: item.provider, url: item.url })}`;
 
 function opener(selector?: string): FocusTarget | undefined {

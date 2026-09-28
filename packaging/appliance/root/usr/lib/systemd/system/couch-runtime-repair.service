@@ -1,7 +1,0 @@
-[Unit]
-Description=Repair the Ubuntu ffmpeg runtime at its installed version
-
-[Service]
-Type=oneshot
-ExecStart=/usr/lib/couch-appliance/repair-runtime
-TimeoutStartSec=300

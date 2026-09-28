@@ -21,9 +21,7 @@ export function nativeMedia(state: ClientSessionState | null, connected: boolean
   const programme = state?.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const { transportReady, pausable, seekable, nextReady, hasNext } = playbackCapabilities(state, connected);
   const url = programme?.artworkUrl ?? current.thumbnail;
-  const artwork = programme?.artworkUrl ? { url: programme.artworkUrl } : current.artworkId
-    ? { url: `${credentials.origin}/api/library/artwork/${encodeURIComponent(current.artworkId)}`, token: credentials.token }
-    : url ? { url } : null;
+  const artwork = url ? { url } : null;
   const live = !!current.live || current.kind === "radio" || current.source.startsWith("radio:");
   return {
     id: `${owner}:${player.playbackId}`, title: programme?.title ?? player.nowPlaying?.title ?? current.title,

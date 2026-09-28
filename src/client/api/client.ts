@@ -1,4 +1,3 @@
-import { loadedBuild } from "../../shared/build";
 
 // Playback commands remain on the session WebSocket. Query owns server reads;
 // SessionGate owns and retires its QueryClient when connection/authority changes.
@@ -29,7 +28,3 @@ export const apiJson = <T,>(credentials: ApiCredentials, path: string, init?: Re
 
 export const apiSend = <T = unknown,>(credentials: ApiCredentials, path: string, body?: unknown, method = "POST", timeoutMs?: number) =>
   apiJson<T>(credentials, path, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) }, timeoutMs);
-
-// The native frontend confirms which build it loaded before maintenance can proceed.
-export const acknowledgeFrontend = (credentials: ApiCredentials, signal: AbortSignal, timeoutMs: number) =>
-  apiFetch(credentials, "/api/maintenance/frontend", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ build: loadedBuild }), signal }, timeoutMs);

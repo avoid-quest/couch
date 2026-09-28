@@ -9,14 +9,13 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { apiFetch } from "@/api/client";
-import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/library";
+import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/progress";
 import { forLaterQuery } from "@/api/for-later";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { ForLaterSection } from "@/sections/saved/ForLaterSection";
@@ -28,7 +27,7 @@ import { sourceLabel } from "@/source-label";
 import { offline, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
-import type { HistoryItem } from "../../../shared/library";
+import type { HistoryItem } from "../../../shared/viewing";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
 import { useHomeRows, type HomeRowId } from "./home-rows";
@@ -100,9 +99,8 @@ export function HomePage() {
   const lead = !current && !unfinished.length ? stations.find(station => onAir(station.id)) : undefined;
   const leadShow = lead && onAir(lead.id);
 
-  const art = (item: { artworkId?: string; thumbnail?: string; title: string }) => <Artwork credentials={credentials} item={item} />;
+  const art = (item: { thumbnail?: string; title: string }) => <Artwork item={item} />;
   const queueHistory = async (item: HistoryItem) => {
-    if (item.libraryItemId) return shell.enqueueCatalog("enqueueLibrary", item.libraryItemId);
     if (!state || !item.playable) return false;
     await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });
     return true;
@@ -225,10 +223,10 @@ function RecentRail({ items, credentials, disabled, onPlay }: { items: HistoryIt
   const details = useDetailNavigation();
   return <ol data-nav-row aria-label="Played recently" className="grid auto-cols-[minmax(10rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-1 lg:auto-cols-[minmax(12rem,1fr)]">
     {items.map(item => {
-      const play = <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.libraryItemId || item.queueEntryId)} onClick={() => onPlay(item)}>Play</Button>;
+      const play = <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.queueEntryId)} onClick={() => onPlay(item)}>Play</Button>;
       return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><Button variant="ghost" aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))}
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
-          <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork credentials={credentials} item={item} /></span>
+          <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork item={item} /></span>
           <span className="line-clamp-2 text-base font-medium">{item.title}</span>
           <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
         </Button>{play}</li>;
@@ -295,7 +293,7 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
     const controls = content.current?.querySelectorAll<HTMLElement>('[data-history-details]');
     (controls?.[Math.min(target.index, controls.length - 1)]?.querySelector<HTMLElement>('[aria-label^="Details "]') ?? document.querySelector<HTMLElement>('[data-page-first]:not(:disabled)'))?.focus();
   });
-  const playable = (item: HistoryItem) => connected && canPlay && !pending && !!(item.playable || item.libraryItemId || item.queueEntryId);
+  const playable = (item: HistoryItem) => connected && canPlay && !pending && !!(item.playable || item.queueEntryId);
   async function act(item: HistoryItem, action: "resume" | "start" | "queue" | "remove") {
     if (pending) return;
     setPending(true);
@@ -328,11 +326,11 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
   const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={`Resume ${item.title}`} onClick={() => void act(item, "resume")}>Resume</Button>;
   const preview = (item: HistoryItem, featured: boolean) => {
     const inspect = () => details.open(itemLocation("history", item.mediaId));
-    return featured ? <div key={item.mediaId} data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork credentials={credentials} item={item} intrinsic />} artFit={item.thumbnail || item.artworkId ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
+    return featured ? <div key={item.mediaId} data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork item={item} intrinsic />} artFit={item.thumbnail ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
       </>}>{resume(item)}{secondary(item)}</Feature></div> : <MediaRow key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
-        art={<Button variant="ghost" className="size-full rounded-none p-0 hover:opacity-80" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork credentials={credentials} item={item} /></Button>}
+        art={<Button variant="ghost" className="size-full rounded-none p-0 hover:opacity-80" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork item={item} /></Button>}
         primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>;
@@ -348,11 +346,9 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
 }
 
 function historyMeta(item: HistoryItem) {
-  return [item.subtitle, item.sourceLabel || (item.libraryItemId ? "Folders" : undefined)].filter(Boolean).join(" · ");
+  return [item.subtitle, item.sourceLabel].filter(Boolean).join(" · ");
 }
 
-function Artwork({ credentials, item, intrinsic = false }: { credentials: Credentials; item: { artworkId?: string; thumbnail?: string; title: string }; intrinsic?: boolean }) {
-  return item.artworkId
-    ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={item.artworkId} className={intrinsic ? "size-auto max-w-full rounded-none [&_img]:h-auto [&_img]:w-auto [&_img]:max-h-64 [&_img]:max-w-full [&_img]:object-contain" : undefined} />
-    : <MediaArtwork thumbnail={item.thumbnail} title={item.title} className={intrinsic ? "aspect-auto h-auto w-auto max-h-64 max-w-full object-contain" : undefined} />;
+function Artwork({ item, intrinsic = false }: { item: { thumbnail?: string; title: string }; intrinsic?: boolean }) {
+  return <MediaArtwork thumbnail={item.thumbnail} title={item.title} className={intrinsic ? "aspect-auto h-auto w-auto max-h-64 max-w-full object-contain" : undefined} />;
 }

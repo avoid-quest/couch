@@ -1,0 +1,3 @@
+export type WatchingProfile = { id: string; name: string; personName?: string };
+export type ViewingProgress = { position: number; duration: number | null; watched: boolean; lastPlayedAt: number | null };
+export type HistoryItem = ViewingProgress & { collection?: import("./protocol").PlaybackCollection; subtitle?: string; description?: string; playedBy?: import("./protocol").PlaybackActor; mediaId: string; title: string; queueEntryId?: string; playable?: boolean; thumbnail?: string; sourceLabel?: string };

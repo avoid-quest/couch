@@ -1,24 +1,18 @@
-import { libraryMetadata } from "./library-metadata";
 import { providerForUrl } from "../shared/providers";
 import type { PlaybackActor } from "../shared/protocol";
-import type { HistoryItem, LibraryItem, LibrarySource } from "../shared/library";
-import type { JellyfinSource } from "./jellyfin";
-import type { Library } from "./library";
+import type { HistoryItem } from "../shared/viewing";
 import { RadioError, type createRadio } from "./radio";
 import { playbackMediaId, ViewingError } from "./progress";
 import type { Store } from "./store";
 import type { createSession } from "./session";
 import { ControllerError } from "./controllers";
-import { RECORDINGS_UNSUPPORTED } from "./messages";
 
 type Services = {
-  library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations" | "getStation">;
-  jellyfin: Pick<JellyfinSource, "status" | "items" | "getItem"> & Partial<Pick<JellyfinSource, "artwork">>;
-  viewing?: { store: Store; session: ReturnType<typeof createSession>; refreshHistory?: (items: import("../shared/library").HistoryItem[]) => void };
+  viewing?: { store: Store; session: ReturnType<typeof createSession>; refreshHistory?: (items: HistoryItem[]) => void };
 };
 
-const progressIdentity = /^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64}|media:[a-f0-9]{64})$/;
+const progressIdentity = /^media:[a-f0-9]{64}$/;
 
 class RequestError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -50,13 +44,7 @@ function queryInteger(params: URLSearchParams, key: string, fallback: number, mi
   return Number(value);
 }
 
-function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
-  if (trusted) return source;
-  const { path: _path, ...view } = source;
-  return { ...view, error: source.error ? "This folder needs attention on the TV." : null };
-}
-
-export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
+export function createCatalog({ radio, viewing }: Services) {
   type ProgressRows = import("./store").ProgressSnapshot;
   const progressUndo = new Map<string, { rows: ProgressRows; expected: ProgressRows; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   const rememberProgress = (rows: ProgressRows, expected: ProgressRows = []) => {
@@ -71,17 +59,11 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
     const { queue, currentEntryId } = viewing!.session.state;
     const queueEntry = queue.find(entry => entry.id === currentEntryId && playbackMediaId(entry) === item.mediaId)
       ?? queue.findLast(entry => playbackMediaId(entry) === item.mediaId);
-    const { duration: _catalogueDuration, ...localMetadata } = item.libraryItemId ? libraryMetadata(library.getItem(item.libraryItemId)) : {};
     const saved = viewing!.store.historySource(item.mediaId);
     const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail, collection: queueEntry.collection ?? (saved.id === queueEntry.id ? saved.collection : undefined) } : {}) } : saved;
     const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
-    const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : "Online";
-    return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}), ...localMetadata };
-  };
-  const libraryView = (item: LibraryItem): LibraryItem => {
-    if (!viewing) return item;
-    const saved = viewing.store.sharedProgress(`library:${item.id}`);
-    return { ...item, progress: saved ? { position: saved.position, duration: saved.duration, watched: saved.watched, lastPlayedAt: saved.lastPlayedAt } : null };
+    const sourceLabel = provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : "Online";
+    return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
   };
   return {
     async handle(request: Request, trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
@@ -152,7 +134,6 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           try { mediaId = decodeURIComponent(historyQueue[1]!); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
-          if (mediaId.startsWith("recording:")) throw new RequestError(RECORDINGS_UNSUPPORTED, 410);
           if (!viewing.store.sharedProgress(mediaId)) throw new RequestError("History item not found.", 404);
           const saved = viewing.session.state.queue.find(entry => playbackMediaId(entry) === mediaId) ?? viewing.store.historySource(mediaId);
           if (!saved || playbackMediaId(saved) !== mediaId) throw new RequestError("Open this item from its source again.", 409);
@@ -199,67 +180,11 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
             || changes.watched !== undefined && typeof changes.watched !== "boolean"
             || changes.clearResume !== undefined && changes.clearResume !== true
             || changes.watched === undefined && changes.clearResume === undefined) throw new RequestError("Choose a watched state or clear the resume position.");
-          const existing = viewing.store.sharedProgress(mediaId);
-          const libraryItemId = mediaId.startsWith("library:") ? mediaId.slice(8) : null;
-          const item = existing ?? (libraryItemId ? library.getItem(libraryItemId) : null);
+          const item = viewing.store.sharedProgress(mediaId);
           if (!item) throw new RequestError("Media item not found.", 404);
           const before = changes.clearResume ? viewing.store.sharedProgressRows(mediaId) : null;
-          viewing.session.editProgress(mediaId, changes as { watched?: boolean; clearResume?: boolean }, { title: item.title, libraryItemId });
+          viewing.session.editProgress(mediaId, changes as { watched?: boolean; clearResume?: boolean }, { title: item.title });
           return Response.json({ progress: viewing.store.sharedProgress(mediaId), ...(before?.length ? rememberProgress(before, viewing.store.sharedProgressRows(mediaId)) : {}) });
-        }
-        if (pathname === "/api/library/sources") {
-          if (request.method === "GET") return Response.json({ sources: library.listSources().map(source => sourceView(source, trusted)) });
-          return methodNotAllowed("GET");
-        }
-        if (pathname === "/api/library/items") {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          const videoType = queryText(searchParams, "videoType", 10);
-          if (videoType !== "" && videoType !== "movie" && videoType !== "episode") throw new RequestError("Invalid video type.");
-          const showId = queryText(searchParams, "showId", 64);
-          if (showId && !/^[a-f0-9]{64}$/.test(showId)) throw new RequestError("Invalid show identity.");
-          const season = !searchParams.has("season") ? undefined : searchParams.get("season") === "unknown" ? "unknown" : queryInteger(searchParams, "season", 0, 0, 999);
-          if (season !== undefined && !showId) throw new RequestError("Choose a show before a season.");
-          const result = library.search({ query: queryText(searchParams, "q", 200), artistId: queryText(searchParams, "artistId", 80) || undefined,
-            videoType: videoType || undefined, showId: showId || undefined, season,
-            offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
-          result.items = result.items.map(libraryView);
-          return Response.json(result);
-        }
-        const libraryItem = /^\/api\/library\/items\/([\w-]{1,80})$/.exec(pathname);
-        if (libraryItem) {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          const item = library.getItem(libraryItem[1]!);
-          if (!item) throw new RequestError("Media item not found.", 404);
-          return Response.json({ item: libraryView(item) });
-        }
-        if (pathname === "/api/library/video/shows") {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          return Response.json(library.videoShows({ query: queryText(searchParams, "q", 200), offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) }));
-        }
-        const seasons = /^\/api\/library\/video\/shows\/([a-f0-9]{64})\/seasons$/.exec(pathname);
-        if (seasons) {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          const items = library.videoSeasons(seasons[1]!);
-          if (!items.length) throw new RequestError("Show not found.", 404);
-          return Response.json({ items });
-        }
-        if (pathname === "/api/library/music/artists" || pathname === "/api/library/music/albums") {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          const options = { query: queryText(searchParams, "q", 200), offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) };
-          return Response.json(pathname.endsWith("artists") ? library.musicArtists(options) : library.musicAlbums({ ...options, artistId: queryText(searchParams, "artistId", 80) || undefined }));
-        }
-        const album = /^\/api\/library\/music\/albums\/([\w-]{1,80})$/.exec(pathname);
-        if (album) {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          try { return Response.json(library.albumTracks(album[1]!)); }
-          catch { throw new RequestError("This album is unavailable or has more than 500 tracks. Browse its tracks in All media.", 404); }
-        }
-        const artwork = /^\/api\/library\/artwork\/([a-f0-9]{64})$/.exec(pathname);
-        if (artwork) {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          const image = library.artwork(artwork[1]!) ?? await jellyfin.artwork?.(artwork[1]!, request.signal);
-          if (!image) throw new RequestError("Artwork not found.", 404);
-          return new Response(Buffer.from(image.data), { headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" } });
         }
         const playlist = /^\/api\/radio\/playlists\/([\w-]{1,80})\/stations$/.exec(pathname);
         if (playlist) {
@@ -296,25 +221,6 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           if (request.method !== "DELETE") return methodNotAllowed("DELETE");
           radio.removeFavorite(favorite[1]!);
           return new Response(null, { status: 204 });
-        }
-        if (pathname === "/api/jellyfin/items") {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          if (searchParams.has("resume") && !["true", "false"].includes(searchParams.get("resume")!)) throw new RequestError("Invalid resume query.");
-          const options = { query: queryText(searchParams, "q", 200), startIndex: queryInteger(searchParams, "startIndex", 0, 0, 1_000_000), resume: searchParams.get("resume") === "true" };
-          if (!jellyfin.status().connected) throw new RequestError("Connect Jellyfin in Settings → Sources first.", 409);
-          try { return Response.json(await jellyfin.items(options)); }
-          catch { throw new RequestError("Couldn't load the Jellyfin library. Check the server connection.", 502); }
-        }
-        const jellyfinItem = /^\/api\/jellyfin\/items\/([a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i.exec(pathname);
-        if (jellyfinItem) {
-          if (request.method !== "GET") return methodNotAllowed("GET");
-          if (!jellyfin.status().connected) throw new RequestError("Connect Jellyfin in Settings → Sources first.", 409);
-          let item;
-          try { item = await jellyfin.getItem(jellyfinItem[1]!, request.signal); }
-          catch { throw new RequestError("Couldn't load this Jellyfin item. Check the server connection.", 502); }
-          authorize();
-          if (!item) throw new RequestError("Jellyfin item not found.", 404);
-          return Response.json({ item });
         }
         return Response.json({ error: "Not found." }, { status: 404 });
       } catch (error) {

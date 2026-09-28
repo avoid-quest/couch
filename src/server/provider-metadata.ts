@@ -1,5 +1,5 @@
 import { providerForUrl, type ProviderItem } from "../shared/providers";
-import type { HistoryItem } from "../shared/library";
+import type { HistoryItem } from "../shared/viewing";
 import type { QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
 import { streamingCommunityList, streamingCommunityWatchContext } from "./streamingcommunity";

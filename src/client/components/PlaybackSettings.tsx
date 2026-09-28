@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { SettingsSection } from "@/components/SettingsRow";
 import { DelayControl } from "@/components/DelayControl";
-import type { WatchingProfile } from "../../shared/library";
-import type { Action, PlaybackPreferences as Preferences, QueueEntry, ReplayGainMode } from "../../shared/protocol";
+import type { WatchingProfile } from "../../shared/viewing";
+import type { Action, PlaybackPreferences as Preferences, QueueEntry } from "../../shared/protocol";
 import type { ClientPlayerState, Credentials } from "@/session/session";
 import { apiJson } from "@/api/client";
 import { playbackDefault, type PlaybackDefaultSetting } from "../../shared/playback-default";
@@ -222,9 +222,6 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
           options={speeds.map(speed => ({ value: String(speed), label: `${speed}×` }))} />{saveDefault("speed", "speed")}</SettingsSection>}
         {showQuality && <SettingsSection title="Quality"><ChoiceGroup label="Quality" orientation="vertical" disabled={idle || !qualityAvailable} value={entry?.quality ?? "auto"} onValueChange={quality => { if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }); }}
           options={(Object.entries(videoQualityLabels) as [NonNullable<QueueEntry["quality"]>, string][]).map(([value, label]) => ({ value, label }))} /></SettingsSection>}
-        {player.replayGain !== undefined && <SettingsSection title="Volume leveling"><ChoiceGroup label="Volume leveling" orientation="vertical" disabled={idle} value={player.replayGain} onValueChange={mode => { if (player.playbackId) void run({ type: "replayGain", playbackId: player.playbackId, mode }); }}
-          options={(["off", "track", "album"] as ReplayGainMode[]).map(mode => ({ value: mode, label: mode[0]!.toUpperCase() + mode.slice(1) }))} />
-          {saveDefault("replayGain", "volume leveling")}</SettingsSection>}
         <SettingsSection title="Sound">
           <PanelStepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => adjustDelay("audioDelay", player.audioDelay ?? 0, direction)} />
         </SettingsSection>
@@ -255,7 +252,6 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
           {subtitles.length > 0 && <div className="grid gap-2">{select("playback-subtitles", "Subtitles", String(subtitles.find(track => track.selected)?.index ?? -1), value => selectTrack("subtitle", Number(value)), [{ value: "-1", label: "Off" }, ...subtitles.map(track => ({ value: String(track.index), label: trackLabel(track, "Subtitle") }))])}{saveDefault("subtitles", "subtitles")}</div>}
           {player.seekable && !entry?.live && <div className="grid gap-2">{select("playback-speed", "Speed", String(player.speed ?? 1), value => { if (player.playbackId) void run({ type: "speed", playbackId: player.playbackId, speed: Number(value) }); }, speeds.map(speed => ({ value: String(speed), label: `${speed}×` })))}{saveDefault("speed", "speed")}</div>}
           {chapters.length > 0 && player.seekable && select("playback-chapters", "Chapter", chapterIndex < 0 ? "" : String(chapterIndex), value => { const chapter = chapters[Number(value)]; if (chapter && player.playbackId) void run({ type: "seek", playbackId: player.playbackId, position: chapter.position }); }, chapters.map((chapter, index) => ({ value: String(index), label: chapter.title || `Chapter ${index + 1}` })), "Chapter")}
-          {player.replayGain !== undefined && <div className="grid gap-2">{select("playback-replaygain", "Volume leveling", player.replayGain, mode => { if (player.playbackId) void run({ type: "replayGain", playbackId: player.playbackId, mode: mode as ReplayGainMode }); }, ["off", "track", "album"].map(mode => ({ value: mode, label: mode[0]!.toUpperCase() + mode.slice(1) })))}{saveDefault("replayGain", "volume leveling")}</div>}
           {video ? <Collapsible key={player.playbackId} className="sm:col-span-2">
             <CollapsibleTrigger asChild><Button variant="ghost" className="-mx-2.5">More</Button></CollapsibleTrigger>
             <CollapsibleContent className="grid gap-4 pt-3">

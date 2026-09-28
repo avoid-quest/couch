@@ -13,24 +13,17 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
 import { SearchOnlineResults, matchesFacet, providerNames, searchError, type SearchCollection, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
-import { SearchSource } from "./SearchSource";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
 import { createId } from "../../session/session";
-import { useOptionalSessionGate } from "@/session/session-context";
 import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { AuthArtwork } from "@/components/AuthArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
-import { OpenFileButton } from "@/sections/now/OpenFileButton";
 
-type Source = "Library" | "Jellyfin";
-type Options = { playNow?: boolean; fromStart?: boolean; placement?: "next" };
 export type Props = {
-  origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean; canManageMetadata?: boolean;
+  origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   defaultQuality?: VideoQuality;
   onCommand?: (action: Action) => Promise<boolean>;
-  onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;
   onManageSources?: (source?: SourceSetupKind) => void;
   onOpenCollection?: (item: ProviderItem) => void;
   onQueryChange?: (query: string) => void;
@@ -41,7 +34,7 @@ export type Props = {
 type Entry = [source: string, summary: SearchResultSummary];
 
 // Sources in the order their results interleave; the rest are searched too.
-const sourceOrder = ["YouTube", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "Folders", "Jellyfin", "StreamingCommunity", "Bandcamp"];
+const sourceOrder = ["YouTube", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "Bandcamp"];
 const searchable = sourceOrder.filter(source => source !== "Bandcamp");
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 const isLink = (value: string) => {
@@ -50,7 +43,6 @@ const isLink = (value: string) => {
 };
 
 export function SearchPanel(props: Props) {
-  const gate = useOptionalSessionGate();
   const [localDraft, setDraft] = useState(props.searchState?.query ?? "");
   const routeQuery = props.searchState?.query;
   const [seenRoute, setSeenRoute] = useState(routeQuery);
@@ -139,10 +131,7 @@ export function SearchPanel(props: Props) {
     <SourceProblems summaries={shown} />
   </>;
   return <section ref={panel} className="min-w-0 space-y-6" aria-label="Search media" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }} onKeyDown={event => { if (event.target !== input.current) return; if (event.key === "ArrowDown") { const row = panel.current?.querySelector<HTMLElement>("[data-play]"); if (row) { event.preventDefault(); row.focus(); } } else if (event.key === "ArrowUp") { const nav = document.querySelector<HTMLElement>(".app-header a"); if (nav) { event.preventDefault(); nav.focus(); } } }}>
-    <div className="flex items-center gap-4">
-      <SearchBar id="media-search" pageFirst inputRef={input} className="min-w-0 flex-1" value={draft} onValueChange={changeDraft} onCompositionChange={setComposing} onSubmit={() => { commit(draft.trim(), true); requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("[data-play]")?.focus()); }} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
-      {gate?.nativeHost && gate.localHost && !gate.tvPresentation && props.onCommand && <OpenFileButton connected={props.connected} run={props.onCommand} playNow />}
-    </div>
+    <SearchBar id="media-search" pageFirst inputRef={input} className="min-w-0" value={draft} onValueChange={changeDraft} onCompositionChange={setComposing} onSubmit={() => { commit(draft.trim(), true); requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("[data-play]")?.focus()); }} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
     {search.query && !url && asking.length > 0 && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner aria-hidden="true" className="size-3.5" />Still asking {asking.join(", ")}…</p>}
     {search.query && !url && <div className={total ? "grid min-w-0 gap-6 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-12" : "min-w-0"}>
       {total > 0 && <>
@@ -158,7 +147,6 @@ export function SearchPanel(props: Props) {
     {search.query && providers.map(provider => <SearchOnlineResults key={`${provider}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && inScope(providerNames[provider])} provider={provider} query={search.query} quality={quality} onEnqueued={resetQuality} />)}
     {search.query && !url && <>
       {radioSources.map(source => <SearchRadioResults key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && inScope(source)} query={search.query} source={source} />)}
-      {(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && inScope(source === "Library" ? "Folders" : source)} source={source} query={search.query} />)}
     </>}
     {url && <PastedLink key={`${url}:${search.attempt}`} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
   </section>;
@@ -178,7 +166,7 @@ export const HitList = memo(function HitList({ hits, label, origin, token }: { h
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
     {hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
     <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} description={hit.description} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
-      art={hit.artworkId ? <AuthArtwork origin={origin} token={token} id={hit.artworkId} video={hit.video} /> : <MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
+      art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
       primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled }}
       actions={hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>)}>
       {hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />}

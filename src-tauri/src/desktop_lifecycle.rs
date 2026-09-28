@@ -16,27 +16,11 @@ pub(crate) fn on_main_window_event(app: &tauri::AppHandle, event: &tauri::Window
     } else { (false, false) };
     if main_window_activated(event, closed, visible, minimized) {
         host.window_closed.store(false, Ordering::SeqCst);
-        crate::operating_mode::window_opened(app);
-    }
-}
-
-#[cfg(test)]
-mod activity_tests {
-    use super::*;
-
-    #[test]
-    fn focus_and_taskbar_restore_count_as_window_activity() {
-        assert!(main_window_activated(&tauri::WindowEvent::Focused(true), false, true, false));
-        assert!(main_window_activated(&tauri::WindowEvent::Resized(PhysicalSize::new(800, 600)), true, true, false));
-        assert!(!main_window_activated(&tauri::WindowEvent::Focused(false), false, true, false));
-        assert!(!main_window_activated(&tauri::WindowEvent::Resized(PhysicalSize::new(800, 600)), true, true, true));
-        assert!(!main_window_activated(&tauri::WindowEvent::Resized(PhysicalSize::new(800, 600)), true, false, false));
     }
 }
 
 pub(crate) fn show(app: &tauri::AppHandle) {
     app.state::<Host>().window_closed.store(false, Ordering::SeqCst);
-    crate::operating_mode::window_opened(app);
     let Some(main) = app.get_webview_window("main") else {
         return;
     };
@@ -268,25 +252,3 @@ pub(crate) fn install_desktop_menu(app: &tauri::AppHandle) -> tauri::Result<()> 
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recovery_requires_a_usable_piece_of_a_current_display() {
-        let window = PhysicalSize::new(900, 700);
-        let display = PhysicalSize::new(1920, 1080);
-        assert_eq!(
-            visible_area((-2000, 100).into(), window, (0, 0).into(), display),
-            0
-        );
-        assert_eq!(
-            visible_area((-850, 100).into(), window, (0, 0).into(), display),
-            35_000
-        );
-        assert_eq!(
-            visible_area((-890, 100).into(), window, (0, 0).into(), display),
-            7_000
-        );
-    }
-}

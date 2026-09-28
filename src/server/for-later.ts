@@ -10,7 +10,7 @@ import { CHANGED_ELSEWHERE, PLAY_CANCELED } from "./messages";
 type Options = {
   databasePath: string;
   onChange: () => void;
-  lookup: (reference: ForLaterReference) => Promise<QueueEntry>;
+  lookup: (reference: Extract<ForLaterReference, { kind: "queue" }>) => Promise<QueueEntry>;
   webMetadata?: (url: string, collection?: Extract<ForLaterReference, { kind: "web" }>["collection"]) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
   reservePlay: () => number;
   prepare: (entry: QueueEntry) => Promise<void>;
@@ -63,8 +63,8 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
             if (reference.collection !== undefined && (!reference.collection || typeof reference.collection !== "object" || typeof reference.collection.url !== "string" || reference.collection.url.length > 2048 || reference.collection.index !== undefined && (!Number.isSafeInteger(reference.collection.index) || reference.collection.index < 0 || reference.collection.index > 2400))) throw new ControllerError("Choose an item to save.");
             entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}`, ...(reference.thumbnail ? { thumbnail: reference.thumbnail } : {}), ...(reference.duration !== undefined ? { duration: reference.duration } : {}), ...webMetadata?.(reference.url, reference.collection) };
           } else {
-            if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || !["queue", "library", "jellyfin"].includes((reference as ForLaterReference).kind) || typeof (reference as { id?: unknown }).id !== "string" || !/^[\w-]{1,80}$/.test((reference as { id: string }).id)) throw new ControllerError("Choose a library or queue item to save.");
-            const found = await lookup(reference);
+            if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || (reference as ForLaterReference).kind !== "queue" || typeof (reference as { id?: unknown }).id !== "string" || !/^[\w-]{1,80}$/.test((reference as { id: string }).id)) throw new ControllerError("Choose a queue item to save.");
+            const found = await lookup(reference as Extract<ForLaterReference, { kind: "queue" }>);
             entry = capturePlaylistEntries([{ ...found, id: crypto.randomUUID() }])[0]!;
           }
           authorize();

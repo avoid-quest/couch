@@ -71,14 +71,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
-      let playbackClock = false;
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
         if (!response.ok) throw new Error("Server unavailable");
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
-        playbackClock = next.playbackClock === 1;
         setConnectionDetails({ origin, details: next });
         if (desktopProtocol && next.desktopClientProtocol !== desktopProtocol) { setStatus("protocol-mismatch"); setState(null); setIdentity(null); return; }
         if (desktopProtocol && next.remoteControlEnabled === false) { setStatus("sharing-disabled"); setState(null); setIdentity(null); retry = setTimeout(() => void connect(), 5_000); return; }
@@ -127,7 +125,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const asset = buildKey(loadedBuild);
       if (asset && !desktopProtocol) url.searchParams.set("build", asset);
       if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
-      if (playbackClock) url.searchParams.set("playbackClock", "1");
       const connection = new WebSocket(url);
       let baseline = false;
       socket.current = connection;
@@ -158,7 +155,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setClock({ playbackId: player.playbackId, position, duration });
           setStatus("connected");
         } else if (message.type === "clock") {
-          if (!playbackClock || !(message.playbackId === null || typeof message.playbackId === "string")
+          if (!(message.playbackId === null || typeof message.playbackId === "string")
             || typeof message.position !== "number" || !Number.isFinite(message.position)
             || !(message.duration === null || typeof message.duration === "number" && Number.isFinite(message.duration))) {
             connection.close(4002, "Invalid response");

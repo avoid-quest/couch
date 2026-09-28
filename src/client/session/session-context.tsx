@@ -5,14 +5,12 @@ import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, u
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
-import { acknowledgeFrontend, ApiError } from "../api/client";
 import { applyTvNavigation } from "../navigation";
 import { isNativeHost, isTvPresentation } from "./native-context";
 import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useInterfaceSize } from "../interface-size";
-import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { desktopClientProtocol } from "../../shared/desktop-protocol";
@@ -130,7 +128,6 @@ export function SessionGate({ children }: PropsWithChildren) {
   const cache = cacheRef.current;
   const queryClient = cache.client;
   useLayoutEffect(() => () => queryClient.clear(), [queryClient]);
-  useUpdateActivity(credentials, connected);
   const remoteControlEnabled = details?.remoteControlEnabled === true;
 
   // Session snapshots invalidate Query directly: each changed domain revision
@@ -158,19 +155,6 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, [versions, connected, !!state, queryClient]);
 
   useInterfaceSize(tvPresentation, state?.appearance);
-
-  useEffect(() => {
-    if (!localHost || !credentials) return;
-    const stop = new AbortController();
-    void (async () => {
-      for (let attempt = 0; attempt < 5 && !stop.signal.aborted; attempt++) {
-        try { await acknowledgeFrontend(credentials, stop.signal, 2_000); return; }
-        catch (reason) { if (reason instanceof ApiError && reason.status === 404) return; /* A trial stays closed until this loaded asset identity is received. */ }
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    })();
-    return () => stop.abort();
-  }, [localHost, credentials]);
 
   useEffect(() => {
     if (!localHost) return;

@@ -1,5 +1,5 @@
 import snapshot from "./releases.json";
-import { downloadUrl, publicFiles, releasePlatforms, type Channel, type PackageFormat } from "../../../scripts/hosted-policy";
+import { downloadUrl, publicFiles, releasePlatforms, type Channel, type PackageFormat } from "./release-policy";
 
 export const formats = ["dmg", "nsis", "appimage", "deb"] as const satisfies readonly PackageFormat[];
 export type Release = { version: string; url: string; filename: string };

@@ -1,11 +1,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { BluetoothState } from "../../shared/bluetooth";
-import type { Diagnostics } from "../../shared/diagnostics";
 import type { DisplayState } from "../../shared/display";
 import type { SoundOutput, SoundProfile, SoundState } from "../../shared/sound";
 import type { StartupState } from "../../shared/startup";
-import type { AptPackageStatus, ToolHealth } from "../../shared/tool-health";
-import type { UpdateState } from "../../shared/updates";
 import { validStreamingCommunityOrigin } from "../../shared/streamingcommunity";
 import { apiJson, type ApiCredentials } from "./client";
 
@@ -66,40 +63,6 @@ export const displayQuery = (credentials: ApiCredentials) =>
     queryKey: ["display"],
     queryFn: ({ signal }) => apiJson<DisplayState>(credentials, "/api/display", { signal }),
     refetchInterval: query => query.state.data?.preview ? 1_000 : false,
-    retry: false,
-  });
-
-const updateSettled = (state: UpdateState | undefined) => {
-  const transaction = state?.installation?.requestedTransaction ?? state?.installation?.transaction;
-  return state?.status !== "checking" && state?.status !== "downloading" && (!transaction || ["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase));
-};
-// Checks, downloads and installation phases progress on the host.
-export const updatesQuery = (credentials: ApiCredentials, requestId?: string) =>
-  queryOptions({
-    queryKey: ["updates", requestId ?? null] as const,
-    queryFn: ({ signal }) => apiJson<UpdateState>(credentials, `/api/updates${requestId ? `?requestId=${requestId}` : ""}`, { signal }),
-    refetchInterval: query => updateSettled(query.state.data) && !(requestId && query.state.error) ? false : 2_000,
-    retry: false,
-  });
-
-export const toolsQuery = (credentials: ApiCredentials) =>
-  queryOptions({
-    queryKey: ["tools", "health"],
-    queryFn: ({ signal }) => apiJson<ToolHealth>(credentials, "/api/tools", { signal }),
-    retry: false,
-  });
-
-export const toolPackagesQuery = (credentials: ApiCredentials) =>
-  queryOptions({
-    queryKey: ["tools", "packages"],
-    queryFn: ({ signal }) => apiJson<AptPackageStatus>(credentials, "/api/tools/packages", { signal }),
-    retry: false,
-  });
-
-export const diagnosticsQuery = (credentials: ApiCredentials) =>
-  queryOptions({
-    queryKey: ["tools", "diagnostics"],
-    queryFn: ({ signal }) => apiJson<Diagnostics>(credentials, "/api/diagnostics", { signal }),
     retry: false,
   });
 

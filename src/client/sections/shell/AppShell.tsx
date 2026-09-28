@@ -68,8 +68,8 @@ function useShellValue() {
     if (section === "Now" && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
   }, [section, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
-  const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
+  const [setupSource, setSetupSource] = useState<"radio" | "iptv" | "streaming-community">("iptv");
+  const openSources = (source: typeof setupSource = "iptv") => { setSetupSource(source); setSourcesOpen(true); };
   const installationId = credentials?.installationId ?? details?.installationId;
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
   const [remoteOpen, setRemoteOpen] = useState(false);
@@ -150,8 +150,6 @@ function useShellValue() {
     return result;
   };
   const openProvider = (item: ProviderItem, focusSelector?: string) => detailNavigation.open(collectionLocation(item), focusSelector);
-  const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean; placement?: "next" }) =>
-    run({ type, itemId, entryId: createId(), ...options });
 
   const playProgress = useMutation({
     mutationFn: ({ mediaId, ...body }: { mediaId: string; fromStart: boolean; profileId: string }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play`, body, "POST", 35_000),
@@ -162,7 +160,6 @@ function useShellValue() {
       try { await playProgress.mutateAsync({ mediaId: item.mediaId, fromStart: options.fromStart === true, profileId: state.activeProfile.id }); return true; }
       catch (reason) { setError(errorText(reason)); return false; }
     }
-    if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId, { playNow: true, ...options });
     if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });
     setError("Couldn't play. It's no longer available.");
     return Promise.resolve(false);
@@ -184,7 +181,7 @@ function useShellValue() {
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
-    enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
+    enqueueProvider, enqueueRadio, playHistory,
     remoteOpen, pairingOpen, setupSource, sourcesOpen,
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
@@ -299,7 +296,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
               {paired && !!state?.queue.length && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
-              {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} updates={!localHost && !tvPresentation} />}
+              {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} />}
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>

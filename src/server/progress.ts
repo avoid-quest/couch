@@ -1,4 +1,4 @@
-import type { HistoryItem } from "../shared/library";
+import type { HistoryItem } from "../shared/viewing";
 import type { PlaybackActor, PlayerState, QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
 
@@ -8,12 +8,7 @@ export class ViewingError extends Error {
 
 export function playbackMediaId(entry: QueueEntry): string | null {
   if (entry.live || entry.kind === "radio" || /^(radio|iptv):/.test(entry.source)) return null;
-  if (/^recording:[a-f0-9-]{36}$/.test(entry.source)) return entry.source;
-  if (/^library:[\w-]{1,80}$/.test(entry.source)) return entry.source;
-  if (entry.source.startsWith("file:")) {
-    return `file:${new Bun.CryptoHasher("sha256").update(new URL(entry.source).href).digest("hex")}`;
-  }
-  if (/^(web:https?:|https?:|jellyfin:)/.test(entry.source)) return `media:${new Bun.CryptoHasher("sha256").update(entry.source).digest("hex")}`;
+  if (/^(web:https?:|https?:)/.test(entry.source)) return `media:${new Bun.CryptoHasher("sha256").update(entry.source).digest("hex")}`;
   return null;
 }
 
@@ -51,7 +46,7 @@ export function createProgress(store: Store, committed: (final: boolean) => void
       const mediaId = playbackMediaId(entry);
       active = mediaId ? {
         playbackId, profileId, entry: { ...entry }, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
-        item: { ...(playedBy ? { playedBy: { ...playedBy } } : {}), mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
+        item: { ...(playedBy ? { playedBy: { ...playedBy } } : {}), mediaId, title: entry.title, position: 0, duration: null, watched: false, lastPlayedAt: null },
       } : null;
     },
     enrichEntry(entry: QueueEntry) {

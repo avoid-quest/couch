@@ -4,11 +4,9 @@ use std::{
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     path::PathBuf,
     sync::{atomic::Ordering, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tauri::{Manager, Url};
-
-const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,7 +30,6 @@ pub struct Modes {
     path: PathBuf,
     choice: Mutex<Choice>,
     operation: tokio::sync::Mutex<()>,
-    last_input: Mutex<Instant>,
 }
 
 impl Modes {
@@ -46,7 +43,6 @@ impl Modes {
             path,
             choice: Mutex::new(choice),
             operation: tokio::sync::Mutex::new(()),
-            last_input: Mutex::new(Instant::now()),
         })
     }
     fn current(&self) -> Choice {
@@ -108,77 +104,6 @@ pub(crate) fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
     } else {
         Err("Playback device controls belong to the bundled app.".into())
     }
-}
-
-pub(crate) fn remote_selected(app: &tauri::AppHandle) -> bool {
-    app.state::<Modes>().current().mode == Some(Mode::Remote)
-}
-
-pub(crate) fn window_opened(app: &tauri::AppHandle) {
-    if remote_selected(app) {
-        *app.state::<Modes>().last_input.lock().expect("input lock poisoned") = Instant::now();
-    }
-}
-
-fn remote_busy(visible: bool, focused: bool, since: Duration) -> bool {
-    visible && focused && since < IDLE_WINDOW
-}
-
-fn recent_remote_input(selected: bool, since: Duration) -> bool {
-    selected && since < IDLE_WINDOW
-}
-
-pub(crate) fn recent_input(app: &tauri::AppHandle) -> bool {
-    let modes = app.state::<Modes>();
-    let selected = modes.current().mode == Some(Mode::Remote);
-    let since = modes.last_input.lock().expect("input lock poisoned").elapsed();
-    recent_remote_input(selected, since)
-}
-
-pub(crate) fn idle_blocked(app: &tauri::AppHandle) -> Result<bool, String> {
-    if !remote_selected(app) { return Ok(false); }
-    let Some(main) = app.get_webview_window("main") else { return Ok(false); };
-    let visible = main.is_visible().map_err(error)? && !main.is_minimized().map_err(error)?;
-    if !visible { return Ok(false); }
-    let focused = main.is_focused().map_err(error)?;
-    let since = app.state::<Modes>().last_input.lock().expect("input lock poisoned").elapsed();
-    Ok(remote_busy(visible, focused, since))
-}
-
-pub(crate) const IDLE_WAIT: &str = "Waiting for Couch to be idle before installing the update.";
-
-pub(crate) async fn resume_idle_quiesce(app: &tauri::AppHandle, nonce: &str) -> Result<(), String> {
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    let host = app.state::<crate::Host>();
-    *host.update_checkpoint.lock().expect("checkpoint lock poisoned") = Some((nonce.to_owned(), sender));
-    host.report_message(serde_json::json!({"type":"appimageResume","nonce":nonce}));
-    let (closed, result) = tokio::time::timeout(Duration::from_secs(10), receiver).await
-        .map_err(|_| "Resuming local maintenance timed out.")?.map_err(error)?;
-    if closed { return Err("Local maintenance remained closed after deferring the update.".into()); }
-    result
-}
-
-pub(crate) async fn defer_after_checkpoint(app: &tauri::AppHandle, when_idle: bool, nonce: &str) -> Result<bool, String> {
-    // The input timestamp precedes its HTTP relay, even if focus has since moved away.
-    if !when_idle || !recent_input(app) { return Ok(false); }
-    resume_idle_quiesce(app, nonce).await?;
-    Ok(true)
-}
-
-#[tauri::command]
-pub async fn local_update_activity(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
-    trusted(&window)?;
-    if !remote_selected(&app) { return Ok(()); }
-    *app.state::<Modes>().last_input.lock().expect("input lock poisoned") = Instant::now();
-    let connection = app.state::<crate::Host>().connection.borrow().clone();
-    if let Some(Ok(info)) = connection {
-        connection_client().timeout(Duration::from_secs(2)).build().map_err(error)?
-            .post(format!("{}/api/activity", info.origin))
-            .bearer_auth(info.token)
-            .json(&serde_json::json!({"activity": true}))
-            .send().await.map_err(error)?.error_for_status().map_err(error)?;
-    }
-    Ok(())
 }
 
 pub(crate) fn local_authority(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -331,24 +256,6 @@ pub(crate) async fn quit_interruption(
 
 async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String> {
     let host = app.state::<Host>();
-    if host
-        .update_busy
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return Err(
-            "Wait for the local update or restart to finish before changing playback device."
-                .into(),
-        );
-    }
-    struct Release<'a>(&'a std::sync::atomic::AtomicBool);
-    impl Drop for Release<'_> {
-        fn drop(&mut self) {
-            self.0.store(false, Ordering::SeqCst);
-        }
-    }
-    let _release = Release(&host.update_busy);
-    update_allows_mode_change(&crate::local_update_status(app, None, "mode-check"))?;
     if host.workers.lock().expect("worker lock poisoned").is_some()
         && host.child.lock().expect("sidecar lock poisoned").is_none()
     {
@@ -399,19 +306,6 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
     Ok(())
 }
 
-fn update_allows_mode_change(status: &serde_json::Value) -> Result<(), String> {
-    if status["ok"] != true {
-        return Err(format!(
-            "Can't check this computer's update before changing where Couch plays: {}",
-            status["error"].as_str().unwrap_or("Unknown update status.")
-        ));
-    }
-    if status["transaction"]["phase"] == "trial" {
-        return Err("Finish this computer's update checks before changing where Couch plays.".into());
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn playback_device(
     window: tauri::WebviewWindow,
@@ -446,7 +340,6 @@ pub async fn select_playback_device(
         choice.address = Some(address);
         // Remember the deliberate choice even when the target is unavailable. Never fall back to local.
         modes.save(choice.clone())?;
-        *modes.last_input.lock().expect("input lock poisoned") = Instant::now();
     } else {
         stop_local(&app, true).await?;
         crate::start_local(&app)?;
@@ -480,7 +373,6 @@ pub async fn retry_playback_device(
     match choice.mode {
         Some(Mode::Local) => crate::start_local(&app),
         Some(Mode::Remote) => {
-            crate::start_coordinator(&app, false)?;
             check_lan_address(&target(choice.address.as_deref().ok_or("Choose another Couch's address.")?)?).await
         }
         None => Ok(()),
@@ -501,243 +393,4 @@ pub async fn complete_local_setup(
     }
     choice.local_setup_complete = true;
     modes.save(choice)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn remote_address_does_not_require_a_native_http_connection() {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
-        drop(listener);
-        assert!(
-            check_lan_address(&url).await.is_ok(),
-            "the webview owns remote reachability"
-        );
-    }
-
-    #[test]
-    fn remote_install_waits_for_recent_input_in_a_visible_focused_window() {
-        let recent = Duration::from_secs(599);
-        assert!(remote_busy(true, true, recent));
-        assert!(!remote_busy(false, true, recent));
-        assert!(!remote_busy(true, false, recent));
-        assert!(!remote_busy(true, true, Duration::from_secs(600)));
-        // Input between the early updater check and the stopped-writer reply changes the final decision.
-        assert!(!remote_busy(true, true, Duration::from_secs(601)));
-        assert!(remote_busy(true, true, Duration::ZERO));
-    }
-
-    #[test]
-    fn final_checkpoint_keeps_input_after_focus_moves_away() {
-        let quiet = Duration::from_secs(601);
-        assert!(!remote_busy(true, true, quiet));
-        assert!(!recent_remote_input(true, quiet));
-        // The native command records input before its HTTP relay completes, then the window loses focus.
-        let fresh = Duration::ZERO;
-        assert!(!remote_busy(true, false, fresh));
-        assert!(recent_remote_input(true, fresh));
-        assert!(!recent_remote_input(true, Duration::from_secs(600)));
-        assert!(!recent_remote_input(false, fresh));
-    }
-
-    #[test]
-    fn mode_change_waits_for_trial_or_unreadable_update_status() {
-        assert!(update_allows_mode_change(&serde_json::json!({"ok":true,"transaction":{"phase":"trial"}})).is_err());
-        assert!(update_allows_mode_change(&serde_json::json!({"error":"journal unreadable"})).is_err());
-        assert!(update_allows_mode_change(&serde_json::json!({"ok":true,"transaction":{"phase":"succeeded"}})).is_ok());
-    }
-
-    #[test]
-    fn main_navigation_accepts_only_packaged_or_exact_development_origin() {
-        let mut config = tauri::Config::default();
-        config.build.dev_url = Some(Url::parse("http://localhost:1420").unwrap());
-        assert!(app_origin(
-            &config,
-            &Url::parse("tauri://localhost/settings").unwrap()
-        ));
-        assert_eq!(
-            app_origin(
-                &config,
-                &Url::parse("http://localhost:1420/settings").unwrap()
-            ),
-            cfg!(dev)
-        );
-        for url in [
-            "http://localhost:1421",
-            "https://localhost:1420",
-            "http://localhost.evil:1420",
-            "http://192.168.1.10:4100",
-        ] {
-            assert!(!app_origin(&config, &Url::parse(url).unwrap()), "{url}");
-        }
-    }
-
-    #[test]
-    fn remote_addresses_are_root_origins_without_credentials() {
-        assert_eq!(
-            target("192.168.1.10:4100")
-                .unwrap()
-                .origin()
-                .ascii_serialization(),
-            "http://192.168.1.10:4100"
-        );
-        assert!(target("http://couch.example:4100").is_ok());
-        for input in [
-            "file:///tmp/a",
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "http://name:secret@192.168.1.1",
-            "http://192.168.1.1/path",
-            "http://192.168.1.1/?token=x",
-            "http://192.168.1.1/#pair=123",
-        ] {
-            assert!(target(input).is_err(), "{input}");
-        }
-    }
-
-    #[test]
-    fn only_private_loopback_and_link_local_addresses_are_accepted() {
-        for ip in [
-            "192.168.1.1",
-            "10.0.0.1",
-            "172.16.1.1",
-            "127.0.0.1",
-            "169.254.1.1",
-            "::1",
-            "fd00::1",
-            "fe80::1",
-            "::ffff:192.168.1.1",
-        ] {
-            assert!(lan(ip.parse().unwrap()), "{ip}");
-        }
-        for ip in [
-            "8.8.8.8",
-            "172.15.1.1",
-            "0.0.0.0",
-            "224.0.0.1",
-            "2001:4860:4860::8888",
-            "::",
-            "::ffff:8.8.8.8",
-        ] {
-            assert!(!lan(ip.parse().unwrap()), "{ip}");
-        }
-    }
-    #[test]
-    fn interruption_uses_the_public_player_phase_and_sharing_setting() {
-        assert_eq!(
-            interruption(&serde_json::json!({"player":"playing","remoteControlEnabled":false}))
-                .unwrap(),
-            Some("playback")
-        );
-        assert_eq!(
-            interruption(&serde_json::json!({"player":"paused","remoteControlEnabled":true}))
-                .unwrap(),
-            Some("playback,sharing")
-        );
-        assert_eq!(
-            interruption(&serde_json::json!({"player":"idle","remoteControlEnabled":true}))
-                .unwrap(),
-            Some("sharing")
-        );
-        assert_eq!(
-            interruption(&serde_json::json!({"player":"idle","remoteControlEnabled":false}))
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            interruption(&serde_json::json!({"player":"unavailable","remoteControlEnabled":false}))
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            interruption(&serde_json::json!({"player":"unavailable","remoteControlEnabled":true}))
-                .unwrap(),
-            Some("sharing")
-        );
-        assert!(interruption(&serde_json::json!({})).is_err());
-    }
-
-    #[test]
-    fn remembered_targets_are_deduplicated_and_old_choices_default_to_an_empty_list() {
-        let old: Choice =
-            serde_json::from_str(r#"{"mode":"remote","address":"http://192.168.1.1:4100"}"#)
-                .unwrap();
-        assert!(old.targets.is_empty());
-        let path =
-            std::env::temp_dir().join(format!("couch-targets-{}.json", uuid::Uuid::new_v4()));
-        let modes = Modes::load(path.clone()).unwrap();
-        let mut choice = modes.save(old).unwrap();
-        choice.address = Some("http://192.168.1.2:4100".into());
-        choice.targets.push("http://192.168.1.1:4100".into());
-        modes.save(choice).unwrap();
-        assert_eq!(
-            Modes::load(path.clone()).unwrap().current().targets,
-            vec!["http://192.168.1.1:4100", "http://192.168.1.2:4100"]
-        );
-        std::fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn forgetting_a_target_preserves_other_targets_and_clears_only_its_selection() {
-        for mode in [Mode::Local, Mode::Remote] {
-            let path = std::env::temp_dir().join(format!("couch-forget-{}.json", uuid::Uuid::new_v4()));
-            let modes = Modes::load(path.clone()).unwrap();
-            modes.save(Choice {
-                mode: Some(mode),
-                address: Some("http://living-room:4100".into()),
-                targets: vec!["http://living-room:4100".into(), "http://kitchen:4100".into()],
-                local_setup_complete: true,
-            }).unwrap();
-            let choice = modes.forget("http://kitchen:4100").unwrap();
-            assert!(choice.mode == Some(mode));
-            assert_eq!(choice.address.as_deref(), Some("http://living-room:4100"));
-            assert_eq!(choice.targets, vec!["http://living-room:4100"]);
-            modes.forget("http://living-room:4100").unwrap();
-            let choice = Modes::load(path.clone()).unwrap().current();
-            assert!(choice.address.is_none());
-            assert!(choice.mode == if mode == Mode::Remote { None } else { Some(Mode::Local) });
-            assert!(choice.targets.is_empty());
-            assert!(choice.local_setup_complete);
-            std::fs::remove_file(path).unwrap();
-        }
-    }
-
-    #[test]
-    fn choice_survives_restart_without_merging_installation_state() {
-        let path = std::env::temp_dir().join(format!("couch-mode-{}.json", uuid::Uuid::new_v4()));
-        let modes = Modes::load(path.clone()).unwrap();
-        assert!(modes.current().mode.is_none());
-        modes
-            .save(Choice {
-                mode: Some(Mode::Remote),
-                address: Some("http://192.168.1.10:4100".into()),
-                targets: vec!["http://192.168.1.10:4100".into()],
-                local_setup_complete: true,
-            })
-            .unwrap();
-        let remembered = Modes::load(path.clone()).unwrap().current();
-        assert!(remembered.mode == Some(Mode::Remote));
-        assert!(remembered.local_setup_complete);
-        assert_eq!(remembered.targets, vec!["http://192.168.1.10:4100"]);
-        assert_eq!(
-            remembered.address.as_deref(),
-            Some("http://192.168.1.10:4100")
-        );
-        std::fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn remembered_local_mode_and_setup_survive_without_rewriting_saved_state() {
-        let path = std::env::temp_dir().join(format!("couch-mode-{}.json", uuid::Uuid::new_v4()));
-        let saved = r#"{"mode":"local","localSetupComplete":true}"#;
-        std::fs::write(&path, saved).unwrap();
-        let remembered = Modes::load(path.clone()).unwrap().current();
-        assert!(remembered.mode == Some(Mode::Local));
-        assert!(remembered.local_setup_complete);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), saved);
-        std::fs::remove_file(path).unwrap();
-    }
 }

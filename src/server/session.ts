@@ -6,16 +6,13 @@ import { playbackDefault } from "../shared/playback-default";
 import type { TvAppearance } from "../shared/appearance";
 import { supportsCurrentVideoQuality } from "../shared/video-quality";
 import type { WebMediaSource } from "./web-media";
-import { UPDATING_PAUSED, RECORDINGS_UNSUPPORTED, QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
+import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
-type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
+type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
-  admitted?: () => boolean;
-  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean) => MediaSource | Promise<MediaSource>;
-  activatePrepared?: (playbackId: string, previous: PlayerState) => void;
-  deactivate?: () => void;
+  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
   now?: () => number;
@@ -31,7 +28,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   let resolution: AbortController | null = null;
   let qualityResolution: AbortController | null = null;
   let audioOnly = false;
-  let prepared: { entryId: string; playbackId: string; currentId: string; key: string; controller: AbortController; sent: boolean } | null = null;
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
@@ -45,8 +41,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   let continuationResolution: AbortController | null = null;
   let continuationManualSources: string[] = [];
   let awaitingContinuation: "ended" | { authorize: () => void; playedBy?: PlaybackActor } | false = false;
-  const admitted = () => !quiescing && (options.admitted?.() ?? true);
-  const assertAdmitted = () => { if (!admitted()) throw new ViewingError(UPDATING_PAUSED, 503); };
+  const admitted = () => !quiescing;
+  const assertAdmitted = () => { if (!admitted()) throw new ViewingError("Couch is closing.", 503); };
   const radioRetry = createRadioRetry(options.now);
   const activeProfile = store.activeProfile();
   const state: SessionState = {
@@ -87,7 +83,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       state.autoplay = { enabled, contextTitle: continuation?.title ?? null, next, ...(pending ? { pending: true } : {}) };
     }
     if (state.radioProgramme && (state.radioProgramme.playbackId !== state.player.playbackId || !["playing", "paused"].includes(state.player.status))) state.radioProgramme = null;
-    refreshPreparation(); publishState(observation, suppressClock);
+    publishState(observation, suppressClock);
   };
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
@@ -103,9 +99,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     state.versions = versions;
     broadcast();
   };
-  // Periodic checkpoints change only history and Continue; a finished viewing
-  // also refreshes the resume and watched marks shown in library listings.
-  const progress = createProgress(store, final => { state.progressError = null; if (final) invalidate("progress", "library"); else invalidate("progress"); }, options.now);
+  const progress = createProgress(store, () => { state.progressError = null; invalidate("progress"); }, options.now);
   const persistProgress = (save: () => void, required = false) => {
     try { save(); }
     catch {
@@ -216,7 +210,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       cancelRadioRetry();
       resolution?.abort();
       qualityResolution?.abort();
-      options.deactivate?.();
       finishProgress();
       state.playedBy = undefined;
       state.player = { ...state.player, playbackId: null, status: "unavailable", nowPlaying: null, error: "The Couch app disconnected." };
@@ -224,49 +217,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       throw new Error("The Couch app disconnected.");
     }
   };
-  const cancelPreparation = () => {
-    const previous = prepared;
-    prepared = null;
-    previous?.controller.abort();
-    if (previous?.sent && state.player.status !== "unavailable") send({ type: "prepare", playbackId: previous.currentId });
-  };
-  const refreshPreparation = () => {
-    if (audioInterrupted) { if (prepared && !prepared.sent) cancelPreparation(); return; }
-    const next = state.currentEntryId ? nextCandidate() : undefined;
-    if (!admitted() || !audioOnly || !next || !/^(library|jellyfin):/.test(next.source) || activePlayIntent !== playIntent || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
-      cancelPreparation();
-      return;
-    }
-    const key = JSON.stringify([state.player.playbackId, next.id, next.source, state.preferences]);
-    if (prepared?.key === key) return;
-    cancelPreparation();
-    const pending = { entryId: next.id, playbackId: crypto.randomUUID(), currentId: state.player.playbackId, key, controller: new AbortController(), sent: false };
-    prepared = pending;
-    const mediaId = playbackMediaId(next);
-    if (mediaId && (store.sharedProgress(mediaId)?.position ?? 0) > 0) return;
-    void Promise.resolve().then(() => {
-      pending.controller.signal.throwIfAborted();
-      return options.resolveSource?.(next, pending.playbackId, pending.controller.signal, false, false, true);
-    }).then(media => {
-      if (audioInterrupted || prepared !== pending || pending.controller.signal.aborted) return;
-      if (!media?.audioOnly || media.segment || media.audioSource || media.startPosition || media.subtitles?.length || media.radio || media.goLive || media.eventStart) {
-        pending.controller.abort();
-        return;
-      }
-      pending.sent = true;
-      send({ type: "prepare", playbackId: pending.currentId, next: { playbackId: pending.playbackId, source: media.source, headers: media.headers, preferences: { ...state.preferences!.profile, ...state.preferences!.device } } });
-    }).catch(() => {
-      // Preparation failure keeps the current song playing. Its ordinary EOF
-      // load retains source-specific errors and retry controls.
-      pending.controller.abort();
-    });
-  };
   const cancelReconnect = (message: string) => {
     if (!state.radioRetry || state.player.status !== "loading") return false;
     cancelRadioRetry();
     resolution?.abort();
     qualityResolution?.abort();
-    options.deactivate?.();
     state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", nowPlaying: null, error: message };
     send({ type: "stop" });
     return true;
@@ -316,7 +271,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       pendingPause = recovery.paused;
       progress.replaceTransport(previous.playbackId, playbackId);
       send({ type: "load", playbackId, ...media, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
-        preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...(previous.replayGain !== undefined ? { replayGain: previous.replayGain } : {}), ...state.preferences!.device } });
+        preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...state.preferences!.device } });
       broadcast();
     }).catch(failed);
     return true;
@@ -327,7 +282,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (!isRadio(entry)) return false;
     resolution?.abort();
     qualityResolution?.abort();
-    options.deactivate?.();
     finishProgress();
     state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
       if (!admitted()) return;
@@ -360,7 +314,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const queue = index < cursor ? [...proposedQueue.slice(0, cursor + 1).filter(item => item.id !== entryId), entry, ...waiting]
       : index > cursor + 1 ? [...proposedQueue.slice(0, cursor + 1), ...waiting.filter(item => selected.has(item.id)), ...waiting.filter(item => !selected.has(item.id))] : proposedQueue;
     audioOnly = false;
-    cancelPreparation();
     progress.finish(true, save => saveQueueCursor(entry.id, true, () => persistProgress(save, true), queue, preserveContext && context === undefined ? continuation : context ?? null));
     awaitingContinuation = false;
     if (preserveContext && continuationResolution) continuationManualSources.push(entry.source);
@@ -376,7 +329,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     resolution?.abort();
     qualityResolution?.abort();
     resolution = new AbortController();
-    options.deactivate?.();
     const playbackId = crypto.randomUUID();
     subtitleWarning = null;
     const profileId = state.activeProfile.id;
@@ -384,7 +336,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     state.playedBy = undefined;
     state.currentEntryId = entry.id;
     state.presentationId = playbackId;
-    state.player = { ...state.player, playbackId, status: "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
+    state.player = { ...state.player, playbackId, status: "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
     broadcast();
     if (!preserveContext && context === undefined && !retry) resolveContinuation(entry);
     const failed = (error: unknown) => {
@@ -393,7 +345,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       try { authorize(); if (failRadio(message, authorize, playedBy)) return; } catch { cancelRadioRetry(); }
       resolution?.abort();
       qualityResolution?.abort();
-      options.deactivate?.();
       try { send({ type: "stop" }); } catch { return; }
       state.player = { ...state.player, status: "error", nowPlaying: null, error: message };
       broadcast();
@@ -474,7 +425,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     continuation = null;
     cancelContinuation();
     audioOnly = false;
-    cancelPreparation();
     webRecovery = null;
     state.webRetry = null;
     expiry = undefined;
@@ -486,12 +436,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     finishProgress(true);
     resolution?.abort();
     qualityResolution?.abort();
-    options.deactivate?.();
     state.playedBy = undefined;
     state.currentEntryId = null;
     state.presentationId = null;
     subtitleWarning = null;
-    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
+    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
     if (state.player.status !== "unavailable") send({ type: "stop" });
     broadcast();
   };
@@ -513,16 +462,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const end = (required: boolean) => {
     quiescing = true;
     cancelContinuation();
-    cancelPreparation();
     playIntent++;
     cancelRadioRetry();
     resolution?.abort();
     qualityResolution?.abort();
     state.player.playbackId = null;
     state.playedBy = undefined;
-    // Stop callbacks first, but keep the dirty observation if its write fails.
-    try { finishProgress(false, required); }
-    finally { options.deactivate?.(); }
+    finishProgress(false, required);
   };
 
   const playNewEntries = (entries: QueueEntry[], { intent, fromStart = false, authorize = () => {}, playedBy, continuation: context }: { intent?: number; fromStart?: boolean; authorize?: () => void; playedBy?: PlaybackActor; continuation?: PlaybackContinuation | null } = {}) => {
@@ -563,7 +509,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         send({ type: "audioPause" });
         state.player = { ...state.player, status: "paused", error };
       } else {
-        options.deactivate?.();
         state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", nowPlaying: null, error };
         send({ type: "stop" });
       }
@@ -615,7 +560,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     reservePlay() {
       available();
       qualityResolution?.abort();
-      cancelPreparation();
       if (state.webRetry) { cancelWebRecovery(); broadcast(); }
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
       return ++playIntent;
@@ -626,7 +570,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();
-      if (mediaId.startsWith("recording:")) throw new ViewingError(RECORDINGS_UNSUPPORTED, 410);
       available();
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
@@ -638,20 +581,18 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       else playNewEntries([entry], { fromStart, authorize, playedBy });
     },
     close() { if (!quiescing) end(false); },
-    checkpoint() { persistProgress(progress.checkpoint, true); },
-    quiesce() { end(true); },
     invalidate,
     createProfile(name: unknown) {
       assertAdmitted();
       const profile = store.createProfile(name);
-      invalidate("library", "progress");
+      invalidate("progress");
       return profile;
     },
     renameProfile(id: string, name: unknown, expectedName: string) {
       assertAdmitted();
       const profile = store.renameProfile(id, name, expectedName);
       if (state.activeProfile.id === id) state.activeProfile = profile;
-      invalidate("library", "progress");
+      invalidate("progress");
       return profile;
     },
     namePerson(id: string, name: unknown, expectedName: string) {
@@ -659,7 +600,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (id !== state.activeProfile.id) throw new ViewingError("The active history changed on another remote. Reopen Your name before saving.", 409);
       const profile = store.namePerson(id, name, expectedName);
       state.activeProfile = profile;
-      invalidate("library", "progress");
+      invalidate("progress");
       return profile;
     },
     removeProfile(id: string, expectedName: string) {
@@ -677,7 +618,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.progressError = null;
         cancelRadioRetry();
       }
-      invalidate("library", "progress");
+      invalidate("progress");
       return profile;
     },
     selectProfile(id: string) {
@@ -692,15 +633,15 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       state.activeProfile = profile;
       state.preferences = preferences;
       cancelRadioRetry();
-      invalidate("library", "progress");
+      invalidate("progress");
       return profile;
     },
-    editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
+    editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string }) {
       assertAdmitted();
       if (changes.clearResume && progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before clearing its resume position.", 409);
       store.editSharedProgress(state.activeProfile.id, mediaId, changes, item);
       progress.discard(mediaId);
-      invalidate("library", "progress");
+      invalidate("progress");
     },
     removeHistory(mediaId: string) {
       assertAdmitted();
@@ -708,14 +649,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       const removed = store.takeSharedProgress(mediaId);
       if (!removed.length) throw new ViewingError("History item not found.", 404);
       progress.discard(mediaId);
-      invalidate("library", "progress");
+      invalidate("progress");
       return removed;
     },
     restoreProgress(removed: import("./store").ProgressSnapshot, expected: import("./store").ProgressSnapshot = []) {
       assertAdmitted();
       if (progress.mediaId === removed[0]?.mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before restoring its history.", 409);
       store.restoreSharedProgress(removed, expected);
-      invalidate("library", "progress");
+      invalidate("progress");
     },
     command(action: Action, authorize = () => {}, playedBy?: PlaybackActor) {
       assertAdmitted();
@@ -814,11 +755,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           currentPlayback(action.playbackId);
           send(action);
           break;
-        case "replayGain":
-          currentPlayback(action.playbackId);
-          if (!["playing", "paused"].includes(state.player.status) || state.player.replayGain === undefined) throw new Error("Volume leveling works on music only.");
-          send(action);
-          break;
         case "track":
           currentPlayback(action.playbackId);
           if (!(action.kind === "subtitle" && action.index === -1) && !state.player.tracks?.some(track => track.kind === action.kind && track.index === action.index)) throw new Error("That track is not available for this item.");
@@ -843,32 +779,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         case "next": currentPlayback(action.playbackId); next(authorize, playedBy); break;
         case "stop": if (action.playbackId !== undefined) currentPlayback(action.playbackId); stop(); break;
-        case "enqueueLibrary": case "enqueueAlbum": case "enqueueJellyfin": case "enqueueRadio": case "enqueueWeb": throw new Error("Resolve this catalog item before adding it to the queue.");
+        case "enqueueRadio": case "enqueueWeb": throw new Error("Resolve this catalog item before adding it to the queue.");
       }
     },
     observe(player: PlayerState) {
       if (!admitted()) return;
-      if (prepared?.sent && player.playbackId === prepared.playbackId) {
-        const next = nextCandidate();
-        if (!next || next.id !== prepared.entryId) return;
-        const manual = state.queue.some(entry => entry.id === next.id);
-        saveQueueCursor(next.id, false, undefined, manual ? state.queue : automaticQueue(next), manual ? afterManualEntry(next) : remainingContinuation());
-        awaitingContinuation = false;
-        if (manual && continuationResolution) continuationManualSources.push(next.source);
-        const previous: PlayerState = { ...state.player, status: "ended", position: state.player.duration ?? state.player.position };
-        persistProgress(() => progress.observe(previous));
-        options.activatePrepared?.(player.playbackId!, previous);
-        resolution?.abort();
-        qualityResolution?.abort();
-        resolution = prepared.controller;
-        prepared = null;
-        state.playedBy = undefined;
-        state.currentEntryId = next.id;
-        state.presentationId = player.playbackId;
-        state.player = { ...state.player, playbackId: player.playbackId, status: "loading", buffering: false };
-        const mediaId = playbackMediaId(next);
-        progress.begin(next, player.playbackId!, mediaId ? store.progressOwner(mediaId) ?? state.activeProfile.id : state.activeProfile.id);
-      }
       // Native Stop can acknowledge the retired source while another source is still resolving.
       if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status === "unavailable") audioInterrupted = false;
@@ -905,7 +820,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       }
       if (player.status === "unavailable" && !wasUnavailable || ended) { playIntent++; qualityResolution?.abort(); }
       if (player.status === "unavailable") cancelContinuation();
-      if (player.status === "unavailable") { cancelRadioRetry(); resolution?.abort(); qualityResolution?.abort(); options.deactivate?.(); }
+      if (player.status === "unavailable") { cancelRadioRetry(); resolution?.abort(); qualityResolution?.abort(); }
       if (["unavailable", "error", "idle"].includes(player.status)) { state.playedBy = undefined; finishProgress(); }
       radioRetry.observe(player);
       if (player.status === "playing") state.radioRetry = null;

@@ -56,11 +56,7 @@ function httpUrl(value: unknown): value is string {
 
 function originalSource(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 8192) return false;
-  if (/^recording:[a-f0-9-]{36}$/.test(value)) return true;
-  if (/^iptv:[a-f0-9]{64}$/.test(value)) return true;
-  if (/^(?:library|radio):[\w-]{1,80}$/.test(value) || /^jellyfin:[a-f0-9]{24}:[\w-]{1,80}$/.test(value)) return true;
-  if (httpUrl(value.startsWith("web:") ? value.slice(4) : value)) return true;
-  try { const url = new URL(value); return url.protocol === "file:" && !url.username && !url.password && !decodeURIComponent(url.pathname).includes("\0"); } catch { return false; }
+  return /^iptv:[a-f0-9]{64}$/.test(value) || /^radio:[\w-]{1,80}$/.test(value) || httpUrl(value.startsWith("web:") ? value.slice(4) : value);
 }
 
 function playlistSource(value: unknown): PlaylistSource {
@@ -92,7 +88,6 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
     return {
       id: entry.id, title: entry.title, source: entry.source,
       ...(httpUrl(entry.thumbnail) ? { thumbnail: entry.thumbnail } : {}),
-      ...(identifier(entry.artworkId) ? { artworkId: entry.artworkId } : {}),
       ...(typeof entry.duration === "number" && Number.isFinite(entry.duration) && entry.duration >= 0 ? { duration: entry.duration } : {}),
       ...(typeof entry.live === "boolean" ? { live: entry.live } : {}),
       ...(entry.kind === "radio" ? { kind: entry.kind } : {}),

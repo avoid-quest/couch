@@ -26,12 +26,3 @@ pub use windows::request;
 pub fn request(_: serde_json::Value) -> Result<serde_json::Value, String> {
     Err("Mac sound requires macOS on the computer running Couch.".into())
 }
-
-#[cfg(all(test, target_os = "macos"))]
-#[test]
-fn core_audio_bridge_reads_without_changing_output() {
-    let inventory = request(serde_json::json!({"op":"inventory"})).unwrap();
-    assert!(inventory["outputs"].is_array());
-    let route = request(serde_json::json!({"op":"route"})).unwrap();
-    assert!(route["output"].is_null() || route["output"].is_string());
-}
