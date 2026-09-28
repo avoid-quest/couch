@@ -34,6 +34,7 @@ import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 
 import { createSoundRouting } from "./sound-routing";
+import { createMpv } from "./mpv";
 import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
@@ -66,7 +67,8 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
   return url.origin;
 };
-type SocketData = { trusted: boolean; deviceId: string | null; authorize: () => void; window: number; count: number };
+// vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -107,12 +109,33 @@ export async function createHub(options: HubOptions) {
   const systemAudio = !!options.native && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  // The app window's socket renders playback (#644 ticket 4). Its newest report wins.
+  // One renderer protocol for every Device (#644 ticket 6): Core sends player commands to
+  // the newest tab of the Device that pressed Play and listens only to that tab's reports.
+  // Sources Chromium can't decode play in Core's own mpv instead (#644 ticket 1).
   let renderer: Socket<SocketData> | null = null;
+  let viaMpv = false;
+  const hostActor = () => playbackActor(null)!;
+  const deviceOf = (socket: Socket<SocketData>) => socket.data.deviceId ?? hostActor().deviceId;
+  const newest = (deviceId: string) => [...sockets].findLast(socket => deviceOf(socket) === deviceId);
+  const playerCommand = (command: PlaybackCommand) => JSON.stringify({ type: "player", command } satisfies ServerMessage);
   const sendPlayer = (command: PlaybackCommand) => {
-    if (!renderer) throw new Error("The Couch app isn't connected.");
-    send(renderer, JSON.stringify({ type: "player", command } satisfies ServerMessage));
+    if (command.type === "load" && !!command.mpv !== viaMpv) {
+      viaMpv = !!command.mpv;
+      if (!viaMpv) mpv.send({ type: "stop" }); else if (renderer) send(renderer, playerCommand({ type: "stop" }));
+      session.rendering(viaMpv ? hostActor() : renderer ? playbackActor(renderer.data.deviceId)! : hostActor());
+    }
+    if (viaMpv) return mpv.send(command);
+    if (!renderer) throw new Error("No Device is connected to play this.");
+    send(renderer, playerCommand(command));
   };
+  // The newest tab of `deviceId` plays from now on; `reload` moves the current item there.
+  const handOver = (socket: Socket<SocketData>, reload: boolean) => {
+    if (renderer && renderer !== socket && sockets.has(renderer) && !viaMpv) send(renderer, playerCommand({ type: "stop" }));
+    renderer = socket;
+    session.rendering(playbackActor(socket.data.deviceId)!);
+    if (reload && !viaMpv) session.reload();
+  };
+  const mpv = createMpv(player => { if (viaMpv) session.observe(player); });
   const session = createSession(store, sendPlayer, (state, clock) => {
     radioProgramme?.observe(state);
     sound?.interrupt();
@@ -125,7 +148,7 @@ export async function createHub(options: HubOptions) {
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
-      if (entry.source.startsWith("web:")) return streamingCommunityOrigin(entry.source.slice(4)).then(origin => resolveWebMedia(entry.source.slice(4), signal, entry.quality, origin));
+      if (entry.source.startsWith("web:")) return streamingCommunityOrigin(entry.source.slice(4)).then(origin => resolveWebMedia(entry.source.slice(4), signal, entry.quality, origin, renderer?.data.vp9 ?? true));
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) {
         const station = radio.getPlayable(entry.source.slice(6));
@@ -137,6 +160,10 @@ export async function createHub(options: HubOptions) {
       return { source: entry.source };
     },
     observe: player => subtitles.observe(player),
+    render: actor => {
+      const socket = actor && newest(actor.deviceId);
+      if (socket && socket !== renderer) handOver(socket, false);
+    },
     stopped: playbackId => subtitles.stopped(playbackId),
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
@@ -198,7 +225,6 @@ export async function createHub(options: HubOptions) {
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
     active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
-    pin: output => sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
@@ -429,7 +455,7 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
   });
   const serveOptions = {
@@ -440,6 +466,7 @@ export async function createHub(options: HubOptions) {
       const { pathname } = new URL(request.url);
       const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
       if (route) return route(request);
+      if (request.method === "GET" && /^\/api\/subtitles\/[\w-]+\.vtt$/.test(pathname)) return subtitles.serve(pathname);
       const page = ["GET", "HEAD"].includes(request.method) && !pathname.startsWith("/api/") ? await frontend(pathname) : null;
       return page ?? api(request, upgrade);
     },
@@ -449,12 +476,18 @@ export async function createHub(options: HubOptions) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         sockets.add(socket);
         send(socket, JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
+        // The newest tab renders for its Device (#644).
+        if (renderer && deviceOf(renderer) === deviceOf(socket)) handOver(socket, true);
       },
       close(socket: Socket<SocketData>) {
         sockets.delete(socket);
         if (socket === renderer) {
-          renderer = null;
-          session.observe({ playbackId: null, status: "unavailable", position: 0, duration: null, volume: session.state.player.volume, seekable: false, error: "The Couch app disconnected." });
+          const tab = newest(deviceOf(socket));
+          if (tab) handOver(tab, true);
+          else {
+            renderer = null;
+            if (!viaMpv) session.observe({ playbackId: null, status: "unavailable", position: 0, duration: null, volume: session.state.player.volume, seekable: false, error: `${playbackActor(socket.data.deviceId)?.name ?? "The Device playing this"} disconnected.` });
+          }
         }
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
       },
@@ -464,8 +497,8 @@ export async function createHub(options: HubOptions) {
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
         if (message === null) { socket.close(1003, "JSON text messages required."); return; }
-        const player = socket.data.trusted ? parsePlayer(message) : null;
-        if (player) { renderer = socket; session.observe(player); return; }
+        const player = parsePlayer(message);
+        if (player) { if (socket === renderer && !viaMpv) session.observe(player); return; }
         let command;
         try { command = parseCommand(message); } catch {
           socket.close(1008, "Invalid command or unsupported media source.");
@@ -491,7 +524,7 @@ export async function createHub(options: HubOptions) {
             if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
             else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
-              if (soundRouting && action.type === "pause" && !action.paused) sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
+              if (soundRouting && action.type === "pause" && !action.paused) soundRouting.prepare();
               await session.command(action, authorize, playedBy);
             }
           }
@@ -555,6 +588,7 @@ export async function createHub(options: HubOptions) {
     catch (error) { progressError = error; }
     sound?.close();
     soundRouting?.close();
+    mpv.close();
     appearance.close();
     guide.close();
     metadata.close();

@@ -6,6 +6,20 @@ import type { DeviceIdentity } from "../shared/devices";
 import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shared/iptv";
 import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
 import { ADMIN_ONLY } from "./messages";
+import { execFile } from "node:child_process";
+import { helper } from "./helpers";
+
+// Raw MPEG-TS plays through mpegts.js. Chromium has no MPEG-1/2 video, AC-3/E-AC-3 or
+// MP2 decoder, so those channels play in Core's own mpv (#644 ticket 1). ffmpeg reads the
+// channel's real codecs; mpegts.js would report MP2 as MP3.
+async function transport(url: string, signal: AbortSignal): Promise<{ mpegts?: true; mpv?: true }> {
+  const ffmpeg = await helper("ffmpeg");
+  const probe = await new Promise<string>(resolve => execFile(ffmpeg, ["-hide_banner", "-nostdin", "-protocol_whitelist", "http,https,tcp,tls", "-probesize", "1000000", "-analyzeduration", "3000000", "-i", url],
+    { timeout: 10_000, signal }, (_error, _stdout, stderr) => resolve(String(stderr))));
+  signal.throwIfAborted();
+  if (!/^Input #0, mpegts\b/m.test(probe)) return {};
+  return /Stream #.*: (?:Video: mpeg[12]video|Audio: (?:ac3|eac3|mp2)\b)/.test(probe) ? { mpegts: true, mpv: true } : { mpegts: true };
+}
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => DeviceIdentity | null;
@@ -143,7 +157,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       signal.throwIfAborted();
       // Only identified HLS URLs enter this EVENT increment. Other live media
       // must not wait for a body that may never finish before native playback.
-      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl };
+      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal])) };
       let eventStart = false;
       try {
         const media = await guideFetch(item.streamUrl, 512 * 1024, request, AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]));

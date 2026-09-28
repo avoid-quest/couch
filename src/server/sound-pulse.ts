@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import type { SoundInventory, SoundOutput, SoundProfile } from "../shared/sound";
 
 type Card = { index: number; name: string; active_profile?: string; properties?: Record<string, string>; profiles?: Record<string, { description?: string; sinks?: number; sources?: number; available?: boolean }> };
@@ -69,12 +70,35 @@ export function pulseSound(): SoundBackend {
   };
 }
 
+// The app's own processes: its main process (Core's parent) and that process's
+// children, among them Chromium's audio service (Linux /proc).
+function appProcesses() {
+  const pids = new Set([String(process.ppid)]);
+  for (const entry of readdirSync("/proc").filter(name => /^\d+$/.test(name))) {
+    try { if (readFileSync(`/proc/${entry}/stat`, "utf8").replace(/^.*\) /s, "").split(" ")[1] === String(process.ppid)) pids.add(entry); }
+    catch { /* The process ended. */ }
+  }
+  return pids;
+}
+
+const appStreams = async () => {
+  const pids = appProcesses();
+  return (JSON.parse(await querySound(["--format=json", "list", "sink-inputs"])) as { index: number; sink: number; properties: Record<string, string> }[])
+    .filter(input => pids.has(input.properties?.["application.process.id"] ?? ""));
+};
+
 export function pulseRouting() {
-  const backend = pulseSound();
   return {
-    inventory: backend.inventory,
-    // Only this native player's streams, never other applications or test tones.
-    route: () => backend.route(process.ppid),
+    inventory: pulseSound().inventory,
+    // Only the app window's streams, never other applications or test tones.
+    async route() {
+      const [streams, sinks] = await Promise.all([appStreams(), querySound(["--format=json", "list", "sinks"])]);
+      const routes = streams.map(stream => (JSON.parse(sinks) as Sink[]).find(sink => sink.index === stream.sink)?.name);
+      if (routes.some(route => route !== routes[0])) throw new Error("The player's audio streams have different routes.");
+      return routes[0] ?? null;
+    },
+    // Chromium plays to the default output; its streams that are already open move now.
+    async move(output: string) { for (const stream of await appStreams()) await querySound(["move-sink-input", String(stream.index), output]); },
     async volume(output: string, volume: number) { await querySound(["set-sink-volume", output, `${volume}%`]); },
     async mute(output: string, muted: boolean) { await querySound(["set-sink-mute", output, muted ? "1" : "0"]); },
     async profile(card: string, profile: string) { await querySound(["set-card-profile", card, profile]); },

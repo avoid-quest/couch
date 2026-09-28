@@ -103,17 +103,26 @@ function formatSelector(quality: VideoQuality): string {
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string): Promise<WebMediaSource> {
+  // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
-    const sort = quality === "auto" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"))
-      ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
+    const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+    const sort = youtube && !vp9 ? ["--format-sort", "res,fps,vcodec:h264,acodec:aac"] : youtube && quality === "auto" ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     const media = parseMedia(info, selectedQuality);
+    // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
+    // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
+    // its own headers, opens the master playlist instead.
+    if (media.metadata?.live && !media.audioSource && typeof info.manifest_url === "string" && String(info.protocol).startsWith("m3u8")) {
+      const response = await fetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
+      await response?.body?.cancel();
+      if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
+    }
     const transport = new URL(media.source);
     const at = Number(transport.searchParams.get("ts")) * 1000;
     // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
@@ -127,7 +136,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;
-        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin);
+        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9);
         const replacement = new URL(fresh.source);
         if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
         return fresh;

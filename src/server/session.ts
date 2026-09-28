@@ -10,11 +10,13 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
+  // Play starts media on the Device that asked (#644); Core picks that Device's newest tab.
+  render?: (actor: PlaybackActor | undefined) => void;
   now?: () => number;
   systemAudio?: boolean;
   prepareAudio?: () => string;
@@ -57,7 +59,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     administratorClaimed: store.administratorExists(),
     preferences: store.playbackPreferences(activeProfile.id),
     autoplay: { enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false, contextTitle: continuation?.title ?? null, next: continuation?.entries[0] ?? null },
-    player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The Couch app isn't connected." },
+    player: { playbackId: null, status: "idle", position: 0, duration: null, volume: desiredVolume, seekable: false, error: null },
   };
   let published: Omit<SessionState, "player"> | undefined;
   let publishedPlayer: string | undefined;
@@ -96,6 +98,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         return name && name !== actor.name ? { ...actor, name } : actor;
       };
       if (state.playedBy) state.playedBy = renamed(state.playedBy);
+      if (state.renderer) state.renderer = renamed(state.renderer);
       if (state.queue.some(entry => entry.addedBy && renamed(entry.addedBy) !== entry.addedBy)) {
         state.queue = state.queue.map(entry => entry.addedBy ? { ...entry, addedBy: renamed(entry.addedBy) } : entry);
         try { store.saveQueue(state.queue, state.queueCursorEntryId); } catch { /* The saved queue keeps the old name until its next save. */ }
@@ -207,14 +210,16 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const available = () => {
     assertAdmitted();
-    if (state.player.status === "unavailable") throw new Error("The Couch app isn't connected.");
+    if (state.player.status === "unavailable") throw new Error(state.player.error ?? "Nothing is playing this.");
   };
   const currentPlayback = (playbackId: string) => {
     available();
     if (playbackId !== state.player.playbackId) throw new Error("The playing item changed. Use the current state and try again.");
   };
+  let loaded: Extract<PlaybackCommand, { type: "load" }> | null = null;
   const send = (command: PlaybackCommand) => {
-    try { sendPlayer(command); } catch {
+    if (command.type === "load") loaded = command;
+    try { sendPlayer(command); } catch (error) {
       playIntent++;
       cancelContinuation();
       cancelRadioRetry();
@@ -222,9 +227,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       qualityResolution?.abort();
       finishProgress();
       state.playedBy = undefined;
-      state.player = { ...state.player, playbackId: null, status: "unavailable", nowPlaying: null, error: "The Couch app disconnected." };
+      const message = error instanceof Error ? error.message : "The Device playing this disconnected.";
+      state.player = { ...state.player, playbackId: null, status: "unavailable", nowPlaying: null, error: message };
       broadcast();
-      throw new Error("The Couch app disconnected.");
+      throw new Error(message);
     }
   };
   const cancelReconnect = (message: string) => {
@@ -280,7 +286,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       webRetried = true;
       pendingPause = recovery.paused;
       progress.replaceTransport(previous.playbackId, playbackId);
-      send({ type: "load", playbackId, ...media, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
+      options.prepareAudio?.();
+      send({ type: "load", playbackId, ...media, startPosition: previous.position, paused: recovery.paused,
         preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...state.preferences!.device } });
       broadcast();
     }).catch(failed);
@@ -373,7 +380,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId, playedBy);
-        send({ type: "load", playbackId, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
+        options.prepareAudio?.();
+        send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
         state.playedBy = playedBy ? { ...playedBy } : undefined;
         broadcast();
       };
@@ -400,7 +408,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (!current()) throw new Error("Quality change canceled because playback changed.");
       authorize();
       if (fresh.audioOnly || fresh.radio) throw new Error("This source has no video quality to change.");
-      const audioOutput = options.prepareAudio?.();
+      options.prepareAudio?.();
       const previous = state.player;
       const paused = pendingPause ?? previous.status === "paused";
       const position = pendingSeek?.playbackId === previous.playbackId ? pendingSeek.position : previous.position;
@@ -422,7 +430,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       progress.replaceTransport(previous.playbackId, playbackId, state.queue.find(item => item.id === entry!.id));
       send({ type: "load", playbackId, ...media, paused,
         ...(entry!.live || fresh.metadata?.live ? {} : { startPosition: position }),
-        ...(audioOutput ? { audioOutput } : {}),
         preferences: { ...state.preferences!.profile, ...(previous.speed === undefined ? {} : { speed: previous.speed }), ...state.preferences!.device } });
       broadcast();
     } finally {
@@ -493,6 +500,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       ids.add(entry.id);
     }
     const added = entries.map(entry => ({ ...entry, addedBy: playedBy ? { ...playedBy } : entry.addedBy }));
+    options.render?.(playedBy);
     play(added[0]!.id, fromStart, false, authorize, false, playedBy, added.map(entry => entry.id), [...state.queue, ...added], context);
     return added;
   };
@@ -529,6 +537,20 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (state.radioProgramme === programme) return;
       state.radioProgramme = programme;
       broadcast();
+    },
+    // The Device that plays from now on. A Device that takes over an unavailable player starts idle.
+    rendering(actor: PlaybackActor) {
+      state.renderer = actor;
+      if (state.player.status === "unavailable") state.player = { ...state.player, status: "idle", error: null };
+      broadcast();
+    },
+    // Another tab of the playing Device takes over: it loads the current item where it is.
+    reload() {
+      const { playbackId, status, position, speed } = state.player;
+      if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status)) return;
+      const live = loaded.radio || state.queue.find(entry => entry.id === state.currentEntryId)?.live;
+      const { startPosition: _start, ...command } = loaded;
+      send({ ...command, ...(live ? {} : { startPosition: position }), paused: status === "paused", ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
     },
     updateAppearance(appearance: TvAppearance) { state.appearance = appearance; broadcast(); },
     notice(actor: PlaybackActor, text: string) {
@@ -576,6 +598,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) {
       assertCurrentPlay(intent);
+      options.render?.(playedBy);
       play(entryId, fromStart, false, authorize, false, playedBy, selectedEntryIds);
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
@@ -587,7 +610,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
       if (!existing && state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
       const entry = existing ?? { ...saved, id: crypto.randomUUID() };
-      if (existing) play(entry.id, fromStart, false, authorize, false, playedBy);
+      if (existing) { options.render?.(playedBy); play(entry.id, fromStart, false, authorize, false, playedBy); }
       else playNewEntries([entry], { fromStart, authorize, playedBy });
     },
     close() { if (!quiescing) end(false); },
@@ -731,7 +754,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           play(entry.id, true, false, authorize, true, playedBy);
           break;
         }
-        case "play": play(action.entryId, action.fromStart, false, authorize, false, playedBy); break;
+        case "play": options.render?.(playedBy); play(action.entryId, action.fromStart, false, authorize, false, playedBy); break;
         case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);
@@ -809,7 +832,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       }
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const wasUnavailable = state.player.status === "unavailable";
-      // libmpv can report EOF after an interrupted HTTP range response. An early
+      // A player can report EOF after an interrupted HTTP range response. An early
       // VOD end only starts the same private expiry confirmation, never a blind retry.
       const earlyEnd = player.status === "ended" && player.duration !== null && player.position + 2 < player.duration;
       if (earlyEnd && webRetried) player = { ...player, status: "error" };

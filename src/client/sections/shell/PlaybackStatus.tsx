@@ -16,6 +16,7 @@ import type { Credentials } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
 import { forgetConnection, knownConnection } from "@/session/connection";
 import { deviceName } from "@/copy";
+import { playingElsewhere } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { StatusDot } from "./StatusLine";
@@ -89,7 +90,9 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   const origin = credentials?.origin ?? location.origin;
   const known = knownConnection();
   const other = known?.origin !== origin ? known : null;
-  const label = localHost ? "Playing here" : `Playing on ${name}`;
+  // Play starts on this Device, so the label names another Device only while it plays (#644 ticket 6).
+  const renderer = playingElsewhere(state);
+  const label = renderer ? `Playing on ${renderer.name}` : "Playing here";
   const choose = (value: string) => {
     const next = destinationOrigin(value);
     if (!next) { setAddressError("Enter just the address, like 192.168.1.10:4100."); return; }
@@ -100,7 +103,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     <PopoverTrigger asChild>
       <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11" aria-label={`${label}: ${status}`}>
         <StatusDot connected={connected} />
-        <span className="max-w-48 truncate max-sm:max-w-32">{localHost ? label : <><span className="max-sm:sr-only">Playing on </span>{name}</>}</span>
+        <span className="max-w-48 truncate max-sm:max-w-32">{renderer ? <><span className="max-sm:sr-only">Playing on </span>{renderer.name}</> : label}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="w-96 gap-4" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>

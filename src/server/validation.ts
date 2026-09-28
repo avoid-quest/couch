@@ -1,4 +1,4 @@
-import type { Action, ClientMessage, PlayerState, QueueEntry } from "../shared/protocol";
+import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
@@ -69,15 +69,18 @@ function validAction(value: unknown): value is Action {
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const playerStatuses = ["idle", "loading", "playing", "paused", "ended", "error"];
+const mediaTrack = (value: unknown): value is MediaTrack => object(value) && id(value.id) && Number.isInteger(value.index) && ["video", "audio", "subtitle"].includes(value.kind as string)
+  && typeof value.label === "string" && typeof value.language === "string" && typeof value.selected === "boolean";
 // null when the message is not a valid player report.
 export function parsePlayer(message: string): PlayerState | null {
   let value: unknown;
   try { value = JSON.parse(message); } catch { return null; }
   if (!object(value) || value.type !== "player" || !object(value.state)) return null;
-  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed } = value.state;
+  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed, tracks = [], audioDelay = 0, subtitleDelay = 0 } = value.state;
   if (!(playbackId === null || id(playbackId)) || !playerStatuses.includes(status as string) || typeof buffering !== "boolean" || !finite(position) || !(duration === null || finite(duration))
-    || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed)) return null;
-  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error?.slice(0, 300) ?? null, speed };
+    || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed) || !finite(audioDelay) || !finite(subtitleDelay)
+    || !Array.isArray(tracks) || tracks.length > 64 || !tracks.every(mediaTrack)) return null;
+  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error?.slice(0, 300) ?? null, speed, tracks: tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label: label.slice(0, 120), language: language.slice(0, 35), selected })), audioDelay, subtitleDelay };
 }
 
 export function parseCommand(message: string): ClientMessage {

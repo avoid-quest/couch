@@ -7,8 +7,9 @@ import { unzipSync } from "fflate";
 // Core's media helpers. It uses the system's copy when it is recent enough.
 // Otherwise it downloads the official build into <data>/helpers/<name>/<version>,
 // checks its SHA-256 and that it runs. yt-dlp is kept at its latest release, and
-// a helper that goes missing or stops working is downloaded again.
-export type Helper = "yt-dlp" | "qjs" | "ffmpeg";
+// a helper that goes missing or stops working is downloaded again. mpv is fetched only
+// when a channel needs it (#644 ticket 1); Linux has no official build, so it uses the system's.
+export type Helper = "yt-dlp" | "qjs" | "ffmpeg" | "mpv";
 type Release = { version: string; url: string; sha256: string };
 
 const names: Helper[] = ["yt-dlp", "qjs", "ffmpeg"];
@@ -17,13 +18,13 @@ const exe = process.platform === "win32" ? ".exe" : "";
 // which publishes source only, Martin Riedl's builds on macOS and Linux and
 // BtbN's (linked from ffmpeg.org) on Windows.
 const assets = ({
-  "darwin-arm64": ["yt-dlp_macos.zip", "qjs-darwin-arm64", "macos/arm64"],
-  "darwin-x64": ["yt-dlp_macos.zip", "qjs-darwin-x86_64", "macos/amd64"],
-  "linux-arm64": ["yt-dlp_linux_aarch64.zip", "qjs-linux-aarch64", "linux/arm64"],
-  "linux-x64": ["yt-dlp_linux.zip", "qjs-linux-x86_64", "linux/amd64"],
-  "win32-arm64": ["yt-dlp_win_arm64.zip", "qjs-windows-x86_64.exe", "winarm64"],
-  "win32-x64": ["yt-dlp_win.zip", "qjs-windows-x86_64.exe", "win64"],
-} as Record<string, [string, string, string]>)[`${process.platform}-${process.arch}`];
+  "darwin-arm64": ["yt-dlp_macos.zip", "qjs-darwin-arm64", "macos/arm64", "macos-14-arm"],
+  "darwin-x64": ["yt-dlp_macos.zip", "qjs-darwin-x86_64", "macos/amd64", "macos-15-intel"],
+  "linux-arm64": ["yt-dlp_linux_aarch64.zip", "qjs-linux-aarch64", "linux/arm64", ""],
+  "linux-x64": ["yt-dlp_linux.zip", "qjs-linux-x86_64", "linux/amd64", ""],
+  "win32-arm64": ["yt-dlp_win_arm64.zip", "qjs-windows-x86_64.exe", "winarm64", "aarch64-pc-windows-msvc"],
+  "win32-x64": ["yt-dlp_win.zip", "qjs-windows-x86_64.exe", "win64", "x86_64-pc-windows-msvc"],
+} as Record<string, [string, string, string, string]>)[`${process.platform}-${process.arch}`];
 
 async function get(url: string) {
   const response = await fetch(url, { headers: { "User-Agent": "Couch" }, signal: AbortSignal.timeout(300_000) });
@@ -41,8 +42,12 @@ async function github(repo: string, pick: (name: string) => boolean): Promise<Re
 
 async function latest(name: Helper): Promise<Release> {
   if (!assets) throw new Error(`Couch can't download ${name} for this system`);
-  const [ytDlp, qjs, ffmpeg] = assets;
+  const [ytDlp, qjs, ffmpeg, mpv] = assets;
   if (name === "yt-dlp") return github("yt-dlp/yt-dlp", asset => asset === ytDlp);
+  if (name === "mpv") {
+    if (!mpv) throw new Error("This channel needs mpv, which has no official build for this system. Install the mpv package.");
+    return github("mpv-player/mpv", asset => new RegExp(`^mpv-v[\\d.]+-${mpv}\\.zip$`).test(asset));
+  }
   if (name === "qjs") return github("quickjs-ng/quickjs", asset => asset === qjs);
   if (process.platform === "win32") {
     const build = await github("BtbN/FFmpeg-Builds", asset => new RegExp(`^ffmpeg-n([\\d.]+)-latest-${ffmpeg}-gpl-\\1\\.zip$`).test(asset));
@@ -68,12 +73,14 @@ function run(path: string, args: string[]): Promise<string | null> {
 }
 
 const version = (name: Helper, path: string) => run(path, [name === "ffmpeg" ? "-version" : "--version"]);
+const tar = (file: string, directory: string) => new Promise<void>((resolve, reject) => execFile("tar", ["-xzf", file, "-C", directory], error => error ? reject(error) : resolve()));
 
 function recentEnough(name: Helper, found: string, current?: string) {
   if (name === "yt-dlp") return !current || found >= current;
   // Older QuickJS-NG builds lack the optimisations yt-dlp's challenge solver needs.
   const [major = 0, minor = 0] = found.split(".").map(Number);
   if (name === "qjs") return /^\d+\.\d+\.\d+$/.test(found) && (major > 0 || minor >= 12);
+  if (name === "mpv") return Number(/^mpv v?0\.(\d+)/.exec(found)?.[1] ?? 99) >= 35;
   return Number(/^ffmpeg version n?(\d+)\./.exec(found)?.[1]) >= 7;
 }
 
@@ -86,7 +93,12 @@ async function onPath(name: Helper) {
 }
 
 // The executable is the one top-level file; yt-dlp keeps its libraries in _internal beside it.
-async function executable(directory: string) {
+// mpv ships an app bundle on macOS and its DLLs beside mpv.exe on Windows.
+async function executable(directory: string, name?: Helper) {
+  if (name === "mpv") {
+    const path = join(directory, process.platform === "darwin" ? "mpv.app/Contents/MacOS/mpv" : "mpv.exe");
+    return await access(path).then(() => path, () => null);
+  }
   const file = (await readdir(directory, { withFileTypes: true }).catch(() => [])).find(entry => entry.isFile());
   return file ? join(directory, file.name) : null;
 }
@@ -99,7 +111,7 @@ async function installed(name: Helper) {
   const directory = join(root, name);
   let found: { version: string; path: string } | null = null;
   for (const entry of (await readdir(directory).catch(() => [])).sort((a, b) => b.localeCompare(a, "en", { numeric: true }))) {
-    const path: string | null | false = !found && !entry.endsWith(".partial") && await executable(join(directory, entry));
+    const path: string | null | false = !found && !entry.endsWith(".partial") && await executable(join(directory, entry), name);
     if (path && await version(name, path)) found = { version: entry, path };
     else await rm(join(directory, entry), { recursive: true, force: true }).catch(() => {});
   }
@@ -130,13 +142,15 @@ async function install(name: Helper, release: Release) {
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, content, { mode: 0o755 });
   }
-  const path = await executable(partial);
+  // macOS mpv zips hold one tarball with the app bundle.
+  if (name === "mpv" && files["mpv.tar.gz"]) { await tar(join(partial, "mpv.tar.gz"), partial); await rm(join(partial, "mpv.tar.gz")); }
+  const path = await executable(partial, name);
   if (!path) throw new Error(`the ${name} download has no program`);
   await verify(name, release, path);
   await rm(target, { recursive: true, force: true });
   await rename(partial, target);
   console.error(`Couch helpers: installed ${name} ${release.version} (SHA-256 verified)`);
-  return join(target, basename(path));
+  return join(target, path.slice(partial.length + 1));
 }
 
 async function check(name: Helper): Promise<string> {
@@ -152,6 +166,7 @@ async function check(name: Helper): Promise<string> {
     const fallback = copy?.path ?? (systemVersion ? system : null);
     console.error(`Couch helpers: couldn't download ${name}: ${(error as Error).message}${fallback ? `; using ${fallback}` : ""}`);
     if (fallback) return fallback;
+    if (name === "mpv" && !assets?.[3]) throw error;
     throw new Error(`Couch couldn't download ${name}. Check the internet connection and try again.`);
   }
 }

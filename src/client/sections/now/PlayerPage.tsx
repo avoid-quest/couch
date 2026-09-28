@@ -15,6 +15,7 @@ import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
+import { playingElsewhere } from "@/session/device-id";
 import { cn } from "@/lib/utils";
 import { collectionTarget } from "@/collection-target";
 
@@ -26,7 +27,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, nativeHost, localHost, tvPresentation, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, tvPresentation, videoQualityPreference } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -50,7 +51,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
   const audioOnly = current?.kind === "radio" || !!current?.source.startsWith("radio:") || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
-  const elsewhere = !localHost && (active || ended);
+  // The picture shows on the Device that plays; the others show the artwork.
+  const renderer = playingElsewhere(state);
+  const elsewhere = !!renderer;
   const artworkStage = audioOnly || elsewhere;
   const autoHide = playing && !artworkStage;
   useBottomBar(band, !!current && shown);
@@ -132,7 +135,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
-  const status = !current ? null : unavailable ? { title: `Player not running on ${localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
+  const status = !current ? null : unavailable ? { title: player?.error ?? `Nothing is playing on ${name}`, detail: "Press Play to start it again here." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }
     : retry ? { title: `Reconnecting to ${current.title}`, detail: `Retrying in ${retrySeconds} s (${retry.attempt} of ${retry.maximum})`, busy: true }
     : player?.status === "loading" && !player.buffering ? { title: `Loading ${current.title}`, detail: `Connecting to ${source}…`, busy: true }
@@ -142,7 +145,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />;
 
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
-    <div ref={localHost ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
+    <div ref={renderInto} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
     <div data-player-header inert={!shown} className={cn("player-header absolute top-0 left-0 z-20 flex items-center gap-3 p-4 transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
       <Button data-back variant="ghost" className="h-11 bg-background" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" />{shell.playerBackLabel || "Find"}</Button>
@@ -159,7 +162,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           </div>
           {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${name}` : current.title}</span>}</p>
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere || currentProgramme) && <span>{elsewhere ? `Playing on ${renderer?.name ?? name}` : current.title}</span>}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
