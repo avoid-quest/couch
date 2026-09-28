@@ -29,6 +29,30 @@ RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.
 Couch serves no local files. The rebuild plan is
 [#644](https://github.com/avoid-quest/couch/issues/644).
 
+## Helpers
+
+Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
+YouTube's challenges) and ffmpeg. The app ships none of them
+(`src/server/helpers.ts`).
+
+- Core uses the copy on `PATH` when it is recent enough: yt-dlp at its latest
+  release, QuickJS-NG 0.12 or later, ffmpeg 7 or later.
+- Otherwise it downloads the official build into `<data>/helpers/<name>/<version>`,
+  checks the SHA-256 and runs it before switching to it:
+  - yt-dlp's own `yt-dlp_macos.zip`, `yt-dlp_linux*.zip` or `yt-dlp_win*.zip`.
+    These unpacked builds start in a fraction of a second; the one-file builds
+    unpack themselves on every run.
+  - QuickJS-NG's `qjs-*` release binary.
+  - ffmpeg from [Martin Riedl](https://ffmpeg.martin-riedl.de) on macOS and
+    Linux (its `.sha256`; on macOS also his Developer ID signature), and from
+    [BtbN](https://github.com/BtbN/FFmpeg-Builds) on Windows.
+
+  GitHub's recorded asset digest is the SHA-256 for GitHub releases.
+- Core checks every helper at start and once a day. It updates yt-dlp when a
+  newer release exists, and downloads again any helper that is missing or
+  doesn't run. Before each yt-dlp run it also replaces a missing yt-dlp or
+  QuickJS-NG, and a yt-dlp that won't start.
+
 ## Delivery
 
 ```

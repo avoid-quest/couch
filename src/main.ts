@@ -2,6 +2,7 @@ import { linuxBluetooth } from "./server/bluetooth-linux";
 import { createNativeDisplay } from "./server/display-native";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { startHelpers } from "./server/helpers";
 import { createHub } from "./server/hub";
 import type { AppMessage, CoreMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
@@ -27,6 +28,7 @@ const nativeDisplay = createNativeDisplay(app && ((requestId, action) => app.pos
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
+startHelpers(join(dataDir, "helpers"));
 const hub = await createHub({
   managedLan: native,
   onAddresses: urls => app?.postMessage({ type: "addresses", urls }),

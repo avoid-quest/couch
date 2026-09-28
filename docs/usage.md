@@ -68,8 +68,8 @@ QR code.
 
 ## Run from source
 
-Install Bun 1.4.x and Node 24 or later. yt-dlp (and a JavaScript runtime for
-YouTube) come from `PATH` until Couch manages its helpers (#644 ticket 4).
+Install Bun 1.4.x and Node 24 or later. Core finds or downloads its media
+helpers itself (see [architecture](architecture.md#helpers)).
 
 ```sh
 bun install --frozen-lockfile
