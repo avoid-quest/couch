@@ -11,8 +11,11 @@ fail() { echo "couch-update: $*" >&2; exit 1; }
 version=$1
 exec 9>/run/couch-update.lock
 flock -x 9
+# The package spells X.Y.Z-preview.N as X.Y.Z~preview.N, which Debian orders
+# before X.Y.Z; releases and the TV account use the first spelling.
+packaged=$(sed 's/-preview\./~preview./' <<< "$version")
 installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
-[[ $installed != "$version" ]] || exit 0
+[[ $installed != "$packaged" ]] || exit 0
 
 channel=latest-linux.yml
 [[ $version != *-preview.* ]] || channel=preview-linux.yml
@@ -31,12 +34,12 @@ fetch "$deb"
 file=$work/$deb
 [[ $(sha512sum "$file" | cut -d' ' -f1 | tr a-f A-F | basenc --base16 -d | base64 -w0) = "${entry#* }" ]] \
     || fail "$deb does not match the sha512 in $channel."
-[[ $(dpkg-deb -f "$file" Package):$(dpkg-deb -f "$file" Version):$(dpkg-deb -f "$file" Architecture) = "couch:$version:amd64" ]] \
+[[ $(dpkg-deb -f "$file" Package):$(dpkg-deb -f "$file" Version):$(dpkg-deb -f "$file" Architecture) = "couch:$packaged:amd64" ]] \
     || fail "$deb is not the Couch $version amd64 package."
 
-if [[ -n $installed ]] && dpkg --compare-versions "$installed" gt "$version"; then
-    # Downgrades include preview -> final: Debian orders X.Y.Z-preview.N above
-    # X.Y.Z. APT resolves dependencies, then dpkg downgrades Couch alone.
+if [[ -n $installed ]] && dpkg --compare-versions "$installed" gt "$packaged"; then
+    # Leaving previews for an older stable release. APT resolves dependencies,
+    # then dpkg downgrades Couch alone.
     for field in Pre-Depends Depends; do
         dependencies=$(dpkg-deb -f "$file" "$field" 2>/dev/null || true)
         [[ -z $dependencies ]] || apt-get satisfy -y --no-install-recommends --no-remove "$dependencies"
@@ -45,7 +48,7 @@ if [[ -n $installed ]] && dpkg --compare-versions "$installed" gt "$version"; th
 else
     apt-get install -y --no-install-recommends --no-remove "$file"
 fi
-[[ $(dpkg-query -W -f='${Version}' couch) = "$version" ]] || fail "Couch $version did not install."
+[[ $(dpkg-query -W -f='${Version}' couch) = "$packaged" ]] || fail "Couch $version did not install."
 
 # Bring the TV back on the new version.
 uid=$(id -u couch-tv)
