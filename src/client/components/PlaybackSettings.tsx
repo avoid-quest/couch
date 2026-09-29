@@ -59,8 +59,8 @@ function SubtitleUpload({ playbackId, credentials, connected, disabled, compact 
     if (!playbackId || disabled || request.current) return;
     setError(null);
     setNotice(null);
-    if (!/\.(srt|ass|ssa|vtt)$/i.test(file.name)) {
-      setError("Choose an SRT, ASS, SSA or VTT subtitle file.");
+    if (!/\.(srt|vtt)$/i.test(file.name)) {
+      setError("Choose an SRT or VTT subtitle file.");
       return;
     }
     if (!file.size || file.size > 2 * 1024 * 1024) {
@@ -87,12 +87,12 @@ function SubtitleUpload({ playbackId, credentials, connected, disabled, compact 
 
   return <div className="grid gap-2">
     {compact ? <Button variant="ghost" className="-mx-2.5 justify-start font-normal" disabled={disabled || pending || !playbackId} onClick={() => fileInput.current?.click()}><Plus aria-hidden="true" />Add subtitles</Button> : <Label htmlFor={id}>Add subtitles</Label>}
-    <Input ref={fileInput} id={id} type="file" tabIndex={compact ? -1 : undefined} className={compact ? "hidden" : undefined} accept=".srt,.ass,.ssa,.vtt" disabled={disabled || pending || !playbackId} aria-describedby={compact ? undefined : `${id}-help`} onChange={event => {
+    <Input ref={fileInput} id={id} type="file" tabIndex={compact ? -1 : undefined} className={compact ? "hidden" : undefined} accept=".srt,.vtt" disabled={disabled || pending || !playbackId} aria-describedby={compact ? undefined : `${id}-help`} onChange={event => {
       const file = event.currentTarget.files?.[0];
       event.currentTarget.value = "";
       if (file) void upload(file);
     }} />
-    {!compact && <p id={`${id}-help`} className="text-sm text-muted-foreground">SRT, ASS, SSA or VTT, up to 2 MB.</p>}
+    {!compact && <p id={`${id}-help`} className="text-sm text-muted-foreground">SRT or VTT, up to 2 MB.</p>}
     {pending && <p className="text-sm text-muted-foreground" role="status">Adding…</p>}
     {notice && <p className="text-sm" role="status">{notice}</p>}
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

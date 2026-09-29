@@ -10,7 +10,6 @@ type Options = {
   savedProfile?: () => SavedSoundProfile | null;
   save: (output: string, profile?: SavedSoundProfile | null) => void;
   active: () => boolean;
-  pin: (output: string) => void;
   lost: (error: string) => void;
   changed: (state: SoundRouteState) => void;
 };
@@ -99,7 +98,7 @@ export function createSoundRouting(options: Options) {
     const hadStream = await backend.route(); authorize();
     try {
       changing = true;
-      options.pin(name);
+      await backend.move(name);
       if (hadStream) {
         const deadline = Date.now() + 2_000;
         while (await backend.route() !== name) {
@@ -112,7 +111,7 @@ export function createSoundRouting(options: Options) {
       if ((await backend.inventory()).defaultOutput !== name) throw new ControllerError("The audio server did not confirm the default output.", 503);
       authorize(); options.save(name, profileFor(inventory, name)); selected = name;
     } catch (error) {
-      if (previous) options.pin(previous);
+      if (previous) await backend.move(previous).catch(() => {});
       if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
       throw error;
     } finally { changing = false; }
@@ -174,7 +173,7 @@ export function createSoundRouting(options: Options) {
           await select(sink.id, updated, authorize);
         } catch (error) {
           if (previous) await backend.profile(previous.card, previous.id).catch(() => {});
-          if (selected) options.pin(selected);
+          if (selected) await backend.move(selected).catch(() => {});
           if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
           throw error;
         } finally { changing = false; }

@@ -45,6 +45,7 @@ function extractionError(stderr: string): Error {
   if (/\bDRM\b|digital rights/i.test(stderr)) return new Error("This item requires DRM playback, which is not supported.");
   if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new Error("This isn't available in your region.");
   if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new Error("This website requires an account or browser session. Website sign-in is not supported yet.");
+  if (/Requested format is not available/i.test(stderr)) return new Error("This website offers no format Couch can play yet.");
   if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new Error("This live stream is offline or has not started yet.");
   return new Error("Couldn't open this page. It may be unsupported.");
 }

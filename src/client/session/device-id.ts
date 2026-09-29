@@ -1,4 +1,5 @@
 import { loadSendspinClientIdentity } from "@sendspin/sendspin-js";
+import type { SessionState } from "../../shared/protocol";
 
 let id: string | undefined;
 
@@ -12,4 +13,10 @@ export function deviceId() {
   try { id = loadSendspinClientIdentity().clientId; }
   catch { id = loadSendspinClientIdentity(null).clientId; } // Storage is blocked: this tab gets a key of its own.
   return id;
+}
+
+/** The other Device that plays the current Playback, if it isn't this one. */
+export function playingElsewhere(state: { renderer?: SessionState["renderer"]; player: Pick<SessionState["player"], "status"> } | null | undefined) {
+  const renderer = state?.renderer;
+  return renderer && renderer.deviceId !== deviceId() && ["loading", "playing", "paused", "ended"].includes(state.player.status) ? renderer : null;
 }

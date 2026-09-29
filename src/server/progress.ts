@@ -15,7 +15,7 @@ export function playbackMediaId(entry: QueueEntry): string | null {
 
 type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem; entry: QueueEntry; observed: boolean; lastSaved: string; lastWrite: number; paused: boolean; seek: { target: number; from: number } | null };
 
-// Only native observations may change position. Commands merely request a checkpoint.
+// Only player reports may change position. Commands merely request a checkpoint.
 // committed(final) runs after each durable write; final marks the end of a
 // viewing (stop or EOF) rather than a periodic checkpoint during playback.
 export function createProgress(store: Store, committed: (final: boolean) => void, now = Date.now) {

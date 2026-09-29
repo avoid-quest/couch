@@ -37,6 +37,7 @@ import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
+import { hear, onBlocked } from "@/session/renderer";
 
 const navItems = ["Home", "Find", "Saved", "Settings"];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -205,7 +206,15 @@ export function AppShell() {
   return <ShellErrorBoundary><DetailFocusRestoration /><MediaSessionBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
-function MediaSessionBridge() { useMediaSession(); return null; }
+function MediaSessionBridge() { useMediaSession(); useTapToHear(); return null; }
+
+// A browser that needs a gesture before it plays sound asks for one on its own screen (#644).
+function useTapToHear() {
+  useEffect(() => onBlocked(blocked => {
+    if (blocked) toast("Sound is waiting for a tap", { id: "tap-to-hear", duration: Infinity, action: { label: "Tap to hear", onClick: hear } });
+    else toast.dismiss("tap-to-hear");
+  }), []);
+}
 
 // Connection and player state as one quiet line; red only for errors that need a decision.
 function ConnectionStatus() {
@@ -222,7 +231,7 @@ function ConnectionStatus() {
   if (status === "server-unavailable" || status === "reconnecting") return <StatusLine busy actions={recovery}>{offline(name)}</StatusLine>;
   if (!credentials || status === "pairing-required") return null;
   if (!connected) return null;
-  if (state?.player.status === "unavailable") return <StatusLine>Player not running on {localHost ? "this computer" : name}.</StatusLine>;
+  if (state?.player.status === "unavailable" && state.player.error) return <StatusLine>{state.player.error}</StatusLine>;
   return null;
 }
 

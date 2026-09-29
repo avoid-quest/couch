@@ -23,6 +23,7 @@ import { SoundControls } from "./PlaybackStatus";
 import { Onboarding } from "./Onboarding";
 import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
+import { playingElsewhere } from "@/session/device-id";
 
 export type Choice = AppMode;
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void> };
@@ -169,11 +170,12 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const failure = device.error && !device.error.startsWith("confirmation-required:") ? device.error : null;
   const nameOf = (target: string) => device.mode === "remote" && device.address === target && installationName || names[target];
   const target = installationName || (device.address ? hostOf(device.address) : "Couch");
+  const elsewhere = playingElsewhere(state);
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   return <>
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{device.mode === "local" ? "Playing here" : <><span className="max-sm:sr-only">Playing on </span>{target}</>}</span></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{device.mode === "local" ? elsewhere ? <><span className="max-sm:sr-only">Playing on </span>{elsewhere.name}</> : "Playing here" : <><span className="max-sm:sr-only">Playing on </span>{target}</>}</span></Button></PopoverTrigger>
       <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="w-96 gap-4">
         <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>
         <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">

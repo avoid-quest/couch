@@ -21,16 +21,25 @@ mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
 
-The Full-mode app window renders its Core's playback
-(`src/client/session/renderer.ts`). Core sends `{ type: "player", command }` over
-the window's host-token WebSocket, and the window reports its player state back
-with `{ type: "player", state }`. Only the host socket may report; if it closes, the
-player becomes unavailable. The window plays URLs in `<video>`. YouTube's separate
-audio plays in an `<audio>` element that follows the video. Playlists that Chromium
-won't open (StreamingCommunity's) go through hls.js. Main caps googlevideo's
-open-ended `Range` requests at 10 MB, because YouTube sends those at about playback
-speed. Tracks, delays, subtitles and gapless preparation are not rendered yet. #644
-ticket 6 makes every Device a renderer.
+Every Device renders playback the same way (`src/client/session/renderer.ts`),
+the app window included: Core sends `{ type: "player", command }` over the
+Device's WebSocket and listens to `{ type: "player", state }` only from the tab it
+chose. Play renders on the Device that pressed it; the newest tab of that Device
+takes over and reloads the item where it was, and when that tab closes the next
+newest one does. The Device fetches the source itself (Direct delivery, no bytes
+through Core): URLs play in `<video>`, YouTube's separate audio in an `<audio>`
+that follows the video, HLS through hls.js where the engine has no native HLS, and
+raw MPEG-TS through mpegts.js. Chromium Devices get YouTube's VP9 and Opus,
+others H.264 and AAC. Uploaded SRT/VTT subtitles are served to the `<track>` as
+WebVTT from memory. A browser that needs a gesture before sound plays the picture
+muted and shows "Tap to hear". In the app, Main caps googlevideo's open-ended
+`Range` requests at 10 MB, because YouTube sends those at about playback speed.
+
+IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
+can't decode, play in an mpv process on the Device that runs Core
+(`src/server/mpv.ts`, JSON IPC). ffmpeg reads the channel's codecs when it
+starts. mpv comes from `PATH` or, on macOS and Windows, from mpv's GitHub
+releases (SHA-256 checked); Linux uses the system's package.
 
 Sources are external internet media only: yt-dlp sites (YouTube, Twitch,
 RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.

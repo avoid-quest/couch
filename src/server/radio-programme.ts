@@ -29,7 +29,7 @@ export function createRadioProgramme({ station, publish, fetch: request = global
       delay = result.retryAt - now();
       resultExpiry = result.programme?.expiresAt ?? 0;
       if (result.programme) publish(current.playbackId, { ...result.programme, playbackId: current.playbackId });
-    } catch { /* Programme metadata never interrupts native audio playback. */ }
+    } catch { /* Programme metadata never interrupts audio playback. */ }
     finally {
       if (valid()) timer = schedule(() => {
         timer = undefined;

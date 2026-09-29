@@ -6,6 +6,20 @@ import type { DeviceIdentity } from "../shared/devices";
 import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shared/iptv";
 import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
 import { ADMIN_ONLY } from "./messages";
+import { execFile } from "node:child_process";
+import { helper } from "./helpers";
+
+// Raw MPEG-TS plays through mpegts.js. Chromium has no MPEG-1/2 video, AC-3/E-AC-3 or
+// MP2 decoder, so those channels play in Core's own mpv (#644 ticket 1). ffmpeg reads the
+// channel's real codecs; mpegts.js would report MP2 as MP3.
+async function transport(url: string, signal: AbortSignal): Promise<{ mpegts?: true; mpv?: true }> {
+  const ffmpeg = await helper("ffmpeg");
+  const probe = await new Promise<string>(resolve => execFile(ffmpeg, ["-hide_banner", "-nostdin", "-protocol_whitelist", "http,https,tcp,tls", "-probesize", "1000000", "-analyzeduration", "3000000", "-i", url],
+    { timeout: 10_000, signal }, (_error, _stdout, stderr) => resolve(String(stderr))));
+  signal.throwIfAborted();
+  if (!/^Input #0, mpegts\b/m.test(probe)) return {};
+  return /Stream #.*: (?:Video: mpeg[12]video|Audio: (?:ac3|eac3|mp2)\b)/.test(probe) ? { mpegts: true, mpv: true } : { mpegts: true };
+}
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => DeviceIdentity | null;
@@ -53,9 +67,9 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   };
   const programSelect = "SELECT id, channel_id AS channelId, start, end, title, description FROM iptv_programs";
   function publishSourcesChanged(ids: string[]) {
-    // A disconnected native player cannot undo a committed guide mutation or
+    // A disconnected player cannot undo a committed guide mutation or
     // prevent controllers from receiving its invalidation.
-    try { onSourcesChanged(ids); } catch { /* The session owns native availability. */ }
+    try { onSourcesChanged(ids); } catch { /* The session owns player availability. */ }
     onChange();
   }
 
@@ -142,8 +156,8 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       const item = channel(id);
       signal.throwIfAborted();
       // Only identified HLS URLs enter this EVENT increment. Other live media
-      // must not wait for a body that may never finish before native playback.
-      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl };
+      // must not wait for a body that may never finish before playback.
+      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal])) };
       let eventStart = false;
       try {
         const media = await guideFetch(item.streamUrl, 512 * 1024, request, AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]));
@@ -154,20 +168,6 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       shutdown.signal.throwIfAborted();
       if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
       return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}) };
-    },
-    async getLivePlayable(id: string, signal: AbortSignal) {
-      const item = channel(id);
-      const combined = AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]);
-      try {
-        const media = await guideFetch(item.streamUrl, 512 * 1024, request, combined);
-        combined.throwIfAborted();
-        if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
-        if (!liveHlsPlaylist(Buffer.from(media.bytes).toString("utf8"), media.url)) throw new GuideError("Go live is no longer available for this channel. Use Play.", 409);
-        return { source: item.streamUrl, goLive: true };
-      } catch (error) {
-        if (error instanceof GuideError) throw error;
-        throw new GuideError("Couldn't check this channel's live playlist. Use Play.", 502);
-      }
     },
     async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this remote first.", 401); return value; };

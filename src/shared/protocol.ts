@@ -44,6 +44,8 @@ export type SessionState = {
   currentEntryId: string | null;
   presentationId?: string | null;
   playedBy?: PlaybackActor;
+  // The Device that plays the current Playback (#644 ticket 6).
+  renderer?: PlaybackActor;
   activity?: { id: string; actor: PlaybackActor; text: string };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
@@ -74,7 +76,6 @@ export type Action =
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
-  | { type: "goLive"; playbackId: string }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
   | { type: "mute"; muted: boolean }
@@ -89,7 +90,7 @@ export type Action =
   | { type: "stop"; playbackId?: string };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
-// The app window plays what Core sends it and reports back (#644 ticket 4; ticket 6 opens this to every Device).
+// Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
@@ -101,9 +102,9 @@ export type ServerMessage =
 
 export type PlaybackCommand =
   | { type: "audioPause" }
-  | { type: "audioOutput"; output: string }
-  | { type: "prepare"; playbackId: string; next?: { playbackId: string; source: string; headers?: Record<string, string>; preferences: ProfilePlaybackPreferences & { audioDelay: number } } }
-  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; eventStart?: boolean; audioOutput?: string }
+  // eventStart: an HLS EVENT playlist starts at its first segment instead of the live edge.
+  // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }

@@ -4,7 +4,7 @@ import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage
 import type { ConnectionDetails, DeviceIdentity } from "../../shared/devices";
 import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
-import { connectRenderer, play } from "./renderer";
+import { connectRenderer, play, playsVp9 } from "./renderer";
 import { deviceId } from "./device-id";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -20,8 +20,7 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// `render`: this window plays its Core's playback (the Full-mode app).
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, render = false) {
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -125,6 +124,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
+      if (playsVp9) url.searchParams.set("vp9", "1");
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -137,7 +137,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       connection.onopen = () => {
         if (!isCurrent()) return;
         setStatus("syncing");
-        if (render) stopRendering = connectRenderer(state => { if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); });
+        stopRendering = connectRenderer(state => { if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -171,7 +171,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
         } else if (message.type === "player") {
-          if (render) play(message.command);
+          play(message.command);
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {
