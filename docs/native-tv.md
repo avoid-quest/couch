@@ -41,5 +41,13 @@ when convenient to apply first-time session and power configuration.
 
 The retired 0.1.0 AppImage installation is not migrated. Fresh installations use
 the package above; an old AppImage installation stays as it is and its session is
-not switched. The TV skips electron-updater's check; it updates through the package, and
-setup grants no package-manager privileges.
+not switched.
+
+The TV checks for updates like the desktop app and installs them itself when
+nothing is playing. Its `couch-tv` account may only start
+`couch-update@<version>.service`; that unit's root script downloads the release's
+`.deb` from avoid-quest/couch-releases, checks its sha512 against the release's
+update file, installs it and restarts the TV app. From SSH, `sudo systemctl start
+couch-update@<version>.service` installs a release by hand and `journalctl -u
+'couch-update@*'` shows how updates went. TVs set up before this rerun `sudo
+couch-setup --tv` once to get the unit.
