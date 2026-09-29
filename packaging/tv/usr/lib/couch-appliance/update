@@ -3,7 +3,8 @@
 # the TV account picked; couch-update.timer runs it without a version to install
 # the newest release on the TV's channel while nothing plays. Trust rests on
 # HTTPS to the fixed couch-releases repository, as electron-updater's does on
-# the other platforms.
+# the other platforms. A release that leaves the TV app unhealthy is rolled back
+# to the previous package, which is kept for that.
 set -euo pipefail
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH DEBIAN_FRONTEND=noninteractive
@@ -11,41 +12,69 @@ releases=https://github.com/avoid-quest/couch-releases/releases
 pattern='^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$'
 fail() { echo "couch-update: $*" >&2; error=$*; exit 1; }
 [[ $EUID = 0 ]] || fail 'Run as root.'
-mode=manual version= outcome= error= work=
+mode=manual version= outcome= error= failed= rollback= work=
 case "$*" in
     ''|--auto) mode=auto ;;
     *) [[ $# = 1 && $1 =~ $pattern ]] || fail 'usage: update [--auto | VERSION]'; version=$1 ;;
 esac
 
-# Every run leaves its outcome in /var/lib/couch-update/status, in a fixed
-# root-owned directory that never follows a substituted path.
+# State lives in a fixed root-owned directory that never follows a substituted
+# path: the last run's outcome in status, the installed package in installed.deb.
+state=/var/lib/couch-update
+cache=$state/installed.deb
+state_directory() {
+    [[ ! -L $state ]] || { echo "couch-update: Refusing symbolic link: $state" >&2; return 1; }
+    [[ -d $state ]] || install -d -m 0755 "$state"
+    [[ $(stat -c %u "$state") = 0 && -z $(find "$state" -maxdepth 0 -perm /022 -print) ]] \
+        || { echo "couch-update: Root must own $state." >&2; return 1; }
+}
 record() {
-    local status=$? directory=/var/lib/couch-update temporary
+    local status=$? temporary
     [[ -z $work ]] || rm -rf "$work"
     [[ -n $outcome ]] || { outcome=failed; error=${error:-Stopped with status $status.}; }
-    [[ ! -L $directory ]] || { echo 'couch-update: Refusing symbolic link: /var/lib/couch-update' >&2; exit 1; }
-    [[ -d $directory ]] || install -d -m 0755 "$directory"
-    [[ $(stat -c %u "$directory") = 0 && -z $(find "$directory" -maxdepth 0 -perm /022 -print) ]] \
-        || { echo 'couch-update: Root must own /var/lib/couch-update.' >&2; exit 1; }
-    temporary=$(mktemp "$directory/.status.XXXXXX")
-    printf 'at=%s\nmode=%s\nversion=%s\noutcome=%s\nerror=%s\n' "$(date -u +%FT%TZ)" "$mode" "$version" "$outcome" \
-        "$(printf '%s' "$error" | tr -c '[:print:]' ' ' | cut -c1-200)" > "$temporary"
+    state_directory || exit 1
+    temporary=$(mktemp "$state/.status.XXXXXX")
+    printf 'at=%s\nmode=%s\nversion=%s\noutcome=%s\nerror=%s\nfailed=%s\nrollback=%s\n' "$(date -u +%FT%TZ)" "$mode" \
+        "$version" "$outcome" "$(printf '%s' "$error" | tr -c '[:print:]' ' ' | cut -c1-200)" "$failed" "$rollback" > "$temporary"
     chmod 0644 "$temporary"
-    mv -fT "$temporary" "$directory/status"
+    mv -fT "$temporary" "$state/status"
 }
 trap record EXIT
 done_with() { outcome=$1; exit 0; }
 
 exec 9>/run/couch-update.lock
 flock -x 9
+state_directory || exit 1
+# The release that last failed its health check, which automatic runs skip.
+failed=$(sed -n 's/^failed=//p' "$state/status" 2>/dev/null || true)
+[[ $failed =~ $pattern ]] || failed=
 # The package spells X.Y.Z-preview.N as X.Y.Z~preview.N, which Debian orders
 # before X.Y.Z; releases and the TV account use the first spelling.
 debian() { sed 's/-preview\./~preview./' <<< "$1"; }
 installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null | sed 's/~preview\./-preview./' || true)
+setting() { [[ -r /etc/couch/appliance.env ]] || return 0; sed -n "s/^$1=//p" /etc/couch/appliance.env | tail -1 | sed 's/^"//; s/"$//'; }
+data=$(setting COUCH_DATA_DIR)
+data=${data:-/var/lib/couch/.local/share/quest.avoid.couch}
 work=$(mktemp -d /var/lib/couch-update.XXXXXX)
 fetch() {
     curl --fail --silent --show-error --location --proto =https --proto-redir =https --retry 3 \
-        --output "$work/${1##*/}" "$1" || fail "Couldn't download ${1##*/}."
+        --output "${2:-$work}/${1##*/}" "$1" || fail "Couldn't download ${1##*/}."
+}
+# Downloads a release's .deb to $work/RELEASE and checks it against the
+# release's update file.
+download() {
+    local release=$1 feed=latest-linux.yml deb=couch_$1_amd64.deb entry directory=$work/$1
+    [[ $release != *-preview.* ]] || feed=preview-linux.yml
+    mkdir -p "$directory"
+    fetch "$releases/download/v$release/$feed" "$directory"
+    [[ $(awk '$1 == "version:" { print $2; exit }' "$directory/$feed") = "$release" ]] || fail "$feed does not describe $release."
+    entry=$(awk '$1 == "-" && $2 == "url:" { url = $3 } $1 == "sha512:" && url ~ /\.deb$/ { print url, $2; exit }' "$directory/$feed")
+    [[ ${entry% *} = "$deb" ]] || fail "$feed lists no $deb."
+    fetch "$releases/download/v$release/$deb" "$directory"
+    [[ $(sha512sum "$directory/$deb" | cut -d' ' -f1 | tr a-f A-F | basenc --base16 -d | base64 -w0) = "${entry#* }" ]] \
+        || fail "$deb does not match the sha512 in $feed."
+    [[ $(dpkg-deb -f "$directory/$deb" Package):$(dpkg-deb -f "$directory/$deb" Version):$(dpkg-deb -f "$directory/$deb" Architecture) = "couch:$(debian "$release"):amd64" ]] \
+        || fail "$deb is not the Couch $release amd64 package."
 }
 
 # Client mode has no local Core; Main reports the TV window's video and synced
@@ -69,9 +98,8 @@ idle() {
 }
 
 if [[ $mode = auto ]]; then
-    setting() { [[ -r /etc/couch/appliance.env ]] || return 0; sed -n "s/^$1=//p" /etc/couch/appliance.env | tail -1 | sed 's/^"//; s/"$//'; }
     # The TV account writes update-channel, so read it as that account, briefly.
-    channel=$(runuser -u couch-tv -- timeout 5 head -c 16 -- "$(setting COUCH_DATA_DIR)/update-channel" 2>/dev/null || true)
+    channel=$(runuser -u couch-tv -- timeout 5 head -c 16 -- "$data/update-channel" 2>/dev/null || true)
     if [[ $channel != latest && $channel != preview ]]; then
         channel=latest
         [[ $installed != *-preview.* ]] || channel=preview
@@ -91,22 +119,28 @@ if [[ $mode = auto ]]; then
     # as app/update.ts allows.
     [[ -z $installed ]] || dpkg --compare-versions "$(debian "$version")" gt "$(debian "$installed")" \
         || [[ $channel = latest && $installed = *-preview.* ]] || done_with up-to-date
+    # Wait for a newer release than one that was rolled back.
+    [[ $version != "$failed" ]] || done_with skipped
 fi
 [[ $installed != "$version" ]] || done_with up-to-date
 
-channel=latest-linux.yml
-[[ $version != *-preview.* ]] || channel=preview-linux.yml
-deb=couch_${version}_amd64.deb
-fetch "$releases/download/v$version/$channel"
-[[ $(awk '$1 == "version:" { print $2; exit }' "$work/$channel") = "$version" ]] || fail "$channel does not describe $version."
-entry=$(awk '$1 == "-" && $2 == "url:" { url = $3 } $1 == "sha512:" && url ~ /\.deb$/ { print url, $2; exit }' "$work/$channel")
-[[ ${entry% *} = "$deb" ]] || fail "$channel lists no $deb."
-fetch "$releases/download/v$version/$deb"
-file=$work/$deb
-[[ $(sha512sum "$file" | cut -d' ' -f1 | tr a-f A-F | basenc --base16 -d | base64 -w0) = "${entry#* }" ]] \
-    || fail "$deb does not match the sha512 in $channel."
-[[ $(dpkg-deb -f "$file" Package):$(dpkg-deb -f "$file" Version):$(dpkg-deb -f "$file" Architecture) = "couch:$(debian "$version"):amd64" ]] \
-    || fail "$deb is not the Couch $version amd64 package."
+# Keep the installed package for a later rollback, offline.
+keep() {
+    chmod 0600 "$1"
+    mv -fT "$1" "$cache"
+}
+
+download "$version"
+file=$work/$version/couch_${version}_amd64.deb
+# Have the installed version's package to roll back to, fetched from its own
+# release unless kept; without it the update still goes ahead.
+if [[ -f $cache && ! -L $cache && $(dpkg-deb -f "$cache" Version 2>/dev/null) = "$(debian "$installed")" ]]; then :
+elif [[ $installed =~ $pattern ]] && ( download "$installed" ); then
+    keep "$work/$installed/couch_${installed}_amd64.deb"
+else
+    rollback=unavailable
+    echo "couch-update: Couch ${installed:-(none)} can't be rolled back to." >&2
+fi
 
 if [[ $mode = auto ]]; then
     idle || done_with waiting
@@ -115,27 +149,63 @@ fi
 # Fresh package lists let new dependencies resolve.
 apt-get update -qq || echo 'couch-update: apt-get update failed; using the current package lists.' >&2
 [[ $mode != auto ]] || idle || done_with waiting
-if [[ -n $installed ]] && dpkg --compare-versions "$(debian "$installed")" gt "$(debian "$version")"; then
-    # APT resolves dependencies, then dpkg downgrades Couch alone.
-    for field in Pre-Depends Depends; do
-        dependencies=$(dpkg-deb -f "$file" "$field" 2>/dev/null || true)
-        [[ -z $dependencies ]] || apt-get satisfy -y --no-install-recommends --no-remove "$dependencies"
-    done
-    [[ $mode != auto ]] || idle || done_with waiting
-    dpkg --install --force-downgrade "$file"
-else
-    apt-get install -y --no-install-recommends --no-remove "$file"
-fi
-[[ $(dpkg-query -W -f='${Version}' couch) = "$(debian "$version")" ]] || fail "Couch $version did not install."
-outcome=installed
+# install FILE VERSION
+install_couch() {
+    local current field dependencies
+    current=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
+    if [[ -n $current ]] && dpkg --compare-versions "$current" gt "$(debian "$2")"; then
+        # APT resolves dependencies, then dpkg downgrades Couch alone.
+        for field in Pre-Depends Depends; do
+            dependencies=$(dpkg-deb -f "$1" "$field" 2>/dev/null || true)
+            [[ -z $dependencies ]] || apt-get satisfy -y --no-install-recommends --no-remove "$dependencies"
+        done
+        [[ $mode != auto || $2 != "$version" ]] || idle || done_with waiting
+        dpkg --install --force-downgrade "$1"
+    else
+        apt-get install -y --no-install-recommends --no-remove "$1"
+    fi
+    [[ $(dpkg-query -W -f='${Version}' couch) = "$(debian "$2")" ]] || fail "Couch $2 did not install."
+}
+install_couch "$file" "$version"
 
 # Bring the TV back on the new version.
 uid=$(id -u couch-tv)
-user_systemctl() {
-    runuser -u couch-tv -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user "$@"
+as_tv() { runuser -u couch-tv -- env HOME=/var/lib/couch XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"; }
+restart() {
+    as_tv systemctl --user daemon-reload || true
+    as_tv systemctl --user reset-failed couch-tv.service || true
+    as_tv systemctl --user restart couch-tv.service || true
 }
-if [[ -S /run/user/$uid/bus ]]; then
-    user_systemctl daemon-reload
-    user_systemctl restart couch-tv.service
+# Within a minute the service must run and pass the check couch-setup uses.
+healthy() {
+    local deadline=$((SECONDS + 60)) pid
+    problem='couch-tv.service is not running.'
+    while ((SECONDS < deadline)); do
+        sleep 2
+        as_tv systemctl --user is-active --quiet couch-tv.service || { problem='couch-tv.service is not running.'; continue; }
+        pid=$(as_tv systemctl --user show couch-tv.service --property=MainPID --value)
+        as_tv env ELECTRON_RUN_AS_NODE=1 /opt/Couch/couch /usr/share/couch/tv/check-health.js "$pid" "$data" > /dev/null 2> "$work/health.txt" \
+            && return 0
+        problem=$(grep -m1 -E '^[A-Za-z]*Error: ' "$work/health.txt" || echo 'The health check failed.')
+    done
+    return 1
+}
+if [[ ! -S /run/user/$uid/bus ]]; then
+    # No TV session to check; the new version starts with the next one.
+    keep "$file"
+    done_with installed-unverified
 fi
-echo "couch-update: installed Couch $version."
+restart
+if healthy; then
+    keep "$file"
+    [[ $failed != "$version" ]] || failed=
+    echo "couch-update: installed Couch $version."
+    done_with installed
+fi
+failed=$version
+[[ -z $rollback ]] || fail "Couch $version is unhealthy and there is no package to roll back to: $problem"
+echo "couch-update: Couch $version is unhealthy, rolling back to $installed: $problem" >&2
+install_couch "$cache" "$installed"
+restart
+error="Couch $version is unhealthy: $problem"
+done_with rolled-back
