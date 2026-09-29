@@ -107,7 +107,7 @@ export function Speakers({ state, run }: Props) {
             const output = outputs.find(item => item.deviceId === device.id);
             const level = output?.level ?? null;
             const disabled = !joinable(device);
-            return <div key={device.id} className="grid w-28 shrink-0 justify-items-center gap-2 px-2 py-3" data-in-mix={level !== null || undefined}>
+            return <div key={device.id} className="grid w-28 shrink-0 content-start justify-items-center gap-2 px-2 py-3" data-in-mix={level !== null || undefined}>
               <span className="text-xl font-medium tabular-nums">{level ?? "–"}</span>
               <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} level`} value={level ?? 0} max={100} disabled={disabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} /></div>
               <span className="line-clamp-2 min-h-[2lh] text-center text-sm leading-tight">{device.name}</span>
