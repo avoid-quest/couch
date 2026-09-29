@@ -239,11 +239,12 @@ export async function createHub(options: HubOptions) {
       playback.synced.members(members(playback));
       if (playback.renderer && deviceOf(playback.renderer) !== picture) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
       const { player } = stateOf(playback);
-      if (!fresh || playback.loaded?.playbackId !== player.playbackId || !active(player.status)) return;
-      if (playback.renderer) deliver(playback, { type: "volume", volume: 0 });
-      const media = playback.media?.playbackId === player.playbackId ? playback.media : {};
-      playback.synced.send({ ...playback.loaded, ...media, ...playback.loaded.radio ? {} : { startPosition: player.position }, paused: player.status === "paused",
-        preferences: { ...playback.loaded.preferences!, ...player.speed ? { speed: player.speed } : {} } });
+      if (fresh && playback.loaded?.playbackId === player.playbackId && active(player.status)) {
+        if (playback.renderer) deliver(playback, { type: "volume", volume: 0 });
+        const media = playback.media?.playbackId === player.playbackId ? playback.media : {};
+        playback.synced.send({ ...playback.loaded, ...media, ...playback.loaded.radio ? {} : { startPosition: player.position }, paused: player.status === "paused",
+          preferences: { ...playback.loaded.preferences!, ...player.speed ? { speed: player.speed } : {} } });
+      }
     } else if (playback.synced) {
       playback.synced.close();
       playback.synced = undefined;
@@ -252,6 +253,15 @@ export async function createHub(options: HubOptions) {
       if (playback.renderer && deviceOf(playback.renderer) === device) deliver(playback, { type: "volume", volume: levelOf(playback) });
       else if (tab) handOver(playback, tab);
     }
+    offline(playback);
+  };
+  // A Playback plays on while one of its outputs is online, and pauses and waits when none is,
+  // however the last one left: its tab closed, or its Device moved to another Playback (#644 Offline).
+  const offline = (playback: Playback, deviceId = playback.outputs[0]?.deviceId) => {
+    if (!deviceId || mpvPlayback === playback || playback.outputs.some(output => newest(output.deviceId))) return;
+    const { playbackId } = stateOf(playback).player;
+    if (playback.synced && playbackId) playback.synced.send({ type: "pause", playbackId, paused: true });
+    playback.session.wait(`${nameOf(deviceId)} is offline.`);
   };
   const createPlayback = (id: string = crypto.randomUUID()) => {
     const playback = { id, outputs: [], renderer: null } as unknown as Playback;
@@ -838,17 +848,9 @@ export async function createHub(options: HubOptions) {
         for (const playback of all()) if (playback.renderer === socket) {
           const tab = newest(deviceOf(socket));
           if (tab) handOver(playback, tab);
-          else {
-            playback.renderer = null;
-            if (mpvPlayback !== playback && !playback.synced) playback.session.wait(`${nameOf(deviceOf(socket))} is offline.`);
-          }
+          else playback.renderer = null;
         }
-        // A synced Playback plays on while one of its Devices is online, and pauses when none is.
-        for (const playback of all()) if (playback.synced && !playback.outputs.some(output => newest(output.deviceId))) {
-          const { playbackId } = stateOf(playback).player;
-          if (playbackId) playback.synced.send({ type: "pause", playbackId, paused: true });
-          playback.session.wait(`${nameOf(deviceOf(socket))} is offline.`);
-        }
+        for (const playback of all()) if (playback.outputs.some(output => output.deviceId === deviceOf(socket))) offline(playback, deviceOf(socket));
         broadcast();
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
       },
