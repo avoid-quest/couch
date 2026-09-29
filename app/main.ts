@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
-import updater from "electron-updater";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { createWriteStream, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -11,10 +10,12 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { DisplayAction, DisplayState } from "../src/shared/display";
 import type { AppMode } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
+import { checkForUpdates } from "./update";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
-const { identifier } = JSON.parse(readFileSync(join(app.getAppPath(), "package.json"), "utf8")) as { identifier: string };
+// Couch Preview packages name their own window and tray icon (scripts/package.ts).
+const { identifier, icon: appIcon = "packaging/icons/icon.png" } = JSON.parse(readFileSync(join(app.getAppPath(), "package.json"), "utf8")) as { identifier: string; icon?: string };
 const base = process.platform === "linux" ? process.env.XDG_DATA_HOME?.startsWith("/") ? process.env.XDG_DATA_HOME : join(homedir(), ".local/share") : app.getPath("appData");
 const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(base, identifier) : ".data"));
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -257,7 +258,7 @@ function createWindow() {
     ...tv ? { fullscreen: true, frame: false } : { width: 1280, height: 800, ...savedBounds() },
     ...macChrome ? { titleBarStyle: "hidden", trafficLightPosition: controlsPosition() } : {},
     minWidth: 800, minHeight: 600, show: false, title: "Couch", backgroundColor: "#000000",
-    ...process.platform === "linux" ? { icon: join(icons, "icon.png") } : {},
+    ...process.platform === "linux" ? { icon: join(app.getAppPath(), appIcon) } : {},
     webPreferences: {
       preload: join(import.meta.dirname, "preload.cjs"),
       autoplayPolicy: "no-user-gesture-required",
@@ -381,7 +382,7 @@ else {
     if (!tv) {
       const icon = process.platform === "darwin"
         ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), { scaleFactor: 2 })
-        : nativeImage.createFromPath(join(icons, "icon.png")).resize({ width: 32, height: 32 });
+        : nativeImage.createFromPath(join(app.getAppPath(), appIcon)).resize({ width: 32, height: 32 });
       icon.setTemplateImage(process.platform === "darwin");
       tray = new Tray(icon);
       tray.setToolTip("Couch");
@@ -411,6 +412,6 @@ else {
       callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
     });
     createWindow();
-    if (app.isPackaged && !tv) updater.autoUpdater.checkForUpdatesAndNotify().catch(error => console.error(`Update check failed: ${error.message}`));
+    if (app.isPackaged && !tv) checkForUpdates().catch(error => console.error(`Update check failed: ${error.message}`));
   });
 }

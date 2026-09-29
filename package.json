@@ -2,7 +2,7 @@
   "name": "couch",
   "productName": "Couch",
   "identifier": "quest.avoid.couch",
-  "version": "0.2.0-preview.19",
+  "version": "0.3.0",
   "description": "Shared media player for your TV, controlled from any phone",
   "homepage": "https://couch.avoid.quest",
   "author": {
@@ -25,7 +25,7 @@
     "client:dev": "bun --bun vite",
     "build": "bun scripts/build.ts",
     "app": "bun run build && bun scripts/app.ts",
-    "package": "bun run build && electron-builder --publish never",
+    "package": "bun run build && bun scripts/package.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts && tsc --noEmit -p app",
     "web:dev": "bun run --cwd apps/web dev",
     "web:build": "bun run --cwd apps/web build",
@@ -82,6 +82,7 @@
   ],
   "build": {
     "appId": "quest.avoid.couch",
+    "artifactName": "Couch-${version}-${arch}.${ext}",
     "directories": {
       "output": ".artifacts/app",
       "buildResources": "packaging/icons"
@@ -93,10 +94,14 @@
       "build/core.mjs",
       "dist/**",
       "packaging/icons/icon.png",
+      "packaging/icons/preview/icon.png",
       "packaging/icons/tray-template.png"
     ],
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "packaging/icons/icon.icns",
       "category": "public.app-category.entertainment",
       "minimumSystemVersion": "14.0"
@@ -116,6 +121,7 @@
       "synopsis": "Shared media player for your TV"
     },
     "deb": {
+      "artifactName": "${name}_${version}_${arch}.${ext}",
       "depends": [
         "libgtk-3-0",
         "libnotify4",
@@ -137,7 +143,7 @@
     "publish": {
       "provider": "github",
       "owner": "avoid-quest",
-      "repo": "couch"
+      "repo": "couch-releases"
     }
   }
 }

@@ -87,9 +87,10 @@ bun run app
 - `bun run build && bun run start` runs Core alone under Node and serves the
   built UI on port 4100.
 - `bun run package --mac dmg` (or `--win nsis`, `--linux AppImage deb`) builds
-  installers into `.artifacts/app` with electron-builder. The
-  [Package](../.github/workflows/package.yml) workflow builds all three.
-  electron-updater checks the repository's GitHub releases on start; nothing is
-  published.
+  installers into `.artifacts/app` with electron-builder. A `-preview.N`
+  version in `package.json` builds Couch Preview. The
+  [Package](../.github/workflows/package.yml) workflow builds all three, and
+  [releases](ci.md#releases) publish them. The installed app checks for updates
+  on start.
 
 See [checks](ci.md) for typecheck and build.
