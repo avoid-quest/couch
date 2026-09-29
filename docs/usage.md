@@ -66,6 +66,25 @@ Core removes the recovery variable from its environment before starting media
 helpers. The server stores a hash, and never sends the secret in a snapshot or
 QR code.
 
+## Install
+
+Download Couch, or Couch Preview, from
+[couch-releases](https://github.com/avoid-quest/couch-releases/releases): the
+dmg on a Mac, the exe on Windows, the AppImage or deb on Linux. After that it
+updates itself.
+
+Couch isn't signed by Apple, so the first time macOS says it "is damaged" or
+"can't be opened". Move it to Applications, then run this once in Terminal
+(`Couch Preview.app` for the preview):
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Couch.app
+```
+
+This removes the quarantine flag the browser put on the download. Updates the
+app installs itself never carry it, so this is needed only once. On Windows,
+SmartScreen shows **More info > Run anyway** the first time.
+
 ## Run from source
 
 Install Bun 1.4.x and Node 24 or later. Core finds or downloads its media
