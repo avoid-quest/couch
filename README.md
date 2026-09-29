@@ -41,7 +41,8 @@ bun run package   # Installers with electron-builder (.artifacts/app)
 ```
 
 See [usage and development](docs/usage.md) for prerequisites, ports and data
-directories, and [checks](docs/ci.md) for CI.
+directories, and [checks and releases](docs/ci.md) for which CI workflow does
+what, how to start it, and how to publish a preview or production release.
 
 | Directory | Responsibility |
 | --- | --- |
@@ -64,5 +65,6 @@ publishes it to Cloudflare Workers at `couch.avoid.quest`. The download page
 reads the hosted release feeds, with `apps/web/src/releases.json` as fallback.
 
 - [Usage and development](docs/usage.md)
+- [Checks and releases](docs/ci.md)
 - [Current architecture](docs/architecture.md)
 - [Design system](docs/design.md)

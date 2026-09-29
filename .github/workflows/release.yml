@@ -1,0 +1,102 @@
+name: Release
+
+# Publishes Couch on the public avoid-quest/couch-releases, where the installed
+# app's electron-updater looks. Dispatched by hand only: channel preview
+# publishes main as vX.Y.Z-preview.N, channel production promotes the latest
+# preview's commit to vX.Y.Z. The tag also goes on this repo, for history.
+# See docs/ci.md.
+"on":
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel
+        type: choice
+        default: preview
+        options: [preview, production]
+
+# One release at a time. A run waiting behind it is replaced by a newer one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    outputs:
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      name: ${{ steps.resolve.outputs.name }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      previous_tag: ${{ steps.resolve.outputs.previous_tag }}
+      skip: ${{ steps.resolve.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - id: resolve
+        shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel || 'preview' }}
+        run: |
+          if [[ $GITHUB_REF != refs/heads/main ]]; then
+            echo "::error::Releases are cut from main, not $GITHUB_REF"
+            exit 1
+          fi
+          bun scripts/release.ts "$CHANNEL" | tee -a "$GITHUB_OUTPUT"
+
+  package:
+    needs: preflight
+    if: needs.preflight.outputs.skip != 'true'
+    uses: ./.github/workflows/package.yml
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      ref: ${{ needs.preflight.outputs.ref }}
+
+  release:
+    needs: [preflight, package]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      CHANNEL: ${{ needs.preflight.outputs.channel }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      NAME: ${{ needs.preflight.outputs.name }}
+      REF: ${{ needs.preflight.outputs.ref }}
+      PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: couch-*
+          merge-multiple: true
+          path: assets
+      # GitHub's notes from this repo's merged pull requests since the previous
+      # release on the same channel.
+      - name: Write the notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" -f target_commitish="$REF" \
+            ${PREVIOUS_TAG:+-f previous_tag_name="$PREVIOUS_TAG"} \
+            --jq .body > notes.md
+          cat notes.md
+      - name: Publish on avoid-quest/couch-releases
+        env:
+          GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
+        run: |
+          gh release create "$TAG" assets/* -R avoid-quest/couch-releases \
+            --title "$NAME" --notes-file notes.md \
+            $([[ $CHANNEL == production ]] && echo --latest || echo --prerelease)
+      - name: Tag this repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$REF"
