@@ -10,7 +10,7 @@ import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
 import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality } from "../shared/providers";
-import { createSession } from "./session";
+import { createSession, type MediaSource } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
 import { parseCommand, parsePlayer } from "./validation";
@@ -25,6 +25,7 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
 import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
+import { createPassThrough } from "./pass-through";
 import { createForLater } from "./for-later";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createDevices, settingField } from "./devices";
@@ -68,7 +69,8 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
   return url.origin;
 };
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; authorize: () => void; window: number; count: number };
+// origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -147,17 +149,9 @@ export async function createHub(options: HubOptions) {
     systemAudio,
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
-    resolveSource: (entry, playbackId, signal, fromStart) => {
-      if (entry.source.startsWith("web:")) return streamingCommunityOrigin(entry.source.slice(4)).then(origin => resolveWebMedia(entry.source.slice(4), signal, entry.quality, origin, renderer?.data.vp9 ?? true));
-      if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal);
-      if (entry.source.startsWith("radio:")) {
-        const station = radio.getPlayable(entry.source.slice(6));
-        radioProgramme?.load(playbackId, entry.source, station.source);
-        return { ...station, radio: true };
-      }
-      // Local files, the library and Jellyfin were removed; their saved entries stay readable but unplayable.
-      if (!/^https?:/.test(entry.source)) throw new Error("This source is no longer supported. Remove it from the queue.");
-      return { source: entry.source };
+    resolveSource: async (entry, playbackId, signal) => {
+      const { headers = {}, ...media } = await resolveEntry(entry, playbackId, signal);
+      return passThrough.prepare(playbackId, media, headers, renderer?.data.origin ? { origin: renderer.data.origin, userAgent: renderer.data.userAgent } : null, signal);
     },
     observe: player => subtitles.observe(player),
     render: actor => {
@@ -166,6 +160,19 @@ export async function createHub(options: HubOptions) {
     },
     stopped: playbackId => subtitles.stopped(playbackId),
   });
+  const passThrough = createPassThrough(() => session.state.player.playbackId);
+  async function resolveEntry(entry: QueueEntry, playbackId: string, signal: AbortSignal): Promise<MediaSource & { headers?: Record<string, string> }> {
+    if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), renderer?.data.vp9 ?? true);
+    if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal);
+    if (entry.source.startsWith("radio:")) {
+      const station = radio.getPlayable(entry.source.slice(6));
+      radioProgramme?.load(playbackId, entry.source, station.source);
+      return { ...station, radio: true };
+    }
+    // Local files, the library and Jellyfin were removed; their saved entries stay readable but unplayable.
+    if (!/^https?:/.test(entry.source)) throw new Error("This source is no longer supported. Remove it from the queue.");
+    return { source: entry.source };
+  }
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlists"), queue: () => session.state.queue,
     upNext: () => {
@@ -455,7 +462,7 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
   });
   const serveOptions = {
@@ -467,6 +474,7 @@ export async function createHub(options: HubOptions) {
       const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
       if (route) return route(request);
       if (request.method === "GET" && /^\/api\/subtitles\/[\w-]+\.vtt$/.test(pathname)) return subtitles.serve(pathname);
+      if (request.method === "GET" && pathname.startsWith("/api/relay/")) return allowed(request, false) ? passThrough.serve(request) : new Response(null, { status: 403 });
       const page = ["GET", "HEAD"].includes(request.method) && !pathname.startsWith("/api/") ? await frontend(pathname) : null;
       return page ?? api(request, upgrade);
     },

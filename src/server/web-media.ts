@@ -3,7 +3,8 @@ import type { VideoQuality } from "../shared/protocol";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
-export type WebMediaSource = { source: string; audioSource?: string; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+// headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
+export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -104,6 +105,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     const media = parseMedia(info);
+    try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
     // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
     // its own headers, opens the master playlist instead.
@@ -121,7 +123,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       media.expiry = { at, recover: async cancellation => {
         if (Date.now() < at) return null;
         cancellation.throwIfAborted();
-        const response = await fetch(media.source, { headers: { ...headers(info.http_headers), Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
+        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;

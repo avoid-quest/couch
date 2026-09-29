@@ -281,7 +281,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     void Promise.resolve().then(() => { if (!current()) return null; return recover(controller.signal); }).then(fresh => {
       if (!current()) return;
       if (!fresh) throw new Error(failure.error || "This stream failed without a confirmed expiry. Play the track to try again.");
-      const { metadata: _metadata, expiry: _expiry, ...media } = fresh;
+      const { metadata: _metadata, expiry: _expiry, headers: _headers, ...media } = fresh;
       webRecovery = null;
       webRetried = true;
       pendingPause = recovery.paused;

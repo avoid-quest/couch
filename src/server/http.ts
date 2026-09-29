@@ -1,9 +1,12 @@
 import { createServer, STATUS_CODES, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream } from "node:stream/web";
 import { WebSocketServer, type WebSocket } from "ws";
 
 // node:http and ws behind the fetch-style handler Core's routes are written
-// against: each request becomes a Request, each Response is written back.
+// against: each request becomes a Request, each Response is streamed back.
 export type Socket<T> = WebSocket & { data: T };
 export type Upgrade<T> = (data: T) => boolean;
 export type Listener = { port: number; stop: () => Promise<void> };
@@ -50,7 +53,9 @@ export async function serve<T>({ hostname, port, maxRequestBodySize, fetch, webs
       const body = message.method === "GET" || message.method === "HEAD" ? undefined : await readBody(message, maxRequestBodySize);
       if (body === null) { response.writeHead(413, { Connection: "close" }).end(); return; }
       const result = await fetch(toRequest(message, body, aborted.signal), () => false) ?? new Response(null, { status: 404 });
-      response.writeHead(result.status, [...result.headers].flat()).end(Buffer.from(await result.arrayBuffer()));
+      response.writeHead(result.status, [...result.headers].flat());
+      if (!result.body || message.method === "HEAD") { await result.body?.cancel(); response.end(); }
+      else await pipeline(Readable.fromWeb(result.body as ReadableStream), response);
     } catch {
       if (!response.headersSent) response.writeHead(500).end();
       else response.destroy();
