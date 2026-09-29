@@ -169,8 +169,8 @@ function lastOutcome(): UpdateOutcome | null {
   const fields = Object.fromEntries([...text.matchAll(/^(\w+)=(.*)$/gm)].map(([, key, value]) => [key, value]));
   const at = Date.parse(fields.at ?? "");
   if (!outcomes.has(fields.outcome) || Number.isNaN(at)) return null;
-  const version = /^\d+\.\d+\.\d+(-preview\.\d+)?$/.test(fields.version ?? "") ? fields.version : null;
-  return { version, outcome: fields.outcome as UpdateOutcome["outcome"], at, error: fields.error?.trim() || null };
+  const release = (value = "") => /^\d+\.\d+\.\d+(-preview\.\d+)?$/.test(value) ? value : null;
+  return { version: release(fields.version), outcome: fields.outcome as UpdateOutcome["outcome"], at, error: fields.error?.trim() || null, failed: release(fields.failed) };
 }
 
 // Downloads the zip into a temporary directory, checks it against the update

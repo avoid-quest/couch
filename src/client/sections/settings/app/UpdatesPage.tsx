@@ -48,8 +48,12 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
   const install = () => credentials ? send("install", { version: state!.available }) : couchApp!.installUpdate();
   const description = !state ? null
     : state.status === "downloading" ? `Couch ${state.available}${state.progress === null ? "" : `, ${state.progress}%`}`
-    : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : tv ? "installs automatically overnight when nothing is playing." : "installs when you quit Couch."}`
-    : state.checkedAt ? `Checked ${new Date(state.checkedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : null;
+    : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : !tv ? "installs when you quit Couch."
+      // The timer isn't there, or skips a release that didn't start.
+      : state.automatic?.installed === false ? "is available."
+      : state.automatic?.last?.failed === state.available ? "didn't start last time, so it only installs when you restart to update."
+      : "installs automatically overnight when nothing is playing."}`
+    : state.checkedAt ? `Checked ${when(state.checkedAt)}` : null;
   const last = state && automatic(state);
   const channelId = credentials ? "remote-update-channel" : "update-channel";
 

@@ -26,6 +26,8 @@ export type UpdateOutcome = {
   outcome: "installed" | "installed-unverified" | "rolled-back" | "failed" | "skipped" | "up-to-date" | "waiting";
   at: number;
   error: string | null;
+  // The release that last failed to start, which the timer skips.
+  failed: string | null;
 };
 export type CouchApp = {
   tvPresentation: boolean;
