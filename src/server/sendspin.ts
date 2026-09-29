@@ -8,13 +8,16 @@ import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
 // wire format, and fan-out writes the same chunks with the same timestamps to every speaker. Each
-// player applies its own level and delay.
-export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & { headers?: Record<string, string> };
+// player applies its own level and delay. Muted pictures follow the same clock (ticket 11).
+// live: the clock is the source's own timestamps, so a picture that joins the stream anywhere
+// lines up with the sound (the RaiPlay stall of #643).
+export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & { headers?: Record<string, string>; live?: boolean };
 export type Member = { deviceId: string; level: number };
 type Wire = "opus" | "pcm";
 // offset and duration are microseconds of audio from where this FFmpeg started.
 type Chunk = { offset: number; duration: number; data: Buffer };
-type Run = { child: ChildProcess; start: number; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
+// start: the position of the first sample, which a live run learns from FFmpeg (the source's timestamp).
+type Run = { child: ChildProcess; start: number; live: boolean; anchored: boolean; speed: number; wires: Set<Wire>; queues: Record<Wire, Chunk[]>; pipes: Partial<Record<Wire, Readable>>; base?: number; released: number; exit?: number | null; timer: ReturnType<typeof setInterval> };
 
 const leadUs = 1_000_000; // Chunks go out this far ahead of their play time.
 const aheadUs = 8_000_000; // Decoded audio that may wait in Core before FFmpeg is held back.
@@ -64,7 +67,7 @@ function oggPackets(onPacket: (packet: Buffer) => void) {
 
 // An HLS master's audio-only rendition when it has one (a separate audio playlist, or an
 // audio-only variant like Twitch's), else its smallest variant. Other sources are read as they are.
-async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
+export async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
   const response = await fetch(url, { headers, signal }).catch(() => null);
   if (!response?.ok || !/mpegurl/i.test(response.headers.get("content-type") ?? "") && !/\.m3u8$/.test(new URL(response.url || url).pathname)) {
     void response?.body?.cancel().catch(() => {});
@@ -105,6 +108,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
   // One Playback's speakers: its Sendspin group. It is the Playback's player while its outputs span Devices.
   function group(id: string, observe: (state: PlayerState) => void) {
     let members: Member[] = [];
+    let screens: string[] = [];
     let load: SyncedLoad | undefined;
     let input: Promise<string> | undefined;
     let run: Run | undefined;
@@ -117,6 +121,17 @@ export function createSendspin(options: { identity: string; name: string; admit:
       reportedAt = Date.now();
       const volume = members[0]?.level ?? 100;
       observe(state = { ...state, volume, ...run?.base !== undefined && state.status !== "ended" ? { position: position() } : {} });
+      for (const screen of screens) sessions.get(screen)?.sendMetadata({ progress: timeline() });
+    };
+    // Where the sound is on the Sendspin clock (Sendspin metadata progress): pictures follow it.
+    // None until a live source has given its first timestamp.
+    const timeline = () => !load || (run ? !run.anchored : load.live && !load.radio && !state.position) ? null
+      : { track_progress: Math.round(position() * 1000), track_duration: Math.round((state.duration ?? 0) * 1000), playback_speed: state.status === "playing" ? Math.round((run?.speed ?? 1) * 1000) : 0 };
+    // A screen learns its group, so it never follows another Playback's clock.
+    const watch = (clientId: string) => {
+      const session = sessions.get(clientId);
+      session?.sendGroupUpdate(run?.base !== undefined ? PlaybackStateType.PLAYING : PlaybackStateType.STOPPED, id, options.name);
+      session?.sendMetadata({ progress: timeline() });
     };
     const position = () => {
       if (!run || run.base === undefined) return state.position;
@@ -152,30 +167,43 @@ export function createSendspin(options: { identity: string; name: string; admit:
         if (attempt !== generation) return;
         const wires = new Set<Wire>(members.flatMap(member => { const session = listening(member.deviceId), wire = session && wireOf(session); return wire ? [wire] : []; }));
         if (!wires.size) wires.add("opus");
-        const speed = state.speed ?? 1, start = state.position;
-        const seek = start > 0 && !current.radio && (state.duration !== null || !!current.startPosition);
-        const shape = ["-map", "0:a:0", "-vn", "-sn", "-dn", ...speed === 1 ? [] : ["-af", tempo(speed)], "-ar", "48000", "-ac", "2"];
+        const speed = state.speed ?? 1, start = state.position, live = !!current.live && !current.radio;
+        const seek = start > 0 && !current.radio && !live && (state.duration !== null || !!current.startPosition);
+        // A live run keeps the source's timestamps and prints its first one (ashowinfo, on one wire only).
+        const shape = (first: boolean) => {
+          const filters = [...live && first ? ["ashowinfo"] : [], ...speed === 1 ? [] : [tempo(speed)]];
+          return ["-map", "0:a:0", "-vn", "-sn", "-dn", ...filters.length ? ["-af", filters.join(",")] : [], "-ar", "48000", "-ac", "2"];
+        };
         // Network protocols only, and a 10 s timeout on every read (#644 FFmpeg safety).
         const child = spawn(ffmpeg, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto", "-rw_timeout", "10000000",
           ...Object.keys(headers).length ? ["-headers", Object.entries(headers).map(([name, value]) => `${name}: ${value}\r\n`).join("")] : [],
-          ...seek ? ["-ss", String(start)] : [], "-i", source,
-          ...wires.has("opus") ? [...shape, "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
-          ...wires.has("pcm") ? [...shape, "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"] });
-        const next: Run = { child, start, speed, wires, queues: { opus: [], pcm: [] }, pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
+          ...live ? ["-copyts"] : [], ...seek ? ["-ss", String(start)] : [], "-i", source,
+          ...wires.has("opus") ? [...shape(true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
+          ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"] });
+        const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
         run = next;
         state = { ...state, status: "loading", buffering: false, error: null };
         report();
-        let log = "";
+        let log = "", partial = "";
         child.stderr!.setEncoding("utf8").on("data", (text: string) => {
-          log = (log + text).slice(-4000);
-          const duration = /Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(text);
-          if (duration && state.duration === null) state = { ...state, duration: Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]), seekable: !current.radio };
+          const lines = (partial + text).split("\n");
+          partial = lines.pop()!;
+          for (const line of lines) {
+            if (line.includes("Parsed_ashowinfo")) {
+              const first = !next.anchored && /\bn:\s*0\s.*?pts_time:(-?[\d.]+)/.exec(line);
+              if (first) { next.start = Number(first[1]); next.anchored = true; }
+              continue;
+            }
+            log = (log + line + "\n").slice(-4000);
+            const duration = /Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(line);
+            if (duration && state.duration === null) state = { ...state, duration: Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]), seekable: !current.radio };
+          }
         });
         child.on("error", () => { if (run === next) fail("Couch couldn't start FFmpeg."); });
         child.on("close", code => {
           if (run !== next) return;
           next.exit = code;
-          if (code !== 0) fail(`The audio couldn't play here (${log.trim().split("\n").at(-1)?.slice(0, 200) || `FFmpeg exited with ${code}`}).`);
+          if (code !== 0) fail(`The audio couldn't play here (${(log + partial).trim().split("\n").at(-1)?.slice(0, 200) || `FFmpeg exited with ${code}`}).`);
         });
         const queue = (wire: Wire, pipe: Readable, chunk: Chunk) => {
           const list = next.queues[wire];
@@ -214,15 +242,17 @@ export function createSendspin(options: { identity: string; name: string; admit:
       const now = serverNowUs();
       const first = Math.min(...Object.values(current.queues).map(list => list[0]?.offset ?? Infinity));
       if (current.base === undefined) {
-        if (first === Infinity) return;
+        if (first === Infinity || !current.anchored) return;
         // Chunk timestamps are shared by the group; each player adds its own delay.
         const delay = Math.max(0, ...members.map(member => delays.get(member.deviceId) ?? 0)) * 1000;
         current.base = now + leadUs + delay - first;
         for (const member of members) begin(member.deviceId);
         if (run !== current) return;
       } else if (first !== Infinity && current.base + first < now + leadUs / 2) {
-        // The source fell behind real time: later chunks play later instead of arriving too late.
+        // The source fell behind real time: later chunks play later instead of arriving too late,
+        // and the pictures learn the new timeline at once.
         current.base = now + leadUs - first;
+        report();
       }
       for (const wire of current.wires) {
         const list = current.queues[wire];
@@ -253,6 +283,12 @@ export function createSendspin(options: { identity: string; name: string; admit:
     };
 
     const synced = {
+      // The screens: Devices whose picture follows this group's clock.
+      screens(next: string[]) {
+        const added = next.filter(clientId => !screens.includes(clientId));
+        screens = next;
+        for (const clientId of added) watch(clientId);
+      },
       // The speakers: Devices whose sound is in this Playback, each with its level.
       members(next: Member[]) {
         const before = members;
@@ -270,6 +306,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
         if (state.playbackId) report();
       },
       joined(clientId: string) {
+        if (screens.includes(clientId)) watch(clientId);
         const member = members.find(item => item.deviceId === clientId);
         if (!member) return;
         sessions.get(clientId)!.sendServerCommand({ player: { command: PlayerCommand.VOLUME, volume: member.level } });

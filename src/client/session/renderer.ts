@@ -1,11 +1,13 @@
 import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
-import type { MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
+import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
+import { soundClock } from "./sendspin";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
 // itself. URLs play in <video>; YouTube's separate audio in an <audio> that follows the
 // video; HLS natively where the engine can (Safari, Android) and through hls.js elsewhere;
-// raw MPEG-TS through mpegts.js (#644 ticket 1).
+// raw MPEG-TS through mpegts.js (#644 ticket 1). A picture of a synced Playback plays muted and
+// follows the Sendspin clock instead of Core's transport commands (ticket 11).
 const video = document.createElement("video");
 const audio = document.createElement("audio");
 video.playsInline = true;
@@ -25,6 +27,10 @@ let volume = 1;
 let audioDelay = 0;
 let subtitleDelay = 0;
 let blocked = false;
+let following: Follow | null = null;
+let unfollow: (() => void) | null = null;
+// Where the source's timestamps start on this video's timeline (hls.js), to map a live clock.
+let ptsOffset: number | undefined;
 let report: ((state: PlayerState) => void) | undefined;
 let reportedAt = 0;
 const blockedListeners = new Set<(blocked: boolean) => void>();
@@ -97,6 +103,8 @@ const fail = (message: string) => {
 };
 for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "waiting", "seeked", "ended", "ratechange", "resize"]) {
   video.addEventListener(event, () => {
+    // Following the clock nudges the rate many times a second; Core doesn't need to hear each one.
+    if (event === "ratechange" && following) return;
     if (event === "waiting" || event === "playing") stalled = event === "waiting";
     if (event !== "durationchange" && event !== "resize") follow(event !== "ratechange");
     send();
@@ -112,9 +120,30 @@ audio.addEventListener("error", () => fail(audio.error?.message || "This media c
 video.textTracks.addEventListener("change", send);
 
 const apply = () => {
-  video.muted = split() || blocked;
+  video.muted = split() || blocked || !!following;
+  audio.muted = !!following;
   video.volume = audio.volume = volume;
 };
+// The sound's clock on this video's timeline: a live clock is the source's timestamps (#643's
+// RaiPlay stall), which hls.js maps to its own timeline.
+const clock = () => {
+  const sample = following && soundClock(following.group);
+  if (!sample || !following!.pts) return sample;
+  return ptsOffset === undefined ? null : { ...sample, position: sample.position - ptsOffset };
+};
+const setFollow = (follow: Follow | null) => {
+  unfollow?.();
+  unfollow = null;
+  following = follow;
+  apply();
+  if (!follow) { video.playbackRate = video.defaultPlaybackRate; return; }
+  const current = playbackId;
+  void import("./picture-clock").then(({ followClock }) => {
+    if (following === follow && playbackId === current) unfollow = followClock(video, clock);
+  });
+};
+// Only hls.js tells where the source's timestamps start; engines without MSE keep native HLS.
+const mapsTimestamps = (command: NonNullable<typeof loading>) => !!command.follow?.pts && !command.mpegts && ("MediaSource" in window || "ManagedMediaSource" in window);
 // An HLS EVENT playlist starts at its first segment; hls.js would start it at the live edge.
 const begin = (command: NonNullable<typeof loading>) => command.startPosition || (command.eventStart ? 0 : undefined);
 // Chromium without native HLS rejects the playlist; hls.js plays it (and not at all on engines without MSE).
@@ -123,6 +152,7 @@ const playlist = async (command: NonNullable<typeof loading>) => {
   if (command !== loading || !Hls.isSupported()) return fail(video.error?.message || "This media couldn't play here.");
   hls = new Hls({ startPosition: begin(command) ?? -1 });
   hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) fail(`The stream failed (${data.details}).`); });
+  hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
   for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, send);
   // Tracks follow the profile's language preferences.
   const { audioLanguage = "", subtitleLanguage = "", subtitles = "auto" } = command.preferences ?? {};
@@ -137,7 +167,7 @@ const playlist = async (command: NonNullable<typeof loading>) => {
   hls.subtitleTrack = -1;
   hls.loadSource(command.source);
   hls.attachMedia(video);
-  if (!command.paused) void start(video);
+  if (!command.paused && !following) void start(video);
 };
 const transportStream = async (command: NonNullable<typeof loading>) => {
   const { default: Mpegts } = await import("mpegts.js");
@@ -147,13 +177,15 @@ const transportStream = async (command: NonNullable<typeof loading>) => {
   mpegts.on(Mpegts.Events.ERROR, (_type: string, detail: string) => fail(`The channel failed (${detail}).`));
   mpegts.attachMediaElement(video);
   mpegts.load();
-  if (!command.paused) void start(video);
+  if (!command.paused && !following) void start(video);
 };
 const reset = () => {
   // With hls.js attached, Chromium keeps drawing a cue whose track is removed while showing.
   for (const track of Array.from(video.textTracks)) track.mode = "disabled";
   playbackId = null;
   loading = null;
+  setFollow(null);
+  ptsOffset = undefined;
   hls?.destroy();
   hls = null;
   mpegts?.destroy();
@@ -192,8 +224,10 @@ export function play(command: PlaybackCommand) {
       reset();
       playbackId = command.playbackId;
       loading = command;
+      if (command.follow) setFollow(command.follow);
       apply();
       if (command.mpegts) { void transportStream(command); break; }
+      if (mapsTimestamps(command)) { void playlist(command); break; }
       for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
         if (!source) continue;
         // The app allows googlevideo in CORS mode (app/main.ts); browsers fetch it without CORS.
@@ -209,7 +243,16 @@ export function play(command: PlaybackCommand) {
       // Attaching hls.js or mpegts.js resets the rate to the default one, so set both.
       video.defaultPlaybackRate = video.playbackRate = command.preferences?.speed ?? 1;
       audioDelay = command.preferences?.audioDelay ?? 0;
-      if (!command.paused) void start(video);
+      if (!command.paused && !following) void start(video);
+      break;
+    case "follow":
+      setFollow(command.follow);
+      // A live clock needs hls.js's timestamps; a picture playing natively switches to it.
+      if (loading && !hls && !mpegts && mapsTimestamps({ ...loading, follow: command.follow ?? undefined })) {
+        for (const element of [video, audio]) { element.removeAttribute("src"); element.load(); }
+        ready = false;
+        void playlist(loading);
+      }
       break;
     case "addSubtitle": addTrack(command.source, command.title, command.language, true); break;
     case "pause": if (command.paused) video.pause(); else void start(video); break;

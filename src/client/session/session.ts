@@ -174,7 +174,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         } else if (message.type === "player") {
           play(message.command);
         } else if (message.type === "sendspin") {
-          listen(message.listen, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
+          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {

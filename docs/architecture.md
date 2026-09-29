@@ -76,9 +76,17 @@ audio, an HLS master's audio playlist or audio-only variant) with network protoc
 only and a 10 s read timeout, decodes once and encodes once per wire format: Opus in
 60 ms packets, and 100 ms PCM chunks for players that don't take Opus (Firefox). Every
 speaker on a wire gets the same chunk with the same timestamp; each applies its own
-level and delay (Sendspin static delay). The picture Device's tab keeps playing the
-picture, silent. Pause, seek and speed restart FFmpeg where the Playback is; when the
-outputs are back on one Device, it plays directly again.
+level and delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
+the Playback is; when the outputs are back on one Device, it plays directly again.
+
+Every Device showing the picture of a synced Playback fetches the video itself,
+resolved for its own engine and origin, and plays it muted. It connects to Sendspin
+only for the clock: Core sends the group's position as Sendspin metadata progress,
+and the picture follows it with `timingsrc` (`src/client/session/picture-clock.ts`),
+which nudges the playback rate for small drift and seeks for large drift. For a live
+source the position is the source's own timestamp: FFmpeg keeps it (`-copyts`) and
+reports the first one, and hls.js maps it to its own timeline (`INIT_PTS_FOUND`), so a
+picture that joins the stream anywhere lines up with the sound.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core
