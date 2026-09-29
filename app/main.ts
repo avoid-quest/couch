@@ -10,7 +10,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { DisplayAction, DisplayState } from "../src/shared/display";
 import type { AppMode } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
-import { checkForUpdates } from "./update";
+import { startUpdates } from "./update";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -348,6 +348,13 @@ handle("connection", async event => {
   const ready = await startCore();
   return { origin: localOrigin, token: core!.token, pairingCode: ready.pairingCode, urls };
 });
+// Set when the app is ready, in the same turn that creates the window.
+let updates: ReturnType<typeof startUpdates>;
+handle("updates", () => updates.state());
+handle("check-for-updates", () => updates.check());
+handle("set-update-channel", (_event, channel) => updates.setChannel(channel));
+handle("install-update", () => updates.install());
+handle("show-logs", () => shell.showItemInFolder(logPath));
 handle("interface-size", (_event, size) => {
   if (size === undefined) return interfaceSize();
   if (!interfaceSizes.includes(size as number)) throw new Error("Choose a supported interface size.");
@@ -412,6 +419,11 @@ else {
       callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
     });
     createWindow();
-    if (app.isPackaged && !tv) checkForUpdates().catch(error => console.error(`Update check failed: ${error.message}`));
+    updates = startUpdates({
+      channelPath: join(dataDir, "update-channel"),
+      tv,
+      idle: async () => !(await interruption().catch(() => null))?.includes("playback"),
+      onState: state => window?.webContents.send("couch:updates", state),
+    });
   });
 }

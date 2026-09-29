@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { deviceName } from "@/copy";
 import { cn } from "@/lib/utils";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
+import { couchApp } from "@/session/native-context";
 import { useSessionGate } from "@/session/session-context";
 
 type Props = { active: SettingsPage };
@@ -18,12 +19,15 @@ export function SettingsNav({ active }: Props) {
     && (id !== "display" || !!details?.tvPresentation)
     // Sound outputs and Bluetooth exist only where Couch controls the system's sound (Linux).
     && (id !== "sound" && id !== "bluetooth" || !!details?.systemAudio)
+    // Updates are this app's own, so only the Couch app's window shows them.
+    && (id !== "updates" || !!couchApp?.updates)
     && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
   const groups = ([
     ["Preferences", ["playback", "home", "appearance"]],
     ["Media", ["sources"]],
     [deviceName(state?.installationName ?? details?.name), ["general", "sound", "bluetooth", "display", "tv-appearance"]],
     ["Connections", ["connection"]],
+    ["This app", ["updates"]],
   ] as const).map(([label, pages]) => ({ label, pages: pages.filter(visible) })).filter(group => group.pages.length);
   const current = active.startsWith("source-") ? "sources" : active;
 

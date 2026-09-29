@@ -28,6 +28,7 @@ import { Route as SettingsSoundRouteImport } from './routes/settings/sound'
 import { Route as SettingsSourcesRouteImport } from './routes/settings/sources'
 import { Route as SettingsTvRouteImport } from './routes/settings/tv'
 import { Route as SettingsTvAppearanceRouteImport } from './routes/settings/tv-appearance'
+import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
 import { Route as SettingsSourcesIndexRouteImport } from './routes/settings/sources/index'
 import { Route as SettingsSourcesLiveTvRouteImport } from './routes/settings/sources/live-tv'
 import { Route as SettingsSourcesRadioRouteImport } from './routes/settings/sources/radio'
@@ -128,6 +129,11 @@ const SettingsTvAppearanceRoute = SettingsTvAppearanceRouteImport.update({
   path: '/tv-appearance',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsUpdatesRoute = SettingsUpdatesRouteImport.update({
+  id: '/updates',
+  path: '/updates',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsSourcesIndexRoute = SettingsSourcesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/settings/sources': typeof SettingsSourcesRouteWithChildren
   '/settings/tv': typeof SettingsTvRoute
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
+  '/settings/updates': typeof SettingsUpdatesRoute
   '/settings/': typeof SettingsIndexRoute
   '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   '/settings/sound': typeof SettingsSoundRoute
   '/settings/tv': typeof SettingsTvRoute
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
+  '/settings/updates': typeof SettingsUpdatesRoute
   '/settings': typeof SettingsIndexRoute
   '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   '/settings/sources': typeof SettingsSourcesRouteWithChildren
   '/settings/tv': typeof SettingsTvRoute
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
+  '/settings/updates': typeof SettingsUpdatesRoute
   '/settings/': typeof SettingsIndexRoute
   '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
@@ -245,6 +254,7 @@ export interface FileRouteTypes {
     | '/settings/sources'
     | '/settings/tv'
     | '/settings/tv-appearance'
+    | '/settings/updates'
     | '/settings/'
     | '/settings/sources/live-tv'
     | '/settings/sources/radio'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/settings/sound'
     | '/settings/tv'
     | '/settings/tv-appearance'
+    | '/settings/updates'
     | '/settings'
     | '/settings/sources/live-tv'
     | '/settings/sources/radio'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/settings/sources'
     | '/settings/tv'
     | '/settings/tv-appearance'
+    | '/settings/updates'
     | '/settings/'
     | '/settings/sources/live-tv'
     | '/settings/sources/radio'
@@ -446,6 +458,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsTvAppearanceRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/updates': {
+      id: '/settings/updates'
+      path: '/updates'
+      fullPath: '/settings/updates'
+      preLoaderRoute: typeof SettingsUpdatesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/sources/': {
       id: '/settings/sources/'
       path: '/'
@@ -507,6 +526,7 @@ interface SettingsRouteChildren {
   SettingsSourcesRoute: typeof SettingsSourcesRouteWithChildren
   SettingsTvRoute: typeof SettingsTvRoute
   SettingsTvAppearanceRoute: typeof SettingsTvAppearanceRoute
+  SettingsUpdatesRoute: typeof SettingsUpdatesRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
@@ -521,6 +541,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsSourcesRoute: SettingsSourcesRouteWithChildren,
   SettingsTvRoute: SettingsTvRoute,
   SettingsTvAppearanceRoute: SettingsTvAppearanceRoute,
+  SettingsUpdatesRoute: SettingsUpdatesRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 

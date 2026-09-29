@@ -110,6 +110,6 @@ bun run app
   version in `package.json` builds Couch Preview. The
   [Package](../.github/workflows/package.yml) workflow builds all three, and
   [releases](ci.md#releases) publish them. The installed app checks for updates
-  on start.
+  at start and every 4 hours; **Settings > Updates** shows them.
 
 See [checks](ci.md) for typecheck and build.
