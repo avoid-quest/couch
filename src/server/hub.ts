@@ -1,9 +1,9 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
 import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
-import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
-import type { HTMLBundle, ServerWebSocket } from "bun";
+import { requestPeer, serve, type Listener, type Socket, type Upgrade } from "./http";
+import { createFrontend } from "./frontend";
 import { randomInt } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
@@ -58,9 +58,6 @@ type HubOptions = {
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   native?: boolean;
   nativeSound?: (action: NativeSoundAction) => Promise<unknown>;
-  frontend?: HTMLBundle | Response;
-  assets?: Record<string, Response>;
-  development?: boolean;
   advertisedUrls?: string[];
 };
 
@@ -78,7 +75,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 type SocketData = { trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
-export function createHub(options: HubOptions) {
+export async function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
@@ -88,7 +85,7 @@ export function createHub(options: HubOptions) {
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
-  let lan: ReturnType<typeof createLanListener<Bun.Server<SocketData>>> | undefined;
+  let lan: ReturnType<typeof createLanListener<Listener>> | undefined;
   let lanError: string | null = null;
   const addresses = new Set(["localhost", "127.0.0.1", "::1"]);
   const lanAddresses = new Set<string>();
@@ -103,7 +100,9 @@ export function createHub(options: HubOptions) {
   let closed = false;
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
-  const sockets = new Set<ServerWebSocket<SocketData>>();
+  const sockets = new Set<Socket<SocketData>>();
+  // A client that stops reading is dropped rather than buffered without limit.
+  const send = (socket: Socket<SocketData>, message: string) => socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message);
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => null);
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
@@ -115,12 +114,9 @@ export function createHub(options: HubOptions) {
   const session = createSession(store, options.sendPlayer, (state, clock) => {
     radioProgramme?.observe(state);
     sound?.interrupt();
-    if (!closed) {
-      const listeners = [server, ...lan?.servers ?? []];
-      if (listeners.some(listener => listener.subscriberCount("session-clock"))) {
-        const message = JSON.stringify(clock ? { type: "clock", ...clock } : { type: "state", state } satisfies ServerMessage);
-        for (const listener of listeners) listener.publish("session-clock", message);
-      }
+    if (!closed && sockets.size) {
+      const message = JSON.stringify(clock ? { type: "clock", ...clock } : { type: "state", state } satisfies ServerMessage);
+      for (const socket of sockets) send(socket, message);
     }
   }, {
     systemAudio,
@@ -193,7 +189,7 @@ export function createHub(options: HubOptions) {
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
-      socket.unsubscribe("session-clock");
+      sockets.delete(socket);
       socket.close(4001, "This remote's access was revoked. Pair again.");
     }
   } });
@@ -214,9 +210,8 @@ export function createHub(options: HubOptions) {
   let pairWindow = Date.now();
   let pairAttempts = 0;
 
-  const peer = (request: Request): string => server.requestIP(request)?.address ?? lan?.servers.map(listener => listener.requestIP(request)?.address).find(Boolean) ?? "";
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
-    if (options.managedLan && !loopbackPeer(peer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, peer(request)))) return false;
+    if (options.managedLan && !loopbackPeer(requestPeer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, requestPeer(request)))) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
@@ -318,9 +313,9 @@ export function createHub(options: HubOptions) {
     [/^\/api\/bluetooth(?:\/|$)/, ["bluetooth", "sound"]],
     [/^\/api\/display(?:\/|$)/, ["display"]],
   ];
-  type Fetch = (request: Request, server: Bun.Server<SocketData>) => Promise<Response | undefined>;
-  const publishWrites = (handle: Fetch): Fetch => async (request, server) => {
-    const response = await handle(request, server);
+  type Fetch = (request: Request, upgrade: Upgrade<SocketData>) => Promise<Response | undefined>;
+  const publishWrites = (handle: Fetch): Fetch => async (request, upgrade) => {
+    const response = await handle(request, upgrade);
     if (response?.ok && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       const path = new URL(request.url).pathname;
       const domains = writes.find(([pattern]) => pattern.test(path))?.[1];
@@ -329,142 +324,138 @@ export function createHub(options: HubOptions) {
     return response;
   };
 
-  const serveOptions: Bun.Serve.Options<SocketData> = {
+  const frontend = createFrontend();
+  const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
+    "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopClientProtocol, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+    "POST /api/pair": async request => {
+      if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
+      const respond = (body: unknown, status = 200) => cors(request, json(body, status));
+      if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+      if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
+      if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
+      if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
+      let body: unknown;
+      try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
+      if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
+      if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
+      try {
+        const token = store.pair("name" in body ? body.name : undefined);
+        session.invalidate("controllers");
+        return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
+      } catch (error) {
+        return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this remote") }, error instanceof ControllerError ? error.status : 500);
+      }
+    },
+  };
+  const api = publishWrites(async (request, upgrade) => {
+    const url = new URL(request.url);
+    const websocket = url.pathname === "/api/ws";
+    if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
+    if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
+    const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+    const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(requestPeer(request)));
+    if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
+    const identity = (): ControllerIdentity | null => {
+      if (closed) return null;
+      if (trusted) return { controller: null, authority: "host", claimAvailable: controllers.claimAvailable() };
+      if (!store.remoteControlEnabled()) return null;
+      const controller = store.controllerForToken(token);
+      return controller ? { controller, authority: controller.role, claimAvailable: controllers.claimAvailable() } : null;
+    };
+    const caller = identity();
+    if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
+    if (url.pathname === "/api/settings/sharing") {
+      if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      try {
+        const enabled = await settingField(request, "enabled");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remotes.");
+        await lan?.setEnabled(enabled);
+        store.saveRemoteControlEnabled(enabled);
+        if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
+          sockets.delete(socket);
+          socket.close(4003, "Remotes are off. Your pairing is remembered.");
+        }
+        session.invalidate("controllers");
+        return cors(request, json({ enabled }));
+      } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
+    }
+    if (url.pathname === "/api/settings/origin-domain") {
+      if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
+      if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const value = await settingField(request, "domain");
+        if (typeof value !== "string") throw new ControllerError("Enter a network address.");
+        const domain = value.trim();
+        const alias = domain ? originDomainUrl(domain, port) : "";
+        if (alias) try { await lan?.validateAlias(alias); }
+        catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
+        if (identity()?.authority === "controller" || !identity()) throw new ControllerError(NO_LONGER_ADMIN, 403);
+        const previous = store.originDomain();
+        const previousAlias = previous ? originDomainUrl(previous, port, !previous.startsWith("http://")) : "";
+        store.saveOriginDomain(alias);
+        // Keep only the address used by this administrator until Couch restarts.
+        // Its browser can finish the save and continue using its paired session.
+        const usingPreviousAlias = previousAlias && (request.headers.get("host")?.toLowerCase() === new URL(previousAlias).host || request.headers.get("origin") === previousAlias);
+        if (usingPreviousAlias && previousAlias !== alias) retainedOrigins.add(previousAlias);
+        await lan?.refresh().catch(() => {});
+        return cors(request, json({ domain: alias }));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
+    }
+    if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
+    if (url.pathname === "/api/controllers/me" && request.method === "GET") return cors(request, await controllers.handle(request, identity));
+    {
+      const playedBy = caller.controller ? { deviceId: caller.controller.id, name: caller.controller.name } : playbackActor(null);
+      const currentIdentity = identity;
+      const authorize = () => {
+        if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
+      };
+      if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
+        ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
+        : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: VERSION_MISMATCH }, 409));
+      if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
+      if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/bluetooth(?:\/|$)/.test(url.pathname)) return cors(request, await bluetoothSettings(request, currentIdentity, options.nativeBluetooth));
+      if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
+      if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
+      if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await controllers.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
+      if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
+      return upgrade({ trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+    }
+  });
+  const serveOptions = {
     hostname,
     port: options.port ?? 3800,
-    development: options.development ? { hmr: true, console: true } : false,
     maxRequestBodySize: subtitleSizeLimit,
-    routes: {
-      ...options.assets,
-      ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
-      "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopClientProtocol, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/pair": {
-        POST: async request => {
-          if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
-          const respond = (body: unknown, status = 200) => cors(request, json(body, status));
-          if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
-          if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
-          if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
-          if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
-          let body: unknown;
-          try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
-          if (!store.remoteControlEnabled()) return respond({ error: REMOTES_OFF(store.installationName()) }, 503);
-          if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
-          try {
-            const token = store.pair("name" in body ? body.name : undefined);
-            session.invalidate("controllers");
-            return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
-          } catch (error) {
-            return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this remote") }, error instanceof ControllerError ? error.status : 500);
-          }
-        },
-      },
+    fetch: async (request: Request, upgrade: Upgrade<SocketData>) => {
+      const { pathname } = new URL(request.url);
+      const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
+      if (route) return route(request);
+      const page = ["GET", "HEAD"].includes(request.method) && !pathname.startsWith("/api/") ? await frontend(pathname) : null;
+      return page ?? api(request, upgrade);
     },
-    fetch: publishWrites(async (request, server) => {
-      const url = new URL(request.url);
-      const websocket = url.pathname === "/api/ws";
-      if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
-      if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
-      const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-      const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
-      if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: REMOTES_OFF(store.installationName()) }, 503));
-      const identity = (): ControllerIdentity | null => {
-        if (closed) return null;
-        if (trusted) return { controller: null, authority: "host", claimAvailable: controllers.claimAvailable() };
-        if (!store.remoteControlEnabled()) return null;
-        const controller = store.controllerForToken(token);
-        return controller ? { controller, authority: controller.role, claimAvailable: controllers.claimAvailable() } : null;
-      };
-      const caller = identity();
-      if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
-      if (url.pathname === "/api/settings/sharing") {
-        if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
-        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
-        if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
-        try {
-          const enabled = await settingField(request, "enabled");
-          if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remotes.");
-          await lan?.setEnabled(enabled);
-          store.saveRemoteControlEnabled(enabled);
-          if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
-            socket.unsubscribe("session-clock");
-            socket.close(4003, "Remotes are off. Your pairing is remembered.");
-          }
-          session.invalidate("controllers");
-          return cors(request, json({ enabled }));
-        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
-      }
-      if (url.pathname === "/api/settings/origin-domain") {
-        if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
-        if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
-        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
-        try {
-          const value = await settingField(request, "domain");
-          if (typeof value !== "string") throw new ControllerError("Enter a network address.");
-          const domain = value.trim();
-          const alias = domain ? originDomainUrl(domain, port) : "";
-          if (alias) try { await lan?.validateAlias(alias); }
-          catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
-          if (identity()?.authority === "controller" || !identity()) throw new ControllerError(NO_LONGER_ADMIN, 403);
-          const previous = store.originDomain();
-          const previousAlias = previous ? originDomainUrl(previous, port, !previous.startsWith("http://")) : "";
-          store.saveOriginDomain(alias);
-          // Keep only the address used by this administrator until Couch restarts.
-          // Its browser can finish the save and continue using its paired session.
-          const usingPreviousAlias = previousAlias && (request.headers.get("host")?.toLowerCase() === new URL(previousAlias).host || request.headers.get("origin") === previousAlias);
-          if (usingPreviousAlias && previousAlias !== alias) retainedOrigins.add(previousAlias);
-          await lan?.refresh().catch(() => {});
-          return cors(request, json({ domain: alias }));
-        } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
-      }
-      if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
-      if (url.pathname === "/api/controllers/me" && request.method === "GET") return cors(request, await controllers.handle(request, identity));
-      {
-        const playedBy = caller.controller ? { deviceId: caller.controller.id, name: caller.controller.name } : playbackActor(null);
-        const currentIdentity = identity;
-        const authorize = () => {
-          if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
-        };
-        if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
-          ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
-          : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: VERSION_MISMATCH }, 409));
-        if (caller.controller) store.touchController(caller.controller.id);
-        if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
-        if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/bluetooth(?:\/|$)/.test(url.pathname)) return cors(request, await bluetoothSettings(request, currentIdentity, options.nativeBluetooth));
-        if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
-        if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
-        if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await controllers.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
-        if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-        return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
-      }
-    }),
     websocket: {
-      data: {} as SocketData,
-      maxPayloadLength: 8192,
-      backpressureLimit: 4 * 1024 * 1024,
-      closeOnBackpressureLimit: true,
-      idleTimeout: 60,
-      sendPings: true,
-      open(socket) {
+      maxPayload: 8192,
+      open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         sockets.add(socket);
-        socket.subscribe("session-clock");
-        if (socket.data.trusted) socket.subscribe("navigation");
-        socket.send(JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
+        send(socket, JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
       },
-      close(socket) { sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
-      async message(socket, message) {
+      close(socket: Socket<SocketData>) { sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
+      async message(socket: Socket<SocketData>, message: string | null) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         if (socket.data.controllerId) store.touchController(socket.data.controllerId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
-        if (typeof message !== "string") { socket.close(1003, "JSON text messages required."); return; }
+        if (message === null) { socket.close(1003, "JSON text messages required."); return; }
         let command;
         try { command = parseCommand(message); } catch {
           socket.close(1008, "Invalid command or unsupported media source.");
@@ -481,10 +472,10 @@ export function createHub(options: HubOptions) {
             await enqueued;
             if (closed) return;
           } else if (action.type === "navigate") {
-            const listeners = [server, ...lan?.servers ?? []];
-            if (!listeners.some(listener => listener.subscriberCount("navigation"))) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+            const hosts = [...sockets].filter(socket => socket.data.trusted);
+            if (!hosts.length) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             const navigation = JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage);
-            for (const listener of listeners) listener.publish("navigation", navigation);
+            for (const host of hosts) send(host, navigation);
           } else {
             if (action.type === "remove") inspections.get(action.entryId)?.abort();
             if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
@@ -506,13 +497,13 @@ export function createHub(options: HubOptions) {
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };
         }
-        socket.send(JSON.stringify(result));
+        send(socket, JSON.stringify(result));
       },
     },
   };
-  const server: Bun.Server<SocketData> = Bun.serve(serveOptions);
+  const server = await serve(serveOptions);
 
-  const port = server.port!;
+  const port = server.port;
   const origin = urlFor(hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname, port);
   const allowedHosts = new Set(options.managedLan ? [new URL(origin).host] : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
   const allowedOrigins = new Set(options.managedLan ? [origin] : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
@@ -527,7 +518,7 @@ export function createHub(options: HubOptions) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
-      start: (network, port) => Bun.serve({ ...serveOptions, hostname: network.address, port }),
+      start: (network, port) => serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {
         lanError = error;
         const current = store.originDomain();
@@ -562,7 +553,7 @@ export function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([lan?.close(), server.stop()]);
     store.close();
     if (progressError) throw progressError;
     const failed = results.find(result => result.status === "rejected");

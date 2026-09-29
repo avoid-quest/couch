@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database } from "../sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
@@ -71,12 +71,12 @@ export async function loadProviderList(provider: ProviderId, url: string, signal
 
 export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = () => defaultStreamingCommunityOrigin, browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => string; browse?: Record<ProviderId, Adapter> }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
-  const db = new Database(databasePath, { create: true, strict: true });
-  db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
-  db.run("CREATE TABLE IF NOT EXISTS provider_favorites (id TEXT PRIMARY KEY, item TEXT NOT NULL)");
+  const db = new Database(databasePath);
+  db.exec("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
+  db.exec("CREATE TABLE IF NOT EXISTS provider_favorites (id TEXT PRIMARY KEY, item TEXT NOT NULL)");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(provider_favorites)").all().some(column => column.name === "position")) {
     db.transaction(() => {
-      db.run("ALTER TABLE provider_favorites ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      db.exec("ALTER TABLE provider_favorites ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
       // Existing installs keep their newest-first reading order as the start order.
       const rows = db.query<{ id: string }, []>("SELECT id FROM provider_favorites ORDER BY rowid DESC").all();
       for (const [index, row] of rows.entries()) db.query("UPDATE provider_favorites SET position = ? WHERE id = ?").run(index + 1, row.id);

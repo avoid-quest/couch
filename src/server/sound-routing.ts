@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { SavedSoundProfile, SoundInventory, SoundRouteState } from "../shared/sound";
 import { ControllerError } from "./controllers";
 import { environment, pulseRouting } from "./sound-pulse";
@@ -20,28 +23,13 @@ type Options = {
 // processes ten times a second around the clock. PipeWire-Pulse understands
 // the PulseAudio event subscription protocol.
 function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => void } {
-  try {
-    const child = Bun.spawn(["/usr/bin/pactl", "subscribe"], { env: environment(), stdout: "pipe", stderr: "ignore" });
-    void (async () => {
-      const reader = child.stdout.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          for (let newline = buffer.indexOf("\n"); newline >= 0; newline = buffer.indexOf("\n")) {
-            const line = buffer.slice(0, newline);
-            buffer = buffer.slice(newline + 1);
-            if (/on (sink|source|card|server) #/.test(line)) onEvent();
-          }
-        }
-      } catch { /* onExit below covers the audio service restarting. */ }
-      onExit();
-    })();
-    return { stop: () => child.kill() };
-  } catch { onExit(); return { stop: () => {} }; }
+  const child = spawn("/usr/bin/pactl", ["subscribe"], { env: environment(), stdio: ["ignore", "pipe", "ignore"] });
+  let exited = false;
+  const exit = () => { if (!exited) { exited = true; onExit(); } };
+  child.once("error", exit);
+  // PipeWire-Pulse restarting ends the stream; onExit resubscribes.
+  createInterface({ input: child.stdout }).on("line", line => { if (/on (sink|source|card|server) #/.test(line)) onEvent(); }).once("close", exit);
+  return { stop: () => child.kill() };
 }
 
 export function createSoundRouting(options: Options) {
@@ -103,7 +91,7 @@ export function createSoundRouting(options: Options) {
     finally { busy = false; }
   };
   const mutate = async (work: () => Promise<void>) => {
-    while (busy && !closed) await Bun.sleep(10);
+    while (busy && !closed) await sleep(10);
     if (closed) throw new ControllerError("The audio session is closing.", 503);
     busy = true;
     try { await work(); await refresh(); }
@@ -121,7 +109,7 @@ export function createSoundRouting(options: Options) {
         const deadline = Date.now() + 2_000;
         while (await backend.route() !== name) {
           if (closed || Date.now() >= deadline) throw new ControllerError("The audio server did not confirm the requested playback route.", 503);
-          await Bun.sleep(50);
+          await sleep(50);
         }
       }
       authorize();
@@ -187,7 +175,7 @@ export function createSoundRouting(options: Options) {
           let updated = await backend.inventory();
           while (!updated.profiles?.some(profile => profile.card === requested.card && profile.id === requested.id && profile.active) || !updated.outputs.some(output => output.card === requested.card && output.availability !== "unavailable")) {
             if (closed || Date.now() >= deadline) throw new ControllerError("The selected profile did not produce an available output.", 503);
-            await Bun.sleep(50); updated = await backend.inventory();
+            await sleep(50); updated = await backend.inventory();
           }
           authorize();
           const sink = updated.outputs.find(output => output.card === requested.card && output.availability !== "unavailable")!;

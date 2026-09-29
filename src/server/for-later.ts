@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database } from "./sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ForLaterReference } from "../shared/for-later";
@@ -22,13 +22,13 @@ const publicItem = (entry: QueueEntry) => { const { source, automaticTitle: _aut
 
 export function createForLater({ databasePath, onChange, lookup, prepare, reservePlay, enqueue, webMetadata }: Options) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
-  const db = new Database(databasePath, { create: true, strict: true });
-  db.run("PRAGMA journal_mode = WAL");
-  db.run("CREATE TABLE IF NOT EXISTS for_later (id TEXT PRIMARY KEY, source TEXT NOT NULL UNIQUE, entry TEXT NOT NULL, savedAt INTEGER NOT NULL)");
-  db.run("CREATE TABLE IF NOT EXISTS for_later_undo (token TEXT PRIMARY KEY, item TEXT NOT NULL, expiresAt INTEGER NOT NULL)");
+  const db = new Database(databasePath);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("CREATE TABLE IF NOT EXISTS for_later (id TEXT PRIMARY KEY, source TEXT NOT NULL UNIQUE, entry TEXT NOT NULL, savedAt INTEGER NOT NULL)");
+  db.exec("CREATE TABLE IF NOT EXISTS for_later_undo (token TEXT PRIMARY KEY, item TEXT NOT NULL, expiresAt INTEGER NOT NULL)");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(for_later)").all().some(column => column.name === "position")) {
     db.transaction(() => {
-      db.run("ALTER TABLE for_later ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      db.exec("ALTER TABLE for_later ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
       // Existing installs keep their newest-first reading order as the start order.
       const rows = db.query<{ id: string }, []>("SELECT id FROM for_later ORDER BY savedAt DESC, id").all();
       for (const [index, row] of rows.entries()) db.query("UPDATE for_later SET position = ? WHERE id = ?").run(index + 1, row.id);

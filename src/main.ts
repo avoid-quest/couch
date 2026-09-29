@@ -3,7 +3,6 @@ import { createNativeDisplay } from "./server/display-native";
 import { createNativeSound } from "./server/sound-native";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import frontend, { assets } from "./frontend";
 import { createHub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
@@ -30,7 +29,7 @@ const nativeSound = createNativeSound(native && ["darwin", "win32"].includes(pro
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
-const hub = createHub({
+const hub = await createHub({
   managedLan: native,
   onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
   remoteControlEnabled: !native,
@@ -43,9 +42,6 @@ const hub = createHub({
   databasePath: join(dataDir, "couch.sqlite"),
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
-  frontend, assets,
-  // Tauri and browser development use Vite HMR; Bun serves remote pages.
-  development: false,
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
   sendPlayer(command) {
     if (native) send({ type: "playback", command });
@@ -82,7 +78,7 @@ if (native) {
   // The sidecar's only playback authority is its owning Rust process.
   let pending = "";
   try {
-    for await (const text of Bun.stdin.stream().pipeThrough(new TextDecoderStream())) {
+    for await (const text of process.stdin.setEncoding("utf8")) {
       pending += text;
       if (pending.length > 64 * 1024) throw new Error("Native message exceeded its limit");
       let end: number;

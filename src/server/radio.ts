@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database } from "./sqlite";
 import { Resolver } from "node:dns/promises";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -78,18 +78,18 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
   onChange?: () => void;
 }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
-  const db = new Database(databasePath, { create: true, strict: true });
-  db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
-  db.run("CREATE TABLE IF NOT EXISTS radio_favorites (id TEXT PRIMARY KEY, station TEXT NOT NULL)");
+  const db = new Database(databasePath);
+  db.exec("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
+  db.exec("CREATE TABLE IF NOT EXISTS radio_favorites (id TEXT PRIMARY KEY, station TEXT NOT NULL)");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(radio_favorites)").all().some(column => column.name === "position")) {
     db.transaction(() => {
-      db.run("ALTER TABLE radio_favorites ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      db.exec("ALTER TABLE radio_favorites ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
       // Existing installs keep their alphabetical reading order as the start order.
       const rows = db.query<{ id: string }, []>("SELECT id FROM radio_favorites ORDER BY json_extract(station, '$.name') COLLATE NOCASE").all();
       for (const [index, row] of rows.entries()) db.query("UPDATE radio_favorites SET position = ? WHERE id = ?").run(index + 1, row.id);
     })();
   }
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS radio_playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, updated_at INTEGER, error TEXT);
     CREATE TABLE IF NOT EXISTS radio_playlist_stations (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, position INTEGER NOT NULL, station TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS radio_playlist_order ON radio_playlist_stations(source_id, position);

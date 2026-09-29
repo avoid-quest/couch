@@ -15,7 +15,7 @@ const buildInfo = (() => {
   try {
     return readFileSync("src-tauri/build-info.json", "utf8");
   } catch {
-    return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, target: null, packaged: false });
+    return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, packaged: false });
   }
 })();
 export default defineConfig(({ command }) => ({
@@ -61,11 +61,11 @@ export default defineConfig(({ command }) => ({
     }),
   ],
   define: {
-    "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version: tauri.version, revision: null, dataFormat: 1, target: null, packaged: false }) : buildInfo),
+    "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version: tauri.version, revision: null, dataFormat: 1, packaged: false }) : buildInfo),
     "COUCH_DEV_ORIGIN": JSON.stringify(command === "serve" ? new URL(tauri.build.devUrl).origin : null),
   },
-  // Browser clients are same-origin with couch-server; the dev proxy supplies
-  // that origin so `vite` (and browser-driven loops) pair with `bun src/main.ts`.
+  // Browser clients are same-origin with Core; the dev proxy supplies that
+  // origin so `vite` (and browser-driven loops) pair with `bun run server:dev`.
   server: {
     port: 1420,
     strictPort: true,

@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "build": {
-    "additionalWatchFolders": ["../src/server", "../src/shared", "../src/main.ts", "../src/frontend.ts"]
-  },
-  "bundle": { "externalBin": [] }
+    "additionalWatchFolders": ["../build"]
+  }
 }

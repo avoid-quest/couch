@@ -1,6 +1,7 @@
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
-import { Database } from "bun:sqlite";
+import { Database } from "./sqlite";
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
@@ -25,9 +26,9 @@ function profileName(value: unknown) {
 
 export function openStore(path: string, remoteControlEnabled = false) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const db = new Database(path, { create: true, strict: true });
-  db.run("PRAGMA journal_mode = WAL");
-  db.run(`
+  const db = new Database(path);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec(`
     CREATE TABLE IF NOT EXISTS session (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       queue TEXT NOT NULL,
@@ -59,27 +60,27 @@ export function openStore(path: string, remoteControlEnabled = false) {
   `);
 
   if (!db.query<{ name: string }, []>("PRAGMA table_info(watching_profiles)").all().some(column => column.name === "confirmedName")) {
-    db.run("ALTER TABLE watching_profiles ADD COLUMN confirmedName INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE watching_profiles ADD COLUMN confirmedName INTEGER NOT NULL DEFAULT 0");
   }
   if (!db.query<{ name: string }, []>("PRAGMA table_info(viewing_progress)").all().some(column => column.name === "playedBy")) {
-    db.run("ALTER TABLE viewing_progress ADD COLUMN playedBy TEXT");
+    db.exec("ALTER TABLE viewing_progress ADD COLUMN playedBy TEXT");
   }
   const profileView = ({ id, name, confirmedName }: WatchingProfile & { confirmedName: number }): WatchingProfile => ({ id, name, ...(confirmedName ? { personName: name } : {}) });
 
   let legacyPairedInstallation = false;
   if (!db.query<{ name: string }, []>("PRAGMA table_info(devices)").all().some(column => column.name === "id")) {
     db.transaction(() => {
-      db.run(`CREATE TABLE devices_named (
+      db.exec(`CREATE TABLE devices_named (
         token_hash TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
         role TEXT NOT NULL CHECK (role IN ('controller', 'administrator')), createdAt INTEGER, lastSeenAt INTEGER
       )`);
       const devices = db.query<{ token_hash: string }, []>("SELECT token_hash FROM devices ORDER BY rowid").all();
       legacyPairedInstallation = devices.length > 0;
       for (const [index, device] of devices.entries()) db.query("INSERT INTO devices_named VALUES (?, ?, ?, 'controller', NULL, NULL)").run(device.token_hash, crypto.randomUUID(), `Remote ${index + 1}`);
-      db.run("DROP TABLE devices; ALTER TABLE devices_named RENAME TO devices;");
+      db.exec("DROP TABLE devices; ALTER TABLE devices_named RENAME TO devices;");
     }).immediate();
   }
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS controller_claims (
       code_hash TEXT PRIMARY KEY, recovery INTEGER NOT NULL CHECK (recovery IN (0, 1)),
       expiresAt INTEGER NOT NULL, consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
@@ -99,7 +100,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
 
   const stored = db.query<{ queue: string; volume: number }, []>("SELECT queue, volume FROM session WHERE id = 1").get()!;
-  const hash = (token: string) => new Bun.CryptoHasher("sha256").update(token).digest("hex");
+  const hash = (token: string) => createHash("sha256").update(token).digest("hex");
   const controllerColumns = "id, name, role, createdAt, lastSeenAt";
   const controller = (id: string) => db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE id = ?`).get(id);
   const administratorExists = () => db.query("SELECT 1 FROM devices WHERE role = 'administrator' LIMIT 1").get() !== null;
@@ -108,7 +109,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     if (!device) throw new ControllerError("This remote is no longer paired.", 404);
     return device;
   };
-  db.run("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
+  db.exec("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
   db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
   const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
@@ -147,7 +148,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       }).immediate();
     },
     audioProfile() { const value = db.query<{ card: string | null; profile: string | null }, []>("SELECT card, profile FROM audio_output WHERE id = 1").get(); const bluetooth = db.query<{ address: string }, []>("SELECT address FROM bluetooth_output WHERE id = 1").get(); return value?.card && value.profile ? { card: value.card, profile: value.profile, ...(bluetooth ? { bluetoothAddress: bluetooth.address } : {}) } : null; },
-    saveAudioOutput(name: string, profile?: import("../shared/sound").SavedSoundProfile | null) { db.transaction(() => { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); if (profile?.bluetoothAddress) db.query("INSERT INTO bluetooth_output VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET address=excluded.address").run(profile.bluetoothAddress); else db.run("DELETE FROM bluetooth_output"); })(); },
+    saveAudioOutput(name: string, profile?: import("../shared/sound").SavedSoundProfile | null) { db.transaction(() => { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); if (profile?.bluetoothAddress) db.query("INSERT INTO bluetooth_output VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET address=excluded.address").run(profile.bluetoothAddress); else db.exec("DELETE FROM bluetooth_output"); })(); },
     tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
     saveTvInterfaceSize(size: InterfaceSize) {
       if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");
@@ -215,7 +216,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return db.transaction(() => {
         unchangedProfile(id, expectedName);
         if (id === "household") throw new ViewingError("The shared default watching profile cannot be removed.", 409);
-        if (activeProfile().id === id) db.run("UPDATE playback_continuation SET context = NULL WHERE id = 1");
+        if (activeProfile().id === id) db.exec("UPDATE playback_continuation SET context = NULL WHERE id = 1");
         db.query("UPDATE watching_state SET profileId = 'household' WHERE profileId = ?").run(id);
         db.query("DELETE FROM viewing_progress WHERE profileId = ?").run(id);
         db.query("DELETE FROM watching_preferences WHERE profileId = ?").run(id);
@@ -227,7 +228,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const profile = db.query<WatchingProfile & { confirmedName: number }, [string]>("SELECT id, name, confirmedName FROM watching_profiles WHERE id = ?").get(id);
       if (!profile) throw new ViewingError("Watching profile not found.", 404);
       db.transaction(() => {
-        db.run("UPDATE playback_continuation SET context = NULL WHERE id = 1");
+        db.exec("UPDATE playback_continuation SET context = NULL WHERE id = 1");
         db.query("UPDATE watching_state SET profileId = ? WHERE id = 1").run(id);
       }).immediate();
       return profileView(profile);
@@ -253,17 +254,15 @@ export function openStore(path: string, remoteControlEnabled = false) {
     sharedHistory(limit = 40, include: (mediaId: string) => boolean = () => true): HistoryItem[] {
       const items: HistoryItem[] = [];
       const maximum = Math.max(1, Math.min(100, Math.floor(limit) || 40));
-      const statement = db.prepare<ProgressRow, []>(`SELECT ${progressColumns} FROM (
+      const statement = db.query<ProgressRow, []>(`SELECT ${progressColumns} FROM (
         SELECT ${progressColumns}, ROW_NUMBER() OVER (PARTITION BY mediaId ORDER BY lastPlayedAt DESC, rowid DESC) AS latest
         FROM viewing_progress WHERE lastPlayedAt IS NOT NULL
       ) WHERE latest = 1 ORDER BY lastPlayedAt DESC, mediaId`);
-      try {
-        for (const row of statement.iterate()) {
-          if (include(row.mediaId)) items.push(progressView(row));
-          if (items.length === maximum) break;
-        }
-        return items;
-      } finally { statement.finalize(); }
+      for (const row of statement.iterate()) {
+        if (include(row.mediaId)) items.push(progressView(row));
+        if (items.length === maximum) break;
+      }
+      return items;
     },
     historySource(mediaId: string): QueueEntry | null {
       const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(mediaId);

@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database } from "./sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaylistLoadMode, PlaylistSource, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
@@ -111,14 +111,14 @@ function view(row: Row): SavedPlaylist {
 
 export function createPlaylists({ databasePath, onChange, queue, upNext, loadQueue, resolveSource }: Options) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
-  const db = new Database(databasePath, { create: true, strict: true });
-  db.run("PRAGMA journal_mode = WAL");
-  db.run(`CREATE TABLE IF NOT EXISTS saved_playlists (
+  const db = new Database(databasePath);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec(`CREATE TABLE IF NOT EXISTS saved_playlists (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL UNIQUE,
     revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL, entries TEXT NOT NULL, source TEXT
   )`);
-  db.run("CREATE TABLE IF NOT EXISTS saved_playlist_undo (token TEXT PRIMARY KEY, playlist TEXT NOT NULL, expiresAt INTEGER NOT NULL)");
-  if (!db.query<{ name: string }, []>("PRAGMA table_info(saved_playlists)").all().some(column => column.name === "source")) db.run("ALTER TABLE saved_playlists ADD COLUMN source TEXT");
+  db.exec("CREATE TABLE IF NOT EXISTS saved_playlist_undo (token TEXT PRIMARY KEY, playlist TEXT NOT NULL, expiresAt INTEGER NOT NULL)");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(saved_playlists)").all().some(column => column.name === "source")) db.exec("ALTER TABLE saved_playlists ADD COLUMN source TEXT");
   const get = (id: string) => {
     const row = db.query<Row, [string]>(`SELECT ${columns} FROM saved_playlists WHERE id = ?`).get(id);
     if (!row) throw new PlaylistError("Playlist not found.", 404);

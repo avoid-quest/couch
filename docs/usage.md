@@ -1,7 +1,7 @@
 # Couch usage and development
 
 Couch plays internet media on a TV or computer and lets every phone on the LAN
-control it. Tauri embeds libmpv; Bun owns the shared queue, catalogs and paired
+control it. Tauri embeds libmpv; Core (Node) owns the shared queue, catalogs and paired
 remotes. The rebuild into one Electron app is tracked in
 [#644](https://github.com/avoid-quest/couch/issues/644).
 
@@ -62,13 +62,13 @@ that deadline nor makes a consumed secret reusable. An expired or consumed secre
 requires a fresh value and another local restart. Recovery grants administration
 to the replacement browser; it does not revoke the old administrator.
 
-Bun removes the recovery variable from its environment before starting media
+Core removes the recovery variable from its environment before starting media
 helpers. The server stores a hash, and never sends the secret in a snapshot or
 QR code.
 
 ## Run from source
 
-Install Bun 1.4.x and Rust stable with [rustup](https://rustup.rs). On macOS
+Install Bun 1.4.x, Node 24 or later, and Rust stable with [rustup](https://rustup.rs). On macOS
 install Apple's command-line tools (`xcode-select --install`) and Homebrew `mpv`
 for libmpv. On Linux install the
 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/#linux) plus
@@ -93,7 +93,9 @@ bun run desktop
   ```
 
 - Edits under `src/client` hot reload. Edits under `src/server`, `src/shared` and
-  `src-tauri` restart the app.
-- `bun run dev` runs the browser-only loop: the coordinator from source and Vite.
+  `src-tauri` rebuild Core (`build/core.mjs`) and restart the app.
+- `bun run dev` runs the browser-only loop: Core under `node --watch` and Vite.
+- `bun run build && bun run start` runs Core alone under Node and serves the
+  built UI on port 4100.
 
 See [checks](ci.md) for typecheck and build.

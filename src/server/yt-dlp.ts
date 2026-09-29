@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import type { Readable } from "node:stream";
 import { buildInfo } from "./build-info";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 
@@ -24,23 +26,19 @@ function releaseSlot() {
   else running--;
 }
 
-async function readOutput(stream: ReadableStream<Uint8Array>, limit: number, kill: () => void): Promise<string> {
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
+async function readOutput(stream: Readable, limit: number, kill: () => void): Promise<string> {
+  const chunks: Buffer[] = [];
   let size = 0;
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) return Buffer.concat(chunks).toString();
-      size += value.length;
-      if (size > limit) {
-        kill();
-        await reader.cancel();
-        throw new Error("yt-dlp returned too much output. Update yt-dlp and try again.");
-      }
-      chunks.push(value);
+  for await (const chunk of stream) {
+    size += chunk.length;
+    if (size > limit) {
+      kill();
+      stream.destroy();
+      throw new Error("yt-dlp returned too much output. Update yt-dlp and try again.");
     }
-  } finally { reader.releaseLock(); }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString();
 }
 
 function extractionError(stderr: string): Error {
@@ -55,27 +53,27 @@ function extractionError(stderr: string): Error {
 async function extract(command: string, args: string[], signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
   const deno = process.env.COUCH_DENO;
-  let child;
+  const child = spawn(command, ["--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", ...(deno ? ["--js-runtimes", `deno:${deno}`] : []), ...args], {
+    stdio: ["ignore", "pipe", "pipe"], signal, killSignal: "SIGKILL",
+  });
+  const exited = new Promise<number | null>((resolve, reject) => {
+    // Aborting also reports an error; the signal check below explains that one.
+    child.once("error", () => signal.aborted ? resolve(null) : reject(new Error("yt-dlp won't start. Reinstall Couch.")));
+    child.once("close", resolve);
+  });
+  const kill = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); };
   try {
-    child = Bun.spawn({
-      cmd: [command, "--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", ...(deno ? ["--js-runtimes", `deno:${deno}`] : []), ...args],
-      stdin: "ignore", stdout: "pipe", stderr: "pipe", signal, killSignal: "SIGKILL",
-    });
-  } catch { throw new Error("yt-dlp won't start. Reinstall Couch."); }
-  const kill = () => { if (child.exitCode === null) child.kill("SIGKILL"); };
-  try {
-    const [stdout, stderr, exitCode] = await Promise.all([readOutput(child.stdout, 8 * 1024 * 1024, kill), readOutput(child.stderr, 64 * 1024, kill), child.exited]);
+    const [stdout, stderr, exitCode] = await Promise.all([readOutput(child.stdout, 8 * 1024 * 1024, kill), readOutput(child.stderr, 64 * 1024, kill), exited]);
     signal.throwIfAborted();
     if (exitCode !== 0) throw extractionError(stderr);
     return stdout;
-  } finally { kill(); await child.exited; }
+  } finally { kill(); await exited.catch(() => {}); }
 }
 
 export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable, plugin }: YtDlpOptions = {}): Promise<string> {
   signal?.throwIfAborted();
-  const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : Bun.which("yt-dlp"));
+  const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : "yt-dlp");
   if (!command) throw new Error("yt-dlp won't start. Reinstall Couch.");
-  if (command.includes("/") && !await Bun.file(command).exists()) throw new Error("yt-dlp won't start. Reinstall Couch.");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {

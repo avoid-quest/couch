@@ -178,25 +178,20 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
         uuid::Uuid::new_v4().simple(),
         uuid::Uuid::new_v4().simple()
     );
-    #[cfg(dev)]
-    let sidecar = app
+    // Core is one Node bundle built by scripts/core.ts. Only development starts
+    // it; Electron takes over Core and packaging (#644 ticket 3).
+    let mut sidecar = app
         .shell()
         .command(
-            std::env::var_os("COUCH_DEV_BUN")
-                .ok_or("Start development with bun run desktop so Couch can locate Bun.")?,
+            std::env::var_os("COUCH_NODE")
+                .ok_or("Start development with bun run desktop so Couch can locate Node.")?,
         )
-        .args(["run", "src/main.ts"])
+        .args(["build/core.mjs"])
         .current_dir(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .parent()
                 .unwrap(),
-        );
-    #[cfg(not(dev))]
-    let sidecar = app
-        .shell()
-        .sidecar("couch-server")
-        .map_err(|error| error.to_string())?;
-    let mut sidecar = sidecar
+        )
         .env("COUCH_NATIVE", "1")
         .env("COUCH_HOST_TOKEN", token)
         .env("COUCH_DATA_DIR", &host.data_dir)

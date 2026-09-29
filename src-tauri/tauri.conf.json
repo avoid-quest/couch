@@ -45,9 +45,6 @@
     "targets": [
       "deb"
     ],
-    "externalBin": [
-      "binaries/couch-server"
-    ],
     "linux": {
       "deb": {
         "depends": [

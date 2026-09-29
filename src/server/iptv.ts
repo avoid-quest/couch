@@ -1,5 +1,5 @@
 import type { PlaybackActor } from "../shared/protocol";
-import { Database } from "bun:sqlite";
+import { Database } from "./sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -21,9 +21,9 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   enqueue?: (channel: GuideChannel, playNow: boolean, authorize: () => void, playedBy?: PlaybackActor) => void;
 }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
-  const db = new Database(databasePath, { create: true, strict: true });
-  db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
-  db.run(`
+  const db = new Database(databasePath);
+  db.exec("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
+  db.exec(`
     CREATE TABLE IF NOT EXISTS iptv_sources (id TEXT PRIMARY KEY, name TEXT NOT NULL, playlist_url TEXT NOT NULL, guide_url TEXT NOT NULL, updated_at INTEGER, error TEXT);
     CREATE TABLE IF NOT EXISTS iptv_channels (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS iptv_channel_order ON iptv_channels(source_id, position);
@@ -88,7 +88,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         channels.forEach((item, index) => insertChannel.run(item.id, source.id, index, JSON.stringify(item)));
         const insertProgram = db.query("INSERT INTO iptv_programs VALUES (?, ?, ?, ?, ?, ?)");
         for (const item of programs) insertProgram.run(item.id, item.channelId, item.start, item.end, item.title, item.description);
-        db.run("DELETE FROM iptv_logos WHERE NOT EXISTS (SELECT 1 FROM iptv_channels c WHERE c.id = iptv_logos.id AND json_extract(c.data, '$.logoUrl') = iptv_logos.url)");
+        db.exec("DELETE FROM iptv_logos WHERE NOT EXISTS (SELECT 1 FROM iptv_channels c WHERE c.id = iptv_logos.id AND json_extract(c.data, '$.logoUrl') = iptv_logos.url)");
       })();
     } catch (error) {
       assertOpen();
@@ -128,7 +128,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         assertOpen();
         if (channel(item.id).logoUrl !== item.logoUrl) throw new GuideError("The channel changed.", 409);
         db.query("INSERT OR REPLACE INTO iptv_logos VALUES (?, ?, ?, ?, ?)").run(item.id, item.logoUrl!, type, data, Date.now());
-        while (db.query<{ size: number }, []>("SELECT COALESCE(SUM(length(data)), 0) AS size FROM iptv_logos").get()!.size > 16 * 1024 * 1024) db.run("DELETE FROM iptv_logos WHERE id = (SELECT id FROM iptv_logos ORDER BY updated_at LIMIT 1)");
+        while (db.query<{ size: number }, []>("SELECT COALESCE(SUM(length(data)), 0) AS size FROM iptv_logos").get()!.size > 16 * 1024 * 1024) db.exec("DELETE FROM iptv_logos WHERE id = (SELECT id FROM iptv_logos ORDER BY updated_at LIMIT 1)");
         return { type, data };
       })().finally(() => { logos.delete(item.id); });
       logos.set(item.id, pending);
