@@ -54,7 +54,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
+  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -79,9 +79,11 @@ function useShellValue() {
   useEffect(() => { setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
+  // The app window titles itself with what's playing (useNativeWindowTitle).
   useEffect(() => {
+    if (nativeHost) return;
     document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Now" || section === "Home" ? "Couch" : `${section} · Couch`;
-  }, [section, settingsSection]);
+  }, [nativeHost, section, settingsSection]);
 
   const at = location.pathname + location.searchStr;
   const changePage = (name: string) => {
@@ -294,14 +296,14 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const installationName = state?.installationName ?? details?.name;
   const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now";
 
-  if (setupPending) return <div className="app-shell flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
+  if (setupPending) return <div className="app-shell drag-region flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
   return (
     <div className={cn("app-shell flex flex-col bg-background", tvPresentation && "tv-shell")}>
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          <header className={cn("app-header sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0 max-[359px]:has-[.tv-remote-shortcut]:h-auto max-[359px]:has-[.tv-remote-shortcut]:flex-wrap max-[359px]:has-[.tv-remote-shortcut]:py-1.5", onPlayer && "hidden")}>
+          <header className={cn("app-header drag-region window-controls-inset sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0 max-[359px]:has-[.tv-remote-shortcut]:h-auto max-[359px]:has-[.tv-remote-shortcut]:flex-wrap max-[359px]:has-[.tv-remote-shortcut]:py-1.5", onPlayer && "hidden")}>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). */}
             {paired && <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
               {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-1.5 max-sm:text-sm">
@@ -321,7 +323,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             </div>
           </header>
           {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
-          {onPlayer && error && <div className="fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
+          {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
           {!paired ? <PairingPage /> : <>
             {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>

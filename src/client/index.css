@@ -106,6 +106,17 @@ html { view-transition-name: none; }
 /* The mini player grows into the player band and back. */
 ::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 
+/* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window
+   around their controls and leave 90pt for the window's buttons, which don't zoom.
+   Electron 44 inherits app-region, so children reset to initial and add no rectangles;
+   open dialogs sit above a header and take its clicks back. */
+[data-window-controls] .drag-region { app-region: drag; }
+@layer base { [data-window-controls] .drag-region > * { app-region: initial; } }
+[data-window-controls] :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
+[data-window-controls] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
+/* 90pt is where the first control's box starts, so the nav keeps its hit area inside it. */
+[data-window-controls] .window-controls-inset > [data-app-nav] { margin-left: 0; }
+
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }
 .app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
