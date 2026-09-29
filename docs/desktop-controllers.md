@@ -73,6 +73,10 @@ the pairing form appears. Get a current QR or code from the TV and pair again.
 An Administrator can remove an old device in **Settings > Connections > Devices**.
 Pairing again does not delete the TV's media or queue.
 
-For a configured HTTPS address, the computer must trust the deployment's
-certificate. Follow the administrator's [named-origin setup](lan-origin.md)
-and use its advertised address consistently.
+Couch serves the LAN over HTTPS with its own self-signed certificate, so a
+browser shows a certificate warning the first time; choose to continue to the
+address shown on the TV. Chrome then registers no service worker and offers no
+install for that address, because the certificate is not trusted. The Couch app
+in Client mode trusts the certificate it saw when that Couch was chosen and
+shows no warning. Use the advertised address consistently
+([named-origin setup](lan-origin.md)).

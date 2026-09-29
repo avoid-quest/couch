@@ -20,13 +20,16 @@ const relayHeaders = (relay: Relay) => ({ "user-agent": relay.target.userAgent, 
 
 // Asks as the Device would, with its Origin and User-Agent. hls.js and mpegts.js read with
 // CORS, so they also need the source to share it. A source Core can't fetch either stays
-// direct, so the Device reports the source's own error.
+// direct, so the Device reports the source's own error. An HTTPS page can't load http://
+// media at all (mixed content), so Core relays those whenever it can fetch them (#644 ticket 8).
 async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSignal) {
   const ask = (headers: Record<string, string>) => fetch(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) })
     .then(async response => { await response.body?.cancel().catch(() => {}); return response; }, () => null);
-  const response = await ask({ origin: relay.target.origin, "user-agent": relay.target.userAgent });
+  const mixed = relay.target.origin.startsWith("https:") && url.startsWith("http:");
+  const response = await ask(mixed ? relayHeaders(relay) : { origin: relay.target.origin, "user-agent": relay.target.userAgent });
   const playlist = playlistType(response?.headers.get("content-type") ?? null, url);
   if (!response) return { direct: true, playlist };
+  if (mixed) return { direct: !response.ok, playlist };
   if (!response.ok) return { direct: !(await ask(relayHeaders(relay)))?.ok, playlist };
   const shared = ["*", relay.target.origin].includes(response.headers.get("access-control-allow-origin") ?? "");
   return { direct: shared || !(cors || playlist), playlist };

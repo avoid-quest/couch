@@ -1,9 +1,12 @@
-import { createServer, STATUS_CODES, type IncomingMessage } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createServer, STATUS_CODES, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer as createSecureServer } from "node:https";
+import { createServer as createNetServer, type AddressInfo, type Socket as NetSocket } from "node:net";
+import type { TLSSocket } from "node:tls";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { WebSocketServer, type WebSocket } from "ws";
+import { loopbackPeer } from "./lan-listener";
 
 // node:http and ws behind the fetch-style handler Core's routes are written
 // against: each request becomes a Request, each Response is streamed back.
@@ -13,6 +16,9 @@ export type Listener = { port: number; stop: () => Promise<void> };
 type Options<T> = {
   hostname: string;
   port: number;
+  // Serves HTTPS and plain HTTP on one port. Plain HTTP is for this machine only (localhost is
+  // a secure context); the LAN gets a redirect to HTTPS on `securePort` (#644 ticket 8).
+  tls?: { key: string; cert: string; securePort?: number };
   maxRequestBodySize: number;
   fetch: (request: Request, upgrade: Upgrade<T>) => Promise<Response | undefined>;
   websocket: {
@@ -27,10 +33,11 @@ type Options<T> = {
 const peers = new WeakMap<Request, string>();
 export const requestPeer = (request: Request) => peers.get(request) ?? "";
 
+const encrypted = (message: IncomingMessage) => !!(message.socket as TLSSocket).encrypted;
 function toRequest(message: IncomingMessage, body?: Buffer, signal?: AbortSignal) {
   const headers = new Headers();
   for (const [name, values] of Object.entries(message.headersDistinct)) for (const value of values ?? []) headers.append(name, value);
-  const request = new Request(new URL(message.url ?? "/", `http://${message.headers.host ?? "localhost"}`), { method: message.method, headers, ...(body ? { body: body as Uint8Array<ArrayBuffer> } : {}), ...(signal ? { signal } : {}) });
+  const request = new Request(new URL(message.url ?? "/", `${encrypted(message) ? "https" : "http"}://${message.headers.host ?? "localhost"}`), { method: message.method, headers, ...(body ? { body: body as Uint8Array<ArrayBuffer> } : {}), ...(signal ? { signal } : {}) });
   peers.set(request, message.socket.remoteAddress ?? "");
   return request;
 }
@@ -45,9 +52,15 @@ async function readBody(message: IncomingMessage, limit: number) {
   return Buffer.concat(chunks);
 }
 
-export async function serve<T>({ hostname, port, maxRequestBodySize, fetch, websocket }: Options<T>): Promise<Listener> {
-  const server = createServer(async (message, response) => {
+export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch, websocket }: Options<T>): Promise<Listener> {
+  const insecure = (message: IncomingMessage) => !!tls && !encrypted(message) && !loopbackPeer(message.socket.remoteAddress ?? "");
+  const handle = async (message: IncomingMessage, response: ServerResponse) => {
     try {
+      if (insecure(message)) {
+        const { hostname: host } = new URL(`http://${message.headers.host}`);
+        response.writeHead(308, { Location: `https://${host}:${tls!.securePort ?? port}${message.url ?? "/"}` }).end();
+        return;
+      }
       const aborted = new AbortController();
       response.once("close", () => { if (!response.writableFinished) aborted.abort(); });
       const body = message.method === "GET" || message.method === "HEAD" ? undefined : await readBody(message, maxRequestBodySize);
@@ -60,6 +73,19 @@ export async function serve<T>({ hostname, port, maxRequestBodySize, fetch, webs
       if (!response.headersSent) response.writeHead(500).end();
       else response.destroy();
     }
+  };
+  const plain = createServer(handle);
+  const secure = tls && createSecureServer({ key: tls.key, cert: tls.cert }, handle);
+  // A TLS connection opens with a handshake record (0x16); anything else is plain HTTP.
+  const server = !secure ? plain : createNetServer(socket => {
+    socket.setTimeout(10_000, () => socket.destroy());
+    socket.once("readable", function first() {
+      const byte = socket.read(1) as Buffer | null;
+      if (!byte) return void socket.once("readable", first);
+      socket.setTimeout(0);
+      socket.unshift(byte);
+      (byte[0] === 0x16 ? secure : plain).emit("connection", socket);
+    });
   });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: websocket.maxPayload });
   // Drop sockets that miss a ping round.
@@ -71,9 +97,10 @@ export async function serve<T>({ hostname, port, maxRequestBodySize, fetch, webs
     }
   }, 30_000);
   heartbeat.unref();
-  server.on("upgrade", async (message, stream, head) => {
+  const upgrade = async (message: IncomingMessage, stream: NetSocket, head: Buffer) => {
     let upgraded = false;
     stream.on("error", () => {});
+    if (insecure(message)) return void stream.destroy();
     try {
       const result = await fetch(toRequest(message), data => {
         upgraded = true;
@@ -94,7 +121,8 @@ export async function serve<T>({ hostname, port, maxRequestBodySize, fetch, webs
       const headers = [...result?.headers ?? []].map(([name, value]) => `${name}: ${value}\r\n`).join("");
       stream.end(Buffer.concat([Buffer.from(`HTTP/1.1 ${status} ${STATUS_CODES[status] ?? ""}\r\n${headers}Content-Length: ${body.length}\r\nConnection: close\r\n\r\n`), body]));
     } catch { if (!upgraded) stream.destroy(); }
-  });
+  };
+  for (const each of [plain, secure]) each?.on("upgrade", upgrade);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, hostname, () => { server.off("error", reject); resolve(); });
@@ -105,7 +133,8 @@ export async function serve<T>({ hostname, port, maxRequestBodySize, fetch, webs
       clearInterval(heartbeat);
       for (const socket of sockets.clients) socket.terminate();
       server.close(() => resolve());
-      server.closeAllConnections();
+      plain.closeAllConnections();
+      secure?.closeAllConnections();
     }),
   };
 }

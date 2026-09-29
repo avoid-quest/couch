@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
 import updater from "electron-updater";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { homedir } from "node:os";
+import { connect as connectTls } from "node:tls";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { DisplayAction, DisplayState } from "../src/shared/display";
@@ -29,7 +30,8 @@ const readText = (path: string) => { try { return readFileSync(path, "utf8").tri
 const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
 
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
-type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
+// pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
+type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean; pins?: Record<string, string> };
 const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
 const save = (next: Choice) => {
@@ -107,6 +109,34 @@ async function lanOrigin(input: unknown) {
   return url.origin;
 }
 
+// Another Couch serves its LAN over HTTPS with a self-signed certificate (#644 ticket 8). Its
+// plain HTTP, such as an address saved earlier or a bare name on port 80, redirects there.
+// The app pins the certificate's key the first time it reaches that Couch and whenever the
+// user chooses it, then trusts only that key, so the window shows no warning.
+const spki = (certificate: X509Certificate) => createHash("sha256").update(certificate.publicKey.export({ type: "spki", format: "der" })).digest("base64");
+function served(origin: string) {
+  const { hostname, port } = new URL(origin);
+  const host = hostname.replace(/^\[|\]$/g, "");
+  return new Promise<string>((resolve, reject) => {
+    const socket = connectTls({ host, port: Number(port || 443), ...isIP(host) ? {} : { servername: host }, rejectUnauthorized: false, timeout: 4_000 }, () => {
+      resolve(spki(socket.getPeerX509Certificate()!));
+      socket.end();
+    });
+    socket.once("error", reject).once("timeout", () => socket.destroy(new Error("Finding that Couch timed out.")));
+  });
+}
+async function trust(address: string, again: boolean) {
+  let origin = address;
+  if (address.startsWith("http:")) {
+    const location = (await fetch(address, { redirect: "manual", signal: AbortSignal.timeout(4_000) })).headers.get("location");
+    origin = new URL(location?.startsWith("https://") ? location : address.replace(/^http:/, "https:")).origin;
+  }
+  const { hostname } = new URL(origin);
+  const pin = again || !choice.pins?.[hostname] ? await served(origin) : choice.pins[hostname]!;
+  if (origin !== address || pin !== choice.pins?.[hostname]) save({ ...choice, address: choice.address === address ? origin : choice.address, targets: choice.targets.map(target => target === address ? origin : target), pins: { ...choice.pins, [hostname]: pin } });
+  return origin;
+}
+
 // Full mode loads Core's own UI; Client mode loads the other Couch's own UI, so versions always match.
 async function load() {
   if (!window) return;
@@ -116,9 +146,9 @@ async function load() {
     return;
   }
   await stopCore();
-  const address = choice.address!;
+  let address = choice.address!;
   for (;;) {
-    try { return void await window.loadURL(address); } catch (error) {
+    try { return void await window.loadURL(address = await trust(address, false)); } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
       // Keep trying in the background; a successful probe closes the prompt and loads the page.
       const reachable = new AbortController();
@@ -126,7 +156,7 @@ async function load() {
       void (async () => {
         while (!answered) {
           await sleep(5_000);
-          if (!answered && await fetch(new URL("/api/connection", address), { signal: AbortSignal.timeout(3_000) }).then(response => response.ok, () => false)) return reachable.abort();
+          if (!answered && await trust(address, false).then(origin => net.fetch(new URL("/api/connection", origin).href, { signal: AbortSignal.timeout(3_000) })).then(response => response.ok, () => false)) return reachable.abort();
         }
       })();
       show();
@@ -249,7 +279,9 @@ handle("choose", async (event, mode, address, confirm) => {
     const origin = await lanOrigin(address);
     const reason = confirm ? null : await interruption().catch(() => "unknown");
     if (reason) throw new Error(`confirmation-required:${reason}`);
-    save({ ...choice, mode, address: origin });
+    // Choosing a Couch trusts the key it serves now; one that can't be reached is pinned when it answers.
+    const secured = await trust(origin, true).catch(() => origin);
+    save({ ...choice, mode, address: secured });
   } else if (mode === "local") {
     const here = choice.mode !== "remote" && new URL(event.senderFrame!.url).origin === localOrigin;
     save({ ...choice, mode });
@@ -262,7 +294,8 @@ handle("choose", async (event, mode, address, confirm) => {
 handle("forget", async (_event, address) => {
   if (typeof address !== "string") throw new Error("Choose a Couch to forget.");
   const current = choice.address === address;
-  save({ ...choice, targets: choice.targets.filter(target => target !== address), ...current ? { address: null, mode: choice.mode === "remote" ? null : choice.mode } : {} });
+  const { [new URL(address).hostname]: _pin, ...pins } = choice.pins ?? {};
+  save({ ...choice, pins, targets: choice.targets.filter(target => target !== address), ...current ? { address: null, mode: choice.mode === "remote" ? null : choice.mode } : {} });
   // Its pairing lives in that origin's storage.
   await session.defaultSession.clearStorageData({ origin: address, storages: ["localstorage"] }).catch(() => {});
   if (!current || choice.mode !== null) return choice;
@@ -319,6 +352,10 @@ else {
     // playback speed and bounded ones at full speed, so ask for 10 MB at a time. It allows
     // only youtube.com's origin, and Chromium's opaque response blocking drops some of its
     // no-cors media responses, so the window fetches it in CORS mode and Couch allows it.
+    session.defaultSession.setCertificateVerifyProc(({ hostname, certificate }, callback) => {
+      const pin = choice.pins?.[hostname];
+      callback(pin && pin === spki(new X509Certificate(certificate.data)) ? 0 : -3);
+    });
     const googlevideo = { urls: ["https://*.googlevideo.com/*"] };
     session.defaultSession.webRequest.onBeforeSendHeaders(googlevideo, ({ requestHeaders }, callback) => {
       const start = /^bytes=(\d+)-$/.exec(requestHeaders.Range ?? "")?.[1];

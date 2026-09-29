@@ -2,12 +2,13 @@
 
 This guide covers the Debian 13 app's direct LAN listener. Enable Allow remote
 control locally and verify the IP address shown in Connection before adding a
-name. Couch uses HTTP on port 4100 by default. Sharing off leaves only the
+name. Couch uses HTTPS with its own self-signed certificate on port 4100 by
+default; plain HTTP on the LAN redirects there. Sharing off leaves only the
 loopback listener used by the local app.
 
 The machine/network administrator owns IP assignment, LAN DNS and any narrowly
 scoped firewall rule. Couch setup does not install a proxy or DNS daemon,
-configure router forwarding or expose Couch to the internet. LAN TLS is deferred.
+configure router forwarding or expose Couch to the internet.
 
 ## Select the local address
 
@@ -38,7 +39,9 @@ The name must work from the TV and each phone that will use it. From the
 playback computer or a paired Administrator, open **Settings → Connections →
 Local network address**. Enter `http://couch.home` for port 80, or
 `http://couch.home:4100` when port 80 is unavailable. A bare `couch.home` also
-uses port 80. Couch checks DNS and the port 80 bind before saving. The direct
+uses port 80, which redirects to `https://couch.home:4100`. Couch checks DNS
+and the port 80 bind before saving, and names it in its certificate at the next
+start. The direct
 IP address stays available. Controllers cannot change this setting.
 
 For additional names managed with the machine's configuration, add HTTP origins
@@ -53,8 +56,8 @@ Multiple names can be comma-separated and work alongside the address saved in
 Settings. They remain active when that Settings field changes or is cleared;
 remove them from the environment and restart Couch if they should no longer be
 admitted. Origins cannot contain credentials,
-paths, queries or fragments. HTTPS and names on any other port are unsupported
-by this listener. Setting an origin does not create a DNS or mDNS record.
+paths, queries or fragments. `https://` names must include Couch's port; names
+on any other port are unsupported by this listener. Setting an origin does not create a DNS or mDNS record.
 
 When an administrator changes or clears the Settings address while using that
 address, Couch keeps the old address admitted until it restarts so the current
@@ -65,7 +68,7 @@ Connection links or QR codes. Restart Couch to retire it.
 
 A name without a port, such as `http://couch.home`, reaches port 80. When such
 an alias validates, Couch opens an extra listener on port 80 of the same
-selected address itself. There is still no proxy and no daemon of Couch's own.
+selected address itself; it only redirects to HTTPS on Couch's port. There is still no proxy and no daemon of Couch's own.
 The operating system must permit the bind:
 
 - On the Debian TV, `couch-tv.service` runs as the unprivileged `couch-tv`
