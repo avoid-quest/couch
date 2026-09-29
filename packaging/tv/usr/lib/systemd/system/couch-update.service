@@ -1,0 +1,10 @@
+[Unit]
+Description=Install the newest Couch release when nothing plays
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/couch-appliance/update
+TimeoutStartSec=30min
+UMask=0022
