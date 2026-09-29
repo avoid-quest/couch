@@ -138,20 +138,22 @@ export function useNavigation(onBack: () => void) {
     // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
     // the keys past a radio group's first or last radio (Radix loops them), and on the TV Up/Down across a
     // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select (OK opens it).
-    // A TV fader (a vertical slider) moves on with every arrow too, until OK hands it Up/Down to change
-    // its level; OK, Back or leaving it hands them back, as TV equalisers do.
+    // A TV fader (a vertical slider, or a Volume, which shares its row with the player's tools)
+    // moves on with every arrow too, until OK hands it the keys along it; OK, Back or leaving it hands
+    // them back, as TV equalisers do.
     const leave = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const tv = isTvPresentation();
       const slider = target?.closest<HTMLElement>('[role="slider"]');
-      const fader = tv && slider?.getAttribute("aria-orientation") === "vertical" ? slider : null;
+      const upright = slider?.getAttribute("aria-orientation") === "vertical";
+      const fader = tv && (upright || slider?.closest("[data-volume]")) ? slider! : null;
       const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
       const radio = target?.closest<HTMLElement>('[role="radio"]');
       const radios = [...radio?.closest('[role="radiogroup"]')?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []].filter(visible);
       if (fader && (event.key === "Enter" || event.key === "Escape" && adjusting === fader)) adjust(adjusting === fader ? null : fader);
       else if (event.key.startsWith("Arrow") && (radio && radios.at(event.key === "ArrowDown" || event.key === "ArrowRight" ? -1 : 0) === radio
-        || fader && !(vertical && adjusting === fader)
+        || fader && !(vertical === upright && adjusting === fader)
         || tv && vertical && (slider && !fader || target?.matches('input:not([role="combobox"])'))
         || tv && target?.matches('button[role="combobox"][aria-expanded="false"]'))) moveFocus(event.key);
       else return;

@@ -39,9 +39,12 @@ catalog provides interface icons, not brand identities.
   Back, so no control may keep them all: the arrows past a radio group's first
   or last radio move on, and on the TV so do Up/Down across a horizontal slider,
   Up/Down in a one-line field and every arrow on a closed select (OK opens it).
-  A TV fader (the Speakers panel's vertical sliders) moves on with every arrow
-  until OK hands it Up/Down; OK, Back or leaving it ends that, as TV equalisers
-  do, and the panel's hint says so on the TV. Spatial navigation places a
+  A TV fader (the Speakers panel's vertical sliders, and every Volume, which
+  has the player's tools beside it) moves on with every arrow until
+  OK hands it the keys along it; OK, Back or leaving it ends that, as TV
+  equalisers do, and the Speakers hint says so on the TV. Playback position
+  keeps Left/Right for seeking, and a seek's brief stall keeps the transport
+  enabled so focus stays where it was. Spatial navigation places a
   slider by its whole track, not its moving thumb. Screens shown before the
   shell (the first-run chooser) bring the same arrow navigation.
 - **First run names the computer.** The app asks "Where is your Couch?" (This
@@ -176,7 +179,10 @@ Messages:
 - **Status line** (`Spinner` and muted text) for work in progress.
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
   for confirmations; **Sheet** for player panels; **Popover** for "Playing
-  here" / "Playing on {Device}" ("+2" when more Devices serve the Playback).
+  here" / "Playing on {Device}" with "+N" when more Devices serve the Playback. On a narrow header the
+  name truncates but the count never does, phones drop "Playing on" and say
+  "Here", and the header's Up next steps aside on phones while the mini dock's
+  own Up next shows.
   The Popover reads top to bottom as Devices (online ones, plus offline ones
   still serving a Playback; choosing one looks at its Playback, idle ones are
   plain rows), Couch (which Couch this window shows: This computer or another

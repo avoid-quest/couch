@@ -292,6 +292,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
+  const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now";
 
   if (setupPending) return <div className="app-shell flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
@@ -308,7 +309,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              {paired && !!state?.queue.length && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
+              {/* On a phone the mini player's own Up next is on screen, so the header's goes and leaves room for the status (#644 ticket 12). */}
+              {paired && !!state?.queue.length && <Button variant="ghost" className={cn("shrink-0 touch:min-w-11", miniPlayer && "max-sm:hidden")} aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
               {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} />}
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a device</Button>}
@@ -324,7 +326,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
+            {miniPlayer && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>

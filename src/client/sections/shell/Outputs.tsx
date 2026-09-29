@@ -112,7 +112,7 @@ export function Speakers({ state, run }: Props) {
               <span className="text-xl font-medium tabular-nums">{level ?? "–"}</span>
               <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} level`} value={level ?? 0} max={100} disabled={disabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} /></div>
               <span className="line-clamp-2 min-h-[2lh] text-center text-sm leading-tight">{device.name}</span>
-              <span className="min-h-4 truncate text-xs text-muted-foreground">{note(device)}</span>
+              <span className="line-clamp-2 min-h-[2lh] w-full text-center text-xs leading-tight break-words text-muted-foreground" title={note(device) || undefined}>{note(device)}</span>
               <Switch aria-label={`${device.name} sound`} checked={level !== null} disabled={disabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, level: on ? 50 : null })} />
               {level !== null && output?.delay !== undefined && <Delay name={device.name} delay={output.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
             </div>;

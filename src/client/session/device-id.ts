@@ -27,8 +27,9 @@ export function playingElsewhere(state: Outputs) {
   if (!others.length || !["loading", "playing", "paused", "ended"].includes(state!.player.status)) return null;
   const first = state!.devices?.find(device => device.id === others[0])?.name ?? "another device";
   const here = others.length < ids.length;
-  const name = here ? `here +${others.length}` : ids.length > 1 ? `${first} +${ids.length - 1}` : first;
-  return { deviceId: others[0]!, here, name, label: here ? `Playing ${name}` : `Playing on ${name}` };
+  const more = here ? others.length : ids.length - 1;
+  const label = `${here ? "Playing here" : `Playing on ${first}`}${more ? ` +${more}` : ""}`;
+  return { deviceId: others[0]!, here, name: first, more, label };
 }
 
 /** Whether this Device shows the looked-at Playback's picture. */

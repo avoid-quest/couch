@@ -13,7 +13,7 @@ export function lanPeer(network: LanNetwork, peer: string) {
 }
 export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selected?: string, address?: string): LanNetwork {
   const networks = Object.entries(interfaces).flatMap(([name, entries]) => (entries ?? []).filter(entry => entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address) && (!address || entry.address === address) && (selected ? name === selected : !/^(docker|br-|veth|virbr|tun|tap|utun)/.test(name))).map(entry => ({ name, address: entry.address, netmask: entry.netmask })));
-  if (networks.length === 0) throw new Error(selected || address ? "No eligible LAN address matches COUCH_LAN_INTERFACE/COUCH_LAN_ADDRESS. Check that the selected private IPv4 address is assigned locally." : "No eligible LAN address. Connect to a private IPv4 LAN before enabling remote control.");
+  if (networks.length === 0) throw new Error(selected || address ? "No eligible LAN address matches COUCH_LAN_INTERFACE/COUCH_LAN_ADDRESS. Check that the selected private IPv4 address is assigned locally." : "No eligible LAN address. Connect to a private IPv4 LAN before sharing on your network.");
   if (networks.length !== 1) throw new Error("Several LAN addresses are available. Select a network with COUCH_LAN_INTERFACE; if it has multiple addresses, also set COUCH_LAN_ADDRESS to one of its private IPv4 addresses and restart Couch.");
   return networks[0]!;
 }

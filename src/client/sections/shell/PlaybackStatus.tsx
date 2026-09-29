@@ -20,7 +20,7 @@ import { playingElsewhere } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { DeviceList } from "./Outputs";
-import { StatusDot } from "./StatusLine";
+import { PlayingLabel, StatusDot } from "./StatusLine";
 
 function destinationOrigin(address: string): string | null {
   try {
@@ -106,9 +106,9 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   };
   return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11" aria-label={`${label}: ${status}`}>
+      <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11 max-sm:px-2" aria-label={`${label}: ${status}`}>
         <StatusDot connected={connected} />
-        <span className="max-w-48 truncate max-sm:max-w-32">{renderer && !renderer.here && !unpaired ? <><span className="max-sm:sr-only">Playing on </span>{renderer.name}</> : label}</span>
+        {unpaired ? <span className="max-w-48 truncate max-sm:max-w-32">{name}</span> : <PlayingLabel renderer={renderer} />}
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="max-h-(--radix-popover-content-available-height) w-96 gap-4 overflow-y-auto" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>
