@@ -1,12 +1,14 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
-import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
+import { createLanListener, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
+import { certificate } from "./certificate";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { healStreamingCommunityOrigin } from "./streamingcommunity";
 import { createStartup } from "./startup";
 import { requestPeer, serve, type Listener, type Socket, type Upgrade } from "./http";
 import { createFrontend } from "./frontend";
 import { randomInt } from "node:crypto";
-import { networkInterfaces } from "node:os";
+import { hostname as machineName, networkInterfaces } from "node:os";
+import { dirname, join } from "node:path";
 import { isIP } from "node:net";
 import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality } from "../shared/providers";
@@ -94,7 +96,15 @@ export async function createHub(options: HubOptions) {
       if (!entry.internal) lanAddresses.add(entry.address);
     }
   }
-  const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
+  // This machine keeps plain HTTP, because localhost is a secure context; the LAN gets HTTPS (#644 ticket 8).
+  const urlFor = (address: string, port: number) => `${address === "localhost" || loopbackPeer(address) ? "http" : "https"}://${address.includes(":") ? `[${address}]` : address}:${port}`;
+  // The certificate names this machine, its addresses and its LAN names.
+  const tls = () => {
+    const name = machineName().toLowerCase();
+    const aliases = [store.originDomain(), ...options.advertisedUrls ?? []].flatMap(value => { try { return value ? [new URL(value.includes("://") ? value : `http://${value}`).hostname] : []; } catch { return []; } });
+    const addresses = Object.values(networkInterfaces()).flatMap(entries => (entries ?? []).filter(entry => !entry.address.includes("%")).map(entry => entry.address));
+    return certificate(join(dirname(options.databasePath), "tls"), [...new Set(["localhost", name, ...name.includes(".") ? [] : [`${name}.local`], ...addresses, ...aliases])]);
+  };
   let closed = false;
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
@@ -431,12 +441,12 @@ export async function createHub(options: HubOptions) {
         catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
         if (identity()?.authority === "controller" || !identity()) throw new ControllerError(NO_LONGER_ADMIN, 403);
         const previous = store.originDomain();
-        const previousAlias = previous ? originDomainUrl(previous, port, !previous.startsWith("http://")) : "";
+        const previousAlias = previous ? secureOrigin(originDomainUrl(previous, port, !previous.startsWith("http://")), port) : "";
         store.saveOriginDomain(alias);
         // Keep only the address used by this administrator until Couch restarts.
         // Its browser can finish the save and continue using its paired session.
         const usingPreviousAlias = previousAlias && (request.headers.get("host")?.toLowerCase() === new URL(previousAlias).host || request.headers.get("origin") === previousAlias);
-        if (usingPreviousAlias && previousAlias !== alias) retainedOrigins.add(previousAlias);
+        if (usingPreviousAlias && previousAlias !== (alias && secureOrigin(alias, port))) retainedOrigins.add(previousAlias);
         await lan?.refresh().catch(() => {});
         return cors(request, json({ domain: alias }));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
@@ -552,15 +562,16 @@ export async function createHub(options: HubOptions) {
       },
     },
   };
-  const server = await serve(serveOptions);
+  const server = await serve({ ...serveOptions, tls: await tls() });
 
   const port = server.port;
   const origin = urlFor(hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname, port);
   // The app window loads Core from localhost (#644: Twitch rejects Origin 127.0.0.1).
   const local = [origin, urlFor("localhost", port)];
-  const allowedHosts = new Set(options.managedLan ? local.map(url => new URL(url).host) : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
-  const allowedOrigins = new Set(options.managedLan ? local : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
-  const urls: string[] = advertised.length ? [...new Set(advertised)] : hostname === "0.0.0.0" || hostname === "::"
+  const secureAdvertised = advertised.map(url => secureOrigin(url, port));
+  const allowedHosts = new Set(options.managedLan ? local.map(url => new URL(url).host) : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(secureAdvertised.map(url => new URL(url).host)));
+  const allowedOrigins = new Set(options.managedLan ? local : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(secureAdvertised));
+  const urls: string[] = secureAdvertised.length ? [...new Set(secureAdvertised)] : hostname === "0.0.0.0" || hostname === "::"
     ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port))
     : [origin];
   if (urls.length === 0) urls.push(origin);
@@ -571,12 +582,12 @@ export async function createHub(options: HubOptions) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
-      start: (network, port) => serve({ ...serveOptions, hostname: network.address, port }),
+      start: async (network, listenPort) => serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port } }),
       changed: (next, error) => {
         lanError = error;
         const current = store.originDomain();
-        const currentAlias = current ? originDomainUrl(current, port, !current.startsWith("http://")) : "";
-        const published = next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.includes(url));
+        const currentAlias = current ? secureOrigin(originDomainUrl(current, port, !current.startsWith("http://")), port) : "";
+        const published = next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.some(value => { try { return secureOrigin(value, port) === url; } catch { return false; } }));
         urls.splice(0, urls.length, ...published);
         connectionUrls.splice(0, connectionUrls.length, ...published);
         allowedHosts.clear(); allowedOrigins.clear();

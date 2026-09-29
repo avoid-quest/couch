@@ -15,7 +15,7 @@ export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconne
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
-// getRandomValues also works on the plain HTTP origins used by LAN remotes.
+// getRandomValues works in any context, secure or not.
 export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

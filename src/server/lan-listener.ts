@@ -17,21 +17,30 @@ export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selec
   if (networks.length !== 1) throw new Error("Several LAN addresses are available. Select a network with COUCH_LAN_INTERFACE; if it has multiple addresses, also set COUCH_LAN_ADDRESS to one of its private IPv4 addresses and restart Couch.");
   return networks[0]!;
 }
+// The LAN reaches Couch over HTTPS on its port (#644 ticket 8). A saved http:// name keeps
+// working: plain HTTP, including a bare name on port 80, redirects there.
+export function secureOrigin(value: string, port: number) {
+  const url = new URL(value);
+  if (url.protocol === "https:") return url.origin;
+  url.protocol = "https:";
+  url.port = String(port);
+  return url.origin;
+}
 export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup, port80 = false) {
-  const ip = `http://${network.address}:${port}`;
+  const ip = `https://${network.address}:${port}`;
   const results = await Promise.all(advertised.map(async (value, index) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const url = new URL(value);
-      const aliasPort = Number(url.port || 80);
-      if (url.protocol !== "http:" || (aliasPort !== port && aliasPort !== 80) || url.pathname !== "/" || url.username || url.password || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Use HTTP and Couch's port, without credentials, a proxy or a path.");
+      const aliasPort = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+      if (!["http:", "https:"].includes(url.protocol) || (aliasPort !== port && (aliasPort !== 80 || url.protocol !== "http:")) || url.pathname !== "/" || url.username || url.password || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Use Couch's port, without credentials, a proxy or a path.");
       if (aliasPort === 80 && port !== 80 && !port80) throw new Error("Couch can't use port 80. Add Couch's port to the address.");
       const answers = await Promise.race([
         resolve(url.hostname, { all: true }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("LAN DNS lookup timed out.")), 5_000); }),
       ]);
       if (!answers.length || answers.some(answer => answer.address !== network.address)) throw new Error("The name does not resolve only to the selected Couch address.");
-      return { url: url.origin };
+      return { url: secureOrigin(url.origin, port) };
     } catch (error) {
       return { error: `Custom LAN address ${index + 1} was ignored: ${error instanceof Error ? error.message : "DNS lookup failed."}` };
     } finally { clearTimeout(timer); }
@@ -73,7 +82,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
       // keep the direct port and drop only the bare-name aliases.
       if (enabled && wantsPort80 && !port80) { try { port80 = await options.start(next, 80); } catch { port80 = null; } }
       if (!wantsPort80 && port80) { await port80.stop(); port80 = null; }
-      if (moved) changed([`http://${next.address}:${options.port}`], null);
+      if (moved) changed([`https://${next.address}:${options.port}`], null);
       const { urls, error } = await lanUrls(next, options.port, advertised, options.resolve, !!port80);
       if (!closed) changed(urls, error);
     } catch (error) {
@@ -96,7 +105,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
       if (enabled && (!active || !network)) throw new Error("The LAN listener is unavailable.");
       const selected = enabled ? network! : selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
       const result = await lanUrls(selected, options.port, [value], options.resolve, true);
-      if (!result.urls.includes(new URL(value).origin)) throw new Error(result.error ?? "The network address is unavailable.");
+      if (!result.urls.includes(secureOrigin(value, options.port))) throw new Error(result.error ?? "The network address is unavailable.");
       if (options.port !== 80 && !new URL(value).port && !port80) {
         try {
           const listener = await options.start(selected, 80);

@@ -14,6 +14,16 @@ popover:
   loads the other Couch's own UI, so both always run the same build. That page
   pairs like any browser.
 
+The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
+in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
+on the same port serves only this machine (the app window's `localhost`); the LAN
+is redirected to HTTPS. Browsers click through Chrome's or Safari's warning once.
+Client mode pins the other Couch's key (SHA-256 of its SPKI, in
+`operating-mode.json` `pins`) when it is chosen or first reached, and trusts only
+that key, so its window shows no warning. The certificate keeps its key when Core
+reissues it for new addresses or before its 825 days run out, so pins survive.
+An HTTPS page can't load `http://` media, so Pass-through relays those streams.
+
 Main and Core talk over the utilityProcess parent port (`ready`, `addresses`,
 `display` and `shutdown`). The window's preload (`app/preload.ts`) exposes
 `window.couchApp`: the mode choice, the host token for this computer's Core (Full
