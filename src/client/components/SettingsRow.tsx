@@ -10,7 +10,7 @@ export function SettingsRow({ label, htmlFor, description, children, className, 
         {htmlFor ? <FieldLabel htmlFor={htmlFor} className="text-base font-normal">{label}</FieldLabel> : <FieldTitle className="min-w-0 text-base font-normal break-words">{label}</FieldTitle>}
         {description && <FieldDescription className="break-words">{description}</FieldDescription>}
       </FieldContent>
-      {children && <div className="flex min-h-6 min-w-0 flex-wrap items-center gap-2">{children}</div>}
+      {Children.toArray(children).length > 0 && <div className="flex min-h-6 min-w-0 flex-wrap items-center gap-2">{children}</div>}
     </Field>
   );
 }

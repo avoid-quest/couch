@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
+import { isTvPresentation } from "./session/native-context";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
@@ -124,6 +125,24 @@ export function useNavigation(onBack: () => void) {
   useEffect(() => {
     const keyboard = () => document.documentElement.setAttribute("data-keyboard", "");
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
+    // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
+    // Up/Down at a radio group's first or last radio (Radix loops them), and on the TV the keys across
+    // a slider (like the phone remote's crossSlider) and Up/Down in a one-line field.
+    const leave = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || !event.key.startsWith("Arrow")) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+      const radio = target?.closest<HTMLElement>('[role="radio"]');
+      const radios = [...radio?.closest('[role="radiogroup"]')?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []].filter(visible);
+      const slider = target?.closest('[role="slider"]');
+      const tv = isTvPresentation();
+      if (!(vertical && radio && radios.at(event.key === "ArrowDown" ? -1 : 0) === radio
+        || tv && slider && (slider.getAttribute("aria-orientation") === "vertical") !== vertical
+        || tv && vertical && target?.matches('input:not([role="combobox"])'))) return;
+      event.preventDefault();
+      event.stopPropagation();
+      moveFocus(event.key);
+    };
     const keydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -143,10 +162,12 @@ export function useNavigation(onBack: () => void) {
       moveFocus(event.key);
     };
     window.addEventListener("keydown", keyboard, true);
+    window.addEventListener("keydown", leave, true);
     window.addEventListener("pointerdown", pointer, true);
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keyboard, true);
+      window.removeEventListener("keydown", leave, true);
       window.removeEventListener("pointerdown", pointer, true);
       window.removeEventListener("keydown", keydown);
     };

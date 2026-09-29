@@ -170,7 +170,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}) };
     },
     async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
-      const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this remote first.", 401); return value; };
+      const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this device first.", 401); return value; };
       const administrator = () => { if (caller().authority === "controller") throw new GuideError(ADMIN_ONLY, 403); };
       try {
         caller();

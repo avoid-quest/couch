@@ -14,6 +14,8 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
       {!!urls.length && <section className="grid min-w-0 gap-2" aria-label="Pairing addresses">
         <h3 className="text-base font-medium">Open on your phone</h3>
         <ul className="grid gap-1">{urls.map(url => <li key={url}><a className="text-sm break-all underline underline-offset-4 hover:text-muted-foreground" href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
+        {/* Couch's certificate is its own (#644 ticket 8), so a browser warns once before the pairing page. */}
+        <p className="text-sm text-muted-foreground">The first time, the browser warns that the connection isn't private. Couch uses its own certificate, so continue to the page.</p>
       </section>}
       <DialogFooter showCloseButton />
     </DialogContent>

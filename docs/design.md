@@ -35,6 +35,17 @@ catalog provides interface icons, not brand identities.
   viewport at every interface size. Plain playback glyphs keep artwork central;
   Playback settings use Sheets. Stage CSS handles native video bounds
   and the responsive queue workspace; controls reuse shadcn components.
+- **Every journey step works with a remote.** The TV has only arrows, Enter and
+  Back, so no control may keep them all: Up/Down leave a radio group at its first
+  or last radio, and on the TV the keys across a slider and Up/Down in a one-line
+  field move focus on. Screens shown before the shell (the first-run chooser)
+  bring the same arrow navigation.
+- **First run names the computer.** The app asks "Where is your Couch?" (This
+  computer hosts it; Another Couch joins one, and this computer still plays),
+  then "Name this computer" with the random default shown, then whether to share
+  it on the network. Unpaired browsers see only the pairing page: no sections
+  that would lead back to it. The pairing dialog warns that browsers flag
+  Couch's own certificate once.
 - **Keyboard control stays inside Couch.** TanStack Hotkeys shares shortcuts
   between the browser and desktop window; Electron global shortcuts would also
   claim keys outside the app. The header's Keyboard shortcuts dialog is the
@@ -160,12 +171,22 @@ Messages:
 - **Empty** for empty states. Say what goes here and offer the next step.
 - **Status line** (`Spinner` and muted text) for work in progress.
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
-  for confirmations; **Sheet** for player panels; **Popover** for "Playing on",
-  whose Devices list looks at another Device's Playback.
-- **Send to** is a menu of Devices in the player band. The **Speakers** Sheet is
-  the Mixer: screens are one-press tiles (pressed tiles invert, because Toggle's
-  muted pressed state barely shows on black), and sound is a channel strip per
-  Device whose fader adds it (0 keeps it silent) and whose switch removes it.
+  for confirmations; **Sheet** for player panels; **Popover** for "Playing
+  here" / "Playing on {Device}" ("+2" when more Devices serve the Playback).
+  The Popover reads top to bottom as Devices (online ones, plus offline ones
+  still serving a Playback; choosing one looks at its Playback, idle ones are
+  plain rows), Couch (which Couch this window shows: This computer or another
+  one in the app, the paired Couch in a browser) and Sound last, because a
+  focused slider owns the arrow keys. Sound outputs and Bluetooth appear only
+  where Couch controls the system's sound (Linux); elsewhere Settings hides
+  them. The Popover scrolls within the space Radix reports.
+- **Send to** is a menu of the online Devices in the player band; with none, it
+  says so instead of disabling the button. The **Speakers** Sheet is the Mixer:
+  screens are one-press tiles (pressed tiles invert, because Toggle's muted
+  pressed state barely shows on black), and sound is a channel strip per Device
+  whose fader adds it (0 keeps it silent) and whose switch removes it. A strip's
+  "Earlier" slider plays a late speaker sooner (Sendspin's static delay);
+  "Delay" read as the opposite.
 
 ## Copy
 
@@ -175,7 +196,8 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | --- | --- |
 | the device's name, or Couch | host, playback host/computer/device, coordinator, installation |
 | This computer / Playing here | this installation, this app |
-| remote | controller, client, browser |
+| device (a phone, browser, app window or TV) | remote, controller, client |
+| Share on network | Allow remotes, remote control |
 | admin, Make admin, Become admin | administrator, Claim administration |
 | Up next (the list), Queue (the verb) | shared queue, Add to Up next |
 | Saved, Save / Saved | Kept, Keep, favorites |

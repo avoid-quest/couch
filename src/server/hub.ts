@@ -503,7 +503,7 @@ export async function createHub(options: HubOptions) {
       return profile;
     },
     namePerson(id, name, expectedName) {
-      if (id !== common.activeProfile.id) throw new ViewingError("The active history changed on another remote. Reopen Your name before saving.", 409);
+      if (id !== common.activeProfile.id) throw new ViewingError("The active history changed on another device. Reopen Your name before saving.", 409);
       const profile = store.namePerson(id, name, expectedName);
       setViewing(profile);
       invalidate("progress");
@@ -624,7 +624,7 @@ export async function createHub(options: HubOptions) {
     sendspin.drop(id);
     for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
-      socket.close(4001, "This remote's access was revoked. Pair again.");
+      socket.close(4001, "This device was removed. Pair again.");
     }
   } });
   if (systemAudio) soundRouting = createSoundRouting({
@@ -769,7 +769,7 @@ export async function createHub(options: HubOptions) {
   const frontend = createFrontend();
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
-    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", systemAudio })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": async request => {
       if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
       const respond = (body: unknown, status = 200) => cors(request, json(body, status));
@@ -786,7 +786,7 @@ export async function createHub(options: HubOptions) {
         invalidate("devices");
         return respond({ token, device: store.deviceForToken(token), installationId: store.installationId() });
       } catch (error) {
-        return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this remote") }, error instanceof ControllerError ? error.status : 500);
+        return respond({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("this device") }, error instanceof ControllerError ? error.status : 500);
       }
     },
   };
@@ -808,23 +808,23 @@ export async function createHub(options: HubOptions) {
     // Each connection presents its Sendspin key, the Device's one ID (#644 ticket 5).
     if (websocket && store.identify(trusted ? null : token, url.searchParams.get("device"))) invalidate("devices");
     const caller = identity();
-    if (!caller) return cors(request, json({ error: "Pair this remote first." }, 401));
+    if (!caller) return cors(request, json({ error: "Pair this device first." }, 401));
     if (url.pathname === "/api/settings/sharing") {
       if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
       if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
       try {
         const enabled = await settingField(request, "enabled");
-        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remotes.");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to share on the network.");
         await lan?.setEnabled(enabled);
         store.saveRemoteControlEnabled(enabled);
         if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
           sockets.delete(socket);
-          socket.close(4003, "Remotes are off. Your pairing is remembered.");
+          socket.close(4003, "Sharing is off. Your pairing is remembered.");
         }
         invalidate("devices");
         return cors(request, json({ enabled }));
-      } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Allow remotes." }, error instanceof ControllerError ? error.status : 500)); }
+      } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Share on network." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/settings/origin-domain") {
       if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
@@ -855,7 +855,7 @@ export async function createHub(options: HubOptions) {
       const playedBy = playbackActor(trusted ? null : caller.device!.id);
       const currentIdentity = identity;
       const authorize = () => {
-        if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
+        if (!identity()) throw new ControllerError("This device was removed. Pair again.", 401);
       };
       if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: VERSION_MISMATCH }, 409));
       if (!trusted) store.touchDevice(caller.device!.id);
@@ -891,7 +891,7 @@ export async function createHub(options: HubOptions) {
     websocket: {
       maxPayload: 8192,
       open(socket: Socket<SocketData>) {
-        try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
+        try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
         // The newest tab renders for its Device (#644 Tabs); an output back online resumes, paused.
         const playback = servedBy(deviceOf(socket));
@@ -910,7 +910,7 @@ export async function createHub(options: HubOptions) {
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
       },
       async message(socket: Socket<SocketData>, message: string | null) {
-        try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
+        try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         if (socket.data.deviceId) store.touchDevice(socket.data.deviceId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }

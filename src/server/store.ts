@@ -140,7 +140,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
   };
   const unchangedProfile = (id: string, expectedName: string) => {
     const profile = db.query<WatchingProfile, [string]>("SELECT id, name FROM watching_profiles WHERE id = ?").get(id);
-    if (!profile) throw new ViewingError("Watching profile not found. It may have been removed on another remote.", 404);
+    if (!profile) throw new ViewingError("Watching profile not found. It may have been removed on another device.", 404);
     if (profile.name !== expectedName) throw new ViewingError(CHANGED_ELSEWHERE, 409);
     return profile;
   };
@@ -401,7 +401,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return device(id)!;
     },
     setDeviceRole(id: string, role: unknown) {
-      if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose Remote or Admin.");
+      if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose a role.");
       return db.transaction(() => {
         requireDevice(id);
         db.query("UPDATE devices SET role = ? WHERE id = ?").run(role, id);
@@ -436,8 +436,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     consumeControllerClaim(id: string, code: string): Device {
       return db.transaction(() => {
         const claimant = pairedDevice(id);
-        if (!claimant) throw new ControllerError("Pair this remote first.", 401);
-        if (claimant.role !== "controller") throw new ControllerError("This remote is already an admin.", 409);
+        if (!claimant) throw new ControllerError("Pair this device first.", 401);
+        if (claimant.role !== "controller") throw new ControllerError("This device is already an admin.", 409);
         const claim = claimRow(code);
         if (!claim || claim.consumed || claim.expiresAt <= Date.now()) throw new ControllerError("This admin code is wrong or expired.", 401);
         if (!claim.recovery && administratorExists()) throw new ControllerError("This Couch already has an admin.", 409);

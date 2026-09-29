@@ -1,7 +1,9 @@
 import type { PlayerState } from "./protocol";
 
 export type ConnectionDetails = {
-  lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; tvPresentation?: boolean };
+  lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; tvPresentation?: boolean;
+  /** Couch controls this computer's sound outputs and Bluetooth (Linux, #644 ticket 3). */
+  systemAudio?: boolean };
 
 /**
  * A connected client with its screen and speakers (#644). Its id is the X25519

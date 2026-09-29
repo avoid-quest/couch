@@ -19,9 +19,11 @@ import type { Device, DeviceIdentity } from "../../../../shared/devices";
 
 const formatSeen = (at: number | null) => at ? `Seen ${new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Never seen";
 
-export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, administratorClaimed, managedLan = false, lanError, hostName = "Couch" }: {
+export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, administratorClaimed, managedLan = false, lanError, hostName = "Couch", online = new Set() }: {
   credentials: ApiCredentials; connected: boolean; urls: string[]; identity: DeviceIdentity;
   remoteControlEnabled: boolean; administratorClaimed: boolean; managedLan?: boolean; lanError?: string | null; hostName?: string;
+  /** Devices connected now, from the session state. */
+  online?: ReadonlySet<string>;
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.device?.id;
@@ -82,7 +84,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         : !devices.data.length ? <Empty className="py-0"><EmptyHeader><EmptyDescription>No devices yet. Use Pair a device to connect one.</EmptyDescription></EmptyHeader></Empty>
         : devices.data.map(device => (
             <SettingsRow key={device.id} data-device={device.id} label={<>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this device)</span>}</>}
-              description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>
+              description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", online.has(device.id) ? "Online" : formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>
               {(manager || device.id === selfId) && <Button variant="outline" disabled={pending || rename.isPending} onClick={() => startRename(device)}>Rename</Button>}
               {manager && device.role !== "host" && device.id !== selfId && <>
                 <Button variant="outline" disabled={pending} onClick={() => act(device, "role")}>{device.role === "administrator" ? "Remove admin" : "Make admin"}</Button>
@@ -93,10 +95,10 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {deviceChange.error && <Alert variant="destructive"><AlertDescription>{message(deviceChange.error, "Couldn't update the device. Try again.")}</AlertDescription></Alert>}
     </SettingsSection>
     {manager && <SettingsSection>
-      {host && <SettingsRow label="Allow remotes" description="Phones and computers on your network can pair.">
-        <Switch aria-label="Allow remotes" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
+      {host && <SettingsRow label="Share on network" description="Phones, browsers and other computers on your network can pair and play.">
+        <Switch aria-label="Share on network" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
       </SettingsRow>}
-      <SettingsRow label="New device" description={remoteControlEnabled ? "Scan a code with your phone." : host ? "Turn on Allow remotes first." : `Turn on Allow remotes on ${hostName} first.`}>
+      <SettingsRow label="New device" description={remoteControlEnabled ? "Show a code to scan or type on the new device." : host ? "Turn on Share on network first." : `Turn on Share on network on ${hostName} first.`}>
         <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>
       </SettingsRow>
       {managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A name that points to ${hostName}. Add a port if 80 is taken.`}>
@@ -105,7 +107,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
           <Button type="submit" variant="outline" disabled={!connected || saveDomain.isPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{saveDomain.isPending ? "Saving…" : "Save"}</Button>
         </form>
       </SettingsRow>}
-      {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Allow remotes.")}</AlertDescription></Alert>}
+      {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Share on network.")}</AlertDescription></Alert>}
       {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
       <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />
     </SettingsSection>}
