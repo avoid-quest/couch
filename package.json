@@ -104,6 +104,8 @@
       ],
       "icon": "packaging/icons/icon.icns",
       "category": "public.app-category.entertainment",
+      "identity": "-",
+      "hardenedRuntime": false,
       "minimumSystemVersion": "14.0"
     },
     "win": {

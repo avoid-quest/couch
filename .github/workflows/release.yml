@@ -71,14 +71,26 @@ jobs:
     steps:
       # GitHub's notes from this repo's merged pull requests since the previous
       # release on the same channel.
+      # Every release opens with the one command an unsigned Mac app needs (docs/usage.md).
       - name: Write the notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          app=$([[ $CHANNEL == preview ]] && echo "Couch Preview" || echo Couch)
+          cat > notes.md <<EOF
+          ## Installing on macOS
+
+          Couch isn't signed by Apple, so the first time macOS says it "is damaged" or "can't be opened". Move $app to Applications, then run this once in Terminal:
+
+          \`\`\`sh
+          xattr -dr com.apple.quarantine "/Applications/$app.app"
+          \`\`\`
+
+          EOF
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
             -f tag_name="$TAG" -f target_commitish="$REF" \
             ${PREVIOUS_TAG:+-f previous_tag_name="$PREVIOUS_TAG"} \
-            --jq .body > notes.md
+            --jq .body >> notes.md
           cat notes.md
       # A rerun keeps the draft it made before.
       - name: Draft on avoid-quest/couch-releases
