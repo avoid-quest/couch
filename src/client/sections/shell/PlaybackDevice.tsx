@@ -11,13 +11,11 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
-import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
-import { acknowledgeFrontend, apiSend } from "@/api/client";
+import { useMutation } from "@tanstack/react-query";
+import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
-import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
-import { useLocalUpdateActivity } from "@/update-activity";
 import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
 import { SoundControls } from "./PlaybackStatus";
@@ -43,7 +41,6 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   const sequence = useRef(0);
   const busy = useRef(false);
   const failedPreflight = useRef(false);
-  useLocalUpdateActivity(native && choice?.mode === "remote");
   useEffect(() => {
     if (!native) return;
     let disposed = false;
@@ -143,36 +140,6 @@ export function DeviceRecovery() {
   </>}>{device.error}</StatusLine>;
 }
 
-/** This app's own updater; the selected Couch updates separately. */
-export function InstallationUpdates({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" }, mutations: { networkMode: "always" } } }));
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => () => queryClient.clear(), [queryClient]);
-  useEffect(() => {
-    const stop = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const connect = async () => {
-      try {
-        const connection = await invoke<Credentials>("connection_info");
-        if (stop.signal.aborted) return;
-        if (!connection?.origin || !connection.token) throw new Error("Updater starting…");
-        await acknowledgeFrontend(connection, stop.signal, 10_000).catch(() => { throw new Error("Couldn't verify the version on this computer."); });
-        setCredentials(connection); setError(null);
-      } catch (reason) { if (!stop.signal.aborted) { setError(message(reason)); timer = setTimeout(() => void connect(), 2_000); } }
-    };
-    void connect();
-    return () => { stop.abort(); clearTimeout(timer); };
-  }, []);
-  return <QueryClientProvider client={queryClient}><Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent data-tv-local-only>
-      <DialogHeader><DialogTitle>Update Couch on this computer</DialogTitle><DialogDescription>Only Couch on this computer. The Couch it plays on updates separately.</DialogDescription></DialogHeader>
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      {credentials ? <UpdatesSettings credentials={credentials} connected target="this app" /> : !error && <StatusLine busy>Connecting…</StatusLine>}
-    </DialogContent>
-  </Dialog></QueryClientProvider>;
-}
-
 function DeviceForm() {
   const device = usePlaybackDevice()!;
   const [address, setAddress] = useState(device.address ?? "");
@@ -213,18 +180,17 @@ function DeviceForm() {
   </div>;
 }
 
-export function PlaybackDevice({ credentials = null, connected = false, installationName, state = null, run, updates = false }: {
+export function PlaybackDevice({ credentials = null, connected = false, installationName, state = null, run }: {
   credentials?: Credentials | null;
   connected?: boolean;
   installationName?: string;
   state?: ClientSessionState | null;
   run?: (action: Action) => Promise<boolean>;
   /** Offer this app's own updater (a remote-mode desktop app). */
-  updates?: boolean;
 }) {
   const device = usePlaybackDevice();
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<"address" | "confirmation" | "forget" | "updates" | null>(null);
+  const [dialog, setDialog] = useState<"address" | "confirmation" | "forget" | null>(null);
   const [address, setAddress] = useState("");
   const [warning, setWarning] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
@@ -268,7 +234,6 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
         <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
         <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={close} />
-        {updates && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" onClick={() => openDialog("updates")}>Update Couch on this computer</Button>}
       </PopoverContent>
     </Popover>
     <AlertDialog open={dialog === "confirmation"} onOpenChange={value => { if (!value) close(); }}>
@@ -294,7 +259,6 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
         </form>
       </DialogContent>
     </Dialog>
-    {updates && <InstallationUpdates open={dialog === "updates"} onOpenChange={value => { if (!value) close(); }} />}
   </>;
 }
 

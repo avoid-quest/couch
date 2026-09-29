@@ -154,7 +154,7 @@ has room to read. Keep the parser's safe URL handling and omit raw HTML.
 
 Messages:
 
-- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity, diagnostic results and unexpected outcomes; routine user-triggered actions stay quiet. One line, at most one action.
+- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity and unexpected outcomes; routine user-triggered actions stay quiet. One line, at most one action.
 - **Alert** for a persistent problem on the page. `variant="destructive"` for
   errors; put Try again in `AlertAction`.
 - **Empty** for empty states. Say what goes here and offer the next step.
@@ -174,7 +174,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | admin, Make admin, Become admin | administrator, Claim administration |
 | Up next (the list), Queue (the verb) | shared queue, Add to Up next |
 | Saved, Save / Saved | Kept, Keep, favorites |
-| Folders, Jellyfin, Live TV, Radio playlists, Movie & show info | TV folders, IPTV, TV guide, metadata |
+| Live TV, Radio playlists | IPTV, TV guide |
 | Try again | Retry, Reload, Refresh |
 | Couldn't load X. | Could not…, Check the connection and… |
 | Offline. Reconnecting to {name}… | 30 variants of "Reconnect to…" |

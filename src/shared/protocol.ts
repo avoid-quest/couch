@@ -1,23 +1,22 @@
 import type { RadioProgrammeDetails } from "./radio";
 import type { MediaShape } from "./media";
 import type { ProviderId, VideoQuality } from "./providers";
-import type { WatchingProfile } from "./library";
+import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
 export type PlaybackCollection = { title: string; url: string; index?: number };
-export type QueueEntry = { subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
+export type QueueEntry = { subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
-export type ReplayGainMode = "off" | "track" | "album";
-export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; replayGain: ReplayGainMode; autoplay?: boolean };
+export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; autoplay?: boolean };
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 export type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
-export type Domain = "library" | "progress" | "radio" | "iptv" | "providers" | "jellyfin" | "playlists" | "for-later" | "controllers" | "settings" | "sound" | "bluetooth" | "display" | "updates" | "tools";
+export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "controllers" | "settings" | "sound" | "bluetooth" | "display";
 export type NavigationKey ="up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 
 export type PlayerState = {
@@ -34,7 +33,6 @@ export type PlayerState = {
   speed?: number;
   audioDelay?: number;
   subtitleDelay?: number;
-  replayGain?: ReplayGainMode;
   subtitleError?: string | null;
   nowPlaying?: NowPlaying | null;
 };
@@ -68,10 +66,7 @@ export type SessionState = {
 export type Action =
   | { type: "navigate"; key: NavigationKey }
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
-  | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
-  | { type: "enqueueAlbum"; albumId: string; playNow?: boolean; placement?: "next" }
   | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection }
-  | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next" }
   | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next" }
   | { type: "remove"; entryId: string }
@@ -85,10 +80,9 @@ export type Action =
   | { type: "mute"; muted: boolean }
   | { type: "volume"; volume: number }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
-  | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" | "replayGain" }
+  | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
-  | { type: "replayGain"; playbackId: string; mode: ReplayGainMode }
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
@@ -113,7 +107,6 @@ export type PlaybackCommand =
   | { type: "volume"; volume: number }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
-  | { type: "replayGain"; playbackId: string; mode: ReplayGainMode }
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "stop" };
@@ -125,18 +118,11 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-export type HostMessage = { type: "sound"; requestId: string; state?: unknown; error?: string } | { type: "bluetooth"; requestId: string; state?: import("./bluetooth").BluetoothState; error?: string } | { type: "appimageQuiesce"; restart?: boolean; nonce: string; confirmInterrupt: boolean; whenIdle: boolean } | { type: "appimageResume"; nonce: string } | ({ type: "appimageUpdate" } & import("./updates").AppImageUpdateReply) | ({ type: "debUpdate" } & import("./updates").DebUpdateReply) | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
+export type HostMessage = { type: "sound"; requestId: string; state?: unknown; error?: string } | { type: "bluetooth"; requestId: string; state?: import("./bluetooth").BluetoothState; error?: string } | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "player"; state: PlayerState } | { type: "shutdown" };
 export type SidecarMessage =
   | { type: "addresses"; urls: string[] }
-  | { type: "appimageQuiesced"; nonce: string; closed: boolean; error: string | null }
-  | { type: "appimageResumed"; nonce: string; error: string | null }
-  | { type: "appimageUpdate"; requestId: string; action: import("./updates").AppImageUpdateAction }
-  | { type: "debUpdate"; requestId: string; action: import("./updates").DebUpdateAction }
   | { type: "bluetooth"; requestId: string; action: import("./bluetooth").BluetoothAction }
   | { type: "sound"; requestId: string; action: unknown }
   | { type: "display"; requestId: string; action: import("./display").DisplayAction }
   | ({ type: "ready" } & ConnectionInfo)
-  | { type: "playback"; command: PlaybackCommand }
-  | { type: "diagnostics"; requestId: string }
-  | { type: "readiness"; nonce: string }
-  | { type: "observe" };
+  | { type: "playback"; command: PlaybackCommand };

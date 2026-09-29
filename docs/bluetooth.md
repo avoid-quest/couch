@@ -8,7 +8,6 @@ The shared settings rows show macOS power/Forget and Windows connect/disconnect 
 
 The UI reuses the existing flat shadcn `SettingsRow`, Button and AlertDialog components. The [official Item catalog](https://ui.shadcn.com/docs/components/item) was checked; the existing row already provides the required description/actions layout, so no new component or custom panel is needed.
 
-The three platform fixtures are checked against the native support serializers and exercised through native transport, authorized HTTP requests, reconciliation and the settings UI. They establish software behavior only. #459's accepted Mac owner reports, installed Windows pairing/audio reports and remaining deferrals stand; physical pairing/audibility and #496's installed-release qualification remain separate.
 
 ## Mac desktop
 
@@ -16,7 +15,6 @@ On a Mac playback host, Bluetooth uses the same paired Administrator endpoint an
 
 The public Mac API supports PIN entry, numeric comparison confirmation and passkey display in Couch. The checked public pairing class has no numeric passkey entry reply. Bluetooth power and bond removal lack a supported public operation, so those actions say "Check in System Settings on the playback host." An absent adapter and denied Bluetooth permission are reported separately. Apple's Bluetooth privacy description is in the Mac bundle's `Info.plist`.
 
-Mac callback fixtures cover current and stale prompts, cancellation, and connection readback. The paired HTTP fixture covers a separate Administrator, Controller denial and revocation. Existing C39S bond, connection and disconnection evidence belongs to the [device-management prototype](https://github.com/avoid-quest/couch/issues/459#issuecomment-5784957834); this source change has not repeated those hardware operations or tested a new pairing ceremony. No audible output, installed bundle or general Mac sound-routing result is inferred from these fixtures. The companion and Linux Bluetooth behavior below remain separate.
 
 ## Linux TV
 
@@ -26,19 +24,7 @@ Couch uses the official [BlueZ Rust binding, bluer 0.17.4](https://github.com/bl
 
 Paired, connected and selected for playback are separate states. A connected output appears in Sound, correlated by the audio card's Bluetooth address. Sound selects and tests the output and exposes available output-only A2DP profiles. It retains the saved address even while that output is missing. Couch makes one bounded reconnect attempt for that selected address on startup; it does not reconnect every remembered nearby device. A failed attempt appears in Bluetooth progress and can be retried with Connect. No reconnect resumes media. Existing Sound behavior pauses seekable playback or stops live media when its selected output disappears.
 
-The Ubuntu companion requires `bluez` and `libspa-0.2-bluetooth` alongside its existing PipeWire, WirePlumber, logind and session packages. Bluetooth and audio run as the existing `couch-tv` login, without another daemon, elevated application privileges or a separate audio server. WirePlumber 0.4.17's [logind module](https://github.com/PipeWire/wireplumber/blob/0.4.17/modules/module-logind.c) checks whether the user is active; an SSH administrator can also qualify. Two active users can therefore connect a speaker into the administrator's audio graph while Couch sees no output.
+The TV setup requires `bluez` and `libspa-0.2-bluetooth` alongside its existing PipeWire, WirePlumber, logind and session packages. Bluetooth and audio run as the existing `couch-tv` login, without another daemon, elevated application privileges or a separate audio server. WirePlumber 0.4.17's [logind module](https://github.com/PipeWire/wireplumber/blob/0.4.17/modules/module-logind.c) checks whether the user is active; an SSH administrator can also qualify. Two active users can therefore connect a speaker into the administrator's audio graph while Couch sees no output.
 
-The companion's `/usr/share/wireplumber/bluetooth.lua.d/80-couch-owner.lua` disables only the Bluetooth audio monitor for users other than `couch-tv`. It leaves other users' ALSA audio and the TV user's logind arbitration unchanged. Ubuntu's systemd user service supplies `USER`; [`os.getenv` is available in WirePlumber 0.4.17's Lua sandbox](https://github.com/PipeWire/wireplumber/blob/0.4.17/modules/module-lua-scripting/wplua/sandbox.lua). The fragment runs after `50-bluez-config.lua` and before [`90-enable-all.lua`](https://github.com/PipeWire/wireplumber/blob/0.4.17/src/config/bluetooth.lua.d/90-enable-all.lua), which honors the monitor's enabled setting. An administrator can override the same filename under `/etc/wireplumber/bluetooth.lua.d/`. This policy belongs to the Ubuntu appliance package; a Tauri application update alone does not install it.
 
-## Qualification
-
-Focused Bun tests cover administrator ownership, delayed revocation, cancellation alongside an in-flight native read, exact Sound address correlation, saved-output changes, disconnected-but-selected UI, and page/connection exit cleanup. The Linux Rust fixture uses a private D-Bus service double through the actual bluer library. Its name check refuses a normal production system bus. It verifies discovery release, current-agent confirmation/PIN handling, late-answer rejection, authentication failure, the actual 60-second timeout, devices without discovery-time UUIDs, generic device connect, target-scoped service authorization, saved A2DP bond reconnect through a fresh client, forget, vanished devices and absent adapter. This proves the protocol boundary, not Bluetooth radio or audio hardware.
-
-Run the ignored Rust test only inside a disposable Linux container with a private bus, after compiling the native test target:
-
-```sh
-dbus-daemon --session --fork --address=unix:path=/tmp/couch-bluetooth-bus
-DBUS_SYSTEM_BUS_ADDRESS=unix:path=/tmp/couch-bluetooth-bus cargo test --manifest-path src-tauri/Cargo.toml bluez_pair_discovery_cancel_reconnect_and_forget -- --ignored --nocapture
-```
-
-[Pair and reconnect Bluetooth speakers or headphones](https://github.com/avoid-quest/couch/issues/15) retains the real-device acceptance. C39S was identified by the owner in earlier discussion; its availability must be confirmed before taking it over. Required hardware evidence remains actual pair, audible stereo test and media, output loss during playback, reconnect without autoplay, restart reconnect, forget, rfkill/absent-adapter behavior, and proof that the active Couch session owns the output. No T480 changes or hardware results are implied by these source and D-Bus checks.
+[Pair and reconnect Bluetooth speakers or headphones](https://github.com/avoid-quest/couch/issues/15) retains the real-device acceptance.

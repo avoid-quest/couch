@@ -4,7 +4,6 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -98,7 +97,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
       {!!items.length && <MediaList ref={list} aria-label="For later">
         <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
           {items.map((item, index) => {
-            const art = item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="size-full rounded-none" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />;
+            const art = <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />;
             const meta = [item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ");
             const inspect = () => details.open(itemLocation("saved", item.id));
             const play = <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => act(item, "play", index)}>Play</Button>;

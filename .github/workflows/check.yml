@@ -2,12 +2,6 @@ name: Check
 
 on:
   workflow_dispatch:
-    inputs:
-      native:
-        description: Include the retained locked Cargo and startup-buffer checks
-        type: boolean
-        default: false
-        required: true
 
 permissions:
   contents: read
@@ -16,14 +10,6 @@ jobs:
   linux:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
-    env:
-      CHECK_NATIVE: ${{ inputs.native }}
-      # Workflow containers can expose several private interfaces; qualification
-      # needs one deterministic LAN address for native sidecar sharing tests.
-      COUCH_LAN_INTERFACE: eth0
-      # Keep assertions and overflow checks without bulky debug symbols.
-      CARGO_PROFILE_DEV_DEBUG: 0
-      CARGO_PROFILE_TEST_DEBUG: 0
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
@@ -32,36 +18,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - name: Install selected host test dependencies
-        run: |
-          wanted=(apt-utils acl jq ffmpeg minisign)
-          if [[ "$CHECK_NATIVE" = true ]]; then
-            wanted+=(libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev)
-          fi
-          packages=()
-          for package in "${wanted[@]}"; do
-            [[ $(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null) = installed ]] || packages+=("$package")
-          done
-          if (( ${#packages[@]} )); then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends "${packages[@]}"
-          fi
       - run: bun install --frozen-lockfile
-      - name: Set up Rust
-        if: inputs.native
-        run: rustup show active-toolchain
-      - uses: Swatinem/rust-cache@v2
-        if: inputs.native
-        with:
-          workspaces: src-tauri
-          cache-bin: false
-          key: ubuntu-24.04-test
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Verify the checked-out revision
-        run: |
-          args=()
-          if [[ "$CHECK_NATIVE" = true ]]; then args+=(--native); fi
-          bun run verify "${args[@]}"
-      - name: Retain the exact-revision receipt
-        if: always()
-        run: jq . .artifacts/verification.json
+      - run: bun run typecheck
+      - run: bun run build

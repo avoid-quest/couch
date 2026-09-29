@@ -1,26 +1,18 @@
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { version } from "../package.json";
-import tauri from "../src-tauri/tauri.conf.json";
-import { releaseVersion } from "./hosted-policy";
-import { createPayload, desktopTarget } from "./desktop-payload";
 import { build as viteBuild } from "vite";
 import { frontendPaths } from "../src/shared/page-paths";
 
-const target = process.env.COUCH_DESKTOP_TARGET ?? desktopTarget();
-if (process.env.COUCH_DESKTOP_TARGET && target !== "x86_64-pc-windows-msvc") throw new Error(`Unsupported cross-build target: ${target}`);
-const cargo = Bun.TOML.parse(await Bun.file("src-tauri/Cargo.toml").text()) as { package: { version: string } };
-if (version !== tauri.version || version !== cargo.package.version) throw new Error("package.json, Tauri and Cargo versions must match");
+const targets: Record<string, string> = {
+  "darwin-arm64": "aarch64-apple-darwin", "darwin-x64": "x86_64-apple-darwin",
+  "linux-arm64": "aarch64-unknown-linux-gnu", "linux-x64": "x86_64-unknown-linux-gnu", "win32-x64": "x86_64-pc-windows-msvc",
+};
+const target = targets[`${process.platform}-${process.arch}`];
+if (!target) throw new Error(`Unsupported build target: ${process.platform}/${process.arch}`);
 const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
 const dirty = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim() !== "";
-const helpers = await Bun.file("src-tauri/resources/tools.json").exists() ? await Bun.file("src-tauri/resources/tools.json").json() : null;
-const format = process.env.COUCH_PACKAGE_FORMAT ?? (process.platform === "darwin" ? "dmg" : process.platform === "win32" ? "nsis" : "deb");
-const packaged = !!process.env.COUCH_PACKAGE_FORMAT || helpers !== null;
-const buildInfo = JSON.stringify({ version: releaseVersion(version), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, readableDataFormats: [1], maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged, clientOnly: false, helpers });
+const buildInfo = JSON.stringify({ version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, bun: Bun.version, packaged: false });
 await Bun.write("src-tauri/build-info.json", buildInfo);
-
-await mkdir("src-tauri/binaries", { recursive: true });
 
 // One client graph: Vite emits dist, which Tauri packages unchanged. The Bun
 // sidecar embeds those same bytes, including the generated worker and manifest.
@@ -43,12 +35,7 @@ if (!files.includes(resolve(dist, "index.html"))) throw new Error("Vite did not 
 const frontendModule = `${imports.join("\n")}\nexport const assets = {${responses.join(",\n")}};\nexport default assets["/index.html"];\n`;
 const server = await Bun.build({
   entrypoints: ["src/main.ts"],
-  compile: {
-    outfile: `src-tauri/binaries/couch-server-${target}`,
-    ...(target === "x86_64-pc-windows-msvc" ? { target: "bun-windows-x64" as const } : {}),
-    autoloadDotenv: false,
-    autoloadBunfig: false,
-  },
+  compile: { outfile: `src-tauri/binaries/couch-server-${target}`, autoloadDotenv: false, autoloadBunfig: false },
   minify: true,
   plugins: [{ name: "vite-frontend-bytes", setup(build) {
     build.onLoad({ filter: /[/\\]src[/\\]frontend\.ts$/ }, () => ({ contents: frontendModule, loader: "ts" }));
@@ -56,26 +43,4 @@ const server = await Bun.build({
   define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo), "import.meta.env.DEV": "false" },
 });
 if (!server.success) throw new AggregateError(server.logs, "Sidecar build failed");
-if (packaged && format === "dmg") {
-  // Tauri signs the copied sidecar in the app. Sign these same bytes under its
-  // installed basename first so payload.json hashes the final ad-hoc signature.
-  const directory = await mkdtemp(join(tmpdir(), "couch-mac-sidecar-"));
-  try {
-    const source = `src-tauri/binaries/couch-server-${target}`;
-    const installed = join(directory, "couch-server");
-    await cp(source, installed);
-    const sign = Bun.spawnSync(["codesign", "--force", "--sign", "-", "--options", "runtime", "--entitlements", "src-tauri/Entitlements.mac.plist", installed], { stderr: "inherit" });
-    if (sign.exitCode !== 0) throw new Error("Cannot ad-hoc sign the Mac coordinator");
-    await cp(installed, source);
-  } finally { await rm(directory, { recursive: true, force: true }); }
-}
-if (packaged) {
-  const hostFile = Bun.file("src-tauri/resources/host.json");
-  const host = await hostFile.exists() ? await hostFile.json() : { target, os: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux", architecture: process.arch };
-  if (host.target !== target) throw new Error(`Package resources target ${host.target}, build target ${target}`);
-  const payload = await createPayload(target, format, `src-tauri/binaries/couch-server-${target}${target === "x86_64-pc-windows-msvc" ? ".exe" : ""}`, "src-tauri/resources", helpers ? ["yt-dlp", "deno", "ffprobe"] : [], host.packages ?? []);
-  const inventory = JSON.stringify(payload);
-  await Bun.write("src-tauri/resources/payload.json", inventory);
-  await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, packageFormat: format, host, payloadSha256: new Bun.CryptoHasher("sha256").update(inventory).digest("hex") }));
-}
 console.log(`Built one frontend (Vite), embedded in Tauri assets and the Bun sidecar for ${target}`);

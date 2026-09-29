@@ -230,6 +230,3 @@ mod linux {
 #[cfg(target_os = "linux")]
 pub use linux::Bluetooth;
 
-#[cfg(all(test, target_os = "linux"))]
-#[path = "bluetooth_tests.rs"]
-mod tests;

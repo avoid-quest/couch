@@ -10,4 +10,3 @@ export function buildKey(build: { version: string; revision: string | null; data
   return build.revision ? `${build.version}:${build.revision}:${build.dataFormat}` : null;
 }
 
-export type MaintenanceBuild = { version: string; revision: string; dataFormat: number };

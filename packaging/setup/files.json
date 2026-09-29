@@ -18,8 +18,6 @@
     "gzip",
     "ca-certificates",
     "fonts-dejavu-core",
-    "fuse3",
-    "libfuse2t64",
     "libgl1",
     "libegl1",
     "libgles2",
@@ -33,7 +31,6 @@
     "x11-xserver-utils",
     "pulseaudio-utils",
     "jq",
-    "minisign",
     "procps"
   ],
   "audio": [

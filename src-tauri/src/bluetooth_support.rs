@@ -29,22 +29,3 @@ pub fn windows() -> Value {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn inventories_match_the_shared_platform_fixtures() {
-        let fixtures: Value = serde_json::from_str(include_str!(
-            "../../tests/fixtures/bluetooth-inventories.json"
-        ))
-        .unwrap();
-        for (platform, support) in [
-            ("linux", linux()),
-            ("macos", macos()),
-            ("windows", windows()),
-        ] {
-            assert_eq!(support, fixtures[platform]["support"], "{platform}");
-        }
-    }
-}

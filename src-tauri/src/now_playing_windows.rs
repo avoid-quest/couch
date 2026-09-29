@@ -292,15 +292,3 @@ pub fn artwork(_app: &tauri::AppHandle, id: String, url: String, bytes: Vec<u8>)
     });
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn artwork_requires_a_decodable_image() {
-        let _apartment = Apartment::new(RO_INIT_MULTITHREADED).unwrap();
-        assert!(thumbnail(super::super::FALLBACK_ARTWORK).is_ok());
-        assert!(thumbnail(b"not an image").is_err());
-        assert!(thumbnail(&super::super::FALLBACK_ARTWORK[..32]).is_err());
-    }
-}

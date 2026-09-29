@@ -6,15 +6,16 @@ persistent state. Tauri owns the native window and libmpv transport; native
 observations return to the coordinator. A remote never resolves private playback
 URLs or becomes another playback authority.
 
-All supported native desktop builds include playback. **This computer** runs
-the local host/player; **Another Couch** controls a selected host in the same
-bundled app window while the local player stays stopped. This installation
-retains its own private maintenance coordinator and updater, independent of the
-selected host's availability and authority. Browser remotes remain controllers;
-Desktop/TV presentation and Controller/Administrator roles are separate choices.
-The serialized `clientOnly` build/artifact field remains fixed to `false` for
-verification compatibility. Retained selections, exact-origin pairings, data,
-legacy desktop protocol markers and historical update journals keep their meaning.
+The desktop app includes playback. **This computer** runs the local host and
+player; **Another Couch** controls a selected host in the same bundled app window
+while the local player and coordinator stay stopped. Browser remotes remain
+controllers; Desktop/TV presentation and Controller/Administrator roles are
+separate choices.
+
+Sources are external internet media only: yt-dlp sites (YouTube, Twitch,
+RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.
+Couch serves no local files. The rebuild plan is
+[#644](https://github.com/avoid-quest/couch/issues/644).
 
 ## Frontend delivery
 
@@ -38,26 +39,10 @@ The worker precaches the shell, not API data, and its navigation fallback is
 restricted to the coordinator's known frontend paths. The loaded build identity
 is still checked before opening the control WebSocket.
 
-## Development and qualification
+## Development
 
 `bun run desktop` uses Tauri's `beforeDevCommand`, `devUrl`, and source watcher
 for native development. `bun run dev` is the separate browser-only loop: it
 starts the source-mode Bun coordinator and Vite together. Vite runs on port
-1420 with an API proxy to the coordinator on port 4100; Browser remotes use
-Bun's hosted UI. Neither development loop proves that the production remote works.
-
-After committing and building, run `bun tests/linux/built-remote.ts` inside the
-existing Linux test environment with WebKitWebDriver, X11/Openbox, xdotool and
-the configured null PulseAudio sink. It reuses `tests/linux/ui.ts`, checks every
-served byte against `dist`, opens a deep link, pairs, navigates, and verifies
-browser Play/Stop through the coordinator's private native pipe. It also checks
-worker activation on loopback, a supported secure context. This journey uses a
-simulated native peer, not libmpv or physical hardware. It writes the exact build
-identity, asset hashes, checks and a screenshot to `.artifacts/built-remote`.
-`COUCH_SIDECAR`, `COUCH_FRONTEND_DIST` and `COUCH_ARTIFACTS` can select the already
-built paths. Run `bun run test:linux` for the existing actual Tauri/libmpv journey.
-
-The dated [architecture research](research/architecture.md) records alternatives
-and earlier delivery proposals, including the former Bun-only frontend build.
-It is historical evidence, not the current build contract; this map and
-[scripts/build.ts](../scripts/build.ts) describe current delivery.
+1420 with an API proxy to the coordinator on port 4100 (`COUCH_PORT`).
+[scripts/build.ts](../scripts/build.ts) describes current delivery.

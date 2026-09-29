@@ -5,7 +5,6 @@ import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize,
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { PlaybackTimeline, PlaybackTransport, PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
 import { sourceLabel } from "@/source-label";
@@ -122,7 +121,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const collection = collectionTarget(current?.collection);
   const hasInfo = !!(currentProgramme || current?.description || collection);
   const infoLabel = currentProgramme ? "About this show" : "Details";
-  const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
+  const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
@@ -132,7 +131,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a></Button>}
   </>;
   const unavailable = connected && player?.status === "unavailable";
-  const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.source.startsWith("file:") || current?.source.startsWith("library:") ? "The file is missing from its folder." : current?.live ? "This stream has ended." : "This video is unavailable.";
+  const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
   const status = !current ? null : unavailable ? { title: `Player not running on ${localHost ? "this computer" : name}`, detail: "Browsing and Up next still work." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }

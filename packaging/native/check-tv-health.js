@@ -9,6 +9,12 @@ const children = (await Promise.all((await readdir(`/proc/${pid}/task`)).map(thr
 const child = (await Promise.all(children.filter(Boolean).map(async candidate => {
   try { return await readlink(`/proc/${candidate}/exe`) === "/usr/bin/couch-server" ? candidate : null; } catch { return null; }
 }))).find(Boolean);
+// Another Couch starts no local backend; only This computer runs one.
+const mode = await readFile(`${data}/operating-mode.json`, "utf8").then(text => JSON.parse(text).mode ?? null, () => null);
+if (!child && mode !== "local") {
+  console.log(JSON.stringify({ mode: mode ?? "unchosen", nativePid: Number(pid) }));
+  process.exit(0);
+}
 if (!child) throw new Error("The native Couch backend has not started.");
 const environment = Object.fromEntries((await readFile(`/proc/${child}/environ`, "utf8")).split("\0").filter(Boolean).map(entry => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)]));
 if (environment.COUCH_DATA_DIR !== data) throw new Error("The native backend is using another data directory.");
@@ -24,8 +30,7 @@ const get = async path => {
   if (!response.ok) throw new Error("The native backend has not become ready.");
   return response.json();
 };
-const remote = environment.COUCH_MAINTENANCE_ONLY === "1";
-const actual = remote ? (await get("/api/updates")).running : await get("/api/build");
-if ((remote ? ["version", "revision"] : ["version", "revision", "dataFormat"]).some(key => actual[key] !== expected[key])) throw new Error("The native backend build differs from the installed package.");
-if (!remote && !(await get("/api/health")).ok) throw new Error("The native backend is unhealthy.");
-console.log(JSON.stringify({ version: actual.version, revision: actual.revision, dataFormat: actual.dataFormat, mode: remote ? "remote" : "local", nativePid: Number(pid), backendPid: Number(child) }));
+const actual = await get("/api/build");
+if (["version", "revision", "dataFormat"].some(key => actual[key] !== expected[key])) throw new Error("The native backend build differs from the installed package.");
+if (!(await get("/api/health")).ok) throw new Error("The native backend is unhealthy.");
+console.log(JSON.stringify({ version: actual.version, revision: actual.revision, dataFormat: actual.dataFormat, mode: "local", nativePid: Number(pid), backendPid: Number(child) }));

@@ -1,7 +1,7 @@
 # Control Couch from Mac or Windows
 
 Open the playback computer's address in a browser. The selected Couch owns
-playback, its media folders and the shared queue. You do not need Bun, Rust,
+playback and the shared queue. You do not need Bun, Rust,
 Docker or a native Couch package on the controller computer.
 
 ## Connect
@@ -28,9 +28,7 @@ another computer, use the advertised LAN address or the configured hostname.
 Pairing grants Controller access. The first remote can claim Administrator
 access with the separate setup code on the TV; a current Administrator can
 promote later remotes in **Settings > Connections**. A browser does not become
-another player. Folder paths refer to the playback computer, including any NAS
-shares mounted there. Your laptop's files do not become available by entering
-their paths in a remote.
+another player.
 
 ## Native desktop app
 
@@ -40,11 +38,7 @@ playback. The local owner or a paired Administrator can select its output and
 control volume and mute; Couch also shows external changes.
 
 Another Couch uses the selected host in the same bundled app window, with that
-host's paired role. It keeps the local player stopped and does not share this
-computer's files. **Update this app** uses this installation's private maintenance
-coordinator, even if the selected host is offline. A paired Administrator's
-**Settings > Updates** applies to the selected host; a Controller cannot install
-that host's updates. Source builds have no packaged update to install.
+host's paired role. It keeps the local player and coordinator stopped.
 
 The app remembers the selected device, targets and exact-address pairings. If
 it is unreachable, use **Try again**, check its address or choose **Use this
@@ -86,13 +80,3 @@ Pairing again does not delete the TV's media or queue.
 For a configured HTTPS address, the computer must trust the deployment's
 certificate. Follow the administrator's [named-origin setup](lan-origin.md)
 and use its advertised address consistently.
-
-## Qualification
-
-The [8 September browser checks](qualification/desktop-controllers-171.md) used
-Safari and its website app against a loopback fixture. Later
-[Mac source-app checks](qualification/desktop-461/README.md) exercised local and
-remote mode, roles and client size; [window checks](qualification/desktop-464/README.md)
-covered Close, reopen and Quit. Those checks do not qualify a downloaded Mac
-installer, local Mac playback or Windows. The Mac-to-installed-TV physical
-journey remains a separate acceptance check.

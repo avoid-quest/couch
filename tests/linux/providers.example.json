@@ -1,6 +1,0 @@
-[
-  {"name":"YouTube original Big Buck Bunny","url":"https://www.youtube.com/watch?v=YE7VzlLtp-4","kind":"webpage","video":true,"seekPosition":30},
-  {"name":"Twitch LofiGirl live","url":"https://www.twitch.tv/lofigirl","kind":"webpage","video":true,"observeSeconds":35},
-  {"name":"RaiNews24 live","url":"https://www.raiplay.it/dirette/rainews24","kind":"webpage","video":true},
-  {"name":"Sygma from radio.avoid.quest","url":"https://radio.syg.ma/audio.mp3","kind":"direct","video":false}
-]

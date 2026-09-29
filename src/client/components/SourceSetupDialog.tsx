@@ -5,7 +5,7 @@ import { ADMIN_ONLY } from "@/copy";
 import { SettingsSources } from "@/sections/settings/SettingsSources";
 import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
-const sources = { jellyfin: "Jellyfin", iptv: "Live TV", folders: "Folders", radio: "Radio playlists", "streaming-community": "StreamingCommunity" } as const;
+const sources = { iptv: "Live TV", radio: "Radio playlists", "streaming-community": "StreamingCommunity" } as const;
 export type SourceSetupKind = keyof typeof sources;
 type Props = SourceSettingsProps & { localOnly?: boolean; open: boolean; onOpenChange: (open: boolean) => void; source?: SourceKind };
 
@@ -21,7 +21,7 @@ export function SourceSetupDialog({ open, onOpenChange, localOnly, source: initi
       >
         <DialogHeader><DialogTitle>Add source</DialogTitle></DialogHeader>
         {props.canManage ? (
-          <Tabs defaultValue={initialSource ?? "jellyfin"} key={initialSource ?? "jellyfin"}>
+          <Tabs defaultValue={initialSource ?? "iptv"} key={initialSource ?? "iptv"}>
             <TabsList aria-label="Source type" className="h-auto w-full flex-wrap justify-start">
               {Object.entries(sources).map(([value, label]) => <TabsTrigger key={value} value={value}>{label}</TabsTrigger>)}
             </TabsList>

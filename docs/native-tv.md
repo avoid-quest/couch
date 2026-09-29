@@ -41,7 +41,6 @@ when convenient to apply first-time session and power configuration.
 
 The retired 0.1.0 AppImage installation is not migrated. Fresh installations use
 the package above; an old AppImage installation stays as it is and its session is
-not switched. The trusted local host and paired Administrators can install
-signed native updates through the restricted package-update service;
-Controllers cannot. Manual is the default, and Auto when idle is optional.
-Setup grants no general package-manager privileges.
+not switched. In-app updates were removed while Couch is rebuilt
+([#644](https://github.com/avoid-quest/couch/issues/644)); setup grants no
+package-manager privileges.

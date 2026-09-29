@@ -4,7 +4,7 @@ import { SettingsRow } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import type { WatchingProfile } from "../../../../shared/library";
+import type { WatchingProfile } from "../../../../shared/viewing";
 import type { Action, PlaybackPreferences as Preferences, ProfilePlaybackPreferences } from "../../../../shared/protocol";
 import { playbackLanguages } from "../../../playback-languages";
 
@@ -52,7 +52,6 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
       <ChoiceGroup label="Speed" value={String(values.speed)} options={speeds} disabled={disabled} onValueChange={value => apply({ speed: Number(value) })} />
     </SettingsRow>
     <SettingsRow label="Volume leveling" description="Music only.">
-      <ChoiceGroup label="Volume leveling" value={values.replayGain} options={[{ value: "off", label: "Off" }, { value: "track", label: "Track" }, { value: "album", label: "Album" }]} disabled={disabled} onValueChange={value => apply({ replayGain: value })} />
     </SettingsRow>
     {save.error && <Alert variant="destructive"><AlertDescription>{save.error.message}</AlertDescription></Alert>}
   </>;

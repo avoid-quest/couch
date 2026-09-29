@@ -16,7 +16,7 @@ export type SearchHit = SearchFacet & {
   position?: number; live?: boolean;
   /** What an openable hit is, shown instead of a length. */
   collection?: "Channel" | "List";
-  thumbnail?: string; artworkId?: string | null; video?: boolean;
+  thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void };
   actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode }>;
 };

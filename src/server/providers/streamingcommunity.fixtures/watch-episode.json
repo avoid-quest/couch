@@ -1,7 +1,0 @@
-{
-  "component": "Titles/Watch",
-  "props": {
-    "title": { "id": 1955, "name": "MasterChef Italia", "slug": "masterchef-italia" },
-    "episode": { "id": 17207, "number": 7, "name": "Puntata 7", "season": { "id": 1195, "number": 11 } }
-  }
-}

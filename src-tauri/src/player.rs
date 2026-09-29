@@ -1,15 +1,11 @@
 use std::collections::BTreeMap;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    mpsc::{Receiver, RecvTimeoutError},
-    Arc,
-};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
 
 use crate::protocol::{
-    ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlaybackSegment, PlayerState, ReplayGainMode, TrackKind, VideoRect,
+    ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlaybackSegment, PlayerState, TrackKind, VideoRect,
 };
 use crate::Host;
 
@@ -17,8 +13,6 @@ pub enum Request {
     Command(PlaybackCommand),
     Layout,
     Observe,
-    Diagnostics(String),
-    Readiness { nonce: String, deadline: std::time::Instant },
     Stop(tokio::sync::oneshot::Sender<Result<(), String>>),
     Shutdown,
 }
@@ -78,31 +72,6 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             Ok(Request::Observe | Request::Command(PlaybackCommand::Stop))
         );
         let result = match request {
-            Ok(Request::Readiness { nonce, deadline }) => {
-                let ok = player.readiness(&app, deadline).is_ok();
-                let build = serde_json::from_str::<serde_json::Value>(
-                    option_env!("COUCH_BUILD_INFO").unwrap_or("{}"),
-                ).unwrap_or(serde_json::Value::Null);
-                app.state::<Host>().report_message(serde_json::json!({
-                    "type": "readiness", "nonce": nonce, "ok": ok, "build": build,
-                }));
-                continue;
-            }
-            Ok(Request::Diagnostics(request_id)) => {
-                // A slow display/property query must not occupy the playback worker.
-                // Only one query may remain in flight, even after the pipe timeout.
-                if !player.diagnostics_pending.swap(true, Ordering::Relaxed) {
-                    let pending = player.diagnostics_pending.clone();
-                    let app = app.clone();
-                    let playback_id = player.session_key.clone();
-                    tauri::async_runtime::spawn_blocking(move || {
-                        let report = crate::diagnostics::collect(&app, playback_id);
-                        app.state::<Host>().report_message(serde_json::json!({ "type": "diagnostics", "requestId": request_id, "report": report }));
-                        pending.store(false, Ordering::Relaxed);
-                    });
-                }
-                continue;
-            }
             Ok(Request::Stop(reply)) => {
                 let result = player.command(&app, PlaybackCommand::Stop);
                 let _ = reply.send(result);
@@ -149,41 +118,8 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
     }
 }
 
-#[cfg(test)]
-mod layout_queue_tests {
-    use super::*;
-
-    #[test]
-    fn keeps_only_the_latest_layout_until_the_worker_runs() {
-        let mut queue = LayoutQueue::default();
-        assert!(queue.push(VideoRect { width: 100.0, ..VideoRect::default() }));
-        assert!(!queue.push(VideoRect { width: 200.0, ..VideoRect::default() }));
-        assert_eq!(queue.take().unwrap().width, 200.0);
-        assert!(queue.push(VideoRect { width: 300.0, ..VideoRect::default() }));
-    }
-
-    #[test]
-    fn stop_errors_reach_the_forced_state_report() {
-        assert!(!is_rejected_control(&PlaybackCommand::Stop));
-        assert!(matches!(command_error(false, false, "close failed".into()), CommandError::Report(error) if error == "close failed"));
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
-    #[test]
-    fn started_open_keeps_observing_after_repeated_stats_timeouts() {
-        let mut reconciling = true;
-        assert!(observation_error(&mut reconciling, tauri_plugin_video::Error::DispatcherInFlight).is_ok());
-        assert!(reconciling);
-        assert!(observation_error(&mut reconciling, tauri_plugin_video::Error::DispatcherInFlight).is_ok());
-        assert!(reconciling);
-        assert!(observation_error(&mut reconciling, tauri_plugin_video::Error::InvalidRequest("open failed".into())).is_err());
-        assert!(!reconciling);
-    }
-}
-
 #[derive(Default)]
 struct Player {
-    diagnostics_pending: Arc<AtomicBool>,
     reconciling_started_load: bool,
     state: PlayerState,
     rect: VideoRect,
@@ -192,28 +128,8 @@ struct Player {
 }
 
 impl Player {
-    fn readiness(&self, app: &AppHandle, deadline: std::time::Instant) -> Result<(), String> {
-        if self.state.playback_id.is_some() || std::time::Instant::now() >= deadline {
-            return Err("Native readiness requires an idle player and a current request".into());
-        }
-        #[cfg(any(target_os = "linux", target_os = "macos", windows))]
-        {
-            use tauri_plugin_video::VideoExt;
-            app.video().desktop().readiness_native(deadline).map_err(|error| error.to_string())
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-        {
-            let _ = app;
-            Err("Native update readiness requires desktop playback".into())
-        }
-    }
-
     fn command(&mut self, app: &AppHandle, command: PlaybackCommand) -> Result<(), String> {
         match command {
-            PlaybackCommand::Prepare { playback_id, next } => {
-                self.prepare(app, playback_id, next)?;
-                Ok(())
-            }
             PlaybackCommand::AudioOutput { output } => self.audio_output(app, &output),
             PlaybackCommand::AudioPause => self.control(app, "audioPause", 0.0, -1),
             PlaybackCommand::Load {
@@ -336,12 +252,6 @@ impl Player {
                 }
                 Ok(())
             }
-            PlaybackCommand::ReplayGain { playback_id, mode } => {
-                if self.state.playback_id.as_deref() == Some(&playback_id) {
-                    self.replay_gain(app, mode)?;
-                }
-                Ok(())
-            }
             PlaybackCommand::SubtitleDelay { playback_id, delay } => {
                 if self.state.playback_id.as_deref() == Some(&playback_id) {
                     self.control(app, "subtitleDelay", delay, -1)?;
@@ -377,20 +287,6 @@ impl Player {
 
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
 impl Player {
-    fn prepare(&mut self, app: &AppHandle, playback_id: String, next: Option<crate::protocol::PreparedAudio>) -> Result<(), String> {
-        use tauri_plugin_video::{NativePrepareRequest, VideoExt};
-        let Some(session_key) = self.session_key.clone() else { return Ok(()); };
-        let request: NativePrepareRequest = serde_json::from_value(serde_json::json!({
-            "sessionKey": session_key,
-            "playbackId": playback_id,
-            "next": next.map(|next| serde_json::json!({ "playbackId": next.playback_id, "uri": next.source, "headers": next.headers, "preferences": next.preferences })),
-        })).map_err(|error| error.to_string())?;
-        // An unsupported preparation falls back to the existing EOF load.
-        // It must not replace the current song's useful playback state.
-        if let Ok(snapshot) = app.video().desktop().prepare_native(request) { self.apply(snapshot)?; }
-        Ok(())
-    }
-
     fn load(
         &mut self,
         app: &AppHandle,
@@ -509,26 +405,6 @@ impl Player {
         self.apply(snapshot)
     }
 
-    fn replay_gain(&mut self, app: &AppHandle, mode: ReplayGainMode) -> Result<(), String> {
-        use tauri_plugin_video::{NativeControlRequest, NativeReplayGain, VideoExt};
-        let Some(session_key) = self.session_key.clone() else { return Ok(()); };
-        let snapshot = app.video().desktop().control_native(NativeControlRequest {
-            session_key,
-            action: "replayGain".into(),
-            playback_id: self.state.playback_id.clone(),
-            value: 0.0,
-            index: -1,
-            subtitle: None,
-            audio_output: None,
-            replay_gain: Some(match mode {
-                ReplayGainMode::Off => NativeReplayGain::Off,
-                ReplayGainMode::Track => NativeReplayGain::Track,
-                ReplayGainMode::Album => NativeReplayGain::Album,
-            }),
-        }).map_err(|error| error.to_string())?;
-        self.apply(snapshot)
-    }
-
     fn observe(&mut self, app: &AppHandle) -> Result<(), String> {
         use tauri_plugin_video::{NativeSessionRequest, VideoExt};
         let Some(session_key) = self.session_key.clone() else {
@@ -621,11 +497,6 @@ impl Player {
         self.state.speed = observed.speed;
         self.state.audio_delay = observed.audio_delay;
         self.state.subtitle_delay = observed.subtitle_delay;
-        self.state.replay_gain = observed.replay_gain.map(|mode| match mode {
-            tauri_plugin_video::NativeReplayGain::Off => ReplayGainMode::Off,
-            tauri_plugin_video::NativeReplayGain::Track => ReplayGainMode::Track,
-            tauri_plugin_video::NativeReplayGain::Album => ReplayGainMode::Album,
-        });
         self.state.subtitle_error = observed.subtitle_error;
         self.state.now_playing = observed
             .now_playing
@@ -665,7 +536,6 @@ impl Player {
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 impl Player {
-    fn prepare(&mut self, _: &AppHandle, _: String, _: Option<crate::protocol::PreparedAudio>) -> Result<(), String> { Ok(()) }
     fn load(
         &mut self,
         _: &AppHandle,
@@ -690,9 +560,6 @@ impl Player {
     fn control(&mut self, _: &AppHandle, _: &str, _: f64, _: i32) -> Result<(), String> {
         Ok(())
     }
-    fn replay_gain(&mut self, _: &AppHandle, _: ReplayGainMode) -> Result<(), String> {
-        Ok(())
-    }
     fn add_subtitle(&mut self, _: &AppHandle, _: ExternalSubtitle) -> Result<(), String> {
         Err("Native playback is unavailable in this build".into())
     }
@@ -707,120 +574,3 @@ impl Player {
     }
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "macos", windows)))]
-mod tests {
-    use super::*;
-
-    fn snapshot() -> tauri_plugin_video::NativePlaybackSnapshot {
-        serde_json::from_value(serde_json::json!({
-            "mpvState": {
-                "volume": 0.65, "seekable": true, "ended": false, "loading": false,
-                "speed": 1.5, "audioDelay": -0.2, "subtitleDelay": 0.4, "replayGain": "album",
-                "chapters": [{ "title": "Second chapter", "position": 10.0 }]
-                ,"nowPlaying": { "title": "Song", "artist": "Actual artist" }
-            },
-            "durationSeconds": 20.0, "currentTimeSeconds": 11.0, "bufferedSeconds": 20.0,
-            "playing": true, "videoWidth": 640, "videoHeight": 360,
-            "tracks": [{ "id": "mpv-audio-2", "index": 2, "kind": "audio",
-                "language": "ita", "label": "Italian", "codec": "aac", "selected": true }]
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn cue_observations_use_relative_positions_duration_and_chapters() {
-        let mut player = Player { segment: Some(PlaybackSegment { start: 8.0, end: 14.0 }), ..Player::default() };
-        player.apply(snapshot()).unwrap();
-        assert_eq!(player.state.position, 3.0);
-        assert_eq!(player.state.duration, Some(6.0));
-        assert_eq!(player.state.chapters[0].position, 2.0);
-        let mut end = snapshot();
-        end.current_time_seconds = 15.0;
-        end.mpv_state.as_mut().unwrap().ended = true;
-        player.apply(end).unwrap();
-        assert_eq!(player.state.position, 6.0);
-        assert_eq!(player.state.status, "ended");
-        player.segment = None;
-        player.apply(snapshot()).unwrap();
-        assert_eq!(player.state.position, 11.0);
-        assert_eq!(player.state.duration, Some(20.0));
-    }
-
-    #[test]
-    fn native_observations_populate_controls_without_changing_playback_identity() {
-        let mut player = Player::default();
-        player.state.playback_id = Some("current-item".into());
-        player.apply(snapshot()).unwrap();
-        assert_eq!(player.state.playback_id.as_deref(), Some("current-item"));
-        assert_eq!(player.state.status, "playing");
-        assert_eq!(player.state.speed, 1.5);
-        assert_eq!(player.state.audio_delay, -0.2);
-        assert_eq!(player.state.subtitle_delay, 0.4);
-        assert_eq!(player.state.replay_gain, Some(ReplayGainMode::Album));
-        assert_eq!(player.state.tracks[0].kind, TrackKind::Audio);
-        assert_eq!(player.state.tracks[0].index, 2);
-        assert!(player.state.tracks[0].selected);
-        assert_eq!(player.state.chapters[0].position, 10.0);
-        let track = player.state.now_playing.as_ref().unwrap();
-        assert_eq!(track.title, "Song");
-        assert_eq!(track.artist.as_deref(), Some("Actual artist"));
-        let mut ordinary = snapshot();
-        ordinary.mpv_state.as_mut().unwrap().now_playing = None;
-        ordinary.mpv_state.as_mut().unwrap().replay_gain = None;
-        player.apply(ordinary).unwrap();
-        assert!(player.state.now_playing.is_none());
-        assert!(player.state.replay_gain.is_none());
-    }
-
-    #[test]
-    fn prepared_observations_change_track_identity_but_keep_the_native_session() {
-        let mut player = Player { session_key: Some("first".into()), ..Player::default() };
-        player.state.playback_id = Some("first".into());
-        let mut next = snapshot();
-        next.mpv_state.as_mut().unwrap().playback_id = Some("second".into());
-        player.apply(next.clone()).unwrap();
-        assert_eq!(player.session_key.as_deref(), Some("first"));
-        assert_eq!(player.state.playback_id.as_deref(), Some("second"));
-        assert_eq!(player.state.status, "playing");
-        next.mpv_state.as_mut().unwrap().error = Some("Next source failed".into());
-        player.apply(next).unwrap();
-        assert_eq!(player.state.playback_id.as_deref(), Some("second"));
-        assert_eq!(player.state.status, "error");
-        assert_eq!(player.state.error.as_deref(), Some("Next source failed"));
-    }
-
-    #[test]
-    fn invalid_engine_values_do_not_replace_the_last_good_observation() {
-        let mut player = Player::default();
-        player.apply(snapshot()).unwrap();
-        let previous = player.state.clone();
-        for speed in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            let mut invalid = snapshot();
-            invalid.mpv_state.as_mut().unwrap().speed = speed;
-            assert!(player.apply(invalid).is_err());
-            assert!(player.state == previous);
-        }
-    }
-
-    #[test]
-    fn native_loading_eof_and_error_remain_observed_states() {
-        let mut player = Player::default();
-        player.state.playback_id = Some("local-clip".into());
-        let mut observation = snapshot();
-        observation.mpv_state.as_mut().unwrap().loading = true;
-        observation.playing = false;
-        player.apply(observation.clone()).unwrap();
-        assert_eq!(player.state.status, "loading");
-        observation.mpv_state.as_mut().unwrap().loading = false;
-        observation.playing = true;
-        player.apply(observation.clone()).unwrap();
-        assert_eq!(player.state.status, "playing");
-        observation.mpv_state.as_mut().unwrap().ended = true;
-        player.apply(observation.clone()).unwrap();
-        assert_eq!(player.state.status, "ended");
-        observation.mpv_state.as_mut().unwrap().error = Some("Decoder failed".into());
-        player.apply(observation).unwrap();
-        assert_eq!(player.state.status, "error");
-        assert_eq!(player.state.playback_id.as_deref(), Some("local-clip"));
-    }
-}

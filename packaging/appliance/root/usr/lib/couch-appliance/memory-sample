@@ -1,8 +1,0 @@
-#!/bin/sh
-# One journal sample of the Couch TV cgroup's memory footprint.
-p=$(ls -d /sys/fs/cgroup/user.slice/user-*.slice/user@*.service/app.slice/couch-tv.service 2>/dev/null | head -1)
-if [ -n "$p" ]; then
-    echo "couch-tv cgroup: current=$(cat "$p/memory.current" 2>/dev/null) peak=$(cat "$p/memory.peak" 2>/dev/null)"
-else
-    echo "couch-tv cgroup: not running"
-fi

@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import type { Action, ClientMessage, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 
@@ -16,26 +15,22 @@ const httpUrl = (value: unknown): value is string => {
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
 };
 
-function validEntry(value: unknown, trusted: boolean): value is QueueEntry {
+function validEntry(value: unknown): value is QueueEntry {
   if (!object(value) || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;
   if (value.kind !== undefined && (value.kind !== "radio" || !httpUrl(value.source))) return false;
   try {
     const url = new URL(value.source.startsWith("web:") ? value.source.slice(4) : value.source);
     if (url.username || url.password) return false;
-    if (["http:", "https:"].includes(url.protocol)) return true;
-    if (value.source.startsWith("web:")) return false;
-    return trusted && url.protocol === "file:" && !fileURLToPath(url).includes("\0");
+    return ["http:", "https:"].includes(url.protocol);
   } catch { return false; }
 }
 
-function validAction(value: unknown, trusted: boolean): value is Action {
+function validAction(value: unknown): value is Action {
   if (!object(value)) return false;
   switch (value.type) {
     case "navigate": return typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
-    case "enqueue": return validEntry(value.entry, trusted) && playOptions(value);
-    case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
+    case "enqueue": return validEntry(value.entry) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
-    case "enqueueAlbum": return id(value.albumId) && playOptions(value);
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
       && playOptions(value) && videoQuality(value.quality)
       && (value.collection === undefined || object(value.collection) && httpUrl(value.collection.url) && providerForUrl(value.collection.url) === value.provider
@@ -56,16 +51,14 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "mute": return typeof value.muted === "boolean";
     case "volume": return number(value.volume, 100);
     case "preferences": return id(value.profileId) && object(value.preferences)
-      && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed", "replayGain", "autoplay"].includes(key))
+      && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed", "autoplay"].includes(key))
       && (value.preferences.autoplay === undefined || typeof value.preferences.autoplay === "boolean")
       && [value.preferences.audioLanguage, value.preferences.subtitleLanguage].every(language => language === undefined || typeof language === "string" && /^(?:[a-z]{2,3})?$/i.test(language))
       && (value.preferences.subtitles === undefined || typeof value.preferences.subtitles === "string" && ["auto", "off"].includes(value.preferences.subtitles))
-      && (value.preferences.speed === undefined || number(value.preferences.speed, 4) && value.preferences.speed >= 0.25)
-      && (value.preferences.replayGain === undefined || typeof value.preferences.replayGain === "string" && ["off", "track", "album"].includes(value.preferences.replayGain));
-    case "savePlaybackDefault": return id(value.profileId) && id(value.playbackId) && typeof value.setting === "string" && ["audio", "subtitles", "speed", "replayGain"].includes(value.setting);
+      && (value.preferences.speed === undefined || number(value.preferences.speed, 4) && value.preferences.speed >= 0.25);
+    case "savePlaybackDefault": return id(value.profileId) && id(value.playbackId) && typeof value.setting === "string" && ["audio", "subtitles", "speed"].includes(value.setting);
     case "track": return id(value.playbackId) && (value.kind === "audio" || value.kind === "subtitle") && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= (value.kind === "subtitle" ? -1 : 0) && value.index <= 1024;
     case "speed": return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
-    case "replayGain": return id(value.playbackId) && typeof value.mode === "string" && ["off", "track", "album"].includes(value.mode);
     case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
     case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
     case "goLive": case "next": return id(value.playbackId);
@@ -74,10 +67,10 @@ function validAction(value: unknown, trusted: boolean): value is Action {
   }
 }
 
-export function parseCommand(message: string, trusted: boolean): ClientMessage {
+export function parseCommand(message: string): ClientMessage {
   let value: unknown;
   try { value = JSON.parse(message); } catch { throw new Error("Invalid JSON command."); }
-  if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action, trusted)) throw new Error("Invalid command or unsupported media source.");
+  if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action)) throw new Error("Invalid command or unsupported media source.");
   if (value.action.type === "videoQuality") {
     const { playbackId, quality } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "videoQuality", playbackId, quality } };
@@ -96,22 +89,17 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
     return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }), ...(value.action.placement === undefined ? {} : { placement: value.action.placement }) } };
   }
   if (value.action.type === "preferences") {
-    const { audioLanguage, subtitleLanguage, subtitles, speed, replayGain, autoplay } = value.action.preferences;
+    const { audioLanguage, subtitleLanguage, subtitles, speed, autoplay } = value.action.preferences;
     return { type: "command", requestId: value.requestId, action: { type: "preferences", profileId: value.action.profileId, preferences: {
       ...(audioLanguage === undefined ? {} : { audioLanguage: audioLanguage.toLowerCase() }),
       ...(subtitleLanguage === undefined ? {} : { subtitleLanguage: subtitleLanguage.toLowerCase() }),
       ...(subtitles === undefined ? {} : { subtitles }), ...(speed === undefined ? {} : { speed }),
-      ...(replayGain === undefined ? {} : { replayGain }),
       ...(autoplay === undefined ? {} : { autoplay }),
     } } };
   }
   if (value.action.type === "savePlaybackDefault") {
     const { profileId, playbackId, setting } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "savePlaybackDefault", profileId, playbackId, setting } };
-  }
-  if (value.action.type === "replayGain") {
-    const { playbackId, mode } = value.action;
-    return { type: "command", requestId: value.requestId, action: { type: "replayGain", playbackId, mode } };
   }
   return value as ClientMessage;
 }
