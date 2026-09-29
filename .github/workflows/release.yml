@@ -59,6 +59,9 @@ jobs:
     if: needs.preflight.outputs.skip != 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
+    # generate-notes is a POST, so it needs write access to this repository.
+    permissions:
+      contents: write
     env:
       CHANNEL: ${{ needs.preflight.outputs.channel }}
       TAG: ${{ needs.preflight.outputs.tag }}
