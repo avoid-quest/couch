@@ -57,6 +57,9 @@ if [[ $mode = auto ]]; then
         [[ $installed != *-preview.* ]] || channel=preview
     fi
     if [[ $channel = latest ]]; then
+        # Before the first stable release, Stable has nothing to install.
+        [[ $(curl --silent --location --proto =https --proto-redir =https --output /dev/null --write-out '%{http_code}' \
+            "$releases/latest/download/latest-linux.yml") != 404 ]] || done_with up-to-date
         fetch "$releases/latest/download/latest-linux.yml"
         version=$(awk '$1 == "version:" { print $2; exit }' "$work/latest-linux.yml")
     else
