@@ -65,4 +65,6 @@ by hand, `systemctl list-timers couch-update.timer` shows the next run,
 `/var/lib/couch-update/status` holds the last run's outcome (`installed`,
 `up-to-date`, `waiting` while something plays, or `failed` with its error) and
 `journalctl -u couch-update.service -u 'couch-update@*'` shows how updates went.
+`sudo systemctl disable --now couch-update.timer` and then `sudo systemctl mask
+couch-update.timer` turn unattended updates off for good.
 TVs set up before this rerun `sudo couch-setup --tv` once to get the units.
