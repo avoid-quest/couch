@@ -10,7 +10,7 @@ import { randomInt } from "node:crypto";
 import { hostname as machineName, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { isIP } from "node:net";
-import type { Action, Domain, Output, PlaybackActor, PlaybackClock, PlaybackCommand, PlaybackSummary, QueueEntry, ServerMessage, SessionState } from "../shared/protocol";
+import type { Action, Domain, Output, PlaybackActor, PlaybackClock, PlaybackCommand, PlaybackSummary, PlayerState, QueueEntry, ServerMessage, SessionState } from "../shared/protocol";
 import type { WatchingProfile } from "../shared/viewing";
 import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality } from "../shared/providers";
 import { createSession, type MediaSource } from "./session";
@@ -43,7 +43,7 @@ import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
-import { createSendspin, type SyncedLoad } from "./sendspin";
+import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
 import { helper } from "./helpers";
 import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -76,8 +76,8 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 };
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
-// listening: this tab plays its Device's synced sound (#644 ticket 10).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; listening?: boolean };
+// sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -136,11 +136,16 @@ export async function createHub(options: HubOptions) {
   // When a Playback's outputs are on one Device, its newest tab fetches the source itself and
   // reports back (Direct, ticket 6). Sources Chromium can't decode play in Core's own mpv, on the
   // Device that runs Core (ticket 1). When they span Devices, its Sendspin group plays the sound on
-  // every speaker and reports back, and the picture Device's tab plays the picture, silent (Synced).
+  // every speaker and reports back, and every picture Device's newest tab shows the picture, muted,
+  // following the group's clock (Synced, ticket 11).
   // next and joining: the tab and output a Send to is moving to, while the source is resolved for it.
   // loaded and media: the last load, and its source as Core fetches it, for the Sendspin group.
+  // resolved: the last resolution, which a screen with the same engine reuses.
+  // screens: while Synced, the tabs showing the picture and the item each loaded; heard and seen:
+  // the group's last report and a screen's, whose subtitles join it.
   type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
-    synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers"> };
+    synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
+    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState };
   const playbacks = new Map<string, Playback>();
   // The Playback each Device looks at; "" after the one it looked at ended.
   const looking = new Map<string, string>();
@@ -161,8 +166,8 @@ export async function createHub(options: HubOptions) {
     return chosen === undefined ? servedBy(deviceId) ?? all().at(-1) : playbacks.get(chosen);
   };
   const playerCommand = (command: PlaybackCommand) => JSON.stringify({ type: "player", command } satisfies ServerMessage);
-  // On the TV the system volume is the level; the stream stays at 100. Synced picture is silent.
-  const levelOf = (playback: Playback) => playback.synced ? 0 : systemAudio ? 100 : playback.outputs.find(output => output.level !== null)?.level ?? 0;
+  // On the TV the system volume is the level; the stream stays at 100.
+  const levelOf = (playback: Playback) => systemAudio ? 100 : playback.outputs.find(output => output.level !== null)?.level ?? 0;
   const spans = (playback: Playback) => new Set(playback.outputs.map(output => output.deviceId)).size > 1;
   const members = (playback: Playback) => playback.outputs.flatMap(output => output.level === null ? [] : [{ deviceId: output.deviceId, level: output.level }]);
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
@@ -182,8 +187,10 @@ export async function createHub(options: HubOptions) {
     }
     if (playback.synced) {
       playback.synced.send(command.type === "load" && playback.media?.playbackId === command.playbackId ? { ...command, ...playback.media } : command);
-      if (playback.renderer) deliver(playback, command);
-      if (playback.renderer && command.type === "load") deliver(playback, { type: "volume", volume: 0 });
+      // Screens follow the clock; only what they show reaches them.
+      if (command.type === "load") show(playback);
+      else if (command.type === "stop") hide(playback);
+      else if (command.type === "addSubtitle" || command.type === "subtitleDelay" || command.type === "track" && command.kind === "subtitle") for (const tab of playback.screens.keys()) send(tab, playerCommand(command));
       return;
     }
     if (mpvPlayback !== playback && !playback.renderer) {
@@ -204,7 +211,7 @@ export async function createHub(options: HubOptions) {
     for (const output of playback.outputs) if (!outputs.some(item => item.deviceId === output.deviceId)) release(playback, output.deviceId, false);
     playback.outputs = outputs;
     // Send to hands everything to one Device, which plays it directly.
-    if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; }
+    if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
   };
   const release = (playback: Playback, deviceId: string, wait = true) => {
@@ -217,41 +224,94 @@ export async function createHub(options: HubOptions) {
     if (wait && !playback.outputs.length) playback.session.wait("Waiting for a Device.");
   };
   // The newest tab of an output Device plays (#644 Tabs); an output back online resumes, paused.
-  // In a synced Playback only the picture Device's tab renders, silent; the others listen.
+  // In a synced Playback the picture Devices' newest tabs show the picture.
   const handOver = (playback: Playback, socket: Socket<SocketData>) => {
-    if (playback.synced && !playback.outputs.some(output => output.picture && output.deviceId === deviceOf(socket))) return;
+    if (playback.synced) return show(playback);
     if (playback.renderer && playback.renderer !== socket && sockets.has(playback.renderer)) send(playback.renderer, playerCommand({ type: "stop" }));
     playback.renderer = socket;
-    const { player } = stateOf(playback);
-    if (!playback.synced) playback.session.reload();
-    else if (playback.loaded?.playbackId === player.playbackId && active(player.status)) {
-      deliver(playback, { ...playback.loaded, ...playback.loaded.radio ? {} : { startPosition: player.position }, paused: player.status === "paused" });
-      deliver(playback, { type: "volume", volume: 0 });
+    playback.session.reload();
+  };
+  // The clock a screen of this Playback follows: the source's timestamps for a live item.
+  const followOf = (playback: Playback) => ({ group: playback.id, pts: !!playback.media?.live });
+  // Synced picture (#644 ticket 11): each picture Device's newest tab shows the current item as
+  // resolved for its own engine and origin, muted, following the group's clock. Nothing else moves.
+  const show = (playback: Playback) => {
+    const { player, queue, currentEntryId } = stateOf(playback);
+    const loaded = playback.loaded?.playbackId === player.playbackId && active(player.status) ? playback.loaded : undefined;
+    const pictured = !!loaded && !loaded.radio && !playback.media?.audioOnly;
+    const wanted = new Set(playback.synced && pictured ? playback.outputs.flatMap(output => { const tab = output.picture && newest(output.deviceId); return tab ? [tab] : []; }) : []);
+    for (const tab of playback.screens.keys()) if (!wanted.has(tab)) { playback.screens.delete(tab); if (sockets.has(tab)) send(tab, playerCommand({ type: "stop" })); }
+    playback.synced?.screens([...wanted].map(deviceOf));
+    const entry = queue.find(item => item.id === currentEntryId);
+    if (!loaded || !entry) return;
+    for (const tab of wanted) {
+      if (playback.screens.get(tab) === loaded.playbackId) continue;
+      playback.screens.set(tab, loaded.playbackId);
+      void screenLoad(playback, entry, loaded, tab).then(command => {
+        if (playback.screens.get(tab) !== loaded.playbackId || !sockets.has(tab)) return;
+        send(tab, playerCommand(command));
+        send(tab, playerCommand({ type: "volume", volume: 0 }));
+      }, () => { if (playback.screens.get(tab) === loaded.playbackId) playback.screens.delete(tab); });
     }
+  };
+  const hide = (playback: Playback) => {
+    for (const tab of playback.screens.keys()) if (sockets.has(tab)) send(tab, playerCommand({ type: "stop" }));
+    playback.screens.clear();
+  };
+  const screenLoad = async (playback: Playback, entry: QueueEntry, loaded: NonNullable<Playback["loaded"]>, tab: Socket<SocketData>): Promise<PlaybackCommand> => {
+    const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(30_000)]);
+    // A live link can expire within minutes, so a live screen resolves its own.
+    const reuse = playback.resolved?.playbackId === loaded.playbackId && playback.resolved.vp9 === tab.data.vp9 && !playback.media?.live ? playback.resolved.media : undefined;
+    const { headers = {}, ...media } = await (reuse ?? resolveEntry(entry, loaded.playbackId, signal, tab, playback));
+    const fresh = await passThrough.prepare(loaded.playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal);
+    const { player } = stateOf(playback);
+    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
+  };
+  // The group reports the sound; a screen adds the subtitles it shows.
+  const observeSynced = (playback: Playback) => {
+    const { heard, seen } = playback;
+    if (!heard) return;
+    const picture = seen?.playbackId === heard.playbackId ? seen : undefined;
+    playback.session.observe(picture ? { ...heard, tracks: [...picture.tracks?.filter(track => track.kind !== "audio") ?? [], ...heard.tracks ?? []], subtitleDelay: picture.subtitleDelay } : heard);
   };
   // Delivery follows from outputs (#644 Delivery): one Device plays directly; outputs that span
   // Devices are Synced, and the Playback's Sendspin group takes over its sound where it is.
   const reconcile = (playback: Playback) => {
-    const picture = playback.outputs.find(output => output.picture)?.deviceId;
     if (spans(playback)) {
       const fresh = !playback.synced;
-      playback.synced ??= sendspin.group(playback.id, player => playback.session.observe(player));
+      playback.synced ??= sendspin.group(playback.id, player => { playback.heard = player; observeSynced(playback); });
       playback.synced.members(members(playback));
-      if (playback.renderer && deviceOf(playback.renderer) !== picture) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
       const { player } = stateOf(playback);
       if (fresh && playback.loaded?.playbackId === player.playbackId && active(player.status)) {
-        if (playback.renderer) deliver(playback, { type: "volume", volume: 0 });
+        // The Direct renderer keeps its picture, now muted and following the clock.
+        const renderer = playback.renderer;
+        if (renderer && playback.outputs.some(output => output.picture && output.deviceId === deviceOf(renderer))) {
+          playback.screens.set(renderer, player.playbackId!);
+          send(renderer, playerCommand({ type: "follow", playbackId: player.playbackId!, follow: followOf(playback) }));
+          send(renderer, playerCommand({ type: "volume", volume: 0 }));
+          playback.renderer = null;
+        }
         const media = playback.media?.playbackId === player.playbackId ? playback.media : {};
-        playback.synced.send({ ...playback.loaded, ...media, ...playback.loaded.radio ? {} : { startPosition: player.position }, paused: player.status === "paused",
+        playback.synced.send({ ...playback.loaded, ...media, ...playback.loaded.radio || playback.media?.live ? {} : { startPosition: player.position }, paused: player.status === "paused",
           preferences: { ...playback.loaded.preferences!, ...player.speed ? { speed: player.speed } : {} } });
       }
+      if (playback.renderer) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
+      show(playback);
     } else if (playback.synced) {
       playback.synced.close();
       playback.synced = undefined;
       const device = playback.outputs[0]?.deviceId;
       const tab = device && newest(device);
-      if (playback.renderer && deviceOf(playback.renderer) === device) deliver(playback, { type: "volume", volume: levelOf(playback) });
-      else if (tab) handOver(playback, tab);
+      // A screen on the Device left plays on, with its sound; any other screen stops.
+      const { playbackId } = stateOf(playback).player;
+      const screen = [...playback.screens.keys()].find(item => deviceOf(item) === device && playback.screens.get(item) === playbackId);
+      if (screen) playback.screens.delete(screen);
+      show(playback);
+      if (screen && playbackId && sockets.has(screen)) {
+        playback.renderer = screen;
+        send(screen, playerCommand({ type: "follow", playbackId, follow: null }));
+        deliver(playback, { type: "volume", volume: levelOf(playback) });
+      } else if (tab) handOver(playback, tab);
     }
     offline(playback);
   };
@@ -264,7 +324,7 @@ export async function createHub(options: HubOptions) {
     playback.session.wait(`${nameOf(deviceId)} is offline.`);
   };
   const createPlayback = (id: string = crypto.randomUUID()) => {
-    const playback = { id, outputs: [], renderer: null } as unknown as Playback;
+    const playback = { id, outputs: [], renderer: null, screens: new Map() } as unknown as Playback;
     playback.session = createSession({ ...store, ...store.playback(id) }, command => sendPlayer(playback, command), (state, clock) => publish(playback, state, clock), {
       systemAudio,
       invalidate: (...domains) => invalidate(...domains),
@@ -273,9 +333,15 @@ export async function createHub(options: HubOptions) {
       resolveSource: async (entry, playbackId, signal) => {
         // Send to resolves for the Device it moves to: its engine and origin choose formats and Pass-through.
         const tab = playback.next ?? playback.renderer;
-        const { headers = {}, ...media } = await resolveEntry(entry, playbackId, signal, tab, playback);
+        const resolving = resolveEntry(entry, playbackId, signal, tab, playback);
+        playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: resolving };
+        const { headers = {}, ...media } = await resolving;
         // Core's own FFmpeg reads the sound as resolved, before Pass-through, with its headers.
-        playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers };
+        const live = !!(entry.live || media.metadata?.live);
+        playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers, live, audioOnly: media.audioOnly };
+        // A live master's link can expire within minutes (RaiPlay: 403 after about 150 s) while its
+        // renditions keep working, so the sound's rendition is picked now for a later Synced start.
+        if (live && !media.radio) void audioRendition(media.audioSource ?? media.source, headers, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
         return passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal);
       },
       observe: player => subtitles.observe(player),
@@ -329,9 +395,6 @@ export async function createHub(options: HubOptions) {
       if (next.picture || next.level !== null) await sendTo(playback, next, authorize);
       return;
     }
-    if (next.picture && !current?.picture) {
-      if (playback.outputs.some(output => output.picture)) throw new Error("Couch shows the picture on one Device for now. Hide it on the other screen first.");
-    }
     if (!current) {
       if (!next.picture && next.level === null) return;
       if (mpvPlayback === playback) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
@@ -340,22 +403,12 @@ export async function createHub(options: HubOptions) {
       const previous = servedBy(deviceId);
       if (previous) { release(previous, deviceId); reconcile(previous); }
       looking.set(deviceId, playback.id);
-      playback.outputs = [...playback.outputs, { ...next, picture: false }];
+      playback.outputs = [...playback.outputs, next];
     } else if (!next.picture && next.level === null) release(playback, deviceId);
-    else playback.outputs = playback.outputs.map(output => output === current ? { ...next, picture: next.picture && current.picture } : output);
+    else playback.outputs = playback.outputs.map(output => output === current ? next : output);
+    // A screen that joins a synced Playback loads the picture for itself and follows the clock.
     reconcile(playback);
     if (!playback.synced && current && next.level !== current.level) deliver(playback, { type: "volume", volume: levelOf(playback) });
-    // A screen that joins a synced Playback loads the picture for itself, where the Playback is.
-    if (next.picture && !current?.picture) {
-      const show = () => { playback.outputs = playback.outputs.map(output => output.deviceId === deviceId ? { ...output, picture: true } : output); };
-      const tab = newest(deviceId);
-      if (!playback.synced || !tab) show();
-      else {
-        playback.next = tab;
-        try { await playback.session.move(() => { show(); playback.renderer = tab; }, authorize); }
-        finally { playback.next = undefined; }
-      }
-    }
     broadcast();
   };
 
@@ -391,9 +444,9 @@ export async function createHub(options: HubOptions) {
       const playback = lookedAt(deviceOf(socket));
       if (!views.has(playback)) views.set(playback, JSON.stringify({ type: "state", state: { ...playback ? stateOf(playback) : idle(), ...shared, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage));
       send(socket, views.get(playback)!);
-      // The newest tab of each synced speaker plays its sound over Sendspin.
-      const listening = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket;
-      if (socket.data.listening !== listening) send(socket, JSON.stringify({ type: "sendspin", listen: socket.data.listening = listening } satisfies ServerMessage));
+      // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
+      const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
+      if (socket.data.sendspin !== `${listen}${watch}`) { socket.data.sendspin = `${listen}${watch}`; send(socket, JSON.stringify({ type: "sendspin", listen, watch } satisfies ServerMessage)); }
     }
   };
   const publish = (playback: Playback, state: SessionState, clock?: PlaybackClock) => {
@@ -417,6 +470,7 @@ export async function createHub(options: HubOptions) {
     for (const [deviceId, id] of looking) if (id === playback.id) looking.set(deviceId, "");
     if (radioPlayback === playback) radioPlayback = null;
     playback.synced?.close();
+    hide(playback);
     playback.session.close();
     try { store.forgetPlayback(playback.id); } catch { /* A stale row is dropped at the next start. */ }
     broadcast();
@@ -506,7 +560,8 @@ export async function createHub(options: HubOptions) {
     }
     // Local files, the library and Jellyfin were removed; their saved entries stay readable but unplayable.
     if (!/^https?:/.test(entry.source)) throw new Error("This source is no longer supported. Remove it from the queue.");
-    return { source: entry.source };
+    const live = await liveHls(entry.source, AbortSignal.any([signal, AbortSignal.timeout(5000)])).catch(() => false);
+    return { source: entry.source, ...live ? { metadata: { live } } : {} };
   }
   const subtitles = createSubtitles(playbackId => playing(playbackId) && stateOf(playing(playbackId)!).player, (playbackId, subtitle) => playing(playbackId)?.session.addSubtitle(playbackId, subtitle));
   // Saved Playbacks come back idle, with no outputs, until a Device plays them.
@@ -849,7 +904,7 @@ export async function createHub(options: HubOptions) {
           const tab = newest(deviceOf(socket));
           if (tab) handOver(playback, tab);
           else playback.renderer = null;
-        }
+        } else if (playback.screens.delete(socket)) show(playback);
         for (const playback of all()) if (playback.outputs.some(output => output.deviceId === deviceOf(socket))) offline(playback, deviceOf(socket));
         broadcast();
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
@@ -862,8 +917,9 @@ export async function createHub(options: HubOptions) {
         if (message === null) { socket.close(1003, "JSON text messages required."); return; }
         const player = parsePlayer(message);
         if (player) {
-          const playback = all().find(item => item.renderer === socket);
-          if (playback && mpvPlayback !== playback && !playback.synced) playback.session.observe(player);
+          const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
+          if (playback?.synced) { playback.seen = player; observeSynced(playback); }
+          else if (playback && mpvPlayback !== playback) playback.session.observe(player);
           return;
         }
         let command;

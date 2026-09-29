@@ -113,16 +113,21 @@ export type ServerMessage =
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
   | { type: "player"; command: PlaybackCommand }
-  // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10).
-  | { type: "sendspin"; listen: boolean }
+  // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
+  // shows its picture and needs only the Sendspin clock (ticket 11).
+  | { type: "sendspin"; listen: boolean; watch: boolean }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
+// A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the
+// clock is the source's own timestamps (live), else the item's position.
+export type Follow = { group: string; pts: boolean };
 export type PlaybackCommand =
   | { type: "audioPause" }
   // eventStart: an HLS EVENT playlist starts at its first segment instead of the live edge.
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number }
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
+  | { type: "follow"; playbackId: string; follow: Follow | null }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
