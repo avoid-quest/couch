@@ -17,6 +17,15 @@ export type UpdateState = {
   progress: number | null;
   checkedAt: number | null;
   error: string | null;
+  // The TV's root updates: whether setup installed them, and the last run's
+  // outcome from /var/lib/couch-update/status (docs/native-tv.md).
+  automatic?: { installed: boolean; last: UpdateOutcome | null };
+};
+export type UpdateOutcome = {
+  version: string | null;
+  outcome: "installed" | "installed-unverified" | "rolled-back" | "failed" | "skipped" | "up-to-date" | "waiting";
+  at: number;
+  error: string | null;
 };
 export type CouchApp = {
   tvPresentation: boolean;

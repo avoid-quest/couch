@@ -13,6 +13,19 @@ import { SettingsLayout } from "../SettingsLayout";
 
 const statuses: Record<UpdateState["status"], string> = { idle: "Not checked yet", checking: "Checking…", "up-to-date": "Up to date", downloading: "Downloading…", ready: "Update ready", installing: "Installing…", error: "Update failed" };
 const busy = (state: UpdateState) => ["checking", "downloading", "installing"].includes(state.status);
+const when = (time: number) => new Date(time).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+// The TV's last root update (app/update.ts).
+const automatic = ({ version, automatic }: UpdateState) => {
+  if (!automatic) return null;
+  if (!automatic.installed) return "Run sudo couch-setup --tv once to turn on automatic updates.";
+  const last = automatic.last;
+  if (!last) return null;
+  const release = last.version ?? "The update";
+  return last.outcome === "installed" || last.outcome === "installed-unverified" ? `Updated to ${release} on ${when(last.at)}`
+    : last.outcome === "rolled-back" ? `${release} didn't start, so the TV went back to ${version}`
+    : last.outcome === "failed" ? `${release} didn't install on ${when(last.at)}${last.error ? `: ${last.error}` : ""}`
+    : `Last checked ${when(last.at)}`;
+};
 
 /** Same controls for this app and the connected Couch's authenticated updater. */
 function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCredentials; target?: string; name: string; tv: boolean }) {
@@ -37,6 +50,7 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
     : state.status === "downloading" ? `Couch ${state.available}${state.progress === null ? "" : `, ${state.progress}%`}`
     : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : tv ? "installs automatically overnight when nothing is playing." : "installs when you quit Couch."}`
     : state.checkedAt ? `Checked ${new Date(state.checkedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : null;
+  const last = state && automatic(state);
   const channelId = credentials ? "remote-update-channel" : "update-channel";
 
   return <SettingsSection>
@@ -54,6 +68,7 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
           ? <Button onClick={() => run(install)}>{credentials ? "Update and restart" : "Restart to update"}</Button>
           : <Button variant="outline" disabled={busy(state)} onClick={() => run(check)}>Check for updates</Button>}
       </SettingsRow>
+      {last && <SettingsRow label="Automatic updates" description={last} />}
       {!credentials && !tv && <SettingsRow label="Logs" description="What Couch did in this run and the one before.">
         <Button variant="outline" onClick={() => run(couchApp!.showLogs)}>Show logs</Button>
       </SettingsRow>}
