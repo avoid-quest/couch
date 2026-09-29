@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { access, constants, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, delimiter, dirname, join } from "node:path";
 import { unzipSync } from "fflate";
@@ -188,6 +189,10 @@ export function checkHelper(name: Helper) {
 // Checks every helper now and once a day: first-run downloads, yt-dlp updates and repairs.
 export function startHelpers(directory: string) {
   root = directory;
+  // Martin Riedl's ffmpeg links a static OpenSSL that doesn't know where the system keeps its
+  // certificates, so every https read failed ("certificate verify failed"). Point it there.
+  const certificates = ["/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"].find(file => existsSync(file));
+  if (certificates) process.env.SSL_CERT_FILE ??= certificates;
   const all = () => { for (const name of names) void checkHelper(name); };
   all();
   setInterval(all, 24 * 60 * 60 * 1000).unref();
