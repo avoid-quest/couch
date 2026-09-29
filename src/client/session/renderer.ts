@@ -142,6 +142,8 @@ const transportStream = async (command: NonNullable<typeof loading>) => {
   if (!command.paused) void start(video);
 };
 const reset = () => {
+  // With hls.js attached, Chromium keeps drawing a cue whose track is removed while showing.
+  for (const track of Array.from(video.textTracks)) track.mode = "disabled";
   playbackId = null;
   loading = null;
   hls?.destroy();
@@ -171,7 +173,8 @@ const shiftCues = () => {
 const selectSubtitle = (index: number) => {
   const embedded = hls?.subtitleTracks.length ?? 0;
   if (hls) hls.subtitleTrack = index < embedded ? index : -1;
-  external().forEach((track, position) => { track.mode = embedded + position === index ? "showing" : "disabled"; });
+  // Chromium's automatic selection would still show a track whose mode never changed, so each one changes.
+  external().forEach((track, position) => { track.mode = "hidden"; track.mode = embedded + position === index ? "showing" : "disabled"; });
 };
 
 export function play(command: PlaybackCommand) {
