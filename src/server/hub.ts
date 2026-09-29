@@ -117,8 +117,9 @@ export async function createHub(options: HubOptions) {
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<Socket<SocketData>>();
-  // A client that stops reading is dropped rather than buffered without limit.
-  const send = (socket: Socket<SocketData>, message: string) => socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message);
+  // A client that stops reading is dropped rather than buffered without limit. A pending state goes
+  // first, so every message still follows the state it was sent after.
+  const send = (socket: Socket<SocketData>, message: string) => { if (pending) flush(); return socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message); };
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   // Checked at start so saved pages load from the current address; afterwards only
   // StreamingCommunity requests wait for the check.
@@ -355,7 +356,13 @@ export async function createHub(options: HubOptions) {
     administratorClaimed: store.administratorExists(), activeProfile: store.activeProfile(), preferences: store.playbackPreferences(store.activeProfile().id),
   };
   const idle = (): SessionState => ({ queue: [], currentEntryId: null, activeProfile: common.activeProfile, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: store.volume(), seekable: false, error: null } });
-  const broadcast = () => {
+  // State goes out once per turn of the event loop: a hundred speakers leaving at once send one
+  // state, not a hundred to every socket, which filled the 4 MB above and dropped every client (#644 ticket 10).
+  let pending = false;
+  const broadcast = () => { if (!pending) { pending = true; setImmediate(flush); } };
+  const flush = () => {
+    if (!pending) return;
+    pending = false;
     if (closed || !sockets.size) return;
     const shared = {
       ...common,

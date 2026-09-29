@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, Monitor, MonitorUp, Speaker } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -115,9 +116,12 @@ export function Speakers({ state, run }: Props) {
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up.
+// It shows its own value while focused, so arrow keys keep stepping from it.
 function Delay({ name, delay, onCommit }: { name: string; delay: number; onCommit: (delay: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(null);
+  const value = draft ?? delay;
   return <div className="grid w-full gap-1 text-center">
-    <span className="text-xs text-muted-foreground tabular-nums">Delay {delay} ms</span>
-    <Slider key={delay} aria-label={`${name} delay`} aria-valuetext={`${delay} milliseconds`} defaultValue={[delay]} min={0} max={500} step={10} onValueCommit={([value]) => onCommit(value!)} />
+    <span className="text-xs text-muted-foreground tabular-nums">Delay {value} ms</span>
+    <Slider aria-label={`${name} delay`} aria-valuetext={`${value} milliseconds`} value={[value]} min={0} max={500} step={10} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => onCommit(next!)} onBlur={() => setDraft(null)} />
   </div>;
 }
