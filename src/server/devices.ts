@@ -59,7 +59,7 @@ export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCo
     async handle(request: Request, identity: () => DeviceIdentity | null): Promise<Response> {
       const requireIdentity = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (!caller) throw new ControllerError("Pair this device first.", 401);
         return caller;
       };
       const administrator = () => {
@@ -121,12 +121,12 @@ export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCo
         }
         if (path === "/api/devices/claim") {
           if (request.method !== "POST") return methods("POST");
-          if (caller.authority === "host") throw new ControllerError("Become admin from a paired remote.");
+          if (caller.authority === "host") throw new ControllerError("Become admin from a paired device.");
           if (Date.now() - claimWindow >= 60_000) { claimWindow = Date.now(); claimAttempts = 0; }
           if (++claimAttempts > 20) throw new ControllerError("Too many claim attempts. Try again in a minute.", 429);
           const code = await settingField(request, "code");
           const current = requireIdentity();
-          if (!current.device || current.authority !== "controller") throw new ControllerError("This remote is already an admin.", 409);
+          if (!current.device || current.authority !== "controller") throw new ControllerError("This device is already an admin.", 409);
           if (typeof code !== "string" || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code)) throw new ControllerError("This admin code is wrong or expired.", 401);
           const device = store.consumeControllerClaim(current.device.id, code);
           onChange();
@@ -156,7 +156,7 @@ export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCo
         }
         return json({ error: "Not found." }, 404);
       } catch (error) {
-        return json({ error: error instanceof ControllerError ? error.message : "Couldn't update remotes. Try again." }, error instanceof ControllerError ? error.status : 500);
+        return json({ error: error instanceof ControllerError ? error.message : "Couldn't update devices. Try again." }, error instanceof ControllerError ? error.status : 500);
       }
     },
   };

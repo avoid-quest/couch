@@ -19,7 +19,7 @@ export function createAppearance(store: Store, publish: (appearance: TvAppearanc
     async handle(request: Request, identity: () => DeviceIdentity | null) {
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (!caller) throw new ControllerError("Pair this device first.", 401);
         if (request.method !== "GET" && caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
       };
       try {

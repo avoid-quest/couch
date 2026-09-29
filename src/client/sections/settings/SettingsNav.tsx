@@ -16,6 +16,8 @@ export function SettingsNav({ active }: Props) {
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
   const visible = (id: SettingsPage) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
     && (id !== "display" || !!details?.tvPresentation)
+    // Sound outputs and Bluetooth exist only where Couch controls the system's sound (Linux).
+    && (id !== "sound" && id !== "bluetooth" || !!details?.systemAudio)
     && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
   const groups = ([
     ["Preferences", ["playback", "home", "appearance"]],

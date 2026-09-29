@@ -153,7 +153,9 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
     commandPending.current = true;
     const listbox = document.activeElement?.closest('[role="listbox"]');
     const trigger = focusId ? document.getElementById(focusId) as HTMLButtonElement | null
-      : listbox?.id ? document.querySelector<HTMLButtonElement>(`[role="combobox"][aria-controls="${CSS.escape(listbox.id)}"]`) : null;
+      : listbox?.id ? document.querySelector<HTMLButtonElement>(`[role="combobox"][aria-controls="${CSS.escape(listbox.id)}"]`)
+      // A pressed choice is disabled while its command runs; focus returns to it rather than dropping out (#644 ticket 12).
+      : document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
     focusRequest.current?.cancel();
     const cancelFocus = () => {
       document.removeEventListener("keydown", cancelFocus, true);

@@ -45,7 +45,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
   const searching = active && current?.kind === "scan";
   const deviceDisabled = !connected || state?.adapter !== "available" || pending || active && !(own && searching);
   const status = !current ? null : active
-    ? !own ? "Another remote is using Bluetooth." : searching ? "Searching…" : current.message || "Connecting…"
+    ? !own ? "Another device is using Bluetooth." : searching ? "Searching…" : current.message || "Connecting…"
     : current.message || (current.kind === "scan" ? "Search done." : "Device updated.");
 
   return <>

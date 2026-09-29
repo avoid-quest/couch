@@ -252,7 +252,7 @@ function PairingPage() {
   const origin = credentials?.origin ?? device?.address ?? location.origin;
   const replaced = !!credentials?.installationId && !!details?.installationId && credentials.installationId !== details.installationId;
   const name = deviceName(details?.name);
-  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, open Settings → Devices → Pair a device, then enter the code shown there.`}>
+  return <Onboarding title={`Pair with ${details?.name ?? new URL(origin).host}`} description={`On ${name}, choose Pair a device, then enter the code it shows.`}>
     {credentials && <Alert variant="destructive"><AlertDescription>{replaced ? "A different Couch is at this address. Pair again." : "This device was removed. Pair again."}</AlertDescription></Alert>}
     <PairForm />
   </Onboarding>;
@@ -292,6 +292,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
+  const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now";
 
   if (setupPending) return <div className="app-shell flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
@@ -301,13 +302,15 @@ export function ShellChrome({ children }: PropsWithChildren) {
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
           <header className={cn("app-header sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0 max-[359px]:has-[.tv-remote-shortcut]:h-auto max-[359px]:has-[.tv-remote-shortcut]:flex-wrap max-[359px]:has-[.tv-remote-shortcut]:py-1.5", onPlayer && "hidden")}>
-            <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
+            {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). */}
+            {paired && <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
               {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-1.5 max-sm:text-sm">
                 <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{name}</Link>
               </Button>)}
-            </nav>
+            </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              {paired && !!state?.queue.length && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
+              {/* On a phone the mini player's own Up next is on screen, so the header's goes and leaves room for the status (#644 ticket 12). */}
+              {paired && !!state?.queue.length && <Button variant="ghost" className={cn("shrink-0 touch:min-w-11", miniPlayer && "max-sm:hidden")} aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
               {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} />}
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a device</Button>}
@@ -323,7 +326,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
+            {miniPlayer && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>

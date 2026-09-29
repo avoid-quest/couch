@@ -11,16 +11,16 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
       const browsing = ["/api/radio/playlists", "/api/radio/avoid", "/api/radio/avoid/programmes"].includes(path) && request.method === "GET";
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (!caller) throw new ControllerError("Pair this device first.", 401);
         if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
       };
       const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
       try {
-        if (!identity()) throw new ControllerError("Pair this remote first.", 401);
+        if (!identity()) throw new ControllerError("Pair this device first.", 401);
         if (path === "/api/radio/avoid" || path === "/api/radio/avoid/programmes") {
           if (request.method !== "GET") return methods("GET");
           const result = path.endsWith("/programmes") ? { programmes: await radio.avoidProgrammes(request.signal) } : await radio.avoid(new URL(request.url).searchParams.get("refresh") === "true");
-          if (!identity()) throw new ControllerError("Pair this remote first.", 401);
+          if (!identity()) throw new ControllerError("Pair this device first.", 401);
           return Response.json(result);
         }
         if (browsing) {

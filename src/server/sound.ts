@@ -23,7 +23,7 @@ export function createSound(options: Options) {
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (!caller) throw new ControllerError("Pair this device first.", 401);
         if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
         if (closed) throw new ControllerError("The audio session is closing.", 503);
       };

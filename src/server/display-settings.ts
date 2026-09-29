@@ -7,7 +7,7 @@ export async function displaySettings(request: Request, identity: () => DeviceId
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
   const authorize = () => {
     const caller = identity();
-    if (!caller) throw new ControllerError("Pair this remote first.", 401);
+    if (!caller) throw new ControllerError("Pair this device first.", 401);
     if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
   };
   try {

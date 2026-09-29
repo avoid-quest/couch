@@ -7,7 +7,7 @@ export async function bluetoothSettings(request: Request, identity: () => Device
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
   const authorize = () => {
     const caller = identity();
-    if (!caller) throw new ControllerError("Pair this remote first.", 401);
+    if (!caller) throw new ControllerError("Pair this device first.", 401);
     if (caller.authority === "controller" || caller.authority === "administrator" && !caller.device) throw new ControllerError(ADMIN_ONLY, 403);
     return caller.authority === "host" ? "host" : caller.device!.id;
   };

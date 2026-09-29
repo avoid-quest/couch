@@ -1,10 +1,18 @@
 import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
+import { isTvPresentation } from "./session/native-context";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
 const localOnly = '[data-tv-local-only]';
 let remoteNavigation = false;
+// The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
+let adjusting: HTMLElement | null = null;
+function adjust(fader: HTMLElement | null) {
+  adjusting?.removeAttribute("data-adjusting");
+  adjusting = fader;
+  fader?.setAttribute("data-adjusting", "");
+}
 const rendered = (element: HTMLElement) => !element.closest('[hidden]')
   && element.closest(portals)?.getAttribute("data-state") !== "closed"
   && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
@@ -17,6 +25,9 @@ const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElemen
   && (!remoteNavigation || !element.closest(localOnly))
   && !element.matches('[role="tablist"], [role="tabpanel"]')
   && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
+
+// A slider is placed by its whole track, not by its thumb, which moves with the value.
+const box = (element: Element) => (element.closest('[data-slot="slider"]') ?? element).getBoundingClientRect();
 
 function focus(element: HTMLElement | undefined) {
   if (!element) return;
@@ -41,14 +52,14 @@ function moveFocus(key: string) {
     const play = scope.querySelector<HTMLElement>(".player-page [data-play-button]");
     if (play && visible(play)) { focus(play); return; }
   }
-  const from = active.getBoundingClientRect();
+  const from = box(active);
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
   const row = key === "ArrowRight" ? active.closest("[data-nav-row]") : null;
   const destinations = row ? controls.filter(element => row.contains(element)) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
   const candidates = destinations.filter(element => element !== active).map(element => {
-    const to = element.getBoundingClientRect();
+    const to = box(element);
     const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
     const forward = (horizontal ? dx : dy) * sign;
     const across = Math.abs(horizontal ? dy : dx);
@@ -102,7 +113,7 @@ export function applyTvNavigation(key: NavigationKey) {
     if (key === "back") {
       sendKey(target, "Escape");
     } else if (key === "select") {
-      if (target.closest('[role="combobox"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"]')) sendKey(target, "Enter");
+      if (target.closest('[role="combobox"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"]')) sendKey(target, "Enter");
       else target.click();
     } else {
       const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];
@@ -124,6 +135,32 @@ export function useNavigation(onBack: () => void) {
   useEffect(() => {
     const keyboard = () => document.documentElement.setAttribute("data-keyboard", "");
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
+    // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
+    // the keys past a radio group's first or last radio (Radix loops them), and on the TV Up/Down across a
+    // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select (OK opens it).
+    // A TV fader (a vertical slider, or a Volume, which shares its row with the player's tools)
+    // moves on with every arrow too, until OK hands it the keys along it; OK, Back or leaving it hands
+    // them back, as TV equalisers do.
+    const leave = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const tv = isTvPresentation();
+      const slider = target?.closest<HTMLElement>('[role="slider"]');
+      const upright = slider?.getAttribute("aria-orientation") === "vertical";
+      const fader = tv && (upright || slider?.closest("[data-volume]")) ? slider! : null;
+      const vertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+      const radio = target?.closest<HTMLElement>('[role="radio"]');
+      const radios = [...radio?.closest('[role="radiogroup"]')?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []].filter(visible);
+      if (fader && (event.key === "Enter" || event.key === "Escape" && adjusting === fader)) adjust(adjusting === fader ? null : fader);
+      else if (event.key.startsWith("Arrow") && (radio && radios.at(event.key === "ArrowDown" || event.key === "ArrowRight" ? -1 : 0) === radio
+        || fader && !(vertical === upright && adjusting === fader)
+        || tv && vertical && (slider && !fader || target?.matches('input:not([role="combobox"])'))
+        || tv && target?.matches('button[role="combobox"][aria-expanded="false"]'))) moveFocus(event.key);
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const release = (event: FocusEvent) => { if (event.target === adjusting) adjust(null); };
     const keydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -143,10 +180,14 @@ export function useNavigation(onBack: () => void) {
       moveFocus(event.key);
     };
     window.addEventListener("keydown", keyboard, true);
+    window.addEventListener("keydown", leave, true);
+    window.addEventListener("focusout", release, true);
     window.addEventListener("pointerdown", pointer, true);
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keyboard, true);
+      window.removeEventListener("keydown", leave, true);
+      window.removeEventListener("focusout", release, true);
       window.removeEventListener("pointerdown", pointer, true);
       window.removeEventListener("keydown", keydown);
     };

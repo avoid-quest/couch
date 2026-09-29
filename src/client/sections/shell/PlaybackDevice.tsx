@@ -22,9 +22,10 @@ import { TRY_AGAIN } from "@/copy";
 import { SoundControls } from "./PlaybackStatus";
 import { Onboarding } from "./Onboarding";
 import { DeviceList } from "./Outputs";
-import { StatusDot, StatusLine } from "./StatusLine";
+import { PlayingLabel, StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 import { playingElsewhere } from "@/session/device-id";
+import { useNavigation } from "@/navigation";
 
 export type Choice = AppMode;
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void> };
@@ -85,7 +86,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   };
   return <Context.Provider value={device}>
     {choice.mode ? children : <main className="flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
-      <Onboarding title="Where do you want to play?"><DeviceForm /></Onboarding>
+      <Onboarding title="Where is your Couch?"><DeviceForm /></Onboarding>
     </main>}
   </Context.Provider>;
 }
@@ -94,7 +95,7 @@ const hostOf = (address: string) => address.replace(/^https?:\/\//i, "").replace
 // Native choices remember only addresses, so each Couch's name is kept here once seen.
 const namesKey = "couch.target-names";
 const targetNames = (): Record<string, string> => { try { return Object.fromEntries(Object.entries(JSON.parse(localStorage.getItem(namesKey) || "{}") ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string")); } catch { return {}; } };
-const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and its remotes disconnect." : reason === "playback" ? "Playback here stops." : "Remotes can't reach this computer until you switch back.";
+const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and other devices disconnect." : reason === "playback" ? "Playback here stops." : "Other devices can't reach this Couch until you switch back.";
 
 function DeviceForm() {
   const device = usePlaybackDevice()!;
@@ -102,6 +103,8 @@ function DeviceForm() {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [forgetting, setForgetting] = useState<string | null>(null);
   const [names] = useState(targetNames);
+  // The shell isn't mounted before a mode is chosen, so the chooser brings the TV remote's arrow keys itself (#644 ticket 12).
+  useNavigation(() => {});
   const selectRemote = async (confirmed = false) => {
     try { await device.choose("remote", address, confirmed); }
     catch (reason) { if (message(reason).startsWith("confirmation-required:")) setConfirm(message(reason).split(":")[1]!); }
@@ -109,8 +112,8 @@ function DeviceForm() {
   const submit = (event: FormEvent) => { event.preventDefault(); void selectRemote(); };
   return <div className="grid gap-6">
     <div className="-mx-3 border-t">
-      <Button variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
-        <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Play here. Phones can pair as remotes.</span></span>
+      <Button autoFocus variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
+        <span className="grid gap-0.5"><span className="text-base font-medium">This computer</span><span className="text-sm text-muted-foreground">Host Couch here. Phones, browsers and other computers on your network join it.</span></span>
         <ChevronRight aria-hidden="true" />
       </Button>
       {device.targets.map(target => <div key={target} className="flex items-center border-b"><Button variant="ghost" className="h-auto w-full justify-between gap-4 rounded-none border-0 px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("remote", target)}>
@@ -118,7 +121,7 @@ function DeviceForm() {
         <ChevronRight aria-hidden="true" />
       </Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
       <form className="grid gap-3 border-b px-3 py-4" onSubmit={submit}>
-        <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Control a Couch on your network.</p></div>
+        <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Join a Couch that runs on another computer. This computer still plays.</p></div>
         <div className="flex gap-2"><Input id="playback-address" aria-label="Couch address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
           {!confirm && <Button type="submit" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>}
         </div>
@@ -170,17 +173,19 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   };
   const failure = device.error && !device.error.startsWith("confirmation-required:") ? device.error : null;
   const nameOf = (target: string) => device.mode === "remote" && device.address === target && installationName || names[target];
-  const target = installationName || (device.address ? hostOf(device.address) : "Couch");
   const elsewhere = playingElsewhere(state);
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   return <>
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{device.mode === "local" ? elsewhere ? <><span className="max-sm:sr-only">Playing on </span>{elsewhere.name}</> : "Playing here" : <><span className="max-sm:sr-only">Playing on </span>{target}</>}</span></Button></PopoverTrigger>
-      <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="w-96 gap-4">
-        <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>
-        <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
-          <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>This computer</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>
+      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><PlayingLabel renderer={elsewhere} /></Button></PopoverTrigger>
+      <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="max-h-(--radix-popover-content-available-height) w-96 gap-4 overflow-y-auto">
+        {/* Devices first: looking at another Device's Playback is what this popover is for (#644 ticket 12). */}
+        {state && run && <DeviceList state={state} run={run} />}
+        <section aria-label="Couch" className="grid gap-3 border-t pt-3 first:border-t-0 first:pt-0">
+        <PopoverHeader><PopoverTitle>Couch</PopoverTitle></PopoverHeader>
+        <RadioGroup aria-label="Couch" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
+          <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer font-normal">This computer</FieldLabel></Field>
           {targets.map((target, index) => {
             const named = nameOf(target);
             return <Field orientation="horizontal" className="items-center py-1.5" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{named || hostOf(target)}</span>{named && <span className="truncate text-muted-foreground">{hostOf(target)}</span>}</FieldLabel><Button variant="ghost" size="sm" className="text-muted-foreground" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); openDialog("forget"); }}>Forget</Button></Field>;
@@ -188,7 +193,8 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
-        {state && run && <DeviceList state={state} run={run} />}
+        </section>
+        {/* Sound last: a focused slider owns the arrow keys, so a TV remote reaches everything above it first. */}
         <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={close} />
       </PopoverContent>
     </Popover>
@@ -218,7 +224,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   </>;
 }
 
-/** A new local setup asks about remotes before anything else. */
+/** A new local setup asks for this computer's name and whether to share it before anything else. */
 export function useLocalSetupPending(credentials: Credentials | null) {
   const device = usePlaybackDevice();
   return !!credentials && device?.mode === "local" && !device.localSetupComplete;
@@ -239,9 +245,11 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   });
   if (!pending) return null;
   const setSharing = (enabled: boolean) => { if (!sharing.isPending) sharing.mutate(enabled); };
-  return <Onboarding title="Allow remotes?" description="Phones on your network can pair and control playback. Change it in Settings → Devices." data-tv-navigation-scope>
-    <Field><FieldLabel htmlFor="host-name">Name this computer</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>
+  // Naming comes first: it is the one thing every other Device will show (#644 ticket 12).
+  return <Onboarding title="Name this computer" description="Every device on your network shows this name. Leave it empty to keep the one shown." data-tv-navigation-scope>
+    <Field><FieldLabel htmlFor="host-name">Name</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>
+    <div className="grid gap-0.5"><p className="text-base font-medium">Share it on your network?</p><p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it in Settings → Devices.</p></div>
     {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}
-    <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Allow</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
+    <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Share</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
   </Onboarding>;
 }

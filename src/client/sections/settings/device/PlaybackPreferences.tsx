@@ -51,8 +51,6 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
     <SettingsRow label="Speed">
       <ChoiceGroup label="Speed" value={String(values.speed)} options={speeds} disabled={disabled} onValueChange={value => apply({ speed: Number(value) })} />
     </SettingsRow>
-    <SettingsRow label="Volume leveling" description="Music only.">
-    </SettingsRow>
     {save.error && <Alert variant="destructive"><AlertDescription>{save.error.message}</AlertDescription></Alert>}
   </>;
 }

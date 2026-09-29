@@ -14,7 +14,7 @@ export function GeneralPage() {
     <SettingsLayout section="general">
       <SettingsSection>
         {credentials ? <TvNameSettings credentials={credentials} connected={connected} canWrite={manager} name={details?.name} />
-          : <SettingsRow label="Name" description="Pair this remote to change it."><span className="text-sm">{deviceName(details?.name)}</span></SettingsRow>}
+          : <SettingsRow label="Name" description="Pair this device to change it."><span className="text-sm">{deviceName(details?.name)}</span></SettingsRow>}
         {manager && credentials && details?.tvPresentation && <StartupSettings credentials={credentials} connected={connected} />}
       </SettingsSection>
     </SettingsLayout>

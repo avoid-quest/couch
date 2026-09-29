@@ -20,7 +20,7 @@ import { playingElsewhere } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { DeviceList } from "./Outputs";
-import { StatusDot } from "./StatusLine";
+import { PlayingLabel, StatusDot } from "./StatusLine";
 
 function destinationOrigin(address: string): string | null {
   try {
@@ -31,7 +31,7 @@ function destinationOrigin(address: string): string | null {
 
 const noCredentials = { origin: "", token: "" };
 
-/** Output and volume of the Couch that plays, inside the Play on popover. */
+/** Volume of the looked-at Playback, plus this Couch's sound outputs where it controls them (Linux). */
 export function SoundControls({ credentials, connected, open, state, run, onClose }: {
   credentials: Credentials | null;
   connected: boolean;
@@ -44,7 +44,9 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
   const gate = useOptionalSessionGate();
   const trigger = useRef<HTMLButtonElement>(null);
   const admin = !!gate?.localHost || gate?.identity?.authority === "host" || gate?.identity?.authority === "administrator";
-  const enabled = open && !!credentials && connected;
+  // Mac and Windows Couches have no system outputs to choose (#644 ticket 3), so only the volume shows.
+  const system = !!gate?.details?.systemAudio;
+  const enabled = open && !!credentials && connected && system;
   const soundRead = useQuery({ ...soundQuery(credentials ?? noCredentials), enabled });
   const sound = enabled ? soundRead.data ?? null : null;
   const output = useMutation({
@@ -59,13 +61,13 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
     : soundRead.isLoading ? "Checking outputs…" : "No outputs.";
   // Offline, the shell's status line already says so; there is nothing to adjust.
   if (!connected) return null;
-  return <section aria-labelledby="sound-controls-title" className="grid gap-2 border-t pt-3">
+  return <section aria-labelledby="sound-controls-title" className="grid gap-2 border-t pt-3 first:border-t-0 first:pt-0">
     <h3 id="sound-controls-title" className="text-sm font-medium">Sound</h3>
-    {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={output.isPending || !connected} onValueChange={value => { if (credentials) output.mutate(value); }} className="gap-0">{outputs.map((item, index) => <Field orientation="horizontal" className="items-center py-1.5" key={item.id}><RadioGroupItem id={`quick-output-${index}`} value={item.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{item.name || item.id}</FieldLabel></Field>)}</RadioGroup> : !forbidden && <p className="text-muted-foreground">{unavailable}</p>}
+    {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={output.isPending || !connected} onValueChange={value => { if (credentials) output.mutate(value); }} className="gap-0">{outputs.map((item, index) => <Field orientation="horizontal" className="items-center py-1.5" key={item.id}><RadioGroupItem id={`quick-output-${index}`} value={item.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{item.name || item.id}</FieldLabel></Field>)}</RadioGroup> : system && !forbidden && <p className="text-muted-foreground">{unavailable}</p>}
     {observed && observed.id !== selected && <p className="text-muted-foreground">Playing through {observed.name || observed.id}.</p>}
     {state && run && <PlaybackVolume state={state} connected={connected} run={run} />}
     {output.error && <Alert variant="destructive"><AlertDescription>{output.error.message || "Couldn't change the output."}</AlertDescription></Alert>}
-    {credentials && admin && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
+    {credentials && admin && system && <Button variant="ghost" className="-mx-2.5 justify-start text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
   </section>;
 }
 
@@ -93,7 +95,9 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   const other = known?.origin !== origin ? known : null;
   // Play starts on this Device, so the label names another Device only while it plays (#644 ticket 6).
   const renderer = playingElsewhere(state);
-  const label = renderer ? `Playing on ${renderer.name}` : "Playing here";
+  // Before pairing nothing plays here yet: the button names the Couch this browser is pairing with (#644 ticket 12).
+  const unpaired = !credentials || !!gate?.pairingRequired;
+  const label = unpaired ? name : renderer?.label ?? "Playing here";
   const choose = (value: string) => {
     const next = destinationOrigin(value);
     if (!next) { setAddressError("Enter just the address, like 192.168.1.10:4100."); return; }
@@ -102,25 +106,29 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   };
   return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11" aria-label={`${label}: ${status}`}>
+      <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11 max-sm:px-2" aria-label={`${label}: ${status}`}>
         <StatusDot connected={connected} />
-        <span className="max-w-48 truncate max-sm:max-w-32">{renderer ? <><span className="max-sm:sr-only">Playing on </span>{renderer.name}</> : label}</span>
+        {unpaired ? <span className="max-w-48 truncate max-sm:max-w-32">{name}</span> : <PlayingLabel renderer={renderer} />}
       </Button>
     </PopoverTrigger>
-    <PopoverContent align="end" className="w-96 gap-4" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>
-      <PopoverHeader><PopoverTitle>Play on</PopoverTitle><PopoverDescription role="status">{status}</PopoverDescription></PopoverHeader>
+    <PopoverContent align="end" className="max-h-(--radix-popover-content-available-height) w-96 gap-4 overflow-y-auto" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>
+      {/* Devices first: looking at another Device's Playback is what this popover is for (#644 ticket 12). */}
+      {state && run && <DeviceList state={state} run={run} />}
+      <section aria-label="Couch" className="grid gap-3 border-t pt-3 first:border-t-0 first:pt-0">
+      <PopoverHeader className="flex-row items-baseline justify-between gap-3"><PopoverTitle>Couch</PopoverTitle><PopoverDescription role="status">{status}</PopoverDescription></PopoverHeader>
       {target ? <div className="grid gap-3">
         <p>Switch this browser to {new URL(target).host}?</p>
         <p className="text-muted-foreground">{name} keeps playing. You may need to pair.</p>
         <div className="flex flex-wrap gap-2"><Button onClick={() => location.assign(target)}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button></div>
       </div> : <>
-        <RadioGroup aria-label="Play on" value={origin} onValueChange={choose} className="gap-0">
+        <RadioGroup aria-label="Couch" value={origin} onValueChange={choose} className="gap-0">
           {[{ origin, name }, ...(other ? [{ origin: other.origin, name: other.details.name }] : [])].map((item, index) => <Field key={item.origin} orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id={`play-on-${index}`} value={item.origin} aria-label={item.name} /><FieldLabel htmlFor={`play-on-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{item.name}</span><span className="truncate text-muted-foreground">{new URL(item.origin).host}</span></FieldLabel>{(item.origin !== origin || !localHost && credentials && gate) && <Button variant="ghost" size="sm" className="text-muted-foreground" aria-label={`Forget ${item.name}`} onClick={() => { setForgetting(item); setOpen(false); }}>Forget</Button>}</Field>)}
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); choose(address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={!address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {addressError && <Alert variant="destructive"><AlertDescription>{addressError}</AlertDescription></Alert>}
       </>}
-      {state && run && <DeviceList state={state} run={run} />}
+      </section>
+      {/* Sound last: a focused slider owns the arrow keys, so a TV remote reaches everything above it first. */}
       <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={() => setOpen(false)} />
     </PopoverContent>
   </Popover><AlertDialog open={forgetting !== null} onOpenChange={value => { if (!value) setForgetting(null); }}>
