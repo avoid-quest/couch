@@ -7,9 +7,8 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import type { BluetoothAction, BluetoothPrompt, BluetoothState } from "../../../../shared/bluetooth";
+import type { BluetoothAction, BluetoothState } from "../../../../shared/bluetooth";
 import { createId } from "../../../session/session";
 
 type Change = (action: Omit<BluetoothAction, "owner">) => void;
@@ -25,7 +24,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
   const mutation = useMutation({
     mutationFn: async (action: Omit<BluetoothAction, "owner">) => {
       if (action.device && state?.operation?.kind === "scan" && state.operation.status === "running" && state.operation.id === operation.current) await send({ op: "cancel", token: state.operation.id });
-      if (!["cancel", "answer"].includes(action.op)) { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
+      if (action.op !== "cancel") { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
       return send(action);
     },
     onSuccess: (result, action) => queryClient.setQueryData<ListedBluetoothState>(bluetoothQuery(credentials).queryKey, previous => bluetoothView(previous, result, action.op === "scan")),
@@ -39,23 +38,10 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
     }).catch(() => {});
   }, [credentials]);
 
-  const support = state?.support;
-  const unavailableReason = (op: BluetoothAction["op"]) => {
-    switch (op) {
-      case "power": return support?.powerUnavailableReason;
-      case "connect": return support?.connectUnavailableReason;
-      case "disconnect": return support?.disconnectUnavailableReason;
-      case "forget": return support?.forgetUnavailableReason;
-    }
-  };
-  const change: Change = action => { if (connected && !pending && !unavailableReason(action.op)) mutation.mutate(action); };
-  useEffect(() => {
-    if (confirm && unavailableReason(confirm.op)) setConfirm(null);
-  }, [confirm, support]);
+  const change: Change = action => { if (connected && !pending) mutation.mutate(action); };
   const current = state?.operation;
   const active = current?.status === "running";
   const own = current?.id === operation.current;
-  const prompt = own ? current?.prompt : null;
   const searching = active && current?.kind === "scan";
   const deviceDisabled = !connected || state?.adapter !== "available" || pending || active && !(own && searching);
   const status = !current ? null : active
@@ -64,10 +50,10 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
 
   return <>
     <SettingsSection>
-      {state?.adapter === "off" && <SettingsRow label="Bluetooth" description={<>Off{support?.powerUnavailableReason && <><br />{support.powerUnavailableReason}</>}</>}>
-        <Button disabled={!connected || pending || active || !!support?.powerUnavailableReason} onClick={() => change({ op: "power" })}>Turn on</Button>
+      {state?.adapter === "off" && <SettingsRow label="Bluetooth" description="Off">
+        <Button disabled={!connected || pending || active} onClick={() => change({ op: "power" })}>Turn on</Button>
       </SettingsRow>}
-      {state?.adapter === "available" && <SettingsRow label="Add a device" description={<>Put your device in pairing mode, then Search.{support?.pairingNotice && <><br />{support.pairingNotice}</>}</>}>
+      {state?.adapter === "available" && <SettingsRow label="Add a device" description="Put your device in pairing mode, then Search.">
         <Button variant="outline" disabled={!connected || pending || active && !(own && searching)} onClick={() => change(own && searching ? { op: "cancel", token: current.id } : { op: "scan" })}>{searching && own ? "Stop" : "Search"}</Button>
       </SettingsRow>}
       {state?.adapter === "absent" && <Alert><AlertDescription>No Bluetooth adapter found.</AlertDescription></Alert>}
@@ -77,7 +63,6 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
         {active && <Spinner />}<span className="text-muted-foreground">{status}</span>
         {active && own && !searching && <Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => change({ op: "cancel", token: current.id })}>Cancel</Button>}
       </div>}
-      {prompt && <PairingPrompt key={prompt.id} prompt={prompt} disabled={!connected || pending} onAnswer={answer => change({ op: "answer", token: current!.id, prompt: prompt.id, answer })} />}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription>{bluetooth.error && !mutation.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => void bluetooth.refetch()}>Try again</Button></AlertAction>}</Alert>}
     </SettingsSection>
     {state?.adapter === "available" && <SettingsSection title="Devices" description="After connecting a speaker, pick it in Sound.">
@@ -86,11 +71,9 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
         const outputs = sound.data?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
         const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);
         const label = [!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired" : "Not paired", selected && "Sound output"].filter(Boolean).join(" · ");
-        const op = device.connected ? "disconnect" : device.paired ? "connect" : "pair";
-        const guidance = unavailableReason(op);
-        return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}{guidance && <><br />{guidance}</>}{device.paired && support?.forgetUnavailableReason && <><br />{support.forgetUnavailableReason}</>}</>}>
-          <Button variant="outline" disabled={deviceDisabled || !device.available || !!guidance} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
-          {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available || !!support?.forgetUnavailableReason} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}
+        return <SettingsRow key={device.address} label={device.name} description={<>{label}<br />{device.address}</>}>
+          <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, name: device.name, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>
+          {device.paired && <Button variant="ghost" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, name: device.name, op: "forget" })}>Forget</Button>}
         </SettingsRow>;
       })}
     </SettingsSection>}
@@ -107,14 +90,4 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       </AlertDialogContent>
     </AlertDialog>
   </>;
-}
-
-function PairingPrompt({ prompt, disabled, onAnswer }: { prompt: BluetoothPrompt; disabled: boolean; onAnswer: (answer: string) => void }) {
-  const [answer, setAnswer] = useState("");
-  const typed = prompt.kind === "pin" || prompt.kind === "passkey";
-  const label = prompt.kind === "confirm" ? `Pair${prompt.value ? ` with code ${prompt.value}` : " with this device"}?` : prompt.kind === "display" ? `Enter ${prompt.value} on the device.` : prompt.kind === "pin" ? "Enter the PIN." : "Enter the 6-digit passkey.";
-  return <SettingsRow label={label}>
-    {typed && <Input aria-label="Bluetooth pairing code" className="w-40" value={answer} maxLength={prompt.kind === "pin" ? 16 : 6} autoComplete="off" onChange={event => setAnswer(event.target.value)} />}
-    {prompt.kind !== "display" && <Button disabled={disabled || typed && !answer} onClick={() => onAnswer(prompt.kind === "confirm" ? "yes" : answer)}>Pair</Button>}
-  </SettingsRow>;
 }

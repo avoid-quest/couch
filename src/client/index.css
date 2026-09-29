@@ -166,12 +166,7 @@ html { view-transition-name: none; }
 .player-page[data-player-idle] .player-main { display: none; }
 .player-page[data-player-idle][data-queue-open] .player-queue { display: flex; width: 100%; max-width: 48rem; border: 0; padding: 0; }
 
-/* macOS mpv sits behind the WebView. Every full-screen ancestor of its video
-   rectangle must be clear; the band, status text and open sheet stay solid. */
-html:has(body.native-host .player-page .video-stage.has-video),
-body.native-host:has(.player-page .video-stage.has-video),
-body.native-host:has(.player-page .video-stage.has-video) .app-shell,
-body.native-host:has(.player-page .video-stage.has-video) .tv-browser,
-body.native-host:has(.player-page .video-stage.has-video) .player-page { background: transparent; }
+/* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
+html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }
 
 @media (max-width: 959px) { [data-queue-open] .player-band.player-video-controls { padding-top: 0; background: var(--background); } }

@@ -28,7 +28,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
   };
   const canSeek = transportReady && seekable;
   const subtitles = player?.tracks?.filter(track => track.kind === "subtitle") ?? [];
-  const canVolume = available && audioReady && state?.systemAudio?.volumeWritable !== false;
+  const canVolume = available && audioReady;
   const volume = (delta: number) => void run({ type: "volume", volume: Math.max(0, Math.min(100, (player?.volume ?? 0) + delta)) });
   useCouchHotkeys([
     { hotkey: "K", action: pause, enabled: canPause },
@@ -40,7 +40,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
     { hotkey: "ArrowUp", action: () => volume(5), enabled: canVolume && shell.section === "Now", backgroundOnly: true },
     { hotkey: "ArrowDown", action: () => volume(-5), enabled: canVolume && shell.section === "Now", backgroundOnly: true },
     ...(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] as const).map((hotkey, digit) => ({ hotkey, enabled: canSeek && clock.playbackId === player?.playbackId && !!clock.duration, action: () => { if (player?.playbackId && clock.duration) void run({ type: "seek", playbackId: player.playbackId, position: clock.duration * digit / 10 }); } })),
-    { hotkey: "M", enabled: available && audioReady && !!state?.systemAudio && state.systemAudio.muteWritable !== false, action: () => void run({ type: "mute", muted: !state?.systemAudio?.muted }) },
+    { hotkey: "M", enabled: available && audioReady && !!state?.systemAudio, action: () => void run({ type: "mute", muted: !state?.systemAudio?.muted }) },
     { hotkey: "C", enabled: transportReady && subtitles.length > 0, action: () => { if (player?.playbackId) void run({ type: "track", playbackId: player.playbackId, kind: "subtitle", index: subtitles.some(track => track.selected) ? -1 : subtitles[0]!.index }); } },
     { hotkey: "Shift+N", enabled: nextReady && hasNext, action: () => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); } },
     { hotkey: "H", action: () => shell.changeSection("Home") },

@@ -1,5 +1,4 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
-import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,6 @@ import { PlaybackTimeline, PlaybackTransport, PlaybackVolume, playbackCapabiliti
 import { sourceLabel } from "@/source-label";
 import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
 import { deviceName, offline } from "@/copy";
-import { VideoStage } from "@/sections/shell/VideoStage";
 import { useBottomBar } from "@/sections/shell/MiniPlayer";
 import { QueuePanel } from "./QueuePanel";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
@@ -78,8 +76,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   }, [autoHide, panel, queueOpen]);
   useEffect(() => {
     if (!nativeHost || !current || shown) return;
-    void invoke("set_native_cursor_visible", { visible: false }).catch(() => {});
-    return () => { void invoke("set_native_cursor_visible", { visible: true }).catch(() => {}); };
+    document.documentElement.toggleAttribute("data-cursor-hidden", true);
+    return () => { document.documentElement.toggleAttribute("data-cursor-hidden", false); };
   }, [nativeHost, !!current, shown]);
   useEffect(() => {
     if (!retry) return;
@@ -144,7 +142,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
-      {!elsewhere && <VideoStage active={active} audioOnly={audioOnly} />}
     </div>
     <div data-player-header inert={!shown} className={cn("player-header absolute top-0 left-0 z-20 flex items-center gap-3 p-4 transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
       <Button data-back variant="ghost" className="h-11 bg-background" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" />{shell.playerBackLabel || "Find"}</Button>

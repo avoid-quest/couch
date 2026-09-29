@@ -30,16 +30,12 @@ import { ControllerError, createControllers, settingField } from "./controllers"
 import type { ControllerIdentity } from "../shared/controllers";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
-import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createGuide } from "./iptv";
 
 import { createSoundRouting } from "./sound-routing";
 import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
-import { macSound } from "./sound-mac";
-import { windowsSound } from "./sound-windows";
-import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
@@ -57,12 +53,10 @@ type HubOptions = {
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   native?: boolean;
-  nativeSound?: (action: NativeSoundAction) => Promise<unknown>;
   advertisedUrls?: string[];
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-const tauriOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
 const validOriginDomain = (domain: string) => domain.length <= 253 && !isIP(domain) && !/^\d+(?:\.\d+)*$/.test(domain)
   && domain.split(".").every(label => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
 const originDomainUrl = (value: string, port: number, legacy = false) => {
@@ -106,9 +100,7 @@ export async function createHub(options: HubOptions) {
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => null);
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
-  const macAudio = process.platform === "darwin" && options.nativeSound ? macSound(options.nativeSound) : null;
-  const windowsAudio = process.platform === "win32" && options.nativeSound ? windowsSound(options.nativeSound) : null;
-  const systemAudio = !!options.native && (process.platform === "linux" || !!macAudio || !!windowsAudio);
+  const systemAudio = !!options.native && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   const session = createSession(store, options.sendPlayer, (state, clock) => {
@@ -198,12 +190,10 @@ export async function createHub(options: HubOptions) {
     active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
     pin: output => options.sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
-    ...(macAudio ? { backend: macAudio.routing, subscribe: macAudio.subscribe, platform: "mac" as const } : {}),
-    ...(windowsAudio ? { backend: windowsAudio.routing, subscribe: windowsAudio.subscribe, platform: "windows" as const, setSystemDefault: false } : {}),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
   if (systemAudio && reconnectBluetooth) void options.nativeBluetooth?.({ op: "reconnect", owner: "boot", device: reconnectBluetooth }).catch(() => {});
-  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: systemAudio, idle: () => !closed && session.state.player.status === "idle", ...(macAudio ? { backend: macAudio.test, testAvailable: false, platform: "mac" as const } : {}), ...(windowsAudio ? { backend: windowsAudio.test, testAvailable: false, platform: "windows" as const } : {}) });
+  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: systemAudio, idle: () => !closed && session.state.player.status === "idle" });
   const appearance = createAppearance(store, value => session.updateAppearance(value));
   const metadata = createProviderMetadata({ store, cachedItem: providers.cachedItem, onChange: () => session.invalidate("progress") });
   const catalog = createCatalog({ radio, viewing: { store, session, refreshHistory: metadata.refreshHistory } });
@@ -215,7 +205,7 @@ export async function createHub(options: HubOptions) {
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
-    return origin === null ? !requireOrigin : allowedOrigins.has(origin) || tauriOrigins.has(origin);
+    return origin === null ? !requireOrigin : allowedOrigins.has(origin);
   };
   const cors = (request: Request, response: Response) => {
     response.headers.set("Cache-Control", "no-store");
@@ -327,7 +317,7 @@ export async function createHub(options: HubOptions) {
   const frontend = createFrontend();
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopClientProtocol, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": async request => {
       if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
       const respond = (body: unknown, status = 200) => cors(request, json(body, status));
@@ -413,9 +403,7 @@ export async function createHub(options: HubOptions) {
       const authorize = () => {
         if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
       };
-      if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
-        ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
-        : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: VERSION_MISMATCH }, 409));
+      if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: VERSION_MISMATCH }, 409));
       if (caller.controller) store.touchController(caller.controller.id);
       if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
       if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
@@ -505,8 +493,10 @@ export async function createHub(options: HubOptions) {
 
   const port = server.port;
   const origin = urlFor(hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname, port);
-  const allowedHosts = new Set(options.managedLan ? [new URL(origin).host] : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
-  const allowedOrigins = new Set(options.managedLan ? [origin] : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
+  // The app window loads Core from localhost (#644: Twitch rejects Origin 127.0.0.1).
+  const local = [origin, urlFor("localhost", port)];
+  const allowedHosts = new Set(options.managedLan ? local.map(url => new URL(url).host) : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
+  const allowedOrigins = new Set(options.managedLan ? local : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
   const urls: string[] = advertised.length ? [...new Set(advertised)] : hostname === "0.0.0.0" || hostname === "::"
     ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port))
     : [origin];
@@ -527,7 +517,7 @@ export async function createHub(options: HubOptions) {
         urls.splice(0, urls.length, ...published);
         connectionUrls.splice(0, connectionUrls.length, ...published);
         allowedHosts.clear(); allowedOrigins.clear();
-        for (const url of [origin, ...next]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
+        for (const url of [...local, ...next]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
         options.onAddresses?.(published);
       },
     });

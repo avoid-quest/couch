@@ -7,7 +7,7 @@ black ground, white ink, hairlines. The picture brings the colour.
 ## Brand mark
 
 Shift carries the avoid.quest disc and horizontal cuts, with its lower half moved
-right. Desktop icons use the black tile in `src-tauri/icons/icon.svg`. The macOS
+right. Desktop icons use the black tile in `packaging/icons/icon.svg`. The macOS
 tray uses a transparent template silhouette so the system can tint it. The PWA
 maskable icon uses a full black background and keeps the mark inside the safe
 circle. The website uses a custom SVG for this product mark because the shadcn
@@ -36,7 +36,7 @@ catalog provides interface icons, not brand identities.
   Playback settings use Sheets. Stage CSS handles native video bounds
   and the responsive queue workspace; controls reuse shadcn components.
 - **Keyboard control stays inside Couch.** TanStack Hotkeys shares shortcuts
-  between the browser and desktop window; Tauri global shortcuts would also
+  between the browser and desktop window; Electron global shortcuts would also
   claim keys outside the app. The header's Keyboard shortcuts dialog is the
   user-facing reference. Keep transport shortcuts aligned with visible control
   capabilities, preserve Find's type-to-search, and let open panels, text entry,

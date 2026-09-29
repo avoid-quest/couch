@@ -118,11 +118,9 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-export type HostMessage = { type: "sound"; requestId: string; state?: unknown; error?: string } | { type: "bluetooth"; requestId: string; state?: import("./bluetooth").BluetoothState; error?: string } | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "player"; state: PlayerState } | { type: "shutdown" };
-export type SidecarMessage =
+// Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
+export type AppMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "shutdown" };
+export type CoreMessage =
+  | { type: "ready"; origin: string; urls: string[]; pairingCode: string }
   | { type: "addresses"; urls: string[] }
-  | { type: "bluetooth"; requestId: string; action: import("./bluetooth").BluetoothAction }
-  | { type: "sound"; requestId: string; action: unknown }
-  | { type: "display"; requestId: string; action: import("./display").DisplayAction }
-  | ({ type: "ready" } & ConnectionInfo)
-  | { type: "playback"; command: PlaybackCommand };
+  | { type: "display"; requestId: string; action: import("./display").DisplayAction };

@@ -1,10 +1,9 @@
-import { createNativeBluetooth } from "./server/bluetooth-native";
+import { linuxBluetooth } from "./server/bluetooth-linux";
 import { createNativeDisplay } from "./server/display-native";
-import { createNativeSound } from "./server/sound-native";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { createHub } from "./server/hub";
-import type { HostMessage, SidecarMessage } from "./shared/protocol";
+import type { AppMessage, CoreMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
 
 if (process.argv.includes("--version")) {
@@ -12,54 +11,43 @@ if (process.argv.includes("--version")) {
   process.exit(0);
 }
 
-const native = process.env.COUCH_NATIVE === "1";
+// Inside the Couch app, Core runs in Electron's utilityProcess and talks to
+// Main over its parent port. `node build/core.mjs` runs it standalone.
+type ParentPort = { postMessage(message: CoreMessage): void; on(event: "message", listener: (event: { data: AppMessage }) => void): void };
+const app = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
+const native = !!app;
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
-if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
+if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The Couch app must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
 
-function send(message: SidecarMessage) {
-  process.stdout.write(`${JSON.stringify(message)}\n`);
-}
-
-const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
-const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
-const nativeSound = createNativeSound(native && ["darwin", "win32"].includes(process.platform) ? (requestId, action) => send({ type: "sound", requestId, action }) : undefined);
+const bluetooth = native && process.platform === "linux" ? linuxBluetooth() : undefined;
+const nativeDisplay = createNativeDisplay(app && ((requestId, action) => app.postMessage({ type: "display", requestId, action })));
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 const hub = await createHub({
   managedLan: native,
-  onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
+  onAddresses: urls => app?.postMessage({ type: "addresses", urls }),
   remoteControlEnabled: !native,
   native,
   nativeDisplay: nativeDisplay.request,
-  ...(native && ["darwin", "win32"].includes(process.platform) ? { nativeSound: nativeSound.request } : {}),
-  ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
+  ...(bluetooth ? { nativeBluetooth: bluetooth.request } : {}),
   hostname: process.env.COUCH_HOST ?? "0.0.0.0",
   port: Number(process.env.COUCH_PORT ?? 4100),
   databasePath: join(dataDir, "couch.sqlite"),
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
-  sendPlayer(command) {
-    if (native) send({ type: "playback", command });
-  },
+  // No renderer takes playback commands yet; the app window becomes one in #644 ticket 6.
+  sendPlayer() {},
 });
 
-if (native) {
-  send({
-    type: "ready",
-    origin: hub.origin,
-    urls: hub.urls,
-    pairingCode: hub.pairingCode,
-    token: process.env.COUCH_HOST_TOKEN!,
-  });
-} else {
+if (app) app.postMessage({ type: "ready", origin: hub.origin, urls: hub.urls, pairingCode: hub.pairingCode });
+else {
   console.error(`Couch: ${hub.urls.join(" · ")}`);
   console.error(`Pairing code: ${hub.pairingCode}`);
-  console.error("Start the desktop app for native playback. Browser clients control that player.");
 }
 
 let closing = false;
@@ -67,36 +55,12 @@ async function close() {
   if (closing) return;
   closing = true;
   nativeDisplay.close();
-  nativeSound.close();
-  nativeBluetooth.close();
+  bluetooth?.close();
   try { await hub.close(); } finally { process.exit(0); }
 }
 process.on("SIGINT", close);
 process.on("SIGTERM", close);
-
-if (native) {
-  // The sidecar's only playback authority is its owning Rust process.
-  let pending = "";
-  try {
-    for await (const text of process.stdin.setEncoding("utf8")) {
-      pending += text;
-      if (pending.length > 64 * 1024) throw new Error("Native message exceeded its limit");
-      let end: number;
-      while ((end = pending.indexOf("\n")) !== -1) {
-        const line = pending.slice(0, end);
-        pending = pending.slice(end + 1);
-        if (!line) continue;
-        const message: HostMessage = JSON.parse(line);
-        if (message.type === "player") hub.session.observe(message.state);
-        else if (message.type === "bluetooth") nativeBluetooth.receive(message);
-        else if (message.type === "display") nativeDisplay.receive(message);
-        else if (message.type === "sound") nativeSound.receive(message);
-        else if (message.type === "shutdown") await close();
-      }
-    }
-  } catch (error) {
-    console.error("Native connection failed:", error);
-  } finally {
-    await close();
-  }
-}
+app?.on("message", ({ data }) => {
+  if (data.type === "display") nativeDisplay.receive(data);
+  else if (data.type === "shutdown") void close();
+});

@@ -22,7 +22,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
   return {
     available,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
-    audioReady: !state?.systemAudio || state.systemAudio.volume !== null || state.systemAudio.volumeWritable === false && !state.systemAudio.error,
+    audioReady: !state?.systemAudio || state.systemAudio.volume !== null,
     transportReady: available && !!player?.playbackId && ["playing", "paused"].includes(player.status),
     nextReady: available && !!player?.playbackId && ["playing", "paused", "ended"].includes(player.status),
     seekable: !!player?.seekable,
@@ -79,8 +79,8 @@ export function PlaybackVolume({ state, connected, run, showSlider = true, showV
   const target = deviceName(state.installationName);
   const muted = state.systemAudio?.muted;
   return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} role="group" aria-label={`${target} volume`}>
-    {state.systemAudio ? <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio.muteWritable === false} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" className="size-4 shrink-0" />}
-    {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady || state.systemAudio?.volumeWritable === false} onCommit={volume => run({ type: "volume", volume })} />}
+    {state.systemAudio ? <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" className="size-4 shrink-0" />}
+    {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady} onCommit={volume => run({ type: "volume", volume })} />}
     {showValue && <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "—" : `${Math.round(state.player.volume)}%`}</span>}
   </div>;
 }

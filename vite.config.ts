@@ -6,14 +6,14 @@ import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
 import { frontendPaths } from "./src/shared/page-paths";
-import tauri from "./src-tauri/tauri.conf.json" with { type: "json" };
+import { version } from "./package.json";
 
 // scripts/build.ts writes the release identity before the client build runs;
 // a standalone `vite build` falls back to an unsigned identity. Development
 // always uses an unsigned identity so old release output cannot block its API.
 const buildInfo = (() => {
   try {
-    return readFileSync("src-tauri/build-info.json", "utf8");
+    return readFileSync("build/build-info.json", "utf8");
   } catch {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, packaged: false });
   }
@@ -21,8 +21,8 @@ const buildInfo = (() => {
 export default defineConfig(({ command }) => ({
   clearScreen: false,
   root: "src/client",
-  // Both the Tauri asset protocol and the sidecar serve the application at /.
-  // Relative asset/worker URLs would instead resolve below a refreshed route.
+  // Core serves the application at /. Relative asset/worker URLs would
+  // instead resolve below a refreshed route.
   base: "/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
@@ -31,7 +31,7 @@ export default defineConfig(({ command }) => ({
     tailwindcss(),
     // App-shell precache only (#338): the generated worker precaches the build's
     // static assets and leaves every API and WebSocket request on the network.
-    // Registration is manual in the client entry so the Tauri webview never
+    // Registration is manual in the client entry so the app window never
     // registers it.
     VitePWA({
       registerType: "autoUpdate",
@@ -61,8 +61,7 @@ export default defineConfig(({ command }) => ({
     }),
   ],
   define: {
-    "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version: tauri.version, revision: null, dataFormat: 1, packaged: false }) : buildInfo),
-    "COUCH_DEV_ORIGIN": JSON.stringify(command === "serve" ? new URL(tauri.build.devUrl).origin : null),
+    "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version, revision: null, dataFormat: 1, packaged: false }) : buildInfo),
   },
   // Browser clients are same-origin with Core; the dev proxy supplies that
   // origin so `vite` (and browser-driven loops) pair with `bun run server:dev`.

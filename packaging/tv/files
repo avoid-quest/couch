@@ -1,0 +1,12 @@
+etc/couch/appliance.env
+usr/lib/couch-appliance/initialize-audio
+usr/lib/couch-appliance/session
+usr/lib/couch-appliance/set-autostart
+usr/lib/systemd/logind.conf.d/50-couch.conf
+usr/lib/systemd/user/couch-tv.service
+usr/lib/systemd/system/couch-autostart@.service
+usr/sbin/couch-session
+usr/share/couch-appliance/openbox.xml
+usr/share/lightdm/lightdm.conf.d/50-couch.conf
+usr/share/polkit-1/rules.d/50-couch-autostart.rules
+usr/share/xsessions/couch.desktop

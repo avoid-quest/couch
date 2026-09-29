@@ -28,7 +28,6 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
   const selectedOutput = state?.outputs.find(output => output.id === selected);
   const observedOutput = state?.outputs.find(output => output.id === state.routing?.observedOutput);
   const unavailableSelected = selected && !selectedChoice;
-  const systemOnly = selectedOutput && (selectedOutput.volumeWritable === false || selectedOutput.muteWritable === false || selectedOutput.configurationAvailable === false);
   const playing = observedOutput && `Playing on ${observedOutput.name}${observedOutput.muted ? " · Muted" : observedOutput.volume !== null ? ` · Volume ${observedOutput.volume}%` : ""}`;
 
   return <>
@@ -48,7 +47,6 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
           : connected && <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</span>}
       </SettingsRow>}
       {unavailableSelected && <Alert><AlertDescription>Output unavailable. Reconnect it or pick another.</AlertDescription></Alert>}
-      {systemOnly && <p className="text-sm text-muted-foreground">Change volume in {hostName}'s system settings.</p>}
       {state?.routing?.error && <Alert><AlertDescription>{state.routing.error}</AlertDescription></Alert>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || pending} onClick={() => { mutation.reset(); void sound.refetch(); }}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     </SettingsSection>

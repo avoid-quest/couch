@@ -1,18 +1,15 @@
 import { useEffect } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
-// In TV mode the native window cursor hides once the pointer goes idle and returns on any activity.
-// Hiding through the window API covers elements that declare their own cursor, unlike document CSS.
+// In TV mode the cursor hides once the pointer goes idle and returns on any activity.
 export function useIdleCursor(enabled: boolean, idleMs = 4_000) {
   useEffect(() => {
     if (!enabled) return;
-    const tvWindow = getCurrentWindow();
-    let hidden = false;
+    const root = document.documentElement;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const wake = () => {
       clearTimeout(timer);
-      if (hidden) { hidden = false; void tvWindow.setCursorVisible(true).catch(() => {}); }
-      timer = setTimeout(() => { hidden = true; void tvWindow.setCursorVisible(false).catch(() => {}); }, idleMs);
+      root.toggleAttribute("data-cursor-hidden", false);
+      timer = setTimeout(() => root.toggleAttribute("data-cursor-hidden", true), idleMs);
     };
     wake();
     window.addEventListener("pointermove", wake);
@@ -21,7 +18,7 @@ export function useIdleCursor(enabled: boolean, idleMs = 4_000) {
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("pointerdown", wake);
       clearTimeout(timer);
-      if (hidden) void tvWindow.setCursorVisible(true).catch(() => {});
+      root.toggleAttribute("data-cursor-hidden", false);
     };
   }, [enabled, idleMs]);
 }

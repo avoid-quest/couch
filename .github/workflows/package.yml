@@ -1,0 +1,53 @@
+name: Package
+
+# Builds the app's installers with electron-builder and keeps them as run
+# artifacts. Nothing is published; electron-updater reads GitHub releases.
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runs-on: blacksmith-4vcpu-ubuntu-2404
+            targets: --linux AppImage deb --x64
+            files: |
+              .artifacts/app/*.AppImage
+              .artifacts/app/*.deb
+              .artifacts/app/latest-linux.yml
+          - name: mac
+            runs-on: macos-26
+            targets: --mac dmg --arm64
+            files: |
+              .artifacts/app/*.dmg
+              .artifacts/app/*.blockmap
+              .artifacts/app/latest-mac.yml
+          - name: windows
+            runs-on: windows-latest
+            targets: --win nsis --x64
+            files: |
+              .artifacts/app/*.exe
+              .artifacts/app/*.blockmap
+              .artifacts/app/latest.yml
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run package ${{ matrix.targets }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: couch-${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14

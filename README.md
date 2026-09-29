@@ -23,20 +23,21 @@ Device. The plan, decisions and tickets live in
 - **Come back later.** Save playlists and items for later, and resume where you
   left off.
 
-**This computer** plays locally; **Another Couch** controls a paired host in
-the same app window. Browser remotes connect on your local network.
+**This computer** hosts Couch in the app; **Another Couch** shows a paired host's
+own page in the app window. Browser remotes connect on your local network.
 
 ## Develop
 
 Couch uses React for the TV and browser remote, Core on Node for the shared queue
-and SQLite storage, and Tauri with libmpv for native playback.
+and SQLite storage, and Electron for the app.
 
 ```sh
 bun install --frozen-lockfile
-bun run desktop   # Native development app, Vite hot reload and owned Core
-bun run dev       # Browser UI and server, without native playback
+bun run app       # Build and start the Electron app on .data
+bun run dev       # Browser UI and Core, with Vite hot reload
 bun run typecheck
-bun run build     # Frontend assets and the Core bundle (build/core.mjs)
+bun run build     # Frontend assets and the Core and app bundles (build/)
+bun run package   # Installers with electron-builder (.artifacts/app)
 ```
 
 See [usage and development](docs/usage.md) for prerequisites, ports and data
@@ -47,13 +48,13 @@ directories, and [checks](docs/ci.md) for CI.
 | `src/client` | TV interface and paired browser remote |
 | `src/server` | Queue, catalogs, providers, and persistence |
 | `src/shared` | Messages shared by client and server |
-| `src-tauri` | Desktop window and native playback |
+| `app` | Electron main process and window preload |
 | `apps/web` | The couch.avoid.quest website |
 
 Environment overrides use the `COUCH_` prefix, including `COUCH_PORT`,
-`COUCH_DATA_DIR`, `COUCH_YT_DLP`, and `COUCH_DENO`. Desktop data lives in Tauri's
-application data directory under the `quest.avoid.couch` identity. Browser-only
-development uses `.data/`.
+`COUCH_DATA_DIR`, `COUCH_YT_DLP`, and `COUCH_DENO`. The installed app keeps its
+data in the platform data directory under the `quest.avoid.couch` identity, as
+the Tauri app did. Development uses `.data/`.
 
 ## Website
 
@@ -65,4 +66,3 @@ reads the hosted release feeds, with `apps/web/src/releases.json` as fallback.
 - [Usage and development](docs/usage.md)
 - [Current architecture](docs/architecture.md)
 - [Design system](docs/design.md)
-- [Native dependency patches](src-tauri/vendor/README.md)

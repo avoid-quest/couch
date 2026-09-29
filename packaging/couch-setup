@@ -1,0 +1,128 @@
+#!/bin/bash
+# Optional setup from the installed Debian package. Never run from a package hook.
+set -euo pipefail
+fail() { echo "couch-setup: $*" >&2; exit 1; }
+trap 'status=$?; if [[ $status != 0 ]]; then echo "Setup did not complete. Existing data was retained. Inspect sudo couch-session logs; rerun couch-setup." >&2; fi' EXIT
+usage='sudo couch-setup --tv'
+tv=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tv) tv=true; shift ;;
+        *) fail "$usage" ;;
+    esac
+done
+[[ $EUID = 0 ]] || fail "$usage"
+. /etc/os-release
+[[ $ID = debian && $VERSION_ID = 13 && $(dpkg --print-architecture) = amd64 ]] || fail 'Supported target: Debian 13 amd64.'
+[[ -d /run/systemd/system ]] || fail 'Boot Debian with systemd before setup.'
+[[ $(dpkg-query -W -f='${db:Status-Status}' couch) = installed ]] || fail 'Install the Couch package with APT first.'
+[[ -x /usr/bin/couch ]] || fail 'The Couch executable is missing. Reinstall its Debian package.'
+[[ $tv = true ]] || fail "$usage"
+desktop_user=couch-tv
+user_home=/var/lib/couch
+state=/var/lib/couch-installer/native-tv
+lock=/var/lib/couch-install-locks/tv.lock
+as_user() { runuser -u "$desktop_user" -- env HOME="$user_home" "$@"; }
+user_systemctl() { as_user env XDG_RUNTIME_DIR="/run/user/$(id -u "$desktop_user")" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$desktop_user")/bus" systemctl --user "$@"; }
+# Fixed root-owned state and lock paths; do not follow substituted directories.
+for directory in /var/lib/couch-installer /var/lib/couch-install-locks "$state"; do
+    [[ ! -L $directory ]] || fail "Refusing symbolic link: $directory"
+    [[ -d $directory ]] || install -d -m 0755 "$directory"
+    [[ $(stat -c %u "$directory") = 0 && -z $(find "$directory" -maxdepth 0 -perm /022 -print) ]] || fail "Root must own $directory."
+done
+chmod 0700 "$state"
+[[ ! -L $lock ]] || fail 'The installation lock is a symbolic link.'
+[[ -e $lock ]] || touch "$lock"
+exec 9<"$lock"
+flock -n 9 || fail 'Another Couch installation or recovery is running.'
+if getent passwd couch-tv >/dev/null; then
+    [[ $(getent passwd couch-tv | cut -d: -f6) = /var/lib/couch && $(id -Gn couch-tv) = couch-tv && $(passwd -S couch-tv | awk '{print $2}') = L ]] || fail 'The existing couch-tv account is not the locked dedicated runtime account.'
+fi
+templates=/usr/share/couch/tv
+unit=/etc/systemd/user/couch-tv.service
+native_unit=$templates/usr/lib/systemd/user/couch-tv.service
+native_selected() { [[ -L $unit && $(readlink "$unit") = "$native_unit" ]]; }
+check_health() {
+    for attempt in {1..20}; do
+        pid=$(user_systemctl show couch-tv.service --property=MainPID --value)
+        if as_user env ELECTRON_RUN_AS_NODE=1 /opt/Couch/couch "$templates/check-health.js" "$pid" "$data" > "$state/health.json" 2> "$state/health-error.txt"; then return 0; fi
+        sleep 1
+    done
+    cat "$state/health-error.txt" >&2
+    return 1
+}
+# Preserve administrator overrides.
+for override in /etc/systemd/system/couch-tv.service /etc/systemd/user/couch-tv.service.d "$user_home/.config/systemd/user/couch-tv.service" "$user_home/.config/systemd/user/couch-tv.service.d"; do
+    [[ ! -e $override && ! -L $override ]] || fail "Inspect the existing service override before migration: $override"
+done
+[[ ! -e $unit && ! -L $unit ]] || native_selected || fail 'Inspect the existing TV user unit before migration.'
+if [[ -e /etc/X11/default-display-manager ]]; then
+    [[ $(cat /etc/X11/default-display-manager) = /usr/sbin/lightdm ]] || fail 'Another display manager is configured. Keep the desktop or select LightDM deliberately.'
+    [[ -f /var/lib/couch-installer/tv-setup.complete || -f $state/pending || -f $state/complete ]] || fail 'LightDM already has a desktop policy. Use ordinary installation.'
+fi
+touch "$state/pending"
+mapfile -t packages < "$templates/packages"
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends "${packages[@]}"
+for package in "${packages[@]}"; do
+    [[ $(dpkg-query -W -f='${db:Status-Status}' "$package") = installed ]] || fail "Debian package $package is missing. Repair APT and rerun setup."
+done
+if ! getent passwd couch-tv >/dev/null; then
+    adduser --system --group --home /var/lib/couch --shell /bin/sh couch-tv
+    as_user mkdir -p "$user_home/.local/state/couch-appliance"
+    as_user touch "$user_home/.local/state/couch-appliance/initialize-audio"
+fi
+chgrp couch-tv "$lock"; chmod 0440 "$lock"
+as_user env ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --version > "$state/native-build.json" || fail 'The Couch app cannot start. The existing session was retained.'
+was_running=false
+if [[ -S /run/user/$(id -u couch-tv)/bus ]]; then
+    if user_systemctl is-active --quiet couch-tv.service; then was_running=true; fi
+    user_systemctl stop couch-tv.service
+fi
+! pgrep -u couch-tv -x couch >/dev/null || fail 'A Couch writer remains. Stop it before setup.'
+# Only the explicit setup command exposes these files to system services.
+# Existing administrator files and masks take precedence, including disabled autologin.
+while IFS= read -r path; do
+    [[ $path != usr/lib/systemd/user/couch-tv.service ]] || continue
+    destination=/$path
+    case "$path" in
+        usr/share/lightdm/lightdm.conf.d/*) destination=/etc/lightdm/lightdm.conf.d/${path##*/} ;;
+        usr/lib/systemd/logind.conf.d/*) destination=/etc/systemd/logind.conf.d/${path##*/} ;;
+    esac
+    if [[ $destination != /$path && ( -e /$path || -L /$path ) ]]; then
+        echo "Preserved /$path"
+        continue
+    fi
+    if [[ -e $destination || -L $destination ]]; then
+        echo "Preserved $destination"
+        continue
+    fi
+    install -d -m 0755 "$(dirname "$destination")"
+    if [[ $destination = /etc/* ]]; then
+        install -m "$(stat -c '%a' "$templates/$path")" "$templates/$path" "$destination"
+    else
+        ln -s "$templates/$path" "$destination"
+    fi
+done < "$templates/files"
+systemctl daemon-reload
+data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
+data=${data#\"}; data=${data%\"}
+install -d -m 0755 /etc/systemd/user
+if ! native_selected; then ln -s "$native_unit" "$unit"; fi
+if [[ -S /run/user/$(id -u couch-tv)/bus ]]; then
+    user_systemctl daemon-reload
+    if $was_running; then
+        user_systemctl reset-failed couch-tv.service || true
+        if ! user_systemctl start couch-tv.service || ! check_health; then
+            fail 'Native startup failed after setup. Inspect couch-session logs; existing data was retained.'
+        fi
+    fi
+fi
+if [[ ! -f /var/lib/couch-installer/tv-setup.complete && ! -f $state/complete ]]; then
+    systemctl enable lightdm.service
+    systemctl set-default graphical.target
+fi
+mv "$state/pending" "$state/complete"
+sync -f "$state"
+echo 'Native TV setup is ready. Reboot when convenient; keep your administrator account and SSH access.'
+echo 'Inspect: sudo couch-session status; sudo couch-session logs'

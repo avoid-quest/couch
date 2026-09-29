@@ -1,12 +1,12 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import type { SoundState, SoundTest } from "../shared/sound";
 import { ControllerError, settingField } from "./controllers";
-import { pulseSound, type SoundBackend, type SoundProcess } from "./sound-pulse";
+import { pulseSound, type SoundProcess } from "./sound-pulse";
 import { ADMIN_ONLY } from "./messages";
 
-type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; testAvailable?: boolean; idle: () => boolean; backend?: SoundBackend; platform?: "linux" | "mac" | "windows" };
+type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; idle: () => boolean };
 export function createSound(options: Options) {
-  const backend = options.backend ?? pulseSound();
+  const backend = pulseSound();
   let test: SoundTest | null = null;
   let active: { process: SoundProcess; timer: ReturnType<typeof setTimeout>; monitor: ReturnType<typeof setInterval>} | null = null;
   let starting = false;
@@ -17,7 +17,7 @@ export function createSound(options: Options) {
     current.process.stop(); clearTimeout(current.timer); clearInterval(current.monitor);
     if (test) test = { ...test, status, message };
   };
-  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), ...(options.testAvailable === false ? { testUnavailableReason: "Sound test isn't available here." } : {}), canTest: (options.testAvailable ?? options.available) && !closed && !starting && !active && options.idle() });
+  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), canTest: options.available && !closed && !starting && !active && options.idle() });
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -57,7 +57,6 @@ export function createSound(options: Options) {
           return json(await state());
         }
         if (path !== "/api/sound/test" || request.method !== "POST") return json({ error: "Not found." }, 404);
-        if (options.testAvailable === false) return json({ error: "Sound test isn't available here." }, 503);
         const output = await settingField(request, "output"); authorize();
         if (typeof output !== "string" || !output.length || output.length > 512) throw new ControllerError("Choose an available output.", 400);
         if (starting || active) throw new ControllerError("Stop the current sound test first.", 409);
@@ -93,11 +92,10 @@ export function createSound(options: Options) {
         } finally { starting = false; }
       } catch (error) {
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
-        if (options.platform === "mac" || options.platform === "windows") return json({ error: error instanceof Error ? error.message : "Couldn't read sound settings." }, error instanceof Error && /unavailable|Check in System Settings/.test(error.message) ? 409 : 503);
         return json({ error: "Couldn't read sound settings." }, 503);
       }
     },
     interrupt() { if (!options.idle()) finish("stopped", "Playback started; the sound test stopped."); },
-    close() { closed = true; finish("stopped", options.platform === "mac" ? "Couch is closing. The sound test stopped." : "The TV is closing; the sound test stopped."); },
+    close() { closed = true; finish("stopped", "The TV is closing; the sound test stopped."); },
   };
 }

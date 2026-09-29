@@ -21,9 +21,9 @@ export async function bluetoothSettings(request: Request, identity: () => Contro
       authorize();
       if (!value || typeof value !== "object" || !("op" in value)) throw new ControllerError("Choose a Bluetooth action.", 400);
       const input = value as Record<string, unknown>;
-      if (!["scan", "power", "pair", "connect", "disconnect", "forget", "cancel", "answer"].includes(String(input.op))) throw new ControllerError("Unknown Bluetooth action.", 400);
+      if (!["scan", "power", "pair", "connect", "disconnect", "forget", "cancel"].includes(String(input.op))) throw new ControllerError("Unknown Bluetooth action.", 400);
       action = { op: input.op as BluetoothAction["op"], owner };
-      for (const field of ["device", "token", "prompt", "answer"] as const) {
+      for (const field of ["device", "token"] as const) {
         if (input[field] !== undefined) {
           if (typeof input[field] !== "string" || input[field].length > 64) throw new ControllerError("Invalid Bluetooth request.", 400);
           action[field] = input[field];
