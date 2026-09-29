@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import type { ControllerIdentity } from "../shared/controllers";
+import type { DeviceIdentity } from "../shared/devices";
 import type { StartupState } from "../shared/startup";
-import { ControllerError, settingField } from "./controllers";
+import { ControllerError, settingField } from "./devices";
 import { ADMIN_ONLY } from "./messages";
 
 const help = "From SSH, run sudo lightdm --show-config and inspect sudo journalctl -u 'couch-autostart@*'. Repair the couch-appliance installation or conflicting LightDM overrides, then refresh.";
@@ -59,7 +59,7 @@ export function createStartup(fullscreen: Backend["fullscreen"], backend?: Backe
   };
   let pending = false;
   return {
-    async handle(request: Request, identity: () => ControllerIdentity | null) {
+    async handle(request: Request, identity: () => DeviceIdentity | null) {
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
       const authorize = () => { if (!["host", "administrator"].includes(identity()?.authority ?? "")) throw new ControllerError(ADMIN_ONLY, 403); };
       try {

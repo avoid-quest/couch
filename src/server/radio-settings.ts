@@ -1,12 +1,12 @@
-import type { ControllerIdentity } from "../shared/controllers";
+import type { DeviceIdentity } from "../shared/devices";
 import type { RadioPlaylistSummary } from "../shared/radio";
-import { ControllerError } from "./controllers";
+import { ControllerError } from "./devices";
 import { RadioError, type createRadio } from "./radio";
 import { ADMIN_ONLY } from "./messages";
 
 export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "avoid" | "avoidProgrammes">) {
   return {
-    async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
+    async handle(request: Request, identity: () => DeviceIdentity | null): Promise<Response> {
       const path = new URL(request.url).pathname;
       const browsing = ["/api/radio/playlists", "/api/radio/avoid", "/api/radio/avoid/programmes"].includes(path) && request.method === "GET";
       const authorize = () => {

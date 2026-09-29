@@ -1,9 +1,9 @@
-import type { ControllerIdentity } from "../shared/controllers";
+import type { DeviceIdentity } from "../shared/devices";
 import type { DisplayAction, DisplayState } from "../shared/display";
-import { ControllerError, settingField } from "./controllers";
+import { ControllerError, settingField } from "./devices";
 import { ADMIN_ONLY } from "./messages";
 
-export async function displaySettings(request: Request, identity: () => ControllerIdentity | null, invoke?: (action: DisplayAction) => Promise<DisplayState>) {
+export async function displaySettings(request: Request, identity: () => DeviceIdentity | null, invoke?: (action: DisplayAction) => Promise<DisplayState>) {
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
   const authorize = () => {
     const caller = identity();

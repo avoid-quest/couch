@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { pairingCodeQuery } from "@/api/controllers";
+import { pairingCodeQuery } from "@/api/devices";
 import { QRCodeSVG } from "qrcode.react";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

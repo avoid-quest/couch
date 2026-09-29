@@ -1,6 +1,6 @@
-import type { ControllerIdentity } from "../shared/controllers";
+import type { DeviceIdentity } from "../shared/devices";
 import type { SoundState, SoundTest } from "../shared/sound";
-import { ControllerError, settingField } from "./controllers";
+import { ControllerError, settingField } from "./devices";
 import { pulseSound, type SoundProcess } from "./sound-pulse";
 import { ADMIN_ONLY } from "./messages";
 
@@ -19,7 +19,7 @@ export function createSound(options: Options) {
   };
   const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), canTest: options.available && !closed && !starting && !active && options.idle() });
   return {
-    async handle(request: Request, identity: () => ControllerIdentity | null) {
+    async handle(request: Request, identity: () => DeviceIdentity | null) {
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
       const authorize = () => {
         const caller = identity();

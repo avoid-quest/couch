@@ -14,7 +14,7 @@ function SessionRouter() {
   const { queryClient, identity, connected } = useSessionGate();
   // beforeLoad and the rendered shell share the live identity. Re-evaluate
   // existing matches after role/revocation/reconnect transitions as well.
-  useLayoutEffect(() => { void router.invalidate(); }, [queryClient, identity?.authority, identity?.controller?.id, identity?.claimAvailable, connected]);
+  useLayoutEffect(() => { void router.invalidate(); }, [queryClient, identity?.authority, identity?.device?.id, identity?.claimAvailable, connected]);
   return <RouterProvider router={router} context={{ queryClient, identity, connected }} />;
 }
 

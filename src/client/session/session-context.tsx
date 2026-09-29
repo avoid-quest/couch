@@ -109,7 +109,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   // detached client cannot populate the replacement client even if I/O ignores abort.
   // Local/loopback reachability comes from the session, not the browser's offline
   // indicator. Disconnected reads are disabled/cancelled below, never queued for replay.
-  const cacheOwner = [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id] as const;
+  const cacheOwner = [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.device?.id] as const;
   const cacheRef = useRef<{ owner: typeof cacheOwner; id: number; client: QueryClient } | null>(null);
   if (!cacheRef.current || cacheRef.current.owner.some((value, index) => value !== cacheOwner[index])) cacheRef.current = { owner: cacheOwner, id: ++cacheSequence, client: new QueryClient({ defaultOptions: {
     queries: { networkMode: "always", retry: 1, refetchOnWindowFocus: false },

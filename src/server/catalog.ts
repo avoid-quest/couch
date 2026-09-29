@@ -5,7 +5,7 @@ import { RadioError, type createRadio } from "./radio";
 import { playbackMediaId, ViewingError } from "./progress";
 import type { Store } from "./store";
 import type { createSession } from "./session";
-import { ControllerError } from "./controllers";
+import { ControllerError } from "./devices";
 
 type Services = {
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations" | "getStation">;

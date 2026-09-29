@@ -9,7 +9,7 @@ import { apiSend, type ApiCredentials } from "@/api/client";
 
 type Props = { credentials: ApiCredentials; connected: boolean; canWrite: boolean; name?: string };
 
-// The name arrives with every session snapshot; saving it bumps the controllers revision.
+// The name arrives with every session snapshot; saving it bumps the devices revision.
 export function TvNameSettings({ credentials, connected, canWrite, name: savedName }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
   const name = draft ?? savedName ?? "";

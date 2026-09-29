@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { ControllerIdentity } from "../shared/controllers";
+import type { Device, DeviceIdentity } from "../shared/devices";
 import type { Store } from "./store";
 import { ADMIN_ONLY } from "./messages";
 
@@ -7,7 +7,7 @@ export class ControllerError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
-export function controllerName(value: unknown) {
+export function deviceName(value: unknown) {
   if (typeof value !== "string" || /\p{Cc}/u.test(value)) throw new ControllerError("Use a name with 1 to 60 characters.");
   const name = value.trim().normalize("NFC");
   if (!name || [...name].length > 60) throw new ControllerError("Use a name with 1 to 60 characters.");
@@ -42,7 +42,7 @@ export async function settingField(request: Request, field: string) {
   return (value as Record<string, unknown>)[field];
 }
 
-export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode, pairingCode }: { store: Store; onChange: (controller?: import("../shared/controllers").Controller) => void; onRevoke?: (id: string) => void; recoveryCode?: string; pairingCode?: string }) {
+export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCode, pairingCode }: { store: Store; onChange: (device?: Device) => void; onRevoke?: (id: string) => void; recoveryCode?: string; pairingCode?: string }) {
   if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("Check the admin code.");
   if (recoveryCode) store.createControllerClaim(recoveryCode, true);
   let setup: { code: string; expiresAt: number } | null = null;
@@ -56,7 +56,7 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
 
   return {
     claimAvailable,
-    async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
+    async handle(request: Request, identity: () => DeviceIdentity | null): Promise<Response> {
       const requireIdentity = () => {
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this remote first.", 401);
@@ -70,44 +70,45 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
       try {
         const caller = requireIdentity();
         const path = new URL(request.url).pathname;
-        if (path === "/api/controllers/me") {
+        if (path === "/api/devices/me") {
           if (request.method !== "GET") return methods("GET");
           return json({ ...caller, claimAvailable: claimAvailable() });
         }
-        if (path === "/api/controllers") {
+        // Every Device sees every Device (#644: look at any Device from any window).
+        if (path === "/api/devices") {
           if (request.method !== "GET") return methods("GET");
-          administrator();
-          return json({ controllers: store.controllers() });
+          return json({ devices: store.devices() });
         }
-        if (path === "/api/controllers/pairing-code") {
+        if (path === "/api/devices/pairing-code") {
           if (request.method !== "GET") return methods("GET");
           administrator();
           if (!pairingCode) throw new ControllerError("Pairing is unavailable.", 503);
           return json({ code: pairingCode });
         }
-        const device = /^\/api\/controllers\/([\w-]{1,80})(?:\/(name|role))?$/.exec(path);
-        if (device && !["claim", "claim-code"].includes(device[1]!)) {
-          const id = device[1]!;
-          const authorizeDevice = () => {
+        const target = /^\/api\/devices\/([\w-]{1,80})(?:\/(name|role))?$/.exec(path);
+        if (target && !["claim", "claim-code"].includes(target[1]!)) {
+          const id = target[1]!;
+          // A Device renames itself; an admin renames and manages any Device.
+          const authorize = () => {
             const current = requireIdentity();
-            if (device[2] !== "name" || current.controller?.id !== id) administrator();
+            if (target[2] !== "name" || current.device?.id !== id) administrator();
           };
-          authorizeDevice();
-          if (!device[2]) {
+          authorize();
+          if (!target[2]) {
             if (request.method !== "DELETE") return methods("DELETE");
-            store.revokeController(id);
+            store.revokeDevice(id);
             onRevoke(id);
             onChange();
             return json({ ok: true });
           }
           if (request.method !== "POST") return methods("POST");
-          const value = await settingField(request, device[2]);
-          authorizeDevice();
-          const controller = device[2] === "name" ? store.renameController(id, value) : store.setControllerRole(id, value);
-          onChange(controller);
-          return json({ controller });
+          const value = await settingField(request, target[2]);
+          authorize();
+          const device = target[2] === "name" ? store.renameDevice(id, value) : store.setDeviceRole(id, value);
+          onChange(device);
+          return json({ device });
         }
-        if (path === "/api/controllers/claim-code") {
+        if (path === "/api/devices/claim-code") {
           if (request.method !== "GET") return methods("GET");
           if (caller.authority !== "host") throw new ControllerError("The setup code is available on the TV only.", 403);
           if (store.administratorExists()) throw new ControllerError("This Couch already has an admin.", 409);
@@ -118,18 +119,18 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
           }
           return json(setup);
         }
-        if (path === "/api/controllers/claim") {
+        if (path === "/api/devices/claim") {
           if (request.method !== "POST") return methods("POST");
           if (caller.authority === "host") throw new ControllerError("Become admin from a paired remote.");
           if (Date.now() - claimWindow >= 60_000) { claimWindow = Date.now(); claimAttempts = 0; }
           if (++claimAttempts > 20) throw new ControllerError("Too many claim attempts. Try again in a minute.", 429);
           const code = await settingField(request, "code");
           const current = requireIdentity();
-          if (!current.controller || current.authority !== "controller") throw new ControllerError("This remote is already an admin.", 409);
+          if (!current.device || current.authority !== "controller") throw new ControllerError("This remote is already an admin.", 409);
           if (typeof code !== "string" || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code)) throw new ControllerError("This admin code is wrong or expired.", 401);
-          const controller = store.consumeControllerClaim(current.controller.id, code);
+          const device = store.consumeControllerClaim(current.device.id, code);
           onChange();
-          return json({ controller });
+          return json({ device });
         }
         if (path === "/api/settings/setup") {
           if (request.method !== "POST") return methods("POST");

@@ -9,7 +9,7 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
   const name = useOptionalSessionGate()?.state?.installationName;
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="gap-6 sm:max-w-lg" showCloseButton={false} onCloseAutoFocus={event => { event.preventDefault(); openerRef?.current?.focus(); }}>
-      <DialogHeader><DialogTitle>Pair a remote</DialogTitle><DialogDescription>Scan with a phone on the same Wi-Fi, or open an address below.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Pair a device</DialogTitle><DialogDescription>Scan with a phone on the same Wi-Fi, or open an address below.</DialogDescription></DialogHeader>
       {connected && urls[0] ? <SetupQr url={urls[0]} credentials={credentials} /> : <p role="status" className="text-sm text-muted-foreground">{connected ? `No network. Connect ${deviceName(name)} to Wi-Fi or Ethernet.` : offline(name)}</p>}
       {!!urls.length && <section className="grid min-w-0 gap-2" aria-label="Pairing addresses">
         <h3 className="text-base font-medium">Open on your phone</h3>

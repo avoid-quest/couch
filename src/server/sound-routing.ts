@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SavedSoundProfile, SoundInventory, SoundRouteState } from "../shared/sound";
-import { ControllerError } from "./controllers";
+import { ControllerError } from "./devices";
 import { environment, pulseRouting } from "./sound-pulse";
 
 type Options = {

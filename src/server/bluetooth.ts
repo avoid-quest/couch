@@ -1,15 +1,15 @@
-import type { ControllerIdentity } from "../shared/controllers";
+import type { DeviceIdentity } from "../shared/devices";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
-import { ControllerError, settingField } from "./controllers";
+import { ControllerError, settingField } from "./devices";
 import { ADMIN_ONLY } from "./messages";
 
-export async function bluetoothSettings(request: Request, identity: () => ControllerIdentity | null, invoke?: (action: BluetoothAction) => Promise<BluetoothState>) {
+export async function bluetoothSettings(request: Request, identity: () => DeviceIdentity | null, invoke?: (action: BluetoothAction) => Promise<BluetoothState>) {
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
   const authorize = () => {
     const caller = identity();
     if (!caller) throw new ControllerError("Pair this remote first.", 401);
-    if (caller.authority === "controller" || caller.authority === "administrator" && !caller.controller) throw new ControllerError(ADMIN_ONLY, 403);
-    return caller.controller?.id ?? "host";
+    if (caller.authority === "controller" || caller.authority === "administrator" && !caller.device) throw new ControllerError(ADMIN_ONLY, 403);
+    return caller.authority === "host" ? "host" : caller.device!.id;
   };
   try {
     const owner = authorize();

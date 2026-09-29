@@ -14,7 +14,7 @@ import { loadBandcampAlbum } from "./bandcamp";
 import { loadRaiPlayProgramme } from "./raiplay";
 import { loadYouTubePlaylist } from "./youtube";
 import { loadStreamingCommunityList } from "./streamingcommunity";
-import { ControllerError } from "../controllers";
+import { ControllerError } from "../devices";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
 const adapters = (streamingCommunityOrigin: () => Promise<string>): Record<ProviderId, Adapter> => ({
