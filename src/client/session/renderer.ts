@@ -120,8 +120,9 @@ const playlist = async (command: NonNullable<typeof loading>) => {
   // Tracks follow the profile's language preferences.
   const { audioLanguage = "", subtitleLanguage = "", subtitles = "auto" } = command.preferences ?? {};
   const matches = (lang = "", wanted: string) => !!wanted && lang.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2));
-  // Tracks chosen on another Device come with the item (#644 ticket 9).
-  hls.once(Hls.Events.MANIFEST_PARSED, () => {
+  // Tracks chosen on another Device come with the item (#644 ticket 9). hls.js lists a
+  // level's audio and subtitle tracks only once it starts loading that level.
+  hls.once(Hls.Events.LEVEL_LOADED, () => {
     const audioTrack = command.audioTrack ?? hls!.audioTracks.findIndex(track => matches(track.lang, audioLanguage));
     if (audioTrack >= 0 && audioTrack < hls!.audioTracks.length) hls!.audioTrack = audioTrack;
     selectSubtitle(command.subtitleTrack ?? (subtitles === "auto" ? hls!.subtitleTracks.findIndex(track => matches(track.lang, subtitleLanguage)) : -1));

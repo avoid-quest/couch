@@ -71,7 +71,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const { position, duration, ...details } = player;
     const playerDetails = JSON.stringify(details);
     // Session fields are replaced by their owners; reported track arrays can be
-    // freshly allocated but equal. Never walk or serialize the household queue.
+    // freshly allocated but equal. Never walk or serialize this Playback's queue.
     const clockOnly = observation && published && playerDetails === publishedPlayer
       && Object.keys({ ...published, ...rest }).every(key => Reflect.get(published!, key) === Reflect.get(rest, key));
     const clock = { playbackId: player.playbackId, position, duration };
@@ -385,6 +385,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   const withAdded = (subtitles: ExternalSubtitle[] = []) => [...subtitles, ...addedSubtitles.filter(file => !subtitles.some(item => item.source === file.source))];
   // Opens the current item again where it is, for another quality or on the Device it was sent to.
   // The old stream plays until the new one is resolved; Stop, Next or another change cancels it.
+  // A stall mid-watch reports "loading" with buffering set (renderer.ts, mpv.ts): the item has started.
+  const started = () => ["playing", "paused"].includes(state.player.status) || state.player.status === "loading" && state.player.buffering === true;
   const reopen = async (entry: QueueEntry, authorize: () => void, switchOver: (fresh: MediaSource) => void) => {
     qualityResolution?.abort();
     const controller = qualityResolution = new AbortController();
@@ -393,7 +395,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const previousId = state.player.playbackId;
     const playbackId = crypto.randomUUID();
     const current = () => admitted() && !signal.aborted && intent === playIntent && state.player.playbackId === previousId
-      && state.currentEntryId === entry.id && ["playing", "paused"].includes(state.player.status);
+      && state.currentEntryId === entry.id && started();
     try {
       const fresh = await options.resolveSource!(entry, playbackId, signal, false);
       if (!current()) throw new Error("Playback changed. Try again.");
@@ -557,8 +559,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     async move(switchOver: () => void, authorize = () => {}) {
       assertAdmitted();
       const entry = state.queue.find(item => item.id === state.currentEntryId);
-      if (entry && state.player.status === "loading") throw new Error("Wait for this item to start, then send it.");
-      if (!entry || !loaded || !["playing", "paused"].includes(state.player.status) || !options.resolveSource) { switchOver(); broadcast(); return; }
+      if (entry && state.player.status === "loading" && !started()) throw new Error("Wait for this item to start, then send it.");
+      if (!entry || !loaded || !started() || !options.resolveSource) { switchOver(); broadcast(); return; }
       await reopen(entry, authorize, switchOver);
     },
     // The watching profile and its preferences are shared by every Playback.
