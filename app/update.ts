@@ -3,7 +3,7 @@ import updater from "electron-updater";
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -34,19 +34,25 @@ export async function checkForUpdates() {
 }
 
 // Downloads the zip into a temporary directory, checks it against the update
-// file's sha512 and unpacks it there, returning the app bundle inside.
+// file's sha512 and unpacks it there, returning the app bundle inside. A failed
+// download removes the directory; after a good one, swap removes it.
 export async function download(url: string, sha512: string) {
   const dir = await mkdtemp(join(tmpdir(), "couch-update-"));
-  const response = await fetch(url);
-  if (!response.ok || !response.body) throw new Error(`${url} answered ${response.status}`);
-  const hash = createHash("sha512");
-  const zip = join(dir, "update.zip");
-  await pipeline(response.body, async function* (chunks: AsyncIterable<Uint8Array>) { for await (const chunk of chunks) { hash.update(chunk); yield chunk; } }, createWriteStream(zip));
-  if (hash.digest("base64") !== sha512) throw new Error(`${url} doesn't match its sha512`);
-  await promisify(execFile)("ditto", ["-x", "-k", zip, dir]);
-  const name = (await readdir(dir)).find(entry => entry.endsWith(".app"));
-  if (!name) throw new Error(`${url} holds no app`);
-  return join(dir, name);
+  try {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) throw new Error(`${url} answered ${response.status}`);
+    const hash = createHash("sha512");
+    const zip = join(dir, "update.zip");
+    await pipeline(response.body, async function* (chunks: AsyncIterable<Uint8Array>) { for await (const chunk of chunks) { hash.update(chunk); yield chunk; } }, createWriteStream(zip));
+    if (hash.digest("base64") !== sha512) throw new Error(`${url} doesn't match its sha512`);
+    await promisify(execFile)("ditto", ["-x", "-k", zip, dir]);
+    const name = (await readdir(dir)).find(entry => entry.endsWith(".app"));
+    if (!name) throw new Error(`${url} holds no app`);
+    return join(dir, name);
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 // A detached shell waits for Couch to exit, puts the new bundle where the
