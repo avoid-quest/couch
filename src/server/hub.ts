@@ -43,7 +43,7 @@ import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
-import { audioRendition, createSendspin, type SyncedLoad } from "./sendspin";
+import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
 import { helper } from "./helpers";
 import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -560,7 +560,8 @@ export async function createHub(options: HubOptions) {
     }
     // Local files, the library and Jellyfin were removed; their saved entries stay readable but unplayable.
     if (!/^https?:/.test(entry.source)) throw new Error("This source is no longer supported. Remove it from the queue.");
-    return { source: entry.source };
+    const live = await liveHls(entry.source, AbortSignal.any([signal, AbortSignal.timeout(5000)])).catch(() => false);
+    return { source: entry.source, ...live ? { metadata: { live } } : {} };
   }
   const subtitles = createSubtitles(playbackId => playing(playbackId) && stateOf(playing(playbackId)!).player, (playbackId, subtitle) => playing(playbackId)?.session.addSubtitle(playbackId, subtitle));
   // Saved Playbacks come back idle, with no outputs, until a Device plays them.

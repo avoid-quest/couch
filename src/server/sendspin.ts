@@ -65,22 +65,37 @@ function oggPackets(onPacket: (packet: Buffer) => void) {
   };
 }
 
-// An HLS master's audio-only rendition when it has one (a separate audio playlist, or an
-// audio-only variant like Twitch's), else its smallest variant. Other sources are read as they are.
-export async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
+// An HLS playlist's lines and final URL, or null when the URL is something else.
+async function playlist(url: string, headers: Record<string, string>, signal: AbortSignal) {
   const response = await fetch(url, { headers, signal }).catch(() => null);
   if (!response?.ok || !/mpegurl/i.test(response.headers.get("content-type") ?? "") && !/\.m3u8$/.test(new URL(response.url || url).pathname)) {
     void response?.body?.cancel().catch(() => {});
-    return url;
+    return null;
   }
-  const lines = (await response.text()).split(/\r?\n/);
-  if (!lines.some(line => line.startsWith("#EXT-X-STREAM-INF:"))) return url;
+  return { url: response.url || url, lines: (await response.text()).split(/\r?\n/) };
+}
+
+// An HLS master's audio-only rendition when it has one (a separate audio playlist, or an
+// audio-only variant like Twitch's), else its smallest variant. Other sources are read as they are.
+export async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
+  const master = await playlist(url, headers, signal);
+  if (!master?.lines.some(line => line.startsWith("#EXT-X-STREAM-INF:"))) return url;
+  const { lines } = master;
   const audio = lines.find(line => line.startsWith("#EXT-X-MEDIA:") && /TYPE=AUDIO/.test(line))?.match(/URI="([^"]+)"/)?.[1];
   const variants = lines.flatMap((line, index) => line.startsWith("#EXT-X-STREAM-INF:") && lines[index + 1] && !lines[index + 1]!.startsWith("#") ? [{ info: line, uri: lines[index + 1]!.trim() }] : []);
   const only = variants.find(variant => /CODECS="/.test(variant.info) && !/avc1|avc3|hvc1|hev1|vp09|av01|mp4v/.test(variant.info));
   const bandwidth = (info: string) => Number(/BANDWIDTH=(\d+)/.exec(info)?.[1] ?? Infinity);
   const smallest = variants.sort((a, b) => bandwidth(a.info) - bandwidth(b.info))[0]?.uri;
-  return new URL(audio ?? only?.uri ?? smallest ?? url, response.url || url).href;
+  return new URL(audio ?? only?.uri ?? smallest ?? url, master.url).href;
+}
+
+// A direct link has no metadata to say it is live, so an HLS playlist is live while it has no
+// end (RFC 8216 EXT-X-ENDLIST); a master is judged by its first variant.
+export async function liveHls(url: string, signal: AbortSignal) {
+  let media = await playlist(url, {}, signal);
+  const variant = media?.lines.find((line, index) => index > 0 && media!.lines[index - 1]!.startsWith("#EXT-X-STREAM-INF:"));
+  if (variant) media = await playlist(new URL(variant.trim(), media!.url).href, {}, signal);
+  return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }
 
 export function createSendspin(options: { identity: string; name: string; admit: (clientId: string) => boolean; changed: () => void; ffmpeg: () => Promise<string> }) {
