@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Toggle } from "@/components/ui/toggle";
 import { RangeControl } from "@/components/RangeControl";
 import { deviceId } from "@/session/device-id";
+import { isTvPresentation } from "@/session/native-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
@@ -101,7 +102,7 @@ export function Speakers({ state, run }: Props) {
         </div>
       </section>
       <section aria-labelledby="sound-title" className="grid gap-2">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3"><h3 id="sound-title" className="text-xs font-medium text-muted-foreground">Sound</h3><p className="text-xs text-muted-foreground">Raise a fader to add a speaker. The switch removes it. Play a late speaker earlier.</p></div>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3"><h3 id="sound-title" className="text-xs font-medium text-muted-foreground">Sound</h3><p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a fader, then raise it to add a speaker." : "Raise a fader to add a speaker."} The switch removes it. Play a late speaker earlier.</p></div>
         <div className="flex divide-x overflow-x-auto border-y">
           {devices.map(device => {
             const output = outputs.find(item => item.deviceId === device.id);

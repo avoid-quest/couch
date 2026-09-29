@@ -36,10 +36,14 @@ catalog provides interface icons, not brand identities.
   Playback settings use Sheets. Stage CSS handles native video bounds
   and the responsive queue workspace; controls reuse shadcn components.
 - **Every journey step works with a remote.** The TV has only arrows, Enter and
-  Back, so no control may keep them all: Up/Down leave a radio group at its first
-  or last radio, and on the TV the keys across a slider and Up/Down in a one-line
-  field move focus on. Screens shown before the shell (the first-run chooser)
-  bring the same arrow navigation.
+  Back, so no control may keep them all: the arrows past a radio group's first
+  or last radio move on, and on the TV so do Up/Down across a horizontal slider,
+  Up/Down in a one-line field and every arrow on a closed select (OK opens it).
+  A TV fader (the Speakers panel's vertical sliders) moves on with every arrow
+  until OK hands it Up/Down; OK, Back or leaving it ends that, as TV equalisers
+  do, and the panel's hint says so on the TV. Spatial navigation places a
+  slider by its whole track, not its moving thumb. Screens shown before the
+  shell (the first-run chooser) bring the same arrow navigation.
 - **First run names the computer.** The app asks "Where is your Couch?" (This
   computer hosts it; Another Couch joins one, and this computer still plays),
   then "Name this computer" with the random default shown, then whether to share
