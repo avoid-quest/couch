@@ -50,6 +50,8 @@ install_files() {
             usr/share/lightdm/lightdm.conf.d/*) destination=/etc/lightdm/lightdm.conf.d/${path##*/} ;;
             usr/lib/systemd/logind.conf.d/*) destination=/etc/systemd/logind.conf.d/${path##*/} ;;
         esac
+        # Sign-in and power policy is only ever set by the administrator's setup.
+        [[ $mode = tv || $destination = /$path ]] || continue
         if [[ $destination != /$path && ( -e /$path || -L /$path ) ]]; then
             echo "Preserved /$path"
             continue
