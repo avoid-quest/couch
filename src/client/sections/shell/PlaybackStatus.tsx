@@ -19,6 +19,7 @@ import { deviceName } from "@/copy";
 import { playingElsewhere } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { PlaybackVolume } from "@/components/PlaybackTransport";
+import { DeviceList } from "./Outputs";
 import { StatusDot } from "./StatusLine";
 
 function destinationOrigin(address: string): string | null {
@@ -119,6 +120,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
         <form onSubmit={event => { event.preventDefault(); choose(address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={!address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {addressError && <Alert variant="destructive"><AlertDescription>{addressError}</AlertDescription></Alert>}
       </>}
+      {state && run && <DeviceList state={state} run={run} />}
       <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={() => setOpen(false)} />
     </PopoverContent>
   </Popover><AlertDialog open={forgetting !== null} onOpenChange={value => { if (!value) setForgetting(null); }}>

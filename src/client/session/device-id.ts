@@ -15,8 +15,13 @@ export function deviceId() {
   return id;
 }
 
-/** The other Device that plays the current Playback, if it isn't this one. */
-export function playingElsewhere(state: { renderer?: SessionState["renderer"]; player: Pick<SessionState["player"], "status"> } | null | undefined) {
-  const renderer = state?.renderer;
-  return renderer && renderer.deviceId !== deviceId() && ["loading", "playing", "paused", "ended"].includes(state.player.status) ? renderer : null;
+type Outputs = { outputs?: SessionState["outputs"]; devices?: SessionState["devices"]; player: Pick<SessionState["player"], "status"> } | null | undefined;
+/** The other Device that plays the looked-at Playback, if it isn't this one (#644 ticket 9). */
+export function playingElsewhere(state: Outputs) {
+  const output = state?.outputs?.[0];
+  if (!output || output.deviceId === deviceId() || !["loading", "playing", "paused", "ended"].includes(state.player.status)) return null;
+  return { deviceId: output.deviceId, name: state.devices?.find(device => device.id === output.deviceId)?.name ?? "another Device" };
 }
+
+/** Whether this Device shows the looked-at Playback's picture. */
+export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output => output.deviceId === deviceId() && output.picture);

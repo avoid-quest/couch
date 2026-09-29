@@ -12,7 +12,7 @@ type Options = {
   onChange: () => void;
   lookup: (reference: Extract<ForLaterReference, { kind: "queue" }>) => Promise<QueueEntry>;
   webMetadata?: (url: string, collection?: Extract<ForLaterReference, { kind: "web" }>["collection"]) => Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
-  reservePlay: () => number;
+  reservePlay: (playedBy?: PlaybackActor) => number;
   prepare: (entry: QueueEntry) => Promise<void>;
   enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;
 };
@@ -119,7 +119,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           authorize();
           if (mode !== "play" && mode !== "append") throw new ControllerError("Choose Play or Add to Up next.");
           const entry = get(id);
-          const intent = mode === "play" ? reservePlay() : undefined;
+          const intent = mode === "play" ? reservePlay(playedBy) : undefined;
           await prepare(entry);
           authorize();
           get(id); // Another controller may have removed it while the source was checked.

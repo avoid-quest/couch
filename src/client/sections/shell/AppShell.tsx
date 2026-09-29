@@ -38,6 +38,7 @@ import { StatusLine } from "./StatusLine";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { hear, onBlocked } from "@/session/renderer";
+import { showsPicture } from "@/session/device-id";
 
 const navItems = ["Home", "Find", "Saved", "Settings"];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -99,6 +100,13 @@ function useShellValue() {
   const openPlayer = (panel?: "queue") => {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
+  // A screen that starts showing a Playback's picture, as after Send to, opens the player (#644 ticket 9).
+  const picture = showsPicture(state) ? state?.playback : null;
+  const shownPicture = useRef(picture);
+  useEffect(() => {
+    if (picture && picture !== shownPicture.current && section !== "Now") openPlayer();
+    shownPicture.current = picture;
+  }, [picture]);
   const focusSearch = () => {
     void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };

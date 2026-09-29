@@ -38,7 +38,8 @@ async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSign
 // Relay addresses are signed for one Playback, so Core relays only what it resolved for the
 // current Playback and the playlists it relayed; it is never an open proxy. Only Devices
 // that were sent a load command learn them, like subtitle paths.
-export function createPassThrough(current: () => string | null) {
+// `current` says whether a transport still plays, in whichever Playback (#644 ticket 9).
+export function createPassThrough(current: (playbackId: string) => boolean) {
   const key = randomBytes(32);
   const relays = new Map<string, Relay>();
   const sign = (playbackId: string, kind: string, url: string) => createHmac("sha256", key).update(`${playbackId}\n${kind}\n${url}`).digest("base64url");
@@ -71,7 +72,7 @@ export function createPassThrough(current: () => string | null) {
         return answer.direct ? url : link(playbackId, relay, answer.playlist ? "playlist" : "bytes", url);
       };
       const [source, audioSource] = await Promise.all([route(media.source), media.audioSource && route(media.audioSource)]);
-      for (const id of relays.keys()) if (id !== current()) relays.delete(id);
+      for (const id of relays.keys()) if (!current(id)) relays.delete(id);
       if (source !== media.source || audioSource !== media.audioSource) relays.set(playbackId, relay);
       return { ...media, source, ...(audioSource ? { audioSource } : {}) };
     },
@@ -83,7 +84,7 @@ export function createPassThrough(current: () => string | null) {
       const relay = relays.get(playbackId);
       const expected = Buffer.from(sign(playbackId, kind, url));
       const given = Buffer.from(signature);
-      if (!relay || playbackId !== current() || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response(null, { status: 404 });
+      if (!relay || !current(playbackId) || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response(null, { status: 404 });
       const range = request.headers.get("range");
       const upstream = await fetch(url, { headers: { ...relayHeaders(relay), ...(range ? { range } : {}) }, signal: request.signal });
       if (kind === "playlist" && upstream.ok) return new Response(await rewrite(await upstream.text(), upstream.url, playbackId, relay), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });

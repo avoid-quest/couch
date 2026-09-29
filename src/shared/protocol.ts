@@ -37,6 +37,13 @@ export type PlayerState = {
   nowPlaying?: NowPlaying | null;
 };
 
+// A Device's picture and sound in one Playback (#644 ticket 9). level is 0–100, or null when
+// the Device's sound is not in the mix; 0 keeps it in the mix, silent.
+export type Output = { deviceId: string; picture: boolean; level: number | null };
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
+export type DeviceSummary = { id: string; name: string; online: boolean };
+
+// The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 export type SessionState = {
   queue: QueueEntry[];
   autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
@@ -44,8 +51,11 @@ export type SessionState = {
   currentEntryId: string | null;
   presentationId?: string | null;
   playedBy?: PlaybackActor;
-  // The Device that plays the current Playback (#644 ticket 6).
-  renderer?: PlaybackActor;
+  // The looked-at Playback, its outputs, and every Playback and Device (#644 ticket 9).
+  playback?: string | null;
+  outputs?: Output[];
+  playbacks?: PlaybackSummary[];
+  devices?: DeviceSummary[];
   activity?: { id: string; actor: PlaybackActor; text: string };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
@@ -87,7 +97,11 @@ export type Action =
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
-  | { type: "stop"; playbackId?: string };
+  | { type: "stop"; playbackId?: string }
+  // Look at a Playback; Send to a Device; set a Device's picture and sound in the looked-at Playback.
+  | { type: "look"; playback: string | null }
+  | { type: "sendTo"; deviceId: string }
+  | { type: "output"; deviceId: string; picture?: boolean; level?: number | null };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
@@ -104,7 +118,8 @@ export type PlaybackCommand =
   | { type: "audioPause" }
   // eventStart: an HLS EVENT playlist starts at its first segment instead of the live edge.
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean }
+  // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }

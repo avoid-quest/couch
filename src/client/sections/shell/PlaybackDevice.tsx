@@ -21,6 +21,7 @@ import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
 import { SoundControls } from "./PlaybackStatus";
 import { Onboarding } from "./Onboarding";
+import { DeviceList } from "./Outputs";
 import { StatusDot, StatusLine } from "./StatusLine";
 import type { Action } from "../../../shared/protocol";
 import { playingElsewhere } from "@/session/device-id";
@@ -187,6 +188,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
         </RadioGroup>
         <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
+        {state && run && <DeviceList state={state} run={run} />}
         <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={close} />
       </PopoverContent>
     </Popover>

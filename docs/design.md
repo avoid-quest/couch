@@ -160,7 +160,12 @@ Messages:
 - **Empty** for empty states. Say what goes here and offer the next step.
 - **Status line** (`Spinner` and muted text) for work in progress.
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
-  for confirmations; **Sheet** for player panels; **Popover** for "Playing on".
+  for confirmations; **Sheet** for player panels; **Popover** for "Playing on",
+  whose Devices list looks at another Device's Playback.
+- **Send to** is a menu of Devices in the player band. The **Speakers** Sheet is
+  the Mixer: screens are one-press tiles (pressed tiles invert, because Toggle's
+  muted pressed state barely shows on black), and sound is a channel strip per
+  Device whose fader adds it (0 keeps it silent) and whose switch removes it.
 
 ## Copy
 

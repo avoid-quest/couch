@@ -63,6 +63,10 @@ function validAction(value: unknown): value is Action {
     case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
     case "next": return id(value.playbackId);
     case "stop": return value.playbackId === undefined || id(value.playbackId);
+    case "look": return value.playback === null || id(value.playback);
+    case "sendTo": return id(value.deviceId);
+    case "output": return id(value.deviceId) && (value.picture === undefined || typeof value.picture === "boolean")
+      && (value.level === undefined || value.level === null || number(value.level, 100)) && (value.picture !== undefined || value.level !== undefined);
     default: return false;
   }
 }
