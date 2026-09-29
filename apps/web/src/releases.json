@@ -2,24 +2,24 @@
   "stable": {},
   "preview": {
     "dmg": {
-      "version": "0.2.0-preview.13",
-      "filename": "Couch_0.2.0-preview.13_aarch64.dmg",
-      "url": "https://cdn.crabnebula.app/asset/01M3CRAWW6QG7PYETPZ7WXBYAY"
+      "version": "0.3.0-preview.1",
+      "filename": "Couch-0.3.0-preview.1-arm64.dmg",
+      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/Couch-0.3.0-preview.1-arm64.dmg"
     },
     "nsis": {
-      "version": "0.2.0-preview.13",
-      "filename": "Couch_0.2.0-preview.13_x64-setup.exe",
-      "url": "https://cdn.crabnebula.app/asset/01M3CRFZ6RHWMSBFY18QWVTQW9"
+      "version": "0.3.0-preview.1",
+      "filename": "Couch-0.3.0-preview.1-x64.exe",
+      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/Couch-0.3.0-preview.1-x64.exe"
     },
     "appimage": {
-      "version": "0.2.0-preview.13",
-      "filename": "Couch_0.2.0-preview.13_amd64.AppImage",
-      "url": "https://cdn.crabnebula.app/asset/01M3CSQF5V20WCHB3J9BXWAHF7"
+      "version": "0.3.0-preview.1",
+      "filename": "Couch-0.3.0-preview.1-x86_64.AppImage",
+      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/Couch-0.3.0-preview.1-x86_64.AppImage"
     },
     "deb": {
-      "version": "0.2.0-preview.13",
-      "filename": "Couch_0.2.0-preview.13_amd64.deb",
-      "url": "https://cdn.crabnebula.app/asset/01M3CS49GZW52S2YYKJ5PGZ40B"
+      "version": "0.3.0-preview.1",
+      "filename": "couch_0.3.0-preview.1_amd64.deb",
+      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/couch_0.3.0-preview.1_amd64.deb"
     }
   }
 }

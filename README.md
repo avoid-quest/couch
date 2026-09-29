@@ -62,7 +62,9 @@ the Tauri app did. Development uses `.data/`.
 `apps/web` is an Astro workspace using the existing UI styles. Run
 `bun run web:dev`; `bun run web:build` builds it and `bun run web:deploy`
 publishes it to Cloudflare Workers at `couch.avoid.quest`. The download page
-reads the hosted release feeds, with `apps/web/src/releases.json` as fallback.
+finds the newest release and preview on
+[couch-releases](https://github.com/avoid-quest/couch-releases) through
+GitHub's API, with `apps/web/src/releases.json` as fallback.
 
 - [Usage and development](docs/usage.md)
 - [Checks and releases](docs/ci.md)

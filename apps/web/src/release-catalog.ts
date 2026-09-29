@@ -1,40 +1,40 @@
-import snapshot from "./releases.json";
-import { downloadUrl, publicFiles, releasePlatforms, type Channel, type PackageFormat } from "./release-policy";
+import fallback from "./releases.json";
 
-export const formats = ["dmg", "nsis", "appimage", "deb"] as const satisfies readonly PackageFormat[];
+// The public repo the app publishes to and updates from (package.json build.publish).
+const repo = "avoid-quest/couch-releases";
+export type Channel = "stable" | "preview";
+export const formats = ["dmg", "nsis", "appimage", "deb"] as const;
+export type PackageFormat = (typeof formats)[number];
+// How electron-builder ends each installer's name.
+const suffixes: Record<PackageFormat, string> = { dmg: "-arm64.dmg", nsis: "-x64.exe", appimage: "-x86_64.AppImage", deb: "_amd64.deb" };
 export type Release = { version: string; url: string; filename: string };
 export type Catalog = Record<Channel, Partial<Record<PackageFormat, Release>>>;
-// These installers came from the signed, publicly checked release receipts.
-// A newer live updater feed wins for its own channel and package format.
-const fallback = snapshot as Catalog;
-const versionPattern = /^\d+\.\d+\.\d+(?:-preview\.\d+)?$/;
+type GitHubRelease = { tag_name: string; prerelease: boolean; assets: { name: string; browser_download_url: string }[] };
 
-export function release(format: PackageFormat, channel: Channel, version: string): Release | null {
-  if (!versionPattern.test(version) || (channel === "preview") !== version.includes("-preview.")) return null;
-  const filename = publicFiles(version, format)[0]!;
-  return { version, filename, url: downloadUrl(filename, channel) };
+function installers(release: GitHubRelease | undefined): Catalog[Channel] {
+  if (!release) return {};
+  const version = release.tag_name.replace(/^v/, "");
+  return Object.fromEntries(formats.flatMap(format => release.assets.filter(asset => asset.name.endsWith(suffixes[format]))
+    .map(asset => [format, { version, filename: asset.name, url: asset.browser_download_url }])));
 }
 
-export function newer(first: string, second: string): boolean {
-  return first.localeCompare(second, "en", { numeric: true }) > 0;
+// GitHub requires a user agent. Cloudflare keeps each answer for five minutes,
+// which keeps the Worker under GitHub's unauthenticated rate limit.
+async function github(path: string) {
+  const response = await fetch(`https://api.github.com/repos/${repo}/${path}`, { headers: { "user-agent": "couch.avoid.quest" }, signal: AbortSignal.timeout(10_000), cf: { cacheTtl: 300, cacheEverything: true } } as RequestInit);
+  if (response.status === 404) return undefined; // No production release yet.
+  if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
+  return response.json();
 }
 
-export function catalog(source: Catalog = fallback): Catalog {
-  return { stable: { ...source.stable }, preview: { ...source.preview } };
+// As t3code's site does: `releases/latest` is the production release and skips
+// pre-releases, so the preview is the newest pre-release in the list. If GitHub
+// can't answer, the page offers the installers in releases.json.
+export async function currentCatalog(): Promise<Catalog> {
+  try {
+    const [latest, list] = await Promise.all([github("releases/latest"), github("releases?per_page=10")]);
+    return { stable: installers(latest), preview: installers((list as GitHubRelease[]).find(release => release.prerelease)) };
+  } catch {
+    return fallback;
+  }
 }
-
-export async function currentCatalog(fetcher: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = fetch, base: Catalog = fallback): Promise<Catalog> {
-  const current = catalog(base);
-  await Promise.all((["stable", "preview"] as const).flatMap(channel => formats.map(async format => {
-    const path = releasePlatforms(format).update;
-    const endpoint = `https://cdn.crabnebula.app/update/avoid-quest/couch/${path}/0.0.0${channel === "preview" ? "?channel=preview" : ""}`;
-    // Cloudflare keeps each feed answer for a minute.
-    const response = await fetcher(endpoint, { signal: AbortSignal.timeout(10_000), cf: { cacheTtl: 60, cacheEverything: true } } as RequestInit).catch(() => null);
-    if (!response?.ok) return;
-    const body = await response.json().catch(() => null);
-    const found = body && typeof body.version === "string" && typeof body.url === "string" && release(format, channel, body.version);
-    if (found && (!current[channel][format] || newer(found.version, current[channel][format]!.version))) current[channel][format] = found;
-  })));
-  return current;
-}
-
