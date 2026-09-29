@@ -42,7 +42,6 @@ export function SoundControls({ credentials, connected, open, state, run, onClos
 }) {
   const queryClient = useQueryClient();
   const gate = useOptionalSessionGate();
-  const trigger = useRef<HTMLButtonElement>(null);
   const admin = !!gate?.localHost || gate?.identity?.authority === "host" || gate?.identity?.authority === "administrator";
   // Mac and Windows Couches have no system outputs to choose (#644 ticket 3), so only the volume shows.
   const system = !!gate?.details?.systemAudio;

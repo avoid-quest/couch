@@ -23,7 +23,7 @@ export function BrowseRadio({ onBack, ...props }: SearchPlaybackProps & { onBack
     <ChoiceGroup label="Radio source" value={source} onValueChange={setSource} options={[{ value: "avoid radio", label: "avoid radio" }, { value: "Radio playlists", label: "Radio playlists" }]} />
     {!props.connected && <p className="text-sm text-muted-foreground" role="status">{offline(name)}</p>}
     {summary?.loading && !summary.hits?.length && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Loading stations…</p>}
-    {hits?.length ? <HitList hits={hits} label="Radio stations" origin={props.origin} token={props.token} /> : null}
+    {hits?.length ? <HitList hits={hits} label="Radio stations" /> : null}
     {summary && <SourceProblems summaries={[[source, summary]]} />}
     {summary && !summary.loading && !summary.error && !summary.hits?.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{source === "avoid radio" ? "No stations are available right now. Try Radio playlists." : "No radio playlists yet. An admin can add one in Settings → Sources → Radio playlists."}</EmptyDescription></EmptyHeader></Empty>}
     <SearchRadioResults {...props} source={source} query="" onResults={report} />

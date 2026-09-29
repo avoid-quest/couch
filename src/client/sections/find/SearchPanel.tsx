@@ -126,7 +126,7 @@ export function SearchPanel(props: Props) {
   </>;
   const activeFilters = [filter, kind, length].filter(value => value !== "All").join(", ");
   const results = (label: string) => <>
-    <HitList hits={mergedHits} label={label} origin={props.origin} token={props.token} />
+    <HitList hits={mergedHits} label={label} />
     <MoreResults summaries={shown} />
     <SourceProblems summaries={shown} />
   </>;
@@ -160,7 +160,7 @@ function FilterGroup<T extends string>({ label, value, onChange, options }: { la
 }
 
 /** Search hits as media rows under one time ruler. */
-export const HitList = memo(function HitList({ hits, label, origin, token }: { hits: SearchHit[]; label: string; origin: string; token: string }) {
+export const HitList = memo(function HitList({ hits, label }: { hits: SearchHit[]; label: string }) {
   if (!hits.length) return null;
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
