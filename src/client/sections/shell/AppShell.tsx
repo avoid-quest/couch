@@ -198,10 +198,10 @@ function useShellValue() {
 }
 
 class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | null }> {
-  state = { error: null as Error | null };
+  override state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info.componentStack); }
-  render() {
+  override componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info.componentStack); }
+  override render() {
     if (!this.state.error) return this.props.children;
     return (
       <main id="main" className="px-(--gutter) py-6">
@@ -246,7 +246,7 @@ function ConnectionStatus() {
 }
 
 function PairingPage() {
-  const { localHost, credentials, details, booting, retryHost, status } = useSessionGate();
+  const { localHost, credentials, details, booting, retryHost } = useSessionGate();
   const device = usePlaybackDevice();
   if (localHost) return <Onboarding title="Starting Couch">
     {booting ? <StatusLine busy>Starting…</StatusLine> : <><p className="text-sm text-muted-foreground">Couldn't start Couch on this computer. If it keeps failing, restart this computer.</p><Button className="self-start" onClick={retryHost}>{TRY_AGAIN}</Button></>}

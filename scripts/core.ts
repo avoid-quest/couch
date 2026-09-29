@@ -5,12 +5,13 @@ import { readFile } from "node:fs/promises";
 // app's utilityProcess, run.
 export const coreBundle = "build/core.mjs";
 
+// Unminified, so the installed app's log has readable stack traces.
 // A release build passes the identity of the dist it serves, so browsers loading
 // that dist see a matching build. Development builds carry none, like Vite's dev
 // server. The bundle is rewritten only when it changed, so `node --watch`
 // restarts Core only then.
 export async function buildCore(identity?: string) {
-  const result = await Bun.build({ entrypoints: ["src/main.ts"], target: "node", format: "esm", minify: !!identity, ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
+  const result = await Bun.build({ entrypoints: ["src/main.ts"], target: "node", format: "esm", ...(identity ? { define: { COUCH_BUILD_INFO: JSON.stringify(identity) } } : {}) });
   if (!result.success) throw new AggregateError(result.logs, "Core build failed");
   const bundle = await result.outputs[0]!.text();
   if (bundle !== await readFile(coreBundle, "utf8").catch(() => null)) await Bun.write(coreBundle, bundle);

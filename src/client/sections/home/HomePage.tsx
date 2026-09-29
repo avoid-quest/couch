@@ -159,7 +159,7 @@ export function HomePage() {
     </HomeRow>,
 
     recent: !!recent.length && <HomeRow title="Played recently" time={plural(recent.length, "title")}>
-      <RecentRail items={recent} credentials={credentials} disabled={!available} onPlay={item => void shell.playHistory(item, { fromStart: true }).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
+      <RecentRail items={recent} disabled={!available} onPlay={item => void shell.playHistory(item, { fromStart: true }).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
     </HomeRow>,
   };
 
@@ -219,7 +219,7 @@ function UpNextStrip({ plan, more, now, disabled, pageFirst, art, onPlay, onMore
 }
 
 /** What played lately, with details and an explicit replay action. */
-function RecentRail({ items, credentials, disabled, onPlay }: { items: HistoryItem[]; credentials: Credentials; disabled: boolean; onPlay: (item: HistoryItem) => void }) {
+function RecentRail({ items, disabled, onPlay }: { items: HistoryItem[]; disabled: boolean; onPlay: (item: HistoryItem) => void }) {
   const details = useDetailNavigation();
   return <ol data-nav-row aria-label="Played recently" className="grid auto-cols-[minmax(10rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-1 lg:auto-cols-[minmax(12rem,1fr)]">
     {items.map(item => {

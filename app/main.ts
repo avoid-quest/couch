@@ -2,13 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, ne
 import updater from "electron-updater";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { connect as connectTls } from "node:tls";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { DisplayAction, DisplayState } from "../src/shared/display";
+import type { AppMode } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
@@ -19,6 +20,15 @@ const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(bas
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 // Chromium's profile, and with it the single-instance lock, lives beside Core's data.
 app.setPath("userData", join(dataDir, "app"));
+// What Main and Core print, for this run and the one before, capped at 10 MB.
+const logPath = join(dataDir, "logs/couch.log");
+mkdirSync(dirname(logPath), { recursive: true });
+try { renameSync(logPath, join(dataDir, "logs/couch.1.log")); } catch {}
+const log = createWriteStream(logPath);
+for (const stream of [process.stdout, process.stderr]) {
+  const write = stream.write.bind(stream) as (chunk: unknown, ...rest: unknown[]) => boolean;
+  stream.write = ((chunk: unknown, ...rest: unknown[]) => { if (log.bytesWritten < 10_000_000) log.write(chunk); return write(chunk, ...rest); }) as typeof stream.write;
+}
 const tv = process.env.COUCH_TV_PRESENTATION === "1";
 const port = Number(process.env.COUCH_PORT ?? 4100);
 // Twitch rejects Origin 127.0.0.1 but accepts localhost (#644 ticket 1).
@@ -33,7 +43,7 @@ const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, tex
 
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
 // pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
-type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean; pins?: Record<string, string> };
+type Choice = AppMode & { pins?: Record<string, string> };
 const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
 const save = (next: Choice) => {
@@ -55,8 +65,11 @@ function startCore() {
   const token = randomBytes(32).toString("hex");
   const child = utilityProcess.fork(join(import.meta.dirname, "core.mjs"), [], {
     serviceName: "Couch Core",
+    stdio: "pipe",
     env: { ...process.env, COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dataDir, COUCH_PORT: String(port) },
   });
+  child.stdout?.pipe(process.stdout, { end: false });
+  child.stderr?.pipe(process.stderr, { end: false });
   const current = { child, token, stopping: false, ready: new Promise<Ready>((resolve, reject) => {
     child.on("message", (message: CoreMessage) => {
       if (message.type === "ready") { urls = message.urls; resolve(message); }
@@ -272,6 +285,13 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  // A page that dies, usually out of memory on a long session, loads again, at most 3 times a minute.
+  let gone: number[] = [];
+  contents.on("render-process-gone", (_event, { reason }) => {
+    console.error(`Couch's page stopped: ${reason}`);
+    gone = [...gone.filter(at => Date.now() - at < 60_000), Date.now()];
+    if (["crashed", "oom", "abnormal-exit"].includes(reason) && gone.length <= 3) void load();
+  });
   contents.on("will-navigate", (event, url) => { if (new URL(url).origin !== new URL(contents.getURL()).origin) event.preventDefault(); });
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
@@ -374,6 +394,9 @@ else {
     // playback speed and bounded ones at full speed, so ask for 10 MB at a time. It allows
     // only youtube.com's origin, and Chromium's opaque response blocking drops some of its
     // no-cors media responses, so the window fetches it in CORS mode and Couch allows it.
+    // Couch's pages only use fullscreen; Electron would grant any permission a page asks for.
+    session.defaultSession.setPermissionRequestHandler((_contents, permission, allow) => allow(permission === "fullscreen"));
+    session.defaultSession.setPermissionCheckHandler((_contents, permission) => permission === "fullscreen");
     session.defaultSession.setCertificateVerifyProc(({ hostname, certificate }, callback) => {
       const pin = choice.pins?.[hostname];
       callback(pin && pin === spki(new X509Certificate(certificate.data)) ? 0 : -3);

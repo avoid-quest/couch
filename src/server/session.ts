@@ -273,7 +273,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     }).catch(failed);
     return true;
   };
-  const failRadio = (error: string, authorize = () => {}, playedBy = state.playedBy) => {
+  const failRadio = (error: string, _authorize = () => {}, playedBy = state.playedBy) => {
     if (!admitted()) return false;
     const entry = state.queue.find(entry => entry.id === state.currentEntryId);
     if (!isRadio(entry)) return false;

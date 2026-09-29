@@ -93,7 +93,7 @@ export async function audioRendition(url: string, headers: Record<string, string
 // end (RFC 8216 EXT-X-ENDLIST); a master is judged by its first variant.
 export async function liveHls(url: string, signal: AbortSignal) {
   let media = await playlist(url, {}, signal);
-  const variant = media?.lines.find((line, index) => index > 0 && media!.lines[index - 1]!.startsWith("#EXT-X-STREAM-INF:"));
+  const variant = media?.lines.find((_line, index) => index > 0 && media!.lines[index - 1]!.startsWith("#EXT-X-STREAM-INF:"));
   if (variant) media = await playlist(new URL(variant.trim(), media!.url).href, {}, signal);
   return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }

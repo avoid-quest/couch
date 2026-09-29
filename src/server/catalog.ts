@@ -79,7 +79,7 @@ export function createCatalog({ radio, viewing }: Services) {
     return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
   };
   return {
-    async handle(request: Request, trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
+    async handle(request: Request, _trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {
         if (viewing && pathname === "/api/profiles") {

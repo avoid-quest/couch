@@ -113,7 +113,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
           <DialogFooter><DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose><Button type="submit" disabled={!connected || keeping || !upNext.length || !listName.trim()}>{keeping ? "Saving…" : "Save list"}</Button></DialogFooter>
         </form>
       </DialogContent>
-    {current && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} credentials={credentials} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
+    {current && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
       <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">{upNext.map((entry, index) => {
@@ -121,7 +121,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         const length = knownLength(entry);
         startsIn = startsIn == null || length == null ? null : startsIn + length;
         const meta = [entry.live ? "Live" : length == null ? null : duration(length), starts == null ? null : `starts ${formatEndTime(starts)}`, entry.addedBy && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
-        return <QueueRow key={entry.id} entry={entry} credentials={credentials} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
+        return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           actions={<QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />;
       })}</ul>
     </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
@@ -129,17 +129,17 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       <div className="flex items-center justify-between gap-4"><h3><Label htmlFor={autoplayId} className="touch:min-h-11 text-base font-medium">Autoplay</Label></h3><Switch id={autoplayId} checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
       {state.autoplay.enabled && state.autoplay.next ? <>
         <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after Up next"}</p>
-        <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} credentials={credentials} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
+        <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
       </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after Up next."}</p>}
     </section>}
     {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="justify-between px-0 text-muted-foreground">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
-      <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} credentials={credentials} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} actions={<QueueActions credentials={credentials} entry={entry} index={queue.indexOf(entry)} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />)}</ul>
+      <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} actions={<QueueActions credentials={credentials} entry={entry} index={queue.indexOf(entry)} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />)}</ul>
     </CollapsibleContent></Collapsible>}
   </section></Dialog>;
 }
 
 
-function QueueRow({ entry, credentials, meta, onPlay, disabled, actions }: { entry: QueueEntry; credentials: Credentials; meta?: string; onPlay?: () => void; disabled?: boolean; actions?: ReactNode }) {
+function QueueRow({ entry, meta, onPlay, disabled, actions }: { entry: QueueEntry; meta?: string; onPlay?: () => void; disabled?: boolean; actions?: ReactNode }) {
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 gap-1"><span className="truncate text-sm font-medium">{entry.title}</span>{meta && <span className="truncate text-xs text-muted-foreground">{meta}</span>}</span></>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} className="flex min-w-0 items-center gap-2 py-2">

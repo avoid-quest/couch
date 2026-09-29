@@ -3,3 +3,6 @@
 - UI work must preserve Couch's design system and prefer shadcn. Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
 - Compose UI with open typography, whitespace, and divided rows. Keep content flat rather than wrapping it in Card or card-like bordered panels, especially on the pairing screen.
 - Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`.
+- Scratch runs of Couch get their own `COUCH_DATA_DIR` and `COUCH_PORT` and are stopped by PID; the owner's installed Couch and its data (`<platform data dir>/quest.avoid.couch`) stay as they are.
+- Debug the installed app from `<data dir>/logs/couch.log` (previous run: `couch.1.log`), which holds Main's and Core's output.
+- Model the desktop shell, releases and repo setup on [t3code](https://github.com/pingdotgg/t3code): read how it solves the problem before designing your own.
