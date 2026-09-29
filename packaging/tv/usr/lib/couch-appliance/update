@@ -38,11 +38,14 @@ done_with() { outcome=$1; exit 0; }
 
 exec 9>/run/couch-update.lock
 flock -x 9
-installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
+# The package spells X.Y.Z-preview.N as X.Y.Z~preview.N, which Debian orders
+# before X.Y.Z; releases and the TV account use the first spelling.
+debian() { sed 's/-preview\./~preview./' <<< "$1"; }
+installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null | sed 's/~preview\./-preview./' || true)
 work=$(mktemp -d /var/lib/couch-update.XXXXXX)
 fetch() {
     curl --fail --silent --show-error --location --proto =https --proto-redir =https --retry 3 \
-        --output "$work/${2:-${1##*/}}" "$1" || fail "Couldn't download ${1##*/}."
+        --output "$work/${1##*/}" "$1" || fail "Couldn't download ${1##*/}."
 }
 
 if [[ $mode = auto ]]; then
@@ -57,20 +60,14 @@ if [[ $mode = auto ]]; then
         fetch "$releases/latest/download/latest-linux.yml"
         version=$(awk '$1 == "version:" { print $2; exit }' "$work/latest-linux.yml")
     else
-        fetch "$releases.atom" releases.atom
+        fetch "$releases.atom"
         version=$(grep -m1 -oE 'releases/tag/v[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+"' "$work/releases.atom" | sed 's|.*/v||; s|"$||' || true)
     fi
-    [[ $version =~ $pattern ]] || fail "No $channel release found."
+    [[ $version =~ $pattern ]] || { version=; fail "No $channel release found."; }
     # Never go back automatically, except from a preview to the stable channel,
-    # as app/update.ts allows. Debian orders X.Y.Z-preview.N above X.Y.Z; ~ doesn't.
-    semver() { sed 's/-preview\./~preview./' <<< "$1"; }
-    [[ -z $installed ]] || dpkg --compare-versions "$(semver "$version")" gt "$(semver "$installed")" \
+    # as app/update.ts allows.
+    [[ -z $installed ]] || dpkg --compare-versions "$(debian "$version")" gt "$(debian "$installed")" \
         || [[ $channel = latest && $installed = *-preview.* ]] || done_with up-to-date
-    # Leave playback alone; if Core doesn't answer, nothing plays.
-    port=$(setting COUCH_PORT)
-    [[ $port =~ ^[0-9]+$ ]] || port=4100
-    player=$(curl --silent --max-time 5 "http://127.0.0.1:$port/api/connection" | grep -oE '"player":"[a-z]*"' | cut -d'"' -f4 || true)
-    case "$player" in ''|idle|stopped|ended|error|unavailable) ;; *) done_with waiting ;; esac
 fi
 [[ $installed != "$version" ]] || done_with up-to-date
 
@@ -85,14 +82,22 @@ fetch "$releases/download/v$version/$deb"
 file=$work/$deb
 [[ $(sha512sum "$file" | cut -d' ' -f1 | tr a-f A-F | basenc --base16 -d | base64 -w0) = "${entry#* }" ]] \
     || fail "$deb does not match the sha512 in $channel."
-[[ $(dpkg-deb -f "$file" Package):$(dpkg-deb -f "$file" Version):$(dpkg-deb -f "$file" Architecture) = "couch:$version:amd64" ]] \
+[[ $(dpkg-deb -f "$file" Package):$(dpkg-deb -f "$file" Version):$(dpkg-deb -f "$file" Architecture) = "couch:$(debian "$version"):amd64" ]] \
     || fail "$deb is not the Couch $version amd64 package."
+
+if [[ $mode = auto ]]; then
+    # Leave playback alone, checked last before the restart; if Core doesn't
+    # answer, nothing plays.
+    port=$(setting COUCH_PORT)
+    [[ $port =~ ^[0-9]+$ ]] || port=4100
+    player=$(curl --silent --max-time 5 "http://127.0.0.1:$port/api/connection" | grep -oE '"player":"[a-z]*"' | cut -d'"' -f4 || true)
+    case "$player" in ''|idle|stopped|ended|error|unavailable) ;; *) done_with waiting ;; esac
+fi
 
 # Fresh package lists let new dependencies resolve.
 apt-get update -qq || echo 'couch-update: apt-get update failed; using the current package lists.' >&2
-if [[ -n $installed ]] && dpkg --compare-versions "$installed" gt "$version"; then
-    # Downgrades include preview -> final: Debian orders X.Y.Z-preview.N above
-    # X.Y.Z. APT resolves dependencies, then dpkg downgrades Couch alone.
+if [[ -n $installed ]] && dpkg --compare-versions "$(debian "$installed")" gt "$(debian "$version")"; then
+    # APT resolves dependencies, then dpkg downgrades Couch alone.
     for field in Pre-Depends Depends; do
         dependencies=$(dpkg-deb -f "$file" "$field" 2>/dev/null || true)
         [[ -z $dependencies ]] || apt-get satisfy -y --no-install-recommends --no-remove "$dependencies"
@@ -101,7 +106,7 @@ if [[ -n $installed ]] && dpkg --compare-versions "$installed" gt "$version"; th
 else
     apt-get install -y --no-install-recommends --no-remove "$file"
 fi
-[[ $(dpkg-query -W -f='${Version}' couch) = "$version" ]] || fail "Couch $version did not install."
+[[ $(dpkg-query -W -f='${Version}' couch) = "$(debian "$version")" ]] || fail "Couch $version did not install."
 outcome=installed
 
 # Bring the TV back on the new version.
