@@ -62,11 +62,18 @@ const state = (): PlayerState => ({
   subtitleDelay,
 });
 const send = () => { reportedAt = performance.now(); report?.(state()); };
+// Synced sound's player waits for a tap too (#644 ticket 10); this unlocks it.
+let unlockSound: (() => void) | null = null;
+const notify = () => { for (const listener of blockedListeners) listener(blocked || !!unlockSound); };
 const setBlocked = (value: boolean) => {
   if (blocked === value) return;
   blocked = value;
-  for (const listener of blockedListeners) listener(value);
+  notify();
 };
+export function waitForTap(unlock: (() => void) | null) {
+  unlockSound = unlock;
+  notify();
+}
 // A browser that wants a gesture before sound plays the picture muted and asks for a tap.
 const start = (element: HTMLMediaElement) => element.play().catch((error: unknown) => {
   if (!(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
@@ -250,7 +257,10 @@ export function onBlocked(listener: (blocked: boolean) => void) {
   return () => { blockedListeners.delete(listener); };
 }
 export function hear() {
+  unlockSound?.();
+  unlockSound = null;
   setBlocked(false);
+  notify();
   apply();
   void start(video);
   if (split()) void start(audio);

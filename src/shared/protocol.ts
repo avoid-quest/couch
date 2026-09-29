@@ -38,8 +38,9 @@ export type PlayerState = {
 };
 
 // A Device's picture and sound in one Playback (#644 ticket 9). level is 0–100, or null when
-// the Device's sound is not in the mix; 0 keeps it in the mix, silent.
-export type Output = { deviceId: string; picture: boolean; level: number | null };
+// the Device's sound is not in the mix; 0 keeps it in the mix, silent. delay is the speaker's own
+// Sendspin delay in milliseconds, present while it is connected (ticket 10).
+export type Output = { deviceId: string; picture: boolean; level: number | null; delay?: number };
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
 export type DeviceSummary = { id: string; name: string; online: boolean };
 
@@ -101,7 +102,7 @@ export type Action =
   // Look at a Playback; Send to a Device; set a Device's picture and sound in the looked-at Playback.
   | { type: "look"; playback: string | null }
   | { type: "sendTo"; deviceId: string }
-  | { type: "output"; deviceId: string; picture?: boolean; level?: number | null };
+  | { type: "output"; deviceId: string; picture?: boolean; level?: number | null; delay?: number };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
@@ -112,6 +113,8 @@ export type ServerMessage =
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
   | { type: "player"; command: PlaybackCommand }
+  // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10).
+  | { type: "sendspin"; listen: boolean }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 export type PlaybackCommand =

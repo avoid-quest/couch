@@ -39,8 +39,7 @@ never moves outputs. Play starts media on this Device; Send to hands the looked-
 Playback's outputs to another Device, which reloads the item where it was with
 its pause state, speed, tracks and subtitle delay. An output that goes offline
 pauses its Playback until it returns, and a Playback ends when its queue does.
-Each Playback keeps its Up next in the `playback` table. Until synced sound
-arrives, a Playback's outputs are on one Device.
+Each Playback keeps its Up next in the `playback` table.
 
 Every Device renders playback the same way (`src/client/session/renderer.ts`),
 the app window included: Core sends `{ type: "player", command }` over the
@@ -64,6 +63,22 @@ address only for what fails there but works for Core: Twitch's playlists answer
 playlists go through Core and segments stay direct when the Device may read
 them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
+
+When a Playback's outputs span Devices, its sound is Synced
+(`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
+`/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
+BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
+Sendspin key is their ID. The newest tab of every Device whose sound is in the mix
+plays it with the official player (`@sendspin/sendspin-js`,
+`src/client/session/sendspin.ts`), and a browser that needs a gesture shows "Tap to
+hear". One FFmpeg per Playback reads the audio-only rendition (YouTube's separate
+audio, an HLS master's audio playlist or audio-only variant) with network protocols
+only and a 10 s read timeout, decodes once and encodes once per wire format: Opus in
+60 ms packets, and 100 ms PCM chunks for players that don't take Opus (Firefox). Every
+speaker on a wire gets the same chunk with the same timestamp; each applies its own
+level and delay (Sendspin static delay). The picture Device's tab keeps playing the
+picture, silent. Pause, seek and speed restart FFmpeg where the Playback is; when the
+outputs are back on one Device, it plays directly again.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core
