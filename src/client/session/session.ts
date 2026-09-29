@@ -5,6 +5,7 @@ import type { ConnectionDetails, DeviceIdentity } from "../../shared/devices";
 import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
+import { listen } from "./sendspin";
 import { deviceId } from "./device-id";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -172,6 +173,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
         } else if (message.type === "player") {
           play(message.command);
+        } else if (message.type === "sendspin") {
+          listen(message.listen, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {

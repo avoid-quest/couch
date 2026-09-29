@@ -2,6 +2,7 @@ import { Check, Monitor, MonitorUp, Speaker } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Toggle } from "@/components/ui/toggle";
 import { RangeControl } from "@/components/RangeControl";
@@ -43,7 +44,8 @@ export function DeviceList({ state, run }: Props) {
 /** Send to another Device: it takes over the looked-at Playback's outputs. */
 export function SendTo({ state, run }: Props) {
   const outputs = state.outputs ?? [];
-  const devices = byPresence(state.devices).filter(device => !outputs.some(output => output.deviceId === device.id));
+  // A speaker of a synced Playback can take it over too; only the one Device playing it alone is left out.
+  const devices = byPresence(state.devices).filter(device => !(outputs.length && outputs.every(output => output.deviceId === device.id)));
   return <DropdownMenu>
     <DropdownMenuTrigger asChild><Button variant="ghost" className="h-11" disabled={!state.playback || !devices.length} aria-label="Send to" title="Send to"><MonitorUp aria-hidden="true" /><span className="max-lg:sr-only">Send to</span></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="min-w-56">
@@ -60,17 +62,17 @@ export function SendTo({ state, run }: Props) {
 
 /**
  * The Speakers panel: the owner's Mixer. Screens are one-press tiles; sound is a channel strip per
- * Device whose fader adds its sound (0 keeps it silent) and whose switch removes it. Until synced
- * sound (#644 tickets 10–11) one Device plays a Playback, so other Devices can't join it yet.
+ * Device whose fader adds its sound (0 keeps it silent) and whose switch removes it. Sound on
+ * several Devices plays in sync over Sendspin (#644 ticket 10), and each speaker has its own delay.
  */
 export function Speakers({ state, run }: Props) {
   const outputs = state.outputs ?? [];
   const devices = byPresence(state.devices).filter(device => device.online || outputs.some(output => output.deviceId === device.id));
   const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
-  const joinable = (device: DeviceSummary) => device.online && (!outputs.length || outputs.some(output => output.deviceId === device.id));
+  const joinable = (device: DeviceSummary) => device.online || outputs.some(output => output.deviceId === device.id);
   const note = (device: DeviceSummary) => {
     const other = served(state, device);
-    return !device.online ? "Offline" : !joinable(device) ? "Not in sync yet" : other && other.id !== state.playback ? `Playing ${other.title ?? "something else"}` : here(device) ? "Here" : "";
+    return !device.online ? "Offline" : other && other.id !== state.playback ? `Playing ${other.title ?? "something else"}` : here(device) ? "Here" : "";
   };
   return <Sheet>
     <SheetTrigger asChild><Button variant="ghost" size="icon" className="size-11" disabled={!state.playback} aria-label="Speakers" title="Speakers"><Speaker aria-hidden="true" /></Button></SheetTrigger>
@@ -94,18 +96,28 @@ export function Speakers({ state, run }: Props) {
         <div className="flex flex-wrap items-baseline justify-between gap-x-3"><h3 id="sound-title" className="text-xs font-medium text-muted-foreground">Sound</h3><p className="text-xs text-muted-foreground">Raise a fader to add a speaker. The switch removes it.</p></div>
         <div className="flex divide-x overflow-x-auto border-y">
           {devices.map(device => {
-            const level = outputs.find(output => output.deviceId === device.id)?.level ?? null;
+            const output = outputs.find(item => item.deviceId === device.id);
+            const level = output?.level ?? null;
             const disabled = !joinable(device);
             return <div key={device.id} className="grid w-28 shrink-0 justify-items-center gap-2 px-2 py-3" data-in-mix={level !== null || undefined}>
               <span className="text-xl font-medium tabular-nums">{level ?? "–"}</span>
-              <div className="h-36"><RangeControl orientation="vertical" label={`${device.name} level`} value={level ?? 0} max={100} disabled={disabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} /></div>
+              <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} level`} value={level ?? 0} max={100} disabled={disabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} /></div>
               <span className="line-clamp-2 text-center text-sm leading-tight">{device.name}</span>
               <span className="min-h-4 truncate text-xs text-muted-foreground">{note(device)}</span>
               <Switch aria-label={`${device.name} sound`} checked={level !== null} disabled={disabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, level: on ? 50 : null })} />
+              {level !== null && output?.delay !== undefined && <Delay name={device.name} delay={output.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
             </div>;
           })}
         </div>
       </section>
     </SheetContent>
   </Sheet>;
+}
+
+// A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up.
+function Delay({ name, delay, onCommit }: { name: string; delay: number; onCommit: (delay: number) => void }) {
+  return <div className="grid w-full gap-1 text-center">
+    <span className="text-xs text-muted-foreground tabular-nums">Delay {delay} ms</span>
+    <Slider key={delay} aria-label={`${name} delay`} aria-valuetext={`${delay} milliseconds`} defaultValue={[delay]} min={0} max={500} step={10} onValueCommit={([value]) => onCommit(value!)} />
+  </div>;
 }

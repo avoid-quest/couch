@@ -43,6 +43,9 @@ import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
+import { createSendspin, type SyncedLoad } from "./sendspin";
+import { helper } from "./helpers";
+import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
 type HubOptions = {
@@ -73,7 +76,8 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 };
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number };
+// listening: this tab plays its Device's synced sound (#644 ticket 10).
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; listening?: boolean };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -85,6 +89,9 @@ export async function createHub(options: HubOptions) {
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
+  // Synced sound (#644 ticket 10). Admits the app window's Device and, while remotes are allowed, paired ones.
+  const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
+    admit: id => id === store.hostDevice()?.id || !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast() });
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Listener>> | undefined;
   let lanError: string | null = null;
@@ -125,11 +132,14 @@ export async function createHub(options: HubOptions) {
   // Playbacks (#644 ticket 9). Each Playback is one session with its own queue, current item,
   // position, pause state, speed and tracks, and its own outputs. A Device's screen and speakers
   // serve one Playback at a time, and every window looks at one Playback, which it controls.
-  // Until synced sound (tickets 10–11) a Playback's outputs are on one Device, whose newest tab
-  // fetches the source itself and reports back (Direct, ticket 6). Sources Chromium can't decode
-  // play in Core's own mpv, on the Device that runs Core (ticket 1).
+  // When a Playback's outputs are on one Device, its newest tab fetches the source itself and
+  // reports back (Direct, ticket 6). Sources Chromium can't decode play in Core's own mpv, on the
+  // Device that runs Core (ticket 1). When they span Devices, its Sendspin group plays the sound on
+  // every speaker and reports back, and the picture Device's tab plays the picture, silent (Synced).
   // next and joining: the tab and output a Send to is moving to, while the source is resolved for it.
-  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState };
+  // loaded and media: the last load, and its source as Core fetches it, for the Sendspin group.
+  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
+    synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers"> };
   const playbacks = new Map<string, Playback>();
   // The Playback each Device looks at; "" after the one it looked at ended.
   const looking = new Map<string, string>();
@@ -150,13 +160,17 @@ export async function createHub(options: HubOptions) {
     return chosen === undefined ? servedBy(deviceId) ?? all().at(-1) : playbacks.get(chosen);
   };
   const playerCommand = (command: PlaybackCommand) => JSON.stringify({ type: "player", command } satisfies ServerMessage);
-  // On the TV the system volume is the level; the stream stays at 100.
-  const levelOf = (playback: Playback) => systemAudio ? 100 : playback.outputs.find(output => output.level !== null)?.level ?? 0;
+  // On the TV the system volume is the level; the stream stays at 100. Synced picture is silent.
+  const levelOf = (playback: Playback) => playback.synced ? 0 : systemAudio ? 100 : playback.outputs.find(output => output.level !== null)?.level ?? 0;
+  const spans = (playback: Playback) => new Set(playback.outputs.map(output => output.deviceId)).size > 1;
+  const members = (playback: Playback) => playback.outputs.flatMap(output => output.level === null ? [] : [{ deviceId: output.deviceId, level: output.level }]);
+  const active = (status: string) => ["loading", "playing", "paused"].includes(status);
   const deliver = (playback: Playback, command: PlaybackCommand) => {
     if (mpvPlayback === playback) mpv.send(command);
     else if (playback.renderer) send(playback.renderer, playerCommand(command));
   };
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
+    if (command.type === "load") playback.loaded = command;
     if (command.type === "load" && !!command.mpv !== (mpvPlayback === playback)) {
       if (command.mpv) {
         // Only the Device that runs Core has mpv, so its outputs move to this Playback.
@@ -164,6 +178,12 @@ export async function createHub(options: HubOptions) {
         assign(playback, [{ deviceId: hostId(), picture: true, level: playback.outputs[0]?.level ?? store.volume() }]);
         mpvPlayback = playback;
       } else { mpv.send({ type: "stop" }); mpvPlayback = null; }
+    }
+    if (playback.synced) {
+      playback.synced.send(command.type === "load" && playback.media?.playbackId === command.playbackId ? { ...command, ...playback.media } : command);
+      if (playback.renderer) deliver(playback, command);
+      if (playback.renderer && command.type === "load") deliver(playback, { type: "volume", volume: 0 });
+      return;
     }
     if (mpvPlayback !== playback && !playback.renderer) {
       if (command.type === "load") throw new Error(playback.outputs[0] ? `${nameOf(playback.outputs[0].deviceId)} is offline.` : "Send this to a Device to play it.");
@@ -177,11 +197,13 @@ export async function createHub(options: HubOptions) {
   const assign = (playback: Playback, outputs: Output[]) => {
     for (const output of outputs) {
       const previous = servedBy(output.deviceId);
-      if (previous && previous !== playback) release(previous, output.deviceId);
+      if (previous && previous !== playback) { release(previous, output.deviceId); reconcile(previous); }
       looking.set(output.deviceId, playback.id);
     }
     for (const output of playback.outputs) if (!outputs.some(item => item.deviceId === output.deviceId)) release(playback, output.deviceId, false);
     playback.outputs = outputs;
+    // Send to hands everything to one Device, which plays it directly.
+    if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; }
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
   };
   const release = (playback: Playback, deviceId: string, wait = true) => {
@@ -194,10 +216,41 @@ export async function createHub(options: HubOptions) {
     if (wait && !playback.outputs.length) playback.session.wait("Waiting for a Device.");
   };
   // The newest tab of an output Device plays (#644 Tabs); an output back online resumes, paused.
+  // In a synced Playback only the picture Device's tab renders, silent; the others listen.
   const handOver = (playback: Playback, socket: Socket<SocketData>) => {
+    if (playback.synced && !playback.outputs.some(output => output.picture && output.deviceId === deviceOf(socket))) return;
     if (playback.renderer && playback.renderer !== socket && sockets.has(playback.renderer)) send(playback.renderer, playerCommand({ type: "stop" }));
     playback.renderer = socket;
-    playback.session.reload();
+    const { player } = stateOf(playback);
+    if (!playback.synced) playback.session.reload();
+    else if (playback.loaded?.playbackId === player.playbackId && active(player.status)) {
+      deliver(playback, { ...playback.loaded, ...playback.loaded.radio ? {} : { startPosition: player.position }, paused: player.status === "paused" });
+      deliver(playback, { type: "volume", volume: 0 });
+    }
+  };
+  // Delivery follows from outputs (#644 Delivery): one Device plays directly; outputs that span
+  // Devices are Synced, and the Playback's Sendspin group takes over its sound where it is.
+  const reconcile = (playback: Playback) => {
+    const picture = playback.outputs.find(output => output.picture)?.deviceId;
+    if (spans(playback)) {
+      const fresh = !playback.synced;
+      playback.synced ??= sendspin.group(playback.id, player => playback.session.observe(player));
+      playback.synced.members(members(playback));
+      if (playback.renderer && deviceOf(playback.renderer) !== picture) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
+      const { player } = stateOf(playback);
+      if (!fresh || playback.loaded?.playbackId !== player.playbackId || !active(player.status)) return;
+      if (playback.renderer) deliver(playback, { type: "volume", volume: 0 });
+      const media = playback.media?.playbackId === player.playbackId ? playback.media : {};
+      playback.synced.send({ ...playback.loaded, ...media, ...playback.loaded.radio ? {} : { startPosition: player.position }, paused: player.status === "paused",
+        preferences: { ...playback.loaded.preferences!, ...player.speed ? { speed: player.speed } : {} } });
+    } else if (playback.synced) {
+      playback.synced.close();
+      playback.synced = undefined;
+      const device = playback.outputs[0]?.deviceId;
+      const tab = device && newest(device);
+      if (playback.renderer && deviceOf(playback.renderer) === device) deliver(playback, { type: "volume", volume: levelOf(playback) });
+      else if (tab) handOver(playback, tab);
+    }
   };
   const createPlayback = (id: string = crypto.randomUUID()) => {
     const playback = { id, outputs: [], renderer: null } as unknown as Playback;
@@ -210,6 +263,8 @@ export async function createHub(options: HubOptions) {
         // Send to resolves for the Device it moves to: its engine and origin choose formats and Pass-through.
         const tab = playback.next ?? playback.renderer;
         const { headers = {}, ...media } = await resolveEntry(entry, playbackId, signal, tab, playback);
+        // Core's own FFmpeg reads the sound as resolved, before Pass-through, with its headers.
+        playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers };
         return passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal);
       },
       observe: player => subtitles.observe(player),
@@ -249,23 +304,46 @@ export async function createHub(options: HubOptions) {
     broadcast();
   };
   // Speakers panel (#644 Actions): a fader adds a Device's sound (0 keeps it silent), the switch
-  // removes it, and a screen's tile toggles its picture.
-  const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; level?: number | null }, authorize: () => void) => {
+  // removes it, and a screen's tile toggles its picture. A speaker's delay is its own (Sendspin).
+  const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; level?: number | null; delay?: number }, authorize: () => void) => {
+    if (change.delay !== undefined) sendspin.setDelay(deviceId, change.delay);
+    if (change.picture === undefined && change.level === undefined) return;
     // A change while the Device is still joining applies to the output it joins with.
     const joining = playback.joining?.deviceId === deviceId ? playback.joining : undefined;
     const current = playback.outputs.find(output => output.deviceId === deviceId) ?? joining;
     const next: Output = { deviceId, picture: change.picture ?? current?.picture ?? false, level: change.level === undefined ? current?.level ?? null : change.level };
     if (next.level !== null) store.saveVolume(next.level);
     if (joining) { Object.assign(joining, next); return; }
-    if (!current) {
-      if (playback.outputs.length) throw new Error("Couch can't play on two Devices in sync yet.");
+    if (!current && !playback.outputs.length) {
       if (next.picture || next.level !== null) await sendTo(playback, next, authorize);
       return;
     }
-    if (!next.picture && next.level === null) release(playback, deviceId);
-    else {
-      playback.outputs = playback.outputs.map(output => output === current ? next : output);
-      if (next.level !== current.level) deliver(playback, { type: "volume", volume: levelOf(playback) });
+    if (next.picture && !current?.picture) {
+      if (playback.outputs.some(output => output.picture)) throw new Error("Couch shows the picture on one Device for now. Hide it on the other screen first.");
+    }
+    if (!current) {
+      if (!next.picture && next.level === null) return;
+      if (mpvPlayback === playback) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
+      if (!newest(deviceId)) throw new Error(`${nameOf(deviceId)} is offline.`);
+      // A Device serves one Playback, so it leaves the one it served (#644 Outputs).
+      const previous = servedBy(deviceId);
+      if (previous) { release(previous, deviceId); reconcile(previous); }
+      looking.set(deviceId, playback.id);
+      playback.outputs = [...playback.outputs, { ...next, picture: false }];
+    } else if (!next.picture && next.level === null) release(playback, deviceId);
+    else playback.outputs = playback.outputs.map(output => output === current ? { ...next, picture: next.picture && current.picture } : output);
+    reconcile(playback);
+    if (!playback.synced && current && next.level !== current.level) deliver(playback, { type: "volume", volume: levelOf(playback) });
+    // A screen that joins a synced Playback loads the picture for itself, where the Playback is.
+    if (next.picture && !current?.picture) {
+      const show = () => { playback.outputs = playback.outputs.map(output => output.deviceId === deviceId ? { ...output, picture: true } : output); };
+      const tab = newest(deviceId);
+      if (!playback.synced || !tab) show();
+      else {
+        playback.next = tab;
+        try { await playback.session.move(() => { show(); playback.renderer = tab; }, authorize); }
+        finally { playback.next = undefined; }
+      }
     }
     broadcast();
   };
@@ -289,10 +367,16 @@ export async function createHub(options: HubOptions) {
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id) })),
     };
     const views = new Map<Playback | undefined, string>();
+    // A speaker's delay is its player's own; it shows once the speaker is connected.
+    const delays = (outputs: Output[]) => outputs.map(output => { const delay = sendspin.delay(output.deviceId); return delay === undefined ? output : { ...output, delay }; });
+    const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
       const playback = lookedAt(deviceOf(socket));
-      if (!views.has(playback)) views.set(playback, JSON.stringify({ type: "state", state: { ...playback ? stateOf(playback) : idle(), ...shared, playback: playback?.id ?? null, outputs: playback?.outputs ?? [] } } satisfies ServerMessage));
+      if (!views.has(playback)) views.set(playback, JSON.stringify({ type: "state", state: { ...playback ? stateOf(playback) : idle(), ...shared, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage));
       send(socket, views.get(playback)!);
+      // The newest tab of each synced speaker plays its sound over Sendspin.
+      const listening = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket;
+      if (socket.data.listening !== listening) send(socket, JSON.stringify({ type: "sendspin", listen: socket.data.listening = listening } satisfies ServerMessage));
     }
   };
   const publish = (playback: Playback, state: SessionState, clock?: PlaybackClock) => {
@@ -315,6 +399,7 @@ export async function createHub(options: HubOptions) {
     for (const output of [...playback.outputs]) release(playback, output.deviceId, false);
     for (const [deviceId, id] of looking) if (id === playback.id) looking.set(deviceId, "");
     if (radioPlayback === playback) radioPlayback = null;
+    playback.synced?.close();
     playback.session.close();
     try { store.forgetPlayback(playback.id); } catch { /* A stale row is dropped at the next start. */ }
     broadcast();
@@ -464,6 +549,7 @@ export async function createHub(options: HubOptions) {
     invalidate("devices");
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
+    sendspin.drop(id);
     for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
       socket.close(4001, "This remote's access was revoked. Pair again.");
@@ -723,6 +809,8 @@ export async function createHub(options: HubOptions) {
       const { pathname } = new URL(request.url);
       const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
       if (route) return route(request);
+      // Sendspin (#644 ticket 10): the Noise handshake admits only this Couch's Devices.
+      if (pathname === "/sendspin") return !allowed(request, false) ? json({ error: "Unrecognized host or origin." }, 403) : upgrade(sendspin.accept) ? undefined : json({ error: "WebSocket upgrade required." }, 426);
       if (request.method === "GET" && /^\/api\/subtitles\/[\w-]+\.vtt$/.test(pathname)) return subtitles.serve(pathname);
       if (request.method === "GET" && pathname.startsWith("/api/relay/")) return allowed(request, false) ? passThrough.serve(request) : new Response(null, { status: 403 });
       const page = ["GET", "HEAD"].includes(request.method) && !pathname.startsWith("/api/") ? await frontend(pathname) : null;
@@ -745,8 +833,14 @@ export async function createHub(options: HubOptions) {
           if (tab) handOver(playback, tab);
           else {
             playback.renderer = null;
-            if (mpvPlayback !== playback) playback.session.wait(`${nameOf(deviceOf(socket))} is offline.`);
+            if (mpvPlayback !== playback && !playback.synced) playback.session.wait(`${nameOf(deviceOf(socket))} is offline.`);
           }
+        }
+        // A synced Playback plays on while one of its Devices is online, and pauses when none is.
+        for (const playback of all()) if (playback.synced && !playback.outputs.some(output => newest(output.deviceId))) {
+          const { playbackId } = stateOf(playback).player;
+          if (playbackId) playback.synced.send({ type: "pause", playbackId, paused: true });
+          playback.session.wait(`${nameOf(deviceOf(socket))} is offline.`);
         }
         broadcast();
         if (socket.data.deviceId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.deviceId }).catch(() => {});
@@ -760,7 +854,7 @@ export async function createHub(options: HubOptions) {
         const player = parsePlayer(message);
         if (player) {
           const playback = all().find(item => item.renderer === socket);
-          if (playback && mpvPlayback !== playback) playback.session.observe(player);
+          if (playback && mpvPlayback !== playback && !playback.synced) playback.session.observe(player);
           return;
         }
         let command;
@@ -885,6 +979,8 @@ export async function createHub(options: HubOptions) {
     sound?.close();
     soundRouting?.close();
     mpv.close();
+    for (const playback of all()) playback.synced?.close();
+    sendspin.close();
     appearance.close();
     guide.close();
     metadata.close();

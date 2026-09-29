@@ -11,7 +11,8 @@ import { loopbackPeer } from "./lan-listener";
 // node:http and ws behind the fetch-style handler Core's routes are written
 // against: each request becomes a Request, each Response is streamed back.
 export type Socket<T> = WebSocket & { data: T };
-export type Upgrade<T> = (data: T) => boolean;
+// A function takes the socket as it is instead of Couch's own handlers (Sendspin, #644 ticket 10).
+export type Upgrade<T> = (data: T | ((socket: WebSocket, request: IncomingMessage) => void)) => boolean;
 export type Listener = { port: number; stop: () => Promise<void> };
 type Options<T> = {
   hostname: string;
@@ -105,10 +106,11 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
       const result = await fetch(toRequest(message), data => {
         upgraded = true;
         sockets.handleUpgrade(message, stream, head, raw => {
-          const socket = Object.assign(raw, { data });
-          alive.add(socket);
-          socket.on("pong", () => alive.add(socket));
-          socket.on("error", () => {});
+          alive.add(raw);
+          raw.on("pong", () => alive.add(raw));
+          raw.on("error", () => {});
+          if (typeof data === "function") return (data as (socket: WebSocket, request: IncomingMessage) => void)(raw, message);
+          const socket = Object.assign(raw, { data: data as T });
           socket.on("message", (value, binary) => websocket.message(socket, binary ? null : value.toString()));
           socket.on("close", () => websocket.close(socket));
           websocket.open(socket);

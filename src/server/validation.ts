@@ -66,7 +66,8 @@ function validAction(value: unknown): value is Action {
     case "look": return value.playback === null || id(value.playback);
     case "sendTo": return id(value.deviceId);
     case "output": return id(value.deviceId) && (value.picture === undefined || typeof value.picture === "boolean")
-      && (value.level === undefined || value.level === null || number(value.level, 100)) && (value.picture !== undefined || value.level !== undefined);
+      && (value.level === undefined || value.level === null || number(value.level, 100)) && (value.delay === undefined || number(value.delay, 5000))
+      && (value.picture !== undefined || value.level !== undefined || value.delay !== undefined);
     default: return false;
   }
 }
