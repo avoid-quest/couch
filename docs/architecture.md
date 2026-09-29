@@ -115,7 +115,10 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   - QuickJS-NG's `qjs-*` release binary.
   - ffmpeg from [Martin Riedl](https://ffmpeg.martin-riedl.de) on macOS and
     Linux (its `.sha256`; on macOS also his Developer ID signature), and from
-    [BtbN](https://github.com/BtbN/FFmpeg-Builds) on Windows.
+    [BtbN](https://github.com/BtbN/FFmpeg-Builds) on Windows. Martin Riedl's
+    builds carry their own OpenSSL, so Core sets `SSL_CERT_FILE` to the system's
+    certificates (`/etc/ssl/cert.pem` on macOS, `/etc/ssl/certs/ca-certificates.crt`
+    on Debian) for its helpers; without it every `https` read fails.
 
   GitHub's recorded asset digest is the SHA-256 for GitHub releases.
 - Core checks every helper at start and once a day. It updates yt-dlp when a
