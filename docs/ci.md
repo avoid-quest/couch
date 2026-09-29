@@ -52,13 +52,21 @@ electron-updater. The Mac app is unsigned, and Squirrel.Mac only updates signed
 apps, so it downloads the zip itself, checks its sha512 and swaps its bundle
 when Couch quits ([app/update.ts](../app/update.ts)).
 
-[Release](../.github/workflows/release.yml) resolves the version, builds with
+[Release](../.github/workflows/release.yml) resolves the version, opens a draft
+release with GitHub's generated notes, builds with
 [Package](../.github/workflows/package.yml) (AppImage and deb on Linux, dmg and
-zip on macOS, nsis on Windows), publishes the release with GitHub's generated
-notes and tags this repository's commit too. Write pull request titles as plain
+zip on macOS, nsis on Windows), which uploads straight into the draft, then
+publishes it and tags this repository's commit too. Nothing passes through
+artifact storage, and the updater never sees a draft, so a failed run publishes
+nothing; rerun its failed jobs to finish it. Write pull request titles as plain
 sentences: they become the release notes. Package can also be dispatched on its
 own for a test build of `package.json`'s version, kept as run artifacts and
 never published. Builds are unsigned.
+
+Every build runs on [Blacksmith](https://docs.blacksmith.sh/blacksmith-runners/overview),
+as in t3code: macOS on `blacksmith-6vcpu-macos-26` and Windows on
+`blacksmith-4vcpu-windows-2025`, beside Linux. Their minutes cost 20× and 4×
+Linux's from the same allowance, so a release costs roughly one Mac build.
 
 One-time setup, done by the owner:
 

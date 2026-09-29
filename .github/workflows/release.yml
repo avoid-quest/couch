@@ -52,20 +52,13 @@ jobs:
           fi
           bun scripts/release.ts "$CHANNEL" | tee -a "$GITHUB_OUTPUT"
 
-  package:
+  # A draft is invisible to the updater. The builds upload into it, so nothing
+  # passes through artifact storage, and it is published once all three are in.
+  draft:
     needs: preflight
     if: needs.preflight.outputs.skip != 'true'
-    uses: ./.github/workflows/package.yml
-    with:
-      version: ${{ needs.preflight.outputs.version }}
-      ref: ${{ needs.preflight.outputs.ref }}
-
-  release:
-    needs: [preflight, package]
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    permissions:
-      contents: write
+    timeout-minutes: 5
     env:
       CHANNEL: ${{ needs.preflight.outputs.channel }}
       TAG: ${{ needs.preflight.outputs.tag }}
@@ -73,11 +66,6 @@ jobs:
       REF: ${{ needs.preflight.outputs.ref }}
       PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: couch-*
-          merge-multiple: true
-          path: assets
       # GitHub's notes from this repo's merged pull requests since the previous
       # release on the same channel.
       - name: Write the notes
@@ -89,13 +77,42 @@ jobs:
             ${PREVIOUS_TAG:+-f previous_tag_name="$PREVIOUS_TAG"} \
             --jq .body > notes.md
           cat notes.md
+      # A rerun keeps the draft it made before.
+      - name: Draft on avoid-quest/couch-releases
+        env:
+          GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
+        run: |
+          gh release view "$TAG" -R avoid-quest/couch-releases >/dev/null 2>&1 ||
+            gh release create "$TAG" -R avoid-quest/couch-releases --draft \
+              --title "$NAME" --notes-file notes.md \
+              $([[ $CHANNEL == preview ]] && echo --prerelease)
+
+  package:
+    needs: [preflight, draft]
+    uses: ./.github/workflows/package.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.preflight.outputs.version }}
+      ref: ${{ needs.preflight.outputs.ref }}
+      release: ${{ needs.preflight.outputs.tag }}
+
+  publish:
+    needs: [preflight, package]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      CHANNEL: ${{ needs.preflight.outputs.channel }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      REF: ${{ needs.preflight.outputs.ref }}
+    steps:
       - name: Publish on avoid-quest/couch-releases
         env:
           GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
         run: |
-          gh release create "$TAG" assets/* -R avoid-quest/couch-releases \
-            --title "$NAME" --notes-file notes.md \
-            $([[ $CHANNEL == production ]] && echo --latest || echo --prerelease)
+          gh release edit "$TAG" -R avoid-quest/couch-releases --draft=false \
+            $([[ $CHANNEL == production ]] && echo --latest)
       - name: Tag this repo
         env:
           GH_TOKEN: ${{ github.token }}
