@@ -8,6 +8,13 @@ const call = async (name: string, ...args: unknown[]) => {
   return result.value;
 };
 
+// The Mac window has no title bar: the page leaves room for its controls (index.css).
+if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presentation")) {
+  const controls = (shown: boolean) => document.documentElement.toggleAttribute("data-window-controls", shown);
+  addEventListener("DOMContentLoaded", () => controls(true));
+  ipcRenderer.on("couch:full-screen", (_event, fullScreen: boolean) => controls(!fullScreen));
+}
+
 contextBridge.exposeInMainWorld("couchApp", {
   tvPresentation: process.argv.includes("--couch-tv-presentation"),
   mode: () => call("mode"),

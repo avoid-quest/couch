@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
 import updater from "electron-updater";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
@@ -24,6 +24,8 @@ const port = Number(process.env.COUCH_PORT ?? 4100);
 // Twitch rejects Origin 127.0.0.1 but accepts localhost (#644 ticket 1).
 const localOrigin = `http://localhost:${port}`;
 const icons = join(app.getAppPath(), "packaging/icons");
+// The Mac window hides its title bar; its controls sit in the page's header (index.css).
+const macChrome = process.platform === "darwin" && !tv;
 
 const readJson = (path: string) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; } };
 const readText = (path: string) => { try { return readFileSync(path, "utf8").trim() || null; } catch { return null; } };
@@ -231,9 +233,16 @@ function show() {
   window.focus();
 }
 
+const interfaceSizePath = join(dataDir, "desktop-interface-size");
+const interfaceSizes = [1, 1.15, 1.3];
+const interfaceSize = () => interfaceSizes.find(value => value === Number(readText(interfaceSizePath))) ?? 1;
+// Centre the 14pt controls in the 56px header, which scales with the interface size.
+const controlsPosition = () => ({ x: 16, y: Math.round(28 * interfaceSize() - 7) });
+
 function createWindow() {
   window = new BrowserWindow({
     ...tv ? { fullscreen: true, frame: false } : { width: 1280, height: 800, ...savedBounds() },
+    ...macChrome ? { titleBarStyle: "hidden", trafficLightPosition: controlsPosition() } : {},
     minWidth: 800, minHeight: 600, show: false, title: "Couch", backgroundColor: "#000000",
     ...process.platform === "linux" ? { icon: join(icons, "icon.png") } : {},
     webPreferences: {
@@ -247,6 +256,13 @@ function createWindow() {
   if (tv) present();
   window.once("ready-to-show", show);
   window.on("leave-full-screen", () => { if (tv) window?.setFullScreen(true); });
+  if (macChrome) {
+    // Fullscreen hides the window controls, so the header drops their space.
+    const fullScreen = () => window?.webContents.send("couch:full-screen", window.isFullScreen());
+    window.on("enter-full-screen", fullScreen);
+    window.on("leave-full-screen", fullScreen);
+    window.webContents.on("dom-ready", fullScreen);
+  }
   window.on("close", event => {
     saveBounds();
     if (quitting || tv) return;
@@ -312,11 +328,10 @@ handle("connection", async event => {
   return { origin: localOrigin, token: core!.token, pairingCode: ready.pairingCode, urls };
 });
 handle("interface-size", (_event, size) => {
-  const sizes = [1, 1.15, 1.3];
-  const path = join(dataDir, "desktop-interface-size");
-  if (size === undefined) return sizes.find(value => value === Number(readText(path))) ?? 1;
-  if (!sizes.includes(size as number)) throw new Error("Choose a supported interface size.");
-  write(path, String(size));
+  if (size === undefined) return interfaceSize();
+  if (!interfaceSizes.includes(size as number)) throw new Error("Choose a supported interface size.");
+  write(interfaceSizePath, String(size));
+  if (macChrome) window?.setWindowButtonPosition(controlsPosition());
   return size;
 });
 
@@ -335,7 +350,14 @@ else {
   app.on("activate", show);
   app.on("before-quit", event => { if (!quitting) { event.preventDefault(); void quit(); } });
   void app.whenReady().then(() => {
-    if (process.platform !== "darwin") Menu.setApplicationMenu(null);
+    // Couch is black everywhere, so native title bars, menus and dialogs are dark too.
+    nativeTheme.themeSource = "dark";
+    Menu.setApplicationMenu(process.platform !== "darwin" ? null : Menu.buildFromTemplate([
+      { role: "appMenu", submenu: [{ role: "about" }, { label: "Show Couch", click: show }, { type: "separator" }, { role: "services" }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] },
+      { role: "editMenu" },
+      { label: "View", submenu: [{ role: "togglefullscreen" }] },
+      { role: "windowMenu" },
+    ]));
     if (!tv) {
       const icon = process.platform === "darwin"
         ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), { scaleFactor: 2 })

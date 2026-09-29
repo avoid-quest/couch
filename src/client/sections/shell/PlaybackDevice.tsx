@@ -50,7 +50,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   }, []);
   if (!couchApp) return children;
   const app = couchApp;
-  if (!choice) return <main className="flex min-h-dvh flex-col bg-background">
+  if (!choice) return <main className="drag-region flex min-h-dvh flex-col bg-background">
     <Onboarding title="Couch">{error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => location.reload()}>{TRY_AGAIN}</Button></AlertAction></Alert> : <StatusLine busy>Loading…</StatusLine>}</Onboarding>
   </main>;
   const device: Device = {
@@ -85,7 +85,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     completeLocalSetup: async () => setChoice(await app.completeLocalSetup()),
   };
   return <Context.Provider value={device}>
-    {choice.mode ? children : <main className="flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
+    {choice.mode ? children : <main className="drag-region flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
       <Onboarding title="Where is your Couch?"><DeviceForm /></Onboarding>
     </main>}
   </Context.Provider>;
