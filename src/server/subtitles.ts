@@ -10,12 +10,14 @@ export const subtitleSizeLimit = 2 * 1024 * 1024;
  * WebVTT in a <track>, so SRT is converted and each file is served from memory at an
  * unguessable address (a <track> request carries no credentials).
  */
-export function createSubtitles(player: () => PlayerState, attach: (playbackId: string, subtitle: ExternalSubtitle) => void) {
+// `player` finds the player that plays `playbackId`, in whichever Playback (#644 ticket 9).
+export function createSubtitles(player: (playbackId: string) => PlayerState | undefined, attach: (playbackId: string, subtitle: ExternalSubtitle) => void) {
   const files = new Map<string, { playbackId: string; text: string }>();
   let pending = 0;
   let closed = false;
-  const current = (id: string) => !closed && player().playbackId === id && ["playing", "paused"].includes(player().status);
-  const retain = (playbackId: string | null) => { for (const [path, file] of files) if (file.playbackId !== playbackId) files.delete(path); };
+  const current = (id: string) => !closed && ["playing", "paused"].includes(player(id)?.status ?? "");
+  // Files live while their item plays, until its player acknowledges a replacement or Stop.
+  const retain = (_playbackId?: string | null) => { for (const [path, file] of files) if (player(file.playbackId)?.status === undefined) files.delete(path); };
   return {
     async handle(request: Request, authorize = () => {}) {
       const json = (body: unknown, status = 200) => Response.json(body, { status });
@@ -64,11 +66,12 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
       } finally { pending--; }
     },
     observe(state: PlayerState) {
-      // Keep files until the player acknowledges the replacement or Stop.
       if (state.status === "loading") return;
-      retain(state.playbackId);
+      retain();
     },
     stopped: retain,
+    // The item moved to a new transport (another quality or Device); its files move with it.
+    moved(from: string | null, to: string) { for (const file of files.values()) if (file.playbackId === from) file.playbackId = to; },
     serve(path: string) {
       const file = files.get(path);
       return file ? new Response(file.text, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" } }) : new Response("Not found", { status: 404 });

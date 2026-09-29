@@ -1,6 +1,6 @@
 # Current architecture
 
-Couch is one Electron app. Core, the Node coordinator, owns the household queue,
+Couch is one Electron app. Core, the Node coordinator, owns the Playbacks,
 playback intent, authorization and persistent state. A remote never resolves
 private playback URLs or becomes another playback authority.
 
@@ -31,10 +31,21 @@ mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
 
+Many Playbacks run at once (`src/server/session.ts`, one session each). A Playback
+is a queue, current item, position, pause state, speed and tracks, with its own
+outputs: each Device's picture and sound level. A Device's outputs serve one
+Playback at a time. Every window looks at one Playback and controls it; looking
+never moves outputs. Play starts media on this Device; Send to hands the looked-at
+Playback's outputs to another Device, which reloads the item where it was with
+its pause state, speed, tracks and subtitle delay. An output that goes offline
+pauses its Playback until it returns, and a Playback ends when its queue does.
+Each Playback keeps its Up next in the `playback` table. Until synced sound
+arrives, a Playback's outputs are on one Device.
+
 Every Device renders playback the same way (`src/client/session/renderer.ts`),
 the app window included: Core sends `{ type: "player", command }` over the
 Device's WebSocket and listens to `{ type: "player", state }` only from the tab it
-chose. Play renders on the Device that pressed it; the newest tab of that Device
+chose. A Playback renders on its output Device; the newest tab of that Device
 takes over and reloads the item where it was, and when that tab closes the next
 newest one does. The Device fetches the source itself (Direct delivery, no bytes
 through Core): URLs play in `<video>`, YouTube's separate audio in an `<audio>`
@@ -52,7 +63,7 @@ address only for what fails there but works for Core: Twitch's playlists answer
 403 to a browser on a LAN origin. Relayed HLS playlists are rewritten so nested
 playlists go through Core and segments stay direct when the Device may read
 them; other bytes stream through with their `Range`. Nothing is transcoded.
-Relay addresses are signed for the current Playback only.
+Relay addresses are signed for one Playback and work while it plays that item.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core

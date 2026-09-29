@@ -1,15 +1,28 @@
 import { providerForUrl } from "../shared/providers";
-import type { PlaybackActor } from "../shared/protocol";
-import type { HistoryItem } from "../shared/viewing";
+import type { PlaybackActor, QueueEntry, SessionState } from "../shared/protocol";
+import type { HistoryItem, WatchingProfile } from "../shared/viewing";
 import { RadioError, type createRadio } from "./radio";
 import { playbackMediaId, ViewingError } from "./progress";
-import type { Store } from "./store";
-import type { createSession } from "./session";
+import type { ProgressSnapshot, Store } from "./store";
 import { ControllerError } from "./devices";
 
 type Services = {
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations" | "getStation">;
-  viewing?: { store: Store; session: ReturnType<typeof createSession>; refreshHistory?: (items: HistoryItem[]) => void };
+  viewing?: { store: Store; session: Viewing; refreshHistory?: (items: HistoryItem[]) => void };
+};
+// Profiles and history are shared by every Playback; Play and Queue act for the Device that asks (#644 ticket 9).
+export type Viewing = {
+  readonly state: Pick<SessionState, "activeProfile" | "queue" | "currentEntryId">;
+  createProfile(name: unknown): WatchingProfile;
+  renameProfile(id: string, name: unknown, expectedName: string): WatchingProfile;
+  namePerson(id: string, name: unknown, expectedName: string): WatchingProfile;
+  removeProfile(id: string, expectedName: string): WatchingProfile;
+  selectProfile(id: string): WatchingProfile;
+  editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string }): void;
+  removeHistory(mediaId: string): ProgressSnapshot;
+  restoreProgress(removed: ProgressSnapshot, expected?: ProgressSnapshot): void;
+  loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize: () => void, playedBy?: PlaybackActor): void;
+  playHistory(mediaId: string, fromStart: boolean, authorize: () => void, playedBy?: PlaybackActor): void;
 };
 
 const progressIdentity = /^media:[a-f0-9]{64}$/;

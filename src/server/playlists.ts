@@ -10,8 +10,8 @@ import { CHANGED_ELSEWHERE, QUEUE_FULL } from "./messages";
 type Options = {
   databasePath: string;
   onChange: () => void;
-  queue: () => QueueEntry[];
-  upNext?: () => QueueEntry[];
+  queue: (playedBy?: PlaybackActor) => QueueEntry[];
+  upNext?: (playedBy?: PlaybackActor) => QueueEntry[];
   loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor, contextTitle?: string) => void;
   resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
@@ -154,7 +154,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
           if (input.scope === "upNext" && !upNext) throw new PlaylistError("Up next is not available on this TV.", 503);
           // Resolve source lists before opening the write transaction so a vanished
           // playlist or a failed resolver leaves no partial save behind.
-          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: input.scope === "upNext" ? upNext!() : queue() };
+          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: input.scope === "upNext" ? upNext!(playedBy) : queue(playedBy) };
           if (source) authorize();
           const name = playlistName(resolution.name);
           const entries = capturePlaylistEntries(resolution.entries);
@@ -201,7 +201,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
           requireRevision(row, input.revision);
           const entries = JSON.parse(row.entries) as QueueEntry[];
           if (!entries.length) throw new PlaylistError("This playlist is empty. Save a queue before loading it.");
-          if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError(QUEUE_FULL);
+          if (input.mode === "append" && queue(playedBy).length + entries.length > 500) throw new PlaylistError(QUEUE_FULL);
           loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy, row.name);
           return Response.json({ ok: true });
         }
@@ -229,7 +229,7 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
               break;
             case "saveQueue":
               fields(input, ["revision", "operation"]);
-              row.entries = JSON.stringify(capturePlaylistEntries(queue()));
+              row.entries = JSON.stringify(capturePlaylistEntries(queue(playedBy)));
               break;
             case "remove": case "move": {
               fields(input, input.operation === "remove" ? ["revision", "operation", "entryId"] : ["revision", "operation", "entryId", "beforeEntryId"]);

@@ -120,10 +120,11 @@ const playlist = async (command: NonNullable<typeof loading>) => {
   // Tracks follow the profile's language preferences.
   const { audioLanguage = "", subtitleLanguage = "", subtitles = "auto" } = command.preferences ?? {};
   const matches = (lang = "", wanted: string) => !!wanted && lang.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2));
+  // Tracks chosen on another Device come with the item (#644 ticket 9).
   hls.once(Hls.Events.MANIFEST_PARSED, () => {
-    const audioTrack = hls!.audioTracks.findIndex(track => matches(track.lang, audioLanguage));
-    if (audioTrack >= 0) hls!.audioTrack = audioTrack;
-    hls!.subtitleTrack = subtitles === "auto" ? hls!.subtitleTracks.findIndex(track => matches(track.lang, subtitleLanguage)) : -1;
+    const audioTrack = command.audioTrack ?? hls!.audioTracks.findIndex(track => matches(track.lang, audioLanguage));
+    if (audioTrack >= 0 && audioTrack < hls!.audioTracks.length) hls!.audioTrack = audioTrack;
+    selectSubtitle(command.subtitleTrack ?? (subtitles === "auto" ? hls!.subtitleTracks.findIndex(track => matches(track.lang, subtitleLanguage)) : -1));
   });
   hls.subtitleTrack = -1;
   hls.loadSource(command.source);
@@ -190,9 +191,12 @@ export function play(command: PlaybackCommand) {
       }
       apply();
       for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
+      if (command.subtitleTrack !== undefined) selectSubtitle(command.subtitleTrack);
+      subtitleDelay = command.subtitleDelay ?? 0;
       const at = begin(command);
       if (at !== undefined) video.currentTime = at;
-      if (command.preferences?.speed) video.playbackRate = command.preferences.speed;
+      // Attaching hls.js or mpegts.js resets the rate to the default one, so set both.
+      video.defaultPlaybackRate = video.playbackRate = command.preferences?.speed ?? 1;
       audioDelay = command.preferences?.audioDelay ?? 0;
       if (!command.paused) void start(video);
       break;
@@ -200,7 +204,7 @@ export function play(command: PlaybackCommand) {
     case "pause": if (command.paused) video.pause(); else void start(video); break;
     case "audioPause": video.pause(); break;
     case "seek": video.currentTime = command.position; break;
-    case "speed": video.playbackRate = command.speed; break;
+    case "speed": video.defaultPlaybackRate = video.playbackRate = command.speed; break;
     case "volume": volume = command.volume / 100; apply(); break;
     case "track":
       if (command.kind === "audio" && hls?.audioTracks[command.index]) hls.audioTrack = command.index;

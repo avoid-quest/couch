@@ -95,10 +95,15 @@ export function openStore(path: string, remoteControlEnabled = false) {
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
 
+  // Playbacks replace the one saved queue; it becomes the first Playback once (#644 ticket 9).
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'playback'").get()) db.transaction(() => {
+    db.exec("CREATE TABLE playback (id TEXT PRIMARY KEY, queue TEXT NOT NULL, cursor TEXT, continuation TEXT)");
+    const legacy = db.query<{ queue: string; cursor: string | null; context: string | null }, []>("SELECT s.queue, q.entryId AS cursor, c.context FROM session s, queue_position q, playback_continuation c").get();
+    if (legacy && legacy.queue !== "[]") db.query("INSERT INTO playback VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), legacy.queue, legacy.cursor, legacy.context);
+  }).immediate();
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
 
-  const stored = db.query<{ queue: string; volume: number }, []>("SELECT queue, volume FROM session WHERE id = 1").get()!;
   const hash = (token: string) => createHash("sha256").update(token).digest("hex");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(installation)").all().some(column => column.name === "deviceId")) {
     db.exec("ALTER TABLE installation ADD COLUMN deviceId TEXT");
@@ -165,22 +170,26 @@ export function openStore(path: string, remoteControlEnabled = false) {
       if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");
       db.query("UPDATE installation_appearance SET scale = ? WHERE id = 1").run(size);
     },
-    queue: JSON.parse(stored.queue) as QueueEntry[],
-    queueCursorEntryId() { return db.query<{ entryId: string | null }, []>("SELECT entryId FROM queue_position WHERE id = 1").get()!.entryId; },
-    playbackContinuation(): PlaybackContinuation | null {
-      const value = db.query<{ context: string | null }, []>("SELECT context FROM playback_continuation WHERE id = 1").get()!.context;
-      return value ? JSON.parse(value) : null;
+    // Each Playback keeps its own Up next, cursor and Autoplay context (#644 ticket 9).
+    playbackIds() { return db.query<{ id: string }, []>("SELECT id FROM playback ORDER BY rowid").all().map(row => row.id); },
+    forgetPlayback(id: string) { db.query("DELETE FROM playback WHERE id = ?").run(id); },
+    playback(id: string) {
+      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null }, [string]>("SELECT queue, cursor, continuation FROM playback WHERE id = ?").get(id);
+      const save = (column: "queue" | "cursor" | "continuation", value: string | null) => {
+        db.query("INSERT OR IGNORE INTO playback (id, queue) VALUES (?, '[]')").run(id);
+        db.query(`UPDATE playback SET ${column} = ? WHERE id = ?`).run(value, id);
+      };
+      return {
+        queue: JSON.parse(row()?.queue ?? "[]") as QueueEntry[],
+        queueCursorEntryId() { return row()?.cursor ?? null; },
+        playbackContinuation(): PlaybackContinuation | null { const value = row()?.continuation; return value ? JSON.parse(value) : null; },
+        savePlaybackContinuation(context: PlaybackContinuation | null) { save("continuation", context ? JSON.stringify(context) : null); },
+        saveQueueCursor(entryId: string, beforeCommit?: () => void) { db.transaction(() => { save("cursor", entryId); beforeCommit?.(); })(); },
+        saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) { db.transaction(() => { save("queue", JSON.stringify(queue)); save("cursor", cursorEntryId); })(); },
+      };
     },
-    savePlaybackContinuation(context: PlaybackContinuation | null) {
-      db.query("UPDATE playback_continuation SET context = ? WHERE id = 1").run(context ? JSON.stringify(context) : null);
-    },
-    saveQueueCursor(entryId: string, beforeCommit?: () => void) {
-      db.transaction(() => {
-        db.query("UPDATE queue_position SET entryId = ? WHERE id = 1").run(entryId);
-        beforeCommit?.();
-      })();
-    },
-    volume: stored.volume,
+    // The level a Device's sound joins a Playback at.
+    volume() { return db.query<{ volume: number }, []>("SELECT volume FROM session WHERE id = 1").get()!.volume; },
     profiles() { return db.query<WatchingProfile & { confirmedName: number }, []>("SELECT id, name, confirmedName FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all().map(profileView); },
     activeProfile,
     playbackPreferences(profileId: string): PlaybackPreferences {
@@ -227,7 +236,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return db.transaction(() => {
         unchangedProfile(id, expectedName);
         if (id === "household") throw new ViewingError("The shared default watching profile cannot be removed.", 409);
-        if (activeProfile().id === id) db.exec("UPDATE playback_continuation SET context = NULL WHERE id = 1");
+        if (activeProfile().id === id) db.exec("UPDATE playback SET continuation = NULL");
         db.query("UPDATE watching_state SET profileId = 'household' WHERE profileId = ?").run(id);
         db.query("DELETE FROM viewing_progress WHERE profileId = ?").run(id);
         db.query("DELETE FROM watching_preferences WHERE profileId = ?").run(id);
@@ -239,7 +248,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const profile = db.query<WatchingProfile & { confirmedName: number }, [string]>("SELECT id, name, confirmedName FROM watching_profiles WHERE id = ?").get(id);
       if (!profile) throw new ViewingError("Watching profile not found.", 404);
       db.transaction(() => {
-        db.exec("UPDATE playback_continuation SET context = NULL WHERE id = 1");
+        db.exec("UPDATE playback SET continuation = NULL");
         db.query("UPDATE watching_state SET profileId = ? WHERE id = 1").run(id);
       }).immediate();
       return profileView(profile);
@@ -333,12 +342,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
           restore.run(row.profileId, row.mediaId, row.title, row.position, row.duration, row.watched, row.lastPlayedAt, row.playedBy);
         }
       }).immediate();
-    },
-    saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) {
-      db.transaction(() => {
-        db.query("UPDATE session SET queue = ? WHERE id = 1").run(JSON.stringify(queue));
-        db.query("UPDATE queue_position SET entryId = ? WHERE id = 1").run(cursorEntryId);
-      })();
     },
     saveVolume(volume: number) {
       db.query("UPDATE session SET volume = ? WHERE id = 1").run(volume);
