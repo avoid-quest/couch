@@ -4,24 +4,27 @@ set -euo pipefail
 fail() { echo "couch-setup: $*" >&2; exit 1; }
 trap 'status=$?; if [[ $status != 0 ]]; then echo "Setup did not complete. Existing data was retained. Inspect sudo couch-session logs; rerun couch-setup." >&2; fi' EXIT
 usage='sudo couch-setup --tv'
-tv=false
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --tv) tv=true; shift ;;
-        *) fail "$usage" ;;
-    esac
-done
+# --refresh, run by the TV's update script, applies the files and packages a
+# newer release adds to a completed setup and leaves everything else alone.
+case "$*" in
+    --tv) mode=tv ;;
+    --refresh) mode=refresh ;;
+    *) fail "$usage" ;;
+esac
 [[ $EUID = 0 ]] || fail "$usage"
 . /etc/os-release
 [[ $ID = debian && $VERSION_ID = 13 && $(dpkg --print-architecture) = amd64 ]] || fail 'Supported target: Debian 13 amd64.'
 [[ -d /run/systemd/system ]] || fail 'Boot Debian with systemd before setup.'
 [[ $(dpkg-query -W -f='${db:Status-Status}' couch) = installed ]] || fail 'Install the Couch package with APT first.'
 [[ -x /usr/bin/couch ]] || fail 'The Couch executable is missing. Reinstall its Debian package.'
-[[ $tv = true ]] || fail "$usage"
 desktop_user=couch-tv
 user_home=/var/lib/couch
 state=/var/lib/couch-installer/native-tv
 lock=/var/lib/couch-install-locks/tv.lock
+if [[ $mode = refresh && ! -f $state/complete ]]; then
+    echo 'TV setup is not complete; nothing to refresh.'
+    exit 0
+fi
 as_user() { runuser -u "$desktop_user" -- env HOME="$user_home" "$@"; }
 user_systemctl() { as_user env XDG_RUNTIME_DIR="/run/user/$(id -u "$desktop_user")" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$desktop_user")/bus" systemctl --user "$@"; }
 # Fixed root-owned state and lock paths; do not follow substituted directories.
@@ -35,10 +38,51 @@ chmod 0700 "$state"
 [[ -e $lock ]] || touch "$lock"
 exec 9<"$lock"
 flock -n 9 || fail 'Another Couch installation or recovery is running.'
+templates=/usr/share/couch/tv
+mapfile -t packages < "$templates/packages"
+# Only the explicit setup command exposes these files to system services.
+# Existing administrator files and masks take precedence, including disabled autologin.
+install_files() {
+    while IFS= read -r path; do
+        [[ $path != usr/lib/systemd/user/couch-tv.service ]] || continue
+        destination=/$path
+        case "$path" in
+            usr/share/lightdm/lightdm.conf.d/*) destination=/etc/lightdm/lightdm.conf.d/${path##*/} ;;
+            usr/lib/systemd/logind.conf.d/*) destination=/etc/systemd/logind.conf.d/${path##*/} ;;
+        esac
+        if [[ $destination != /$path && ( -e /$path || -L /$path ) ]]; then
+            echo "Preserved /$path"
+            continue
+        fi
+        if [[ -e $destination || -L $destination ]]; then
+            echo "Preserved $destination"
+            continue
+        fi
+        install -d -m 0755 "$(dirname "$destination")"
+        if [[ $destination = /etc/* ]]; then
+            install -m "$(stat -c '%a' "$templates/$path")" "$templates/$path" "$destination"
+        else
+            ln -s "$templates/$path" "$destination"
+        fi
+    done < "$templates/files"
+    systemctl daemon-reload
+    # A mask keeps unattended updates off.
+    [[ $(systemctl is-enabled couch-update.timer 2>/dev/null || true) = masked* ]] || systemctl enable --now couch-update.timer
+}
+if [[ $mode = refresh ]]; then
+    missing=()
+    for package in "${packages[@]}"; do
+        [[ $(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null) = installed ]] || missing+=("$package")
+    done
+    # The update script already refreshed the package lists.
+    [[ ${#missing[@]} = 0 ]] || DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends "${missing[@]}"
+    install_files
+    echo 'TV setup is current.'
+    exit 0
+fi
 if getent passwd couch-tv >/dev/null; then
     [[ $(getent passwd couch-tv | cut -d: -f6) = /var/lib/couch && $(id -Gn couch-tv) = couch-tv && $(passwd -S couch-tv | awk '{print $2}') = L ]] || fail 'The existing couch-tv account is not the locked dedicated runtime account.'
 fi
-templates=/usr/share/couch/tv
 unit=/etc/systemd/user/couch-tv.service
 native_unit=$templates/usr/lib/systemd/user/couch-tv.service
 native_selected() { [[ -L $unit && $(readlink "$unit") = "$native_unit" ]]; }
@@ -61,7 +105,6 @@ if [[ -e /etc/X11/default-display-manager ]]; then
     [[ -f /var/lib/couch-installer/tv-setup.complete || -f $state/pending || -f $state/complete ]] || fail 'LightDM already has a desktop policy. Use ordinary installation.'
 fi
 touch "$state/pending"
-mapfile -t packages < "$templates/packages"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends "${packages[@]}"
 for package in "${packages[@]}"; do
@@ -80,33 +123,7 @@ if [[ -S /run/user/$(id -u couch-tv)/bus ]]; then
     user_systemctl stop couch-tv.service
 fi
 ! pgrep -u couch-tv -x couch >/dev/null || fail 'A Couch writer remains. Stop it before setup.'
-# Only the explicit setup command exposes these files to system services.
-# Existing administrator files and masks take precedence, including disabled autologin.
-while IFS= read -r path; do
-    [[ $path != usr/lib/systemd/user/couch-tv.service ]] || continue
-    destination=/$path
-    case "$path" in
-        usr/share/lightdm/lightdm.conf.d/*) destination=/etc/lightdm/lightdm.conf.d/${path##*/} ;;
-        usr/lib/systemd/logind.conf.d/*) destination=/etc/systemd/logind.conf.d/${path##*/} ;;
-    esac
-    if [[ $destination != /$path && ( -e /$path || -L /$path ) ]]; then
-        echo "Preserved /$path"
-        continue
-    fi
-    if [[ -e $destination || -L $destination ]]; then
-        echo "Preserved $destination"
-        continue
-    fi
-    install -d -m 0755 "$(dirname "$destination")"
-    if [[ $destination = /etc/* ]]; then
-        install -m "$(stat -c '%a' "$templates/$path")" "$templates/$path" "$destination"
-    else
-        ln -s "$templates/$path" "$destination"
-    fi
-done < "$templates/files"
-systemctl daemon-reload
-# A mask keeps unattended updates off.
-[[ $(systemctl is-enabled couch-update.timer 2>/dev/null || true) = masked* ]] || systemctl enable --now couch-update.timer
+install_files
 data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
 data=${data#\"}; data=${data%\"}
 install -d -m 0755 /etc/systemd/user

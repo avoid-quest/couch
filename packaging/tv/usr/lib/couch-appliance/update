@@ -12,7 +12,7 @@ releases=https://github.com/avoid-quest/couch-releases/releases
 pattern='^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$'
 fail() { echo "couch-update: $*" >&2; error=$*; exit 1; }
 [[ $EUID = 0 ]] || fail 'Run as root.'
-mode=manual version= outcome= error= failed= rollback= work=
+mode=manual version= outcome= error= failed= rollback= setup= work=
 case "$*" in
     ''|--auto) mode=auto ;;
     *) [[ $# = 1 && $1 =~ $pattern ]] || fail 'usage: update [--auto | VERSION]'; version=$1 ;;
@@ -34,8 +34,8 @@ record() {
     [[ -n $outcome ]] || { outcome=failed; error=${error:-Stopped with status $status.}; }
     state_directory || exit 1
     temporary=$(mktemp "$state/.status.XXXXXX")
-    printf 'at=%s\nmode=%s\nversion=%s\noutcome=%s\nerror=%s\nfailed=%s\nrollback=%s\n' "$(date -u +%FT%TZ)" "$mode" \
-        "$version" "$outcome" "$(printf '%s' "$error" | tr -c '[:print:]' ' ' | cut -c1-200)" "$failed" "$rollback" > "$temporary"
+    printf 'at=%s\nmode=%s\nversion=%s\noutcome=%s\nerror=%s\nfailed=%s\nrollback=%s\nsetup=%s\n' "$(date -u +%FT%TZ)" "$mode" \
+        "$version" "$outcome" "$(printf '%s' "$error" | tr -c '[:print:]' ' ' | cut -c1-200)" "$failed" "$rollback" "$setup" > "$temporary"
     chmod 0644 "$temporary"
     mv -fT "$temporary" "$state/status"
 }
@@ -165,6 +165,9 @@ install_couch() {
         apt-get install -y --no-install-recommends --no-remove "$1"
     fi
     [[ $(dpkg-query -W -f='${Version}' couch) = "$(debian "$2")" ]] || fail "Couch $2 did not install."
+    # The installed package's setup applies the TV files and packages it adds;
+    # the TV still restarts without them.
+    if /usr/sbin/couch-setup --refresh; then setup=; else setup=failed; fi
 }
 install_couch "$file" "$version"
 
