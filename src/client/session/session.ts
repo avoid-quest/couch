@@ -1,9 +1,10 @@
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../../shared/protocol";
+import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
 import type { ConnectionDetails, ControllerIdentity } from "../../shared/controllers";
 import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
+import { connectRenderer, play } from "./renderer";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
@@ -18,7 +19,8 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
+// `render`: this window plays its Core's playback (the Full-mode app).
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, render = false) {
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -52,6 +54,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let authenticate = !!credentials;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let handshake: ReturnType<typeof setTimeout> | undefined;
+    let stopRendering: (() => void) | undefined;
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -130,7 +133,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       handshake = setTimeout(() => connection.close(), 8_000);
 
       connection.onopen = () => {
-        if (isCurrent()) setStatus("syncing");
+        if (!isCurrent()) return;
+        setStatus("syncing");
+        if (render) stopRendering = connectRenderer(state => { if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -163,6 +168,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (previous?.player.playbackId !== message.playbackId) return;
           observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
+        } else if (message.type === "player") {
+          if (render) play(message.command);
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {
@@ -182,6 +189,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         socket.current = null;
         socketCredentials.current = null;
         clearTimeout(handshake);
+        stopRendering?.();
         ready.current = false;
         observation.current = null;
         setClock(emptyPlaybackClock);
@@ -213,6 +221,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       clearTimeout(retry);
       clearTimeout(handshake);
       rejectPending();
+      stopRendering?.();
       socket.current?.close();
       socket.current = null;
       socketCredentials.current = null;

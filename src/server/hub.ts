@@ -1,6 +1,7 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
 import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
+import { healStreamingCommunityOrigin } from "./streamingcommunity";
 import { createStartup } from "./startup";
 import { requestPeer, serve, type Listener, type Socket, type Upgrade } from "./http";
 import { createFrontend } from "./frontend";
@@ -8,11 +9,11 @@ import { randomInt } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
 import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
-import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
+import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
-import { parseCommand } from "./validation";
+import { parseCommand, parsePlayer } from "./validation";
 import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
 import { createRadioProgramme } from "./radio-programme";
@@ -49,7 +50,6 @@ type HubOptions = {
   pairingCode?: string;
   remoteControlEnabled?: boolean;
   adminRecoveryCode?: string;
-  sendPlayer: (command: PlaybackCommand) => void;
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   native?: boolean;
@@ -98,12 +98,22 @@ export async function createHub(options: HubOptions) {
   // A client that stops reading is dropped rather than buffered without limit.
   const send = (socket: Socket<SocketData>, message: string) => socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message);
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
+  // Checked at start so saved pages load from the current address; afterwards only
+  // StreamingCommunity requests wait for the check.
+  void healStreamingCommunityOrigin(store);
+  const streamingCommunityOrigin = async (url: string) => providerForUrl(url) === "streamingcommunity" ? healStreamingCommunityOrigin(store) : undefined;
   const startup = createStartup(async () => null);
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const systemAudio = !!options.native && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
-  const session = createSession(store, options.sendPlayer, (state, clock) => {
+  // The app window's socket renders playback (#644 ticket 4). Its newest report wins.
+  let renderer: Socket<SocketData> | null = null;
+  const sendPlayer = (command: PlaybackCommand) => {
+    if (!renderer) throw new Error("The Couch app isn't connected.");
+    send(renderer, JSON.stringify({ type: "player", command } satisfies ServerMessage));
+  };
+  const session = createSession(store, sendPlayer, (state, clock) => {
     radioProgramme?.observe(state);
     sound?.interrupt();
     if (!closed && sockets.size) {
@@ -115,7 +125,7 @@ export async function createHub(options: HubOptions) {
     resolveContinuation: (entry, signal) => continuation(entry, signal),
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
-      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
+      if (entry.source.startsWith("web:")) return streamingCommunityOrigin(entry.source.slice(4)).then(origin => resolveWebMedia(entry.source.slice(4), signal, entry.quality, origin));
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) {
         const station = radio.getPlayable(entry.source.slice(6));
@@ -157,7 +167,7 @@ export async function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => healStreamingCommunityOrigin(store) });
   const forLater = createForLater({
     webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
     databasePath: options.databasePath, onChange: () => session.invalidate("for-later"),
@@ -188,7 +198,7 @@ export async function createHub(options: HubOptions) {
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
     active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
-    pin: output => options.sendPlayer({ type: "audioOutput", output }),
+    pin: output => sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
@@ -279,7 +289,7 @@ export async function createHub(options: HubOptions) {
         if (inspectUrl) {
           const controller = new AbortController();
           inspections.set(entry.id, controller);
-          void inspectWebMedia(inspectUrl, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
+          void streamingCommunityOrigin(inspectUrl).then(origin => inspectWebMedia(inspectUrl, controller.signal, origin)).then(metadata => {
             if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(entry.id, entry.source, metadata); }
           }).catch(() => {}).finally(() => {
             if (inspections.get(entry.id) === controller) inspections.delete(entry.id);
@@ -437,13 +447,22 @@ export async function createHub(options: HubOptions) {
         sockets.add(socket);
         send(socket, JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
       },
-      close(socket: Socket<SocketData>) { sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
+      close(socket: Socket<SocketData>) {
+        sockets.delete(socket);
+        if (socket === renderer) {
+          renderer = null;
+          session.observe({ playbackId: null, status: "unavailable", position: 0, duration: null, volume: session.state.player.volume, seekable: false, error: "The Couch app disconnected." });
+        }
+        if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {});
+      },
       async message(socket: Socket<SocketData>, message: string | null) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         if (socket.data.controllerId) store.touchController(socket.data.controllerId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
         if (message === null) { socket.close(1003, "JSON text messages required."); return; }
+        const player = socket.data.trusted ? parsePlayer(message) : null;
+        if (player) { renderer = socket; session.observe(player); return; }
         let command;
         try { command = parseCommand(message); } catch {
           socket.close(1008, "Invalid command or unsupported media source.");
@@ -469,7 +488,7 @@ export async function createHub(options: HubOptions) {
             if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
             else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
-              if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
+              if (soundRouting && action.type === "pause" && !action.paused) sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
               await session.command(action, authorize, playedBy);
             }
           }

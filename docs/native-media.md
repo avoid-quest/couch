@@ -8,7 +8,8 @@ from the session state (`src/client/session/media-session.ts`): title, artist,
 album and artwork, playback state and position, and play, pause, stop, next and
 seek handlers that run the existing session actions. Chromium maps it to macOS
 Now Playing, the Windows media controls and Linux MPRIS, but only while the page
-itself plays media, which starts with #644 ticket 6.
+itself plays media: the Full-mode app window since #644 ticket 4, and every Device
+from ticket 6.
 
 The idle player and TV cursor hide with `html[data-cursor-hidden]`, and the
 player's fullscreen button uses the page's Fullscreen API, which Electron applies

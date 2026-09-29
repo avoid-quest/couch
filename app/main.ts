@@ -315,6 +315,19 @@ else {
     }
     screen.on("display-added", () => { if (tv && !preview) present(); });
     screen.on("display-removed", () => { if (tv && !preview) present(); });
+    // YouTube in the window (#644 ticket 4). googlevideo sends open-ended ranges at about
+    // playback speed and bounded ones at full speed, so ask for 10 MB at a time. It allows
+    // only youtube.com's origin, and Chromium's opaque response blocking drops some of its
+    // no-cors media responses, so the window fetches it in CORS mode and Couch allows it.
+    const googlevideo = { urls: ["https://*.googlevideo.com/*"] };
+    session.defaultSession.webRequest.onBeforeSendHeaders(googlevideo, ({ requestHeaders }, callback) => {
+      const start = /^bytes=(\d+)-$/.exec(requestHeaders.Range ?? "")?.[1];
+      callback({ requestHeaders: start === undefined ? requestHeaders : { ...requestHeaders, Range: `bytes=${start}-${Number(start) + 10_485_759}` } });
+    });
+    session.defaultSession.webRequest.onHeadersReceived(googlevideo, ({ responseHeaders = {} }, callback) => {
+      const headers = Object.fromEntries(Object.entries(responseHeaders).filter(([name]) => !/^access-control-allow-origin$/i.test(name)));
+      callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
+    });
     createWindow();
     if (app.isPackaged && !tv) updater.autoUpdater.checkForUpdatesAndNotify().catch(error => console.error(`Update check failed: ${error.message}`));
   });

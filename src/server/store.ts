@@ -94,7 +94,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
-  db.query("UPDATE streamingcommunity_origin SET origin = ? WHERE origin = 'https://streamingcommunityz.academy'").run(streamingCommunityOrigin);
 
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));

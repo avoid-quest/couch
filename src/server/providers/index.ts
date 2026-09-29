@@ -17,11 +17,11 @@ import { loadStreamingCommunityList } from "./streamingcommunity";
 import { ControllerError } from "../controllers";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
-const adapters = (streamingCommunityOrigin: () => string): Record<ProviderId, Adapter> => ({
+const adapters = (streamingCommunityOrigin: () => Promise<string>): Record<ProviderId, Adapter> => ({
   youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp,
-  streamingcommunity: (request, signal) => browseStreamingCommunity(request, signal, streamingCommunityOrigin()),
+  streamingcommunity: async (request, signal) => browseStreamingCommunity(request, signal, await streamingCommunityOrigin()),
 });
-const providerIds = new Set(Object.keys(adapters(() => "")));
+const providerIds = new Set(Object.keys(adapters(async () => "")));
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 function publicUrl(value: unknown, provider?: ProviderId): string {
@@ -69,7 +69,7 @@ export async function loadProviderList(provider: ProviderId, url: string, signal
   return { ...page, items };
 }
 
-export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = () => defaultStreamingCommunityOrigin, browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => string; browse?: Record<ProviderId, Adapter> }) {
+export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = async () => defaultStreamingCommunityOrigin, browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => Promise<string>; browse?: Record<ProviderId, Adapter> }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath);
   db.exec("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
@@ -136,7 +136,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         const preview = /^\/api\/providers\/streamingcommunity\/titles\/(\d{1,8})$/.exec(pathname);
         if (preview) {
           if (request.method !== "GET") return wrongMethod("GET");
-          return Response.json(await streamingCommunityPreview(Number(preview[1]), streamingCommunityOrigin(), AbortSignal.any([request.signal, shutdown.signal])));
+          return Response.json(await streamingCommunityPreview(Number(preview[1]), await streamingCommunityOrigin(), AbortSignal.any([request.signal, shutdown.signal])));
         }
         const match = /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|streamingcommunity)\/items$/.exec(pathname);
         if (!match) return Response.json({ error: "Not found." }, { status: 404 });

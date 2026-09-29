@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
-import { buildInfo } from "./build-info";
+import { helper, checkHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 
-export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; executable?: string; plugin?: "streamingcommunity" };
+export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; plugin?: "streamingcommunity" };
 
 let running = 0;
 const waiting: Array<() => void> = [];
@@ -46,41 +46,48 @@ function extractionError(stderr: string): Error {
   if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new Error("This isn't available in your region.");
   if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new Error("This website requires an account or browser session. Website sign-in is not supported yet.");
   if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new Error("This live stream is offline or has not started yet.");
-  if (/JavaScript|JS runtime|challenge|EJS/i.test(stderr)) return new Error("This website needs a JavaScript runtime. Update Couch.");
   return new Error("Couldn't open this page. It may be unsupported.");
 }
 
-async function extract(command: string, args: string[], signal: AbortSignal): Promise<string> {
+function broken() {
+  void checkHelper("yt-dlp");
+  return new Error("yt-dlp won't start. Couch is repairing it; try again shortly.");
+}
+
+async function extract(command: string, quickjs: string, args: string[], signal: AbortSignal): Promise<string> {
   signal.throwIfAborted();
-  const deno = process.env.COUCH_DENO;
-  const child = spawn(command, ["--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", ...(deno ? ["--js-runtimes", `deno:${deno}`] : []), ...args], {
+  // A file that isn't a program fails spawn itself on macOS (ENOEXEC).
+  let child: ReturnType<typeof spawn>;
+  try { child = spawn(command, ["--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", "--no-js-runtimes", "--js-runtimes", `quickjs:${quickjs}`, ...args], {
     stdio: ["ignore", "pipe", "pipe"], signal, killSignal: "SIGKILL",
-  });
+  }); } catch { throw broken(); }
   const exited = new Promise<number | null>((resolve, reject) => {
     // Aborting also reports an error; the signal check below explains that one.
-    child.once("error", () => signal.aborted ? resolve(null) : reject(new Error("yt-dlp won't start. Reinstall Couch.")));
+    child.once("error", () => signal.aborted ? resolve(null) : reject(broken()));
     child.once("close", resolve);
   });
   const kill = () => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); };
   try {
-    const [stdout, stderr, exitCode] = await Promise.all([readOutput(child.stdout, 8 * 1024 * 1024, kill), readOutput(child.stderr, 64 * 1024, kill), exited]);
+    const [stdout, stderr, exitCode] = await Promise.all([readOutput(child.stdout!, 8 * 1024 * 1024, kill), readOutput(child.stderr!, 64 * 1024, kill), exited]);
     signal.throwIfAborted();
+    // 126 and 127 come from the shell that execvp falls back to when the file isn't a program.
+    if (exitCode === 126 || exitCode === 127) throw broken();
     if (exitCode !== 0) throw extractionError(stderr);
     return stdout;
   } finally { kill(); await exited.catch(() => {}); }
 }
 
-export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable, plugin }: YtDlpOptions = {}): Promise<string> {
+export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plugin }: YtDlpOptions = {}): Promise<string> {
   signal?.throwIfAborted();
-  const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : "yt-dlp");
-  if (!command) throw new Error("yt-dlp won't start. Reinstall Couch.");
+  // A first run waits here for its helper downloads, outside the website's deadline.
+  const [command, quickjs] = await Promise.all([helper("yt-dlp"), helper("qjs")]);
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
     await acquireSlot(cancellation);
     try {
       const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : null;
-      try { return await extract(command, [...(bundled ? ["--plugin-dirs", bundled.directory, "--use-extractors", "StreamingCommunity,end", "--flat-playlist"] : []), ...args], cancellation); }
+      try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory, "--use-extractors", "StreamingCommunity,end", "--flat-playlist"] : []), ...args], cancellation); }
       finally { await bundled?.close(); }
     }
     finally { releaseSlot(); }

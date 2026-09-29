@@ -105,12 +105,13 @@ function formatSelector(quality: VideoQuality): string {
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string): Promise<WebMediaSource> {
     const source = mediaUrl(url);
-    const plugin = streamingCommunityLink(source, streamingCommunityOrigin) ? "streamingcommunity" : undefined;
+    const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
+    const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
     const sort = quality === "auto" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"))
       ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", source], { ...options, signal, plugin });
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     const media = parseMedia(info, selectedQuality);
     const transport = new URL(media.source);
@@ -139,8 +140,8 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
 export function createWebMediaInspector(options: ResolverOptions = {}) {
   return async function inspectWebMedia(url: string, signal?: AbortSignal, streamingCommunityOrigin?: string): Promise<WebMediaMetadata> {
     const source = mediaUrl(url);
-    const plugin = streamingCommunityLink(source, streamingCommunityOrigin) ? "streamingcommunity" : undefined;
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--ignore-no-formats-error", "--", source], { ...options, signal, plugin });
+    const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--ignore-no-formats-error", "--", streamingCommunity ?? source], { ...options, signal, plugin: streamingCommunity ? "streamingcommunity" : undefined });
     return publicMetadata(parseInfo(output));
   };
 }

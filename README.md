@@ -51,8 +51,8 @@ directories, and [checks](docs/ci.md) for CI.
 | `app` | Electron main process and window preload |
 | `apps/web` | The couch.avoid.quest website |
 
-Environment overrides use the `COUCH_` prefix, including `COUCH_PORT`,
-`COUCH_DATA_DIR`, `COUCH_YT_DLP`, and `COUCH_DENO`. The installed app keeps its
+Environment overrides use the `COUCH_` prefix, including `COUCH_PORT` and
+`COUCH_DATA_DIR`. The installed app keeps its
 data in the platform data directory under the `quest.avoid.couch` identity, as
 the Tauri app did. Development uses `.data/`.
 

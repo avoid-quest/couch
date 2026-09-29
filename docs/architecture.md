@@ -21,13 +21,45 @@ mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
 
-No renderer plays yet: libmpv left with Tauri and the app window becomes an
-ordinary renderer in #644 ticket 6.
+The Full-mode app window renders its Core's playback
+(`src/client/session/renderer.ts`). Core sends `{ type: "player", command }` over
+the window's host-token WebSocket, and the window reports its player state back
+with `{ type: "player", state }`. Only the host socket may report; if it closes, the
+player becomes unavailable. The window plays URLs in `<video>`. YouTube's separate
+audio plays in an `<audio>` element that follows the video. Playlists that Chromium
+won't open (StreamingCommunity's) go through hls.js. Main caps googlevideo's
+open-ended `Range` requests at 10 MB, because YouTube sends those at about playback
+speed. Tracks, delays, subtitles and gapless preparation are not rendered yet. #644
+ticket 6 makes every Device a renderer.
 
 Sources are external internet media only: yt-dlp sites (YouTube, Twitch,
 RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.
 Couch serves no local files. The rebuild plan is
 [#644](https://github.com/avoid-quest/couch/issues/644).
+
+## Helpers
+
+Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
+YouTube's challenges) and ffmpeg. The app ships none of them
+(`src/server/helpers.ts`).
+
+- Core uses the copy on `PATH` when it is recent enough: yt-dlp at its latest
+  release, QuickJS-NG 0.12 or later, ffmpeg 7 or later.
+- Otherwise it downloads the official build into `<data>/helpers/<name>/<version>`,
+  checks the SHA-256 and runs it before switching to it:
+  - yt-dlp's own `yt-dlp_macos.zip`, `yt-dlp_linux*.zip` or `yt-dlp_win*.zip`.
+    These unpacked builds start in a fraction of a second; the one-file builds
+    unpack themselves on every run.
+  - QuickJS-NG's `qjs-*` release binary.
+  - ffmpeg from [Martin Riedl](https://ffmpeg.martin-riedl.de) on macOS and
+    Linux (its `.sha256`; on macOS also his Developer ID signature), and from
+    [BtbN](https://github.com/BtbN/FFmpeg-Builds) on Windows.
+
+  GitHub's recorded asset digest is the SHA-256 for GitHub releases.
+- Core checks every helper at start and once a day. It updates yt-dlp when a
+  newer release exists, and downloads again any helper that is missing or
+  doesn't run. Before each yt-dlp run it also replaces a missing yt-dlp or
+  QuickJS-NG, and a yt-dlp that won't start.
 
 ## Delivery
 
