@@ -178,7 +178,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
   return <>
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{elsewhere ? <><span className="max-sm:sr-only">Playing on </span>{elsewhere.name}</> : "Playing here"}</span></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><span className="max-w-48 truncate max-sm:max-w-32">{elsewhere && !elsewhere.here ? <><span className="max-sm:sr-only">Playing on </span>{elsewhere.name}</> : elsewhere?.label ?? "Playing here"}</span></Button></PopoverTrigger>
       <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="max-h-(--radix-popover-content-available-height) w-96 gap-4 overflow-y-auto">
         {/* Devices first: looking at another Device's Playback is what this popover is for (#644 ticket 12). */}
         {state && run && <DeviceList state={state} run={run} />}

@@ -18,14 +18,17 @@ export function deviceId() {
 type Outputs = { outputs?: SessionState["outputs"]; devices?: SessionState["devices"]; player: Pick<SessionState["player"], "status"> } | null | undefined;
 /**
  * Where the looked-at Playback plays when that isn't only this Device (#644 ticket 9): the first
- * other Device's name, plus how many more Devices serve it ("Studio Mac +2", ticket 12).
+ * other Device's name plus how many more serve it ("Playing on Studio Mac +2"), or "Playing here +2"
+ * when this Device is one of them (ticket 12).
  */
 export function playingElsewhere(state: Outputs) {
   const ids = [...new Set(state?.outputs?.map(output => output.deviceId))];
   const others = ids.filter(id => id !== deviceId());
   if (!others.length || !["loading", "playing", "paused", "ended"].includes(state!.player.status)) return null;
-  const name = state!.devices?.find(device => device.id === others[0])?.name ?? "another device";
-  return { deviceId: others[0]!, name: ids.length > 1 ? `${name} +${ids.length - 1}` : name };
+  const first = state!.devices?.find(device => device.id === others[0])?.name ?? "another device";
+  const here = others.length < ids.length;
+  const name = here ? `here +${others.length}` : ids.length > 1 ? `${first} +${ids.length - 1}` : first;
+  return { deviceId: others[0]!, here, name, label: here ? `Playing ${name}` : `Playing on ${name}` };
 }
 
 /** Whether this Device shows the looked-at Playback's picture. */

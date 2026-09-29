@@ -97,7 +97,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   const renderer = playingElsewhere(state);
   // Before pairing nothing plays here yet: the button names the Couch this browser is pairing with (#644 ticket 12).
   const unpaired = !credentials || !!gate?.pairingRequired;
-  const label = unpaired ? name : renderer ? `Playing on ${renderer.name}` : "Playing here";
+  const label = unpaired ? name : renderer?.label ?? "Playing here";
   const choose = (value: string) => {
     const next = destinationOrigin(value);
     if (!next) { setAddressError("Enter just the address, like 192.168.1.10:4100."); return; }
@@ -108,7 +108,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     <PopoverTrigger asChild>
       <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11" aria-label={`${label}: ${status}`}>
         <StatusDot connected={connected} />
-        <span className="max-w-48 truncate max-sm:max-w-32">{renderer && !unpaired ? <><span className="max-sm:sr-only">Playing on </span>{renderer.name}</> : label}</span>
+        <span className="max-w-48 truncate max-sm:max-w-32">{renderer && !renderer.here && !unpaired ? <><span className="max-sm:sr-only">Playing on </span>{renderer.name}</> : label}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="max-h-(--radix-popover-content-available-height) w-96 gap-4 overflow-y-auto" onCloseAutoFocus={event => { if (forgetting) event.preventDefault(); }}>
