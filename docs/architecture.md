@@ -35,6 +35,15 @@ WebVTT from memory. A browser that needs a gesture before sound plays the pictur
 muted and shows "Tap to hear". In the app, Main caps googlevideo's open-ended
 `Range` requests at 10 MB, because YouTube sends those at about playback speed.
 
+When a Device can't fetch a stream itself because of its Origin, CORS or headers,
+Core relays it (Pass-through, `src/server/pass-through.ts`). At Play, Core asks
+each stream once with the Device's Origin and User-Agent and hands out a relay
+address only for what fails there but works for Core: Twitch's playlists answer
+403 to a browser on a LAN origin. Relayed HLS playlists are rewritten so nested
+playlists go through Core and segments stay direct when the Device may read
+them; other bytes stream through with their `Range`. Nothing is transcoded.
+Relay addresses are signed for the current Playback only.
+
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core
 (`src/server/mpv.ts`, JSON IPC). ffmpeg reads the channel's codecs when it
