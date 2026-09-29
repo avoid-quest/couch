@@ -184,7 +184,7 @@ healthy() {
         sleep 2
         as_tv systemctl --user is-active --quiet couch-tv.service || { problem='couch-tv.service is not running.'; continue; }
         pid=$(as_tv systemctl --user show couch-tv.service --property=MainPID --value)
-        as_tv env ELECTRON_RUN_AS_NODE=1 /opt/Couch/couch /usr/share/couch/tv/check-health.js "$pid" "$data" > /dev/null 2> "$work/health.txt" \
+        as_tv env ELECTRON_RUN_AS_NODE=1 /usr/bin/couch /usr/share/couch/tv/check-health.js "$pid" "$data" > /dev/null 2> "$work/health.txt" \
             && return 0
         problem=$(grep -m1 -E '^[A-Za-z]*Error: ' "$work/health.txt" || echo 'The health check failed.')
     done

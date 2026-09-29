@@ -1,9 +1,10 @@
-// Run as couch-tv with the app's own Node: ELECTRON_RUN_AS_NODE=1 /opt/Couch/couch check-health.js <pid> <data dir>.
+// Run as couch-tv with the app's own Node: ELECTRON_RUN_AS_NODE=1 /usr/bin/couch check-health.js <pid> <data dir>.
 // Read-only setup check; never expose tokens.
 import { readFile, readdir, readlink, stat } from "node:fs/promises";
 import process from "node:process";
 const [pid, data] = process.argv.slice(2);
-const app = "/opt/Couch/couch";
+// The installed Couch running this check: /opt/Couch/couch, or /opt/Couch Preview/couch for a preview.
+const app = process.execPath;
 if (!/^[1-9][0-9]*$/.test(pid ?? "")) throw new Error("The TV service has no Couch process.");
 if ((await stat(`/proc/${pid}`)).uid !== (await stat("/proc/self")).uid || await readlink(`/proc/${pid}/exe`) !== app) throw new Error("The service is not running the installed Couch.");
 const children = (await Promise.all((await readdir(`/proc/${pid}/task`)).map(thread => readFile(`/proc/${pid}/task/${thread}/children`, "utf8").catch(() => "")))).join(" ").trim().split(/\s+/);
