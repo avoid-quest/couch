@@ -9,7 +9,7 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
-import { deviceId, initializeDeviceIdentity, localDeviceName, saveLocalDeviceName } from "@/session/device-id";
+import { deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
 import { defaultDeviceName } from "../../../shared/devices";
 import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
@@ -35,7 +35,9 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!couchApp) return;
     let disposed = false;
-    void initializeDeviceIdentity().then(() => couchApp!.mode()).then(value => { if (!disposed) setChoice(value); })
+    // The name loads beside the mode; a couch.sqlite failure must not keep the app from starting.
+    void loadLocalDeviceName().catch(() => {});
+    void couchApp.mode().then(value => { if (!disposed) setChoice(value); })
       .catch(reason => { if (!disposed) setError(message(reason)); })
       .finally(() => { if (!disposed) setPending(false); });
     return () => { disposed = true; };
@@ -212,12 +214,11 @@ export function useLocalSetupPending(credentials: Credentials | null) {
 export function LocalSharingPrompt({ credentials }: { credentials: Credentials | null }) {
   const device = usePlaybackDevice();
   const pending = useLocalSetupPending(credentials);
-  const savedName = localDeviceName();
-  const [name, setName] = useState(savedName ?? "");
+  const savedName = useLocalDeviceName();
+  const [name, setName] = useState("");
   const sharing = useMutation({
     mutationFn: async (enabled: boolean) => {
-      const value = savedName ?? (name.trim() || defaultDeviceName(deviceId()));
-      await saveLocalDeviceName(value);
+      if (!savedName) await saveLocalDeviceName(name.trim() || defaultDeviceName(deviceId()));
       await apiSend(credentials!, "/api/settings/sharing", { enabled }, "POST", 10_000);
       await device!.completeLocalSetup();
     },

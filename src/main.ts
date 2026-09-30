@@ -67,6 +67,6 @@ process.on("SIGTERM", close);
 app?.on("message", ({ data }) => {
   if (data.type === "display") nativeDisplay.receive(data);
   else if (data.type === "updates") nativeUpdates.receive(data);
-  else if (data.type === "identity-changed") hub.refreshDeviceIdentity();
+  else if (data.type === "renamed") hub.renamed();
   else if (data.type === "shutdown") void close();
 });

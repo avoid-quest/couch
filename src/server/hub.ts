@@ -93,9 +93,9 @@ export async function createHub(options: HubOptions) {
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
-  // Synced sound (#644 ticket 10). Admits the app window's Device and, while remotes are allowed, paired ones.
+  // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
   const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
-    admit: id => id === store.hostDevice()?.id || !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast() });
+    admit: (id, loopback) => id === store.hostDevice()?.id ? loopback : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast() });
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Listener>> | undefined;
   let lanError: string | null = null;
@@ -1138,5 +1138,5 @@ export async function createHub(options: HubOptions) {
     if (failed?.status === "rejected") throw failed.reason;
   })();
 
-  return { server, pairingCode, urls, origin, close, refreshDeviceIdentity: () => invalidate("devices") };
+  return { server, pairingCode, urls, origin, close, renamed: () => invalidate("devices") };
 }

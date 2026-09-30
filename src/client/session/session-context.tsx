@@ -13,7 +13,7 @@ import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
-import { announcePlay, deviceId, initializeDeviceIdentity, saveLocalDeviceName, useLocalDeviceName } from "./device-id";
+import { announcePlay, deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "./device-id";
 import { apiSend } from "../api/client";
 
 const tokenKey = "couch.remote-token";
@@ -109,8 +109,9 @@ export function SessionGate({ children }: PropsWithChildren) {
   const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
   useEffect(() => {
     if (!connected || !credentials || !ownName) return;
-    // A hosted server and its native device read the same installation name.
-    if (localHost) void initializeDeviceIdentity().catch(reason => setError(errorText(reason)));
+    // The host's name is this app's installation name: reread it after an administrator renames it.
+    // Elsewhere an unnamed device adopts its pairing name; a named one gives the Couch its name.
+    if (localHost) void loadLocalDeviceName().catch(reason => setError(errorText(reason)));
     else if (!localName) void saveLocalDeviceName(ownName).catch(reason => setError(errorText(reason)));
     else if (localName !== ownName) void apiSend(credentials, `/api/devices/${deviceId()}/name`, { name: localName }).catch(reason => setError(errorText(reason)));
   }, [connected, credentials, ownName, localName, localHost]);

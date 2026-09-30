@@ -1,6 +1,5 @@
 import type { InterfaceSize } from "./appearance";
 import type { ConnectionInfo } from "./protocol";
-import type { DeviceIdentityUpdate, LocalDeviceIdentity } from "./device-identity";
 
 // The Couch app's preload (app/preload.ts) gives its window this bridge to Main (app/main.ts).
 // Full mode ("local") hosts Couch on this computer; Client mode ("remote") shows another Couch.
@@ -32,7 +31,8 @@ export type UpdateOutcome = {
 };
 export type CouchApp = {
   tvPresentation: boolean;
-  deviceIdentity?(update?: DeviceIdentityUpdate): Promise<LocalDeviceIdentity>;
+  /** Reads, or saves, this computer's name; null until it has one. Older apps lack it. */
+  deviceName?(name?: string): Promise<string | null>;
   mode(): Promise<AppMode>;
   // null: the window is loading the chosen Couch.
   choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;

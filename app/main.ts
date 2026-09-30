@@ -11,8 +11,7 @@ import type { DisplayAction, DisplayState } from "../src/shared/display";
 import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
-import { createDeviceIdentity } from "./device-identity";
-import type { DeviceIdentityUpdate } from "../src/shared/device-identity";
+import { readDeviceName, saveDeviceName } from "./device-name";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -43,7 +42,6 @@ const macChrome = process.platform === "darwin" && !tv;
 const readJson = (path: string) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; } };
 const readText = (path: string) => { try { return readFileSync(path, "utf8").trim() || null; } catch { return null; } };
 const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
-const deviceIdentity = createDeviceIdentity(join(dataDir, "couch.sqlite"));
 
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
 // pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
@@ -321,14 +319,12 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
-handle("device-identity", (_event, update) => {
-  if (update !== undefined && (!update || typeof update !== "object" || Array.isArray(update)
-    || Object.keys(update).some(key => !["key", "name", "sharing"].includes(key)))) throw new Error("Invalid device identity.");
-  const value = update as DeviceIdentityUpdate | undefined;
-  if (value?.key !== undefined && (typeof value.key !== "string" || !/^[\w-]{43}$/.test(value.key))) throw new Error("Invalid device identity.");
-  const identity = deviceIdentity(value);
-  if ((value?.name !== undefined || value?.sharing !== undefined) && core && !core.stopping) core.child.postMessage({ type: "identity-changed" } satisfies AppMessage);
-  return identity;
+// Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.
+handle("device-name", (_event, name) => {
+  if (name === undefined) return readDeviceName(join(dataDir, "couch.sqlite"));
+  const saved = saveDeviceName(join(dataDir, "couch.sqlite"), name);
+  if (core && !core.stopping) core.child.postMessage({ type: "renamed" } satisfies AppMessage);
+  return saved;
 });
 handle("choose", async (event, mode, address, confirm) => {
   if (mode === "remote") {

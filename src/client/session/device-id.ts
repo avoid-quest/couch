@@ -2,92 +2,56 @@ import { loadSendspinClientIdentity, type SendspinStorage } from "@sendspin/send
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import type { SessionState } from "../../shared/protocol";
-import { defaultDeviceSharing, isDeviceSharing, normalizeDeviceName, type DeviceSharing, type LocalDeviceIdentity } from "../../shared/device-identity";
+import { normalizeDeviceName } from "../../shared/devices";
 import { couchApp } from "./native-context";
 
 let id: string | undefined;
-let nativeIdentity: LocalDeviceIdentity | null = null;
+// This device's one name, reused with every Couch: the Couch app's installation name, or this browser's storage.
 const nameKey = "couch.device-name";
-const sharingKey = "couch.device-sharing";
-const changed = "couch-device-identity";
+const changed = "couch-device-name";
+// Full or blocked storage keeps values for this tab, so saving and pairing still work.
 const memory = new Map<string, string>();
 const read = (key: string) => { if (memory.has(key)) return memory.get(key)!; try { return localStorage.getItem(key); } catch { return null; } };
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); memory.delete(key); } catch { memory.set(key, value); } };
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
-let name = validName(read(nameKey));
-const readSharing = (): DeviceSharing => {
-  try { const value: unknown = JSON.parse(read(sharingKey) ?? "null"); return isDeviceSharing(value) ? value : defaultDeviceSharing; }
-  catch { return defaultDeviceSharing; }
-};
-let sharing = readSharing();
+let name = couchApp?.deviceName ? null : validName(read(nameKey));
 
-// Deliberate browser switches carry only the public name, never the Sendspin key.
-if (!couchApp && typeof location !== "undefined" && new URLSearchParams(location.hash.slice(1)).has("device-name")) {
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  const carried = validName(fragment.get("device-name"));
-  if (carried) { name = carried; write(nameKey, carried); }
-  fragment.delete("device-name");
-  history.replaceState(history.state, "", location.pathname + location.search + (fragment.size ? `#${fragment}` : ""));
-}
-
-const storage: SendspinStorage = {
-  getItem: key => key === "sendspin-identity-sk" && nativeIdentity ? nativeIdentity.key : read(key),
-  setItem: (key, value) => { if (key !== "sendspin-identity-sk" || !nativeIdentity) write(key, value); },
-};
-/** The SDK and Couch use the same storage, including when browser storage is blocked. */
+const storage: SendspinStorage = { getItem: read, setItem: write };
+/** The SDK and Couch use the same storage, including when browser storage is unavailable. */
 export const deviceStorage = () => storage;
 
-export async function initializeDeviceIdentity() {
-  if (!couchApp?.deviceIdentity) return;
-  const previousName = name, previousSharing = sharing;
-  const key = read("sendspin-identity-sk");
-  nativeIdentity = await couchApp.deviceIdentity(key && /^[\w-]{43}$/.test(key) ? { key } : {});
-  if (!nativeIdentity.name && name) nativeIdentity = await couchApp.deviceIdentity({ name });
-  name = nativeIdentity.name;
-  sharing = nativeIdentity.sharing;
-  id = undefined;
-  if (name !== previousName || JSON.stringify(sharing) !== JSON.stringify(previousSharing)) window.dispatchEvent(new Event(changed));
+const announce = (next: string | null) => { if (next !== name) { name = next; window.dispatchEvent(new Event(changed)); } };
+/** Reads the Couch app's name; older apps without the bridge keep browser storage. */
+export async function loadLocalDeviceName() {
+  if (couchApp?.deviceName) announce(await couchApp.deviceName());
 }
 
 export const localDeviceName = () => name;
-export const localDeviceSharing = () => sharing;
-export const deviceNameHash = () => name ? `#device-name=${encodeURIComponent(name)}` : "";
 
 export async function saveLocalDeviceName(value: string) {
   const next = normalizeDeviceName(value);
-  if (couchApp?.deviceIdentity) nativeIdentity = await couchApp.deviceIdentity({ name: next });
+  if (couchApp?.deviceName) await couchApp.deviceName(next);
   else write(nameKey, next);
-  name = next;
-  window.dispatchEvent(new Event(changed));
+  announce(next);
   return next;
 }
 
-export async function saveLocalDeviceSharing(value: DeviceSharing) {
-  if (!isDeviceSharing(value)) throw new Error("Choose which features to share.");
-  if (couchApp?.deviceIdentity) nativeIdentity = await couchApp.deviceIdentity({ sharing: value });
-  else write(sharingKey, JSON.stringify(value));
-  sharing = value;
-  window.dispatchEvent(new Event(changed));
-}
-
-export const subscribeDeviceIdentity = (listener: () => void) => {
+export const subscribeDeviceName = (listener: () => void) => {
   const update = (event: StorageEvent) => {
-    if (couchApp?.deviceIdentity) return;
+    if (couchApp?.deviceName || event.key !== nameKey && event.key !== null) return;
     if (event.key === null) memory.clear(); else memory.delete(event.key);
-    if (event.key === nameKey || event.key === null) name = validName(read(nameKey));
-    if (event.key === sharingKey || event.key === null) sharing = readSharing();
-    if ([nameKey, sharingKey, null].includes(event.key)) listener();
+    name = validName(read(nameKey));
+    listener();
   };
   window.addEventListener("storage", update);
   window.addEventListener(changed, listener);
   return () => { window.removeEventListener("storage", update); window.removeEventListener(changed, listener); };
 };
-export const useLocalDeviceName = () => useSyncExternalStore(subscribeDeviceIdentity, localDeviceName, () => null);
-export const useLocalDeviceSharing = () => useSyncExternalStore(subscribeDeviceIdentity, localDeviceSharing, () => defaultDeviceSharing);
+export const useLocalDeviceName = () => useSyncExternalStore(subscribeDeviceName, localDeviceName, () => null);
 
 /**
  * This Device's one ID: the X25519 key the Sendspin JS SDK stores for this
- * origin (or this native app), which is also its Sendspin client_id.
+ * origin, which is also its Sendspin client_id. Tabs on one origin share it.
  * The SDK generates it with @noble/curves, so plain-HTTP LAN pages have it too.
  */
 export function deviceId() {

@@ -12,7 +12,8 @@ import { defaultDeviceName } from "../../../shared/devices";
 
 export async function requestPairing(origin: string, code: string, name: string) {
   const id = deviceId();
-  const value = localDeviceName() ?? (name || defaultDeviceName(id));
+  // Saved before pairing, so a failed save never drops an issued token.
+  const value = localDeviceName() ?? await saveLocalDeviceName(name || defaultDeviceName(id));
   const response = await fetch(`${origin}/api/pair`, {
     method: "POST",
     signal: AbortSignal.timeout(8_000),
@@ -21,7 +22,6 @@ export async function requestPairing(origin: string, code: string, name: string)
   }).catch(() => { throw new Error("Couldn't reach Couch. Check you're on the same Wi-Fi."); });
   const result = await response.json() as { token?: string; installationId?: string; error?: string };
   if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "Code expired. Enter the code shown on Couch now." : result.error || "Couldn't pair.");
-  await saveLocalDeviceName(value);
   return { origin, token: result.token, installationId: result.installationId };
 }
 

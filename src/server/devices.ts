@@ -1,8 +1,7 @@
 import { randomInt } from "node:crypto";
-import type { Device, DeviceIdentity } from "../shared/devices";
+import { normalizeDeviceName, type Device, type DeviceIdentity } from "../shared/devices";
 import type { Store } from "./store";
 import { ADMIN_ONLY } from "./messages";
-import { normalizeDeviceName } from "../shared/device-identity";
 
 export class ControllerError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -87,11 +86,11 @@ export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCo
         const target = /^\/api\/devices\/([\w-]{1,80})(?:\/(name|role))?$/.exec(path);
         if (target && !["claim", "claim-code"].includes(target[1]!)) {
           const id = target[1]!;
-          // Each device owns its name; administrators may also name the server.
+          // A device names only itself (administrators name the host through /api/settings); admins manage the rest.
           const authorize = () => {
             const current = requireIdentity();
-            if (target[2] === "name" && current.device?.id !== id && store.hostDevice()?.id !== id) throw new ControllerError("Change this name on that device.", 403);
-            if (target[2] !== "name" || current.device?.id !== id) administrator();
+            if (target[2] !== "name") administrator();
+            else if (current.device?.id !== id) throw new ControllerError("Change this name on that device.", 403);
           };
           authorize();
           if (!target[2]) {

@@ -3,102 +3,59 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadSendspinClientIdentity } from "@sendspin/sendspin-js";
-import { createDeviceIdentity } from "../app/device-identity";
+import { readDeviceName, saveDeviceName } from "../app/device-name";
 import { createDevices } from "../src/server/devices";
 import { openStore } from "../src/server/store";
-import { Database } from "../src/server/sqlite";
 
-test("native identity owns the hosted name and survives Client mode without Core", () => {
+test("the app and the Couch it hosts share one installation name, with or without Core", () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-identity-"));
   const path = join(directory, "couch.sqlite");
-  const main = createDeviceIdentity(path), anotherWindow = createDeviceIdentity(path);
-  const origin = new Map<string, string>();
-  const legacy = loadSendspinClientIdentity({ getItem: key => origin.get(key) ?? null, setItem: (key, value) => { origin.set(key, value); } });
   let store: ReturnType<typeof openStore> | undefined;
   try {
-    const first = main({ key: origin.get("sendspin-identity-sk") });
-    assert.equal(first.name, null);
-    assert.deepEqual(first.sharing, { audio: false, video: false, administration: false });
-    assert.equal(loadSendspinClientIdentity({ getItem: key => key === "sendspin-identity-sk" ? first.key : null, setItem: () => {} }).clientId, legacy.clientId);
+    // Client mode before Core ever ran: Main reads nothing, then creates the name.
+    assert.equal(readDeviceName(path), null);
+    assert.equal(saveDeviceName(path, "  Laptop  "), "Laptop");
+    assert.equal(readDeviceName(path), "Laptop");
     store = openStore(path);
-    store.identify(null, legacy.clientId);
-    assert.equal(store.installationName(), "Couch");
-    assert.equal(store.hostDevice()?.name, "Couch");
-    main({ name: "  Living room  " });
-    assert.equal(anotherWindow().name, "Living room");
-    assert.equal(createDeviceIdentity(path)({ key: "x".repeat(43) }).key, first.key);
-    assert.equal(store.installationName(), "Living room");
+    assert.equal(store.installationName(), "Laptop");
+    store.identify(null, "h".repeat(43));
+    assert.equal(store.hostDevice()?.name, "Laptop");
+    saveDeviceName(path, "Living room");
     assert.equal(store.hostDevice()?.name, "Living room");
-    store.renameDevice(legacy.clientId, "Renamed by an administrator");
-    assert.equal(main().name, "Renamed by an administrator");
-    anotherWindow({ sharing: { audio: true, video: false, administration: false } });
-    assert.equal(main().name, "Renamed by an administrator");
-    main({ name: "Office" });
-    assert.equal(store.installationName(), "Office");
-    assert.equal(store.hostDevice()?.name, "Office");
-    assert.deepEqual(main().sharing, { audio: true, video: false, administration: false });
-    assert.throws(() => main({ name: "\n" }));
-    assert.equal(store.installationName(), "Office");
-    store.close(); store = undefined;
-    main({ name: "Bedroom" });
-    assert.equal(anotherWindow().name, "Bedroom");
+    store.renameDevice("h".repeat(43), "Renamed by an administrator");
+    assert.equal(readDeviceName(path), "Renamed by an administrator");
+    assert.throws(() => saveDeviceName(path, "\n"));
+    // "Couch", the name Core seeds, counts as unnamed so a pairing name is not replaced by it.
+    store.renameInstallation("Couch");
+    assert.equal(readDeviceName(path), null);
   } finally { store?.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("released headless names survive native setup, and corrupt SDK keys recover with sharing off", () => {
-  const directory = mkdtempSync(join(tmpdir(), "couch-device-identity-"));
-  const path = join(directory, "couch.sqlite");
-  const store = openStore(path, true);
-  try {
-    store.renameInstallation("Existing Couch");
-    const identity = createDeviceIdentity(path);
-    assert.equal(identity().name, "Existing Couch");
-    const db = new Database(path);
-    try { db.query("UPDATE installation SET deviceKey = ?, deviceSharing = ? WHERE id = 1").run("broken", JSON.stringify({ audio: true })); }
-    finally { db.close(); }
-    const recovered = identity();
-    assert.equal(recovered.name, "Existing Couch");
-    assert.deepEqual(recovered.sharing, { audio: false, video: false, administration: false });
-    assert.match(loadSendspinClientIdentity({ getItem: key => key === "sendspin-identity-sk" ? recovered.key : null, setItem: () => {} }).clientId, /^[\w-]{43}$/);
-  } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
-});
-
-test("existing pairing survives a native key migration, and clients own their name", async () => {
+test("clients own their name, and administrators name only the host", async () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-identity-"));
   const store = openStore(join(directory, "couch.sqlite"), true);
   try {
     const adminToken = store.pair("a".repeat(43), "Admin");
     const clientToken = store.pair("b".repeat(43), "Laptop");
+    // An existing pairing survives a key change with its name.
     assert.equal(store.identify(clientToken, "c".repeat(43)), true);
-    assert.equal(store.deviceForToken(clientToken)?.id, "c".repeat(43));
     assert.equal(store.deviceForToken(clientToken)?.name, "Laptop");
     const devices = createDevices({ store, onChange: () => {} });
-    const sendName = (path: string, name: string, token: string) => devices.handle(new Request(`http://localhost${path}`, {
+    const send = (path: string, name: string, token: string) => devices.handle(new Request(`http://localhost${path}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
     }), () => {
       const device = store.deviceForToken(token)!;
       return { device, authority: device.role === "administrator" ? "administrator" : "controller", claimAvailable: false };
     });
-    const rename = (id: string, name: string, token: string) => sendName(`/api/devices/${id}/name`, name, token);
-    const renameServer = (name: string, token: string) => sendName("/api/settings", name, token);
-    assert.equal(store.hostDevice(), null);
-    assert.equal((await renameServer("Denied", clientToken)).status, 403);
-    assert.equal(store.installationName(), "Couch");
-    assert.equal((await renameServer("Headless Couch", adminToken)).status, 200);
+    assert.equal((await send("/api/settings", "Denied", clientToken)).status, 403);
+    assert.equal((await send("/api/settings", "Headless Couch", adminToken)).status, 200);
     assert.equal(store.installationName(), "Headless Couch");
-    assert.equal(store.hostDevice(), null);
     store.identify(null, "h".repeat(43));
     assert.equal(store.hostDevice()?.name, "Headless Couch");
-    assert.equal((await rename("c".repeat(43), "Per-server alias", adminToken)).status, 403);
-    assert.equal(store.deviceForToken(clientToken)?.name, "Laptop");
-    assert.equal((await rename("c".repeat(43), "Office laptop", clientToken)).status, 200);
+    assert.equal((await send(`/api/devices/${"c".repeat(43)}/name`, "Per-server alias", adminToken)).status, 403);
+    assert.equal((await send(`/api/devices/${"h".repeat(43)}/name`, "Second route", adminToken)).status, 403);
+    assert.equal((await send(`/api/devices/${"c".repeat(43)}/name`, "Office laptop", clientToken)).status, 200);
     assert.equal(store.deviceForToken(clientToken)?.name, "Office laptop");
-    assert.equal((await rename("h".repeat(43), "Living room", adminToken)).status, 200);
-    assert.equal(store.installationName(), "Living room");
-    assert.equal((await renameServer("Kitchen", adminToken)).status, 200);
-    assert.equal(store.hostDevice()?.name, "Kitchen");
-    assert.equal((await renameServer("Denied", clientToken)).status, 403);
-    assert.equal(createDeviceIdentity(join(directory, "couch.sqlite"))().name, "Kitchen");
+    assert.equal(readDeviceName(join(directory, "couch.sqlite")), "Headless Couch");
   } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
 });
