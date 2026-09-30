@@ -554,12 +554,12 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       state.player = { ...state.player, status: "paused", buffering: false, error: message };
       broadcast();
     },
-    // Send to (#644 ticket 9): `switchOver` hands the outputs to another Device, and the current
+    // Solo (#644 ticket 9): `switchOver` hands the outputs to another Device, and the current
     // item continues there where it was, with its pause state, speed, tracks and delays.
     async move(switchOver: () => void, authorize = () => {}) {
       assertAdmitted();
       const entry = state.queue.find(item => item.id === state.currentEntryId);
-      if (entry && state.player.status === "loading" && !started()) throw new Error("Wait for this item to start, then send it.");
+      if (entry && state.player.status === "loading" && !started()) throw new Error("Wait for this item to start, then play it there.");
       if (!entry || !loaded || !started() || !options.resolveSource) { switchOver(); broadcast(); return; }
       await reopen(entry, authorize, switchOver);
     },

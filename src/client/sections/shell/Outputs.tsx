@@ -12,8 +12,8 @@ import { isTvPresentation } from "@/session/native-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
-// Devices, Look at, Send to and the Speakers panel (#644 ticket 9). Every window looks at one
-// Playback and controls it; looking never moves its outputs.
+// Devices, Send to and the Speakers panel (#644 ticket 9). Every window controls one Device and
+// the Playback it serves; controlling never moves outputs.
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
 
 const statusText: Partial<Record<PlaybackSummary["status"], string>> = { loading: "Loading", playing: "Playing", paused: "Paused", ended: "Finished", error: "Can't play" };
@@ -22,33 +22,28 @@ const describe = (playback: PlaybackSummary) => [playback.title ?? "Up next", st
 const here = (device: DeviceSummary) => device.id === deviceId();
 // Online Devices first; offline ones stay listed, and skipped.
 const byPresence = (devices: DeviceSummary[] = []) => [...devices].sort((a, b) => Number(b.online) - Number(a.online));
-// An offline Device that serves no Playback can't be looked at or sent to; Settings → Devices still lists it (#644 ticket 12).
+// An offline Device that serves no Playback is left out; Settings → Devices still lists it (#644 ticket 12).
 const present = (state: ClientSessionState) => byPresence(state.devices).filter(device => device.online || served(state, device));
 
-/** Every Device and what it plays. Choosing one looks at its Playback. */
+/** Every Device and what it plays. Choosing one controls it, idle ones too. */
 export function DeviceList({ state, run }: Props) {
-  const waiting = state.playbacks?.filter(playback => !playback.outputs.length) ?? [];
   const label = (name: string, detail: string) => <span className="grid min-w-0"><span className="truncate">{name}</span><span className="truncate text-xs text-muted-foreground">{detail}</span></span>;
-  // An idle Device has nothing to look at: a plain row, not a greyed-out button (#644 ticket 12).
-  const row = (key: string, playback: PlaybackSummary | undefined, name: string, detail: string) => !playback ? <div key={key} className="px-2.5 py-2 text-sm">{label(name, detail)}</div>
-    : <Button key={key} variant="ghost" className="h-auto w-full justify-between gap-3 rounded-none px-2.5 py-2 text-left font-normal" aria-pressed={playback.id === state.playback} onClick={() => void run({ type: "look", playback: playback.id })}>
-      {label(name, detail)}
-      {playback.id === state.playback && <Check aria-hidden="true" />}
-    </Button>;
   if (!state.devices?.length) return null;
   return <section aria-labelledby="devices-title" className="grid gap-1 border-t pt-3 first:border-t-0 first:pt-0">
     <h3 id="devices-title" className="text-sm font-medium">Devices</h3>
     <div className="-mx-2.5 grid">
       {present(state).map(device => {
-        const playback = served(state, device);
-        return row(device.id, playback, `${device.name}${here(device) ? " · Here" : ""}`, !device.online ? "Offline" : playback ? describe(playback) : "Idle");
+        const playback = served(state, device), chosen = device.id === state.controlling;
+        return <Button key={device.id} variant="ghost" className="h-auto w-full justify-between gap-3 rounded-none px-2.5 py-2 text-left font-normal" aria-pressed={chosen} onClick={() => void run({ type: "control", deviceId: device.id })}>
+          {label(`${device.name}${here(device) ? " · Here" : ""}`, !device.online ? "Offline" : playback ? describe(playback) : "Idle")}
+          {chosen && <Check aria-hidden="true" />}
+        </Button>;
       })}
-      {waiting.map(playback => row(playback.id, playback, playback.title ?? "Up next", "Waiting for a Device"))}
     </div>
   </section>;
 }
 
-/** Send to another Device: it takes over the looked-at Playback's outputs. */
+/** Solo on another Device: only it keeps the controlled Playback. */
 export function SendTo({ state, run }: Props) {
   const outputs = state.outputs ?? [];
   // A speaker of a synced Playback can take it over too; only the one Device playing it alone is left out.
@@ -59,7 +54,7 @@ export function SendTo({ state, run }: Props) {
     <DropdownMenuContent align="end" className="min-w-56">
       {devices.map(device => {
         const other = served(state, device);
-        return <DropdownMenuItem key={device.id} onSelect={() => void run({ type: "sendTo", deviceId: device.id })}>
+        return <DropdownMenuItem key={device.id} onSelect={() => void run({ type: "solo", deviceId: device.id })}>
           <span className="min-w-0 flex-1 truncate">{device.name}</span>
           <span className="shrink-0 text-xs text-muted-foreground">{here(device) ? "Here" : other ? statusText[other.status] ?? "Busy" : ""}</span>
         </DropdownMenuItem>;
