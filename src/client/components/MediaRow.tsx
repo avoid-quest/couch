@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemMedia } from "@/components/ui/item";
 import { cn } from "@/lib/utils";
+import { usePlayOn } from "./PlayOn";
 
 /** A divided list of MediaRow items. */
 export function MediaList({ className, ...props }: ComponentProps<"ul">) {
@@ -33,6 +34,8 @@ type Props = {
  * verb and quiet secondary actions. Used by Home, Find and Saved; Up next has its own compact rows.
  */
 export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, compact = false, className, ...props }: Props) {
+  const { on } = usePlayOn();
+  const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
   const body = <>
     <span className="line-clamp-2 w-full text-base font-medium">{title}</span>
     {meta && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
@@ -43,7 +46,7 @@ export function MediaRow({ art, artFit = "cover", title, meta, children, descrip
     <Item asChild size="xs" className={cn("grid gap-y-1 rounded-none border-0 border-b border-border px-0 py-2", compact ? "gap-x-3 grid-cols-[3rem_minmax(0,1fr)_auto]" : art ? "gap-x-4 grid-cols-[5rem_minmax(0,1fr)] @md:grid-cols-[7rem_minmax(0,1fr)] @3xl:grid-cols-[7rem_minmax(0,1fr)_auto]" : "gap-x-4 grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_auto]", className)}>
       <li data-nav-row {...props}>
         {art && <ItemMedia className={cn("w-full self-center overflow-hidden bg-muted *:size-full *:rounded-none", compact ? "aspect-square" : "aspect-video", artFit === "contain" ? "[&_img]:object-contain" : "[&_img]:object-cover")}>{art}</ItemMedia>}
-        {primary ? <Button asChild={!!primary.href} variant="ghost" data-play aria-label={`${primary.label} ${title}`} disabled={primary.disabled} onClick={event => {
+        {primary ? <Button asChild={!!primary.href} variant="ghost" data-play aria-label={label} title={label !== `${primary.label} ${title}` ? label : undefined} disabled={primary.disabled} onClick={event => {
           if (primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
           if (primary.href) event.preventDefault();
           primary.onClick();

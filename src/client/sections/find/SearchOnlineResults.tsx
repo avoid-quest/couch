@@ -21,9 +21,10 @@ export type SearchHit = SearchFacet & {
   collection?: "Channel" | "List";
   thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
-  actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode }>;
+  /** playOn makes the action "Play on", a menu of the online Devices. */
+  actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void }>;
 };
-export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playAll?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
+export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playAll?: () => void; playOn?: (deviceId: string) => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
 export const lengthOf = (seconds: number): SearchLength => seconds < 600 ? "Under 10 min" : seconds <= 3600 ? "10–60 min" : "Over 1 hr";
 export function matchesFacet(item: SearchFacet, kind?: SearchKind, length?: SearchLength) {
@@ -104,9 +105,9 @@ function OnlineResults(props: Props) {
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setBusy(false); }
   }
-  function play(item: ProviderItem, playNow: boolean, placement?: "next") {
+  function play(item: ProviderItem, playNow: boolean, placement?: "next", deviceId?: string) {
     void action(async signal => {
-      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}) });
+      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}), ...(deviceId ? { deviceId } : {}) });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
     });
@@ -137,6 +138,7 @@ function OnlineResults(props: Props) {
         primary: { label: !props.paged && item.kind === "media" ? "Play" : "Open", href: props.paged || item.kind !== "media" ? collectionLocation(item) : undefined, disabled: !props.paged && item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => !props.paged && item.kind === "media" ? play(item, true) : props.onOpenCollection?.(item) },
         actions: item.kind === "media" ? [
           ...(props.paged ? [{ label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(item, true) }] : []),
+          { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(item, true, undefined, deviceId) },
           { label: "Play next", disabled: busy || !props.onCommand, run: () => play(item, false, "next") },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(item, false) },
           saveAction,
@@ -155,10 +157,10 @@ function OnlineResults(props: Props) {
       subtitle: canonical.subtitle ?? known.find(item => item.subtitle)?.subtitle,
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
-    const list = (playNow: boolean) => props.onCommand && props.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality }) ?? Promise.resolve(false)) : undefined;
+    const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
     props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
       ...(props.url ? { collection: { title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected,
-        single: selected?.kind === "media", playAll: list(true), queueAll: list(false),
+        single: selected?.kind === "media", playAll: list(true), playOn: list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });

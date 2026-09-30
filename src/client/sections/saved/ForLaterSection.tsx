@@ -9,6 +9,7 @@ import { DurationBar } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { savedSourceLabel } from "@/saved-source";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
@@ -47,18 +48,20 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     mutationFn: (order: string[]) => apiSend(credentials, "/api/for-later/reorder", { order }, "POST", 10_000),
     onSettled: refresh,
   });
+  const { on, play } = usePlayOn();
   const action = useMutation({
-    mutationFn: ({ item, mode }: { item: ForLaterItem; mode: Mode }) => {
+    mutationFn: ({ item, mode, deviceId }: { item: ForLaterItem; mode: Mode; deviceId?: string }) => {
       const path = `/api/for-later/${encodeURIComponent(item.id)}`;
-      return apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
+      const send = () => apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
+      return mode === "play" ? play(send, deviceId) : send();
     },
     onSuccess: async (body, { item, mode }) => {
       if (mode !== "remove") {
-        if (body?.notice) toast(body.notice);
+        if (body && body.notice) toast(body.notice);
         return;
       }
       const text = savedNotice(item.title, false);
-      const undoToken = body?.undoToken;
+      const undoToken = body && body.undoToken;
       if (undoToken && session) session.offerUndo(text, async () => {
         await apiSend(credentials, "/api/for-later/restore", { token: undoToken }, "POST", 10_000);
         await refresh();
@@ -76,10 +79,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   const heading = useRef<HTMLHeadingElement>(null);
   const sensors = useDndSensors();
   const removing = useRemovalFocus(items.map(item => item.id), !pending, list, () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current);
-  const act = (item: ForLaterItem, mode: Mode, index: number) => {
+  const act = (item: ForLaterItem, mode: Mode, index: number, deviceId?: string) => {
     if (!connected || pending) return;
     if (mode === "remove") removing(item.id, index);
-    action.mutate({ item, mode });
+    action.mutate({ item, mode, deviceId });
   };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     const order = over && forLaterOrder(all, String(active.id), String(over.id));
@@ -100,7 +103,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             const art = <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />;
             const meta = [item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ");
             const inspect = () => details.open(itemLocation("saved", item.id));
-            const play = <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => act(item, "play", index)}>Play</Button>;
+            const playButton = <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={on(`Play ${item.title}`)} onClick={() => act(item, "play", index)}>Play</Button>;
             return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
               art={<Button variant="ghost" className="h-auto p-0 touch:h-auto" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
               artFit="contain"
@@ -109,7 +112,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
               description={item.description}
               primary={{ label: "Details", onClick: inspect }}
               actions={<>
-                {play}
+                {playButton}
+                <PlayOnMenu title={item.title} disabled={!connected || !canPlay || pending} onPlay={deviceId => act(item, "play", index, deviceId)} />
                 <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => act(item, "append", index)}>Queue</Button>
                 <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title}`} onClick={() => act(item, "remove", index)}>Remove</Button>
                 {drag.handle}

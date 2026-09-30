@@ -1,4 +1,5 @@
 import { loadSendspinClientIdentity } from "@sendspin/sendspin-js";
+import { toast } from "sonner";
 import type { SessionState } from "../../shared/protocol";
 
 let id: string | undefined;
@@ -33,3 +34,12 @@ export function playsOn(state: Outputs) {
 
 /** Whether this Device shows the looked-at Playback's picture. */
 export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output => output.deviceId === deviceId() && output.picture);
+
+/**
+ * One "Playing on {name}" toast when a play this window started lands on another Device: its
+ * picture and sound are elsewhere. A fixed id keeps a play announced twice (control, then play) one toast.
+ */
+export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
+  const name = target && target !== deviceId() && state?.devices?.find(device => device.id === target)?.name;
+  if (name) toast(`Playing on ${name}`, { id: "playing-on" });
+}
