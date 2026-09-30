@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Monitor, Speaker } from "lucide-react";
+import { Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
-import { DeviceSignal, signalOf } from "@/components/DeviceSignal";
+import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { RangeControl } from "@/components/RangeControl";
 import { cn } from "@/lib/utils";
 import { deviceId, playsOn } from "@/session/device-id";
@@ -29,19 +29,26 @@ export function WhereItPlays({ state, run }: Props) {
   const output = (id: string) => outputs.find(item => item.deviceId === id);
   // The Playback's Devices first, then the other online ones; an offline Device only while it is an output.
   const devices = (state.devices ?? []).filter(device => device.online || output(device.id)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
+  // The All fader shows the loudest in-sound Device's volume, or 0 when none is.
+  const loudest = Math.max(0, ...devices.filter(device => output(device.id)?.sound).map(device => device.volume));
   const label = `Where it plays${at ? `: ${at.name}${at.more ? ` +${at.more}` : ""}` : ""}`;
   return <Sheet>
     <SheetTrigger asChild><Button variant="ghost" className="h-11 min-w-11 max-w-56 gap-2" disabled={!state.playback} aria-label={label} title={label}>
-      <DeviceSignal {...signalOf(state, at?.deviceId ?? state.controlling ?? deviceId())} />
+      <DeviceIcon {...signalOf(state, at?.deviceId ?? state.controlling ?? deviceId())} />
       {at && <span className="flex min-w-0 gap-1 max-lg:hidden"><span className="truncate">{at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>}
     </Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] gap-4 overflow-y-auto px-(--gutter) pb-6">
-      <SheetHeader className="flex-row items-start justify-between gap-4 px-0 pr-8 pb-0">
-        <div className="grid min-w-0 gap-0.5"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="truncate">{title ?? "Nothing is playing."}</SheetDescription></div>
-        <Button variant="outline" className="shrink-0" disabled={!state.playback} onClick={() => void run({ type: "allSpeakers" })}><Speaker aria-hidden="true" />All speakers</Button>
-      </SheetHeader>
+      <SheetHeader className="gap-0.5 px-0 pr-8 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="truncate">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
       <p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a fader, then raise it to play the sound there too." : "Raise a fader to play the sound there too."} At 0 that device's sound is off.</p>
-      <div className="flex divide-x overflow-x-auto border-y">
+      <div className="flex border-y">
+      {/* All, pinned first like a console's master: it sets every online Device to one level and stores nothing. */}
+      <div className="grid w-32 shrink-0 content-start justify-items-center gap-2 border-r px-2 py-3">
+        <span aria-hidden="true" className="h-8 touch:h-11" />
+        <span className="text-xl font-medium tabular-nums">{loudest ? Math.round(loudest) : "–"}</span>
+        <div className="h-40"><RangeControl orientation="vertical" label="All volume" value={loudest} max={100} disabled={!state.playback} onCommit={level => run({ type: "allSpeakers", level })} /></div>
+        <span className="grid w-full justify-items-center gap-0.5 text-center"><span className="text-sm">All</span><span className="text-xs text-muted-foreground">Every device</span></span>
+      </div>
+      <div className="flex min-w-0 flex-1 divide-x overflow-x-auto">
         {devices.map(device => {
           const current = output(device.id);
           const sound = !!current?.sound;
@@ -53,7 +60,7 @@ export function WhereItPlays({ state, run }: Props) {
             <span className="text-xl font-medium tabular-nums">{sound ? Math.round(device.volume) : "–"}</span>
             <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} volume`} value={sound ? device.volume : 0} max={100} disabled={false} onCommit={level => run({ type: "output", deviceId: device.id, level })} /></div>
             <span className="grid w-full justify-items-center gap-0.5 text-center">
-              <span className="flex max-w-full items-center gap-1.5"><DeviceSignal {...signalOf(state, device.id)} /><span className="truncate text-sm" title={device.name}>{device.name}</span></span>
+              <span className="flex max-w-full items-center gap-1.5"><DeviceIcon {...signalOf(state, device.id)} /><span className="truncate text-sm" title={device.name}>{device.name}</span></span>
               <span className="w-full truncate text-xs text-muted-foreground" title={status}>{status}</span>
             </span>
             <div className="grid w-full grid-cols-2 gap-1">
@@ -64,13 +71,14 @@ export function WhereItPlays({ state, run }: Props) {
           </div>;
         })}
       </div>
+      </div>
     </SheetContent>
   </Sheet>;
 }
 
 /** "on {name} +N" with the named Device's signal: where the controlled Playback plays when that isn't only this Device. */
 export function PlaysOn({ state, at }: { state: ClientSessionState; at: NonNullable<ReturnType<typeof playsOn>> }) {
-  return <span className="inline-flex min-w-0 items-center gap-1.5"><DeviceSignal {...signalOf(state, at.deviceId)} /><span className="flex min-w-0 gap-1"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span></span>;
+  return <span className="inline-flex min-w-0 items-center gap-1.5"><DeviceIcon {...signalOf(state, at.deviceId)} /><span className="flex min-w-0 gap-1"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span></span>;
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up: Sendspin's

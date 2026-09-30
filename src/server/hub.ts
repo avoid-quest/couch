@@ -1023,8 +1023,13 @@ export async function createHub(options: HubOptions) {
               follow(left, action.deviceId);
               broadcast();
             } else if (action.type === "allSpeakers") {
-              // Every online Device joins its sound; a busy one leaves what it played.
-              for (const id of new Set([...sockets].map(deviceOf))) if (!target.outputs.some(output => output.deviceId === id && output.sound)) await setOutput(target, id, { sound: true }, authorize);
+              // The All fader: more than 0 sets every online Device to that volume and puts its sound in (a busy
+              // one leaves what it played); 0 takes every Device's sound out and keeps their volumes.
+              const ids = action.level ? [...new Set([...sockets].map(deviceOf))] : target.outputs.flatMap(output => output.sound ? [output.deviceId] : []);
+              for (const id of ids) {
+                if (action.level) await setSound(id, { volume: action.level }, authorize);
+                await setOutput(target, id, { sound: action.level > 0 }, authorize);
+              }
             } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
               if (action.level) await setSound(action.deviceId, { volume: action.level }, authorize);

@@ -45,8 +45,9 @@ and looks at the Playback that Device serves; controlling never moves outputs.
 Play, Queue, transport and volume act on it, and Play on a Device (`deviceId` on
 Play now, the item menus' "Play on" and "Play on {name}") starts it there and
 controls that Device, with a "Playing on {name}" toast. `solo` leaves one Device
-with the Playback's picture and sound, and `allSpeakers` adds every online
-Device's sound; a Device that joins reloads the item where it was with its pause
+with the Playback's picture and sound, and `allSpeakers` is the Mixer's All
+fader: a level above 0 sets every online Device to it with its sound in, 0 takes
+every Device's sound out, and it stores nothing; a Device that joins reloads the item where it was with its pause
 state, speed, tracks and subtitle delay, and windows controlling a Device the
 Playback left follow it. An output that goes offline
 pauses its Playback until it returns, and a Playback ends when its queue does.
