@@ -163,6 +163,7 @@ Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12, plus `gap-0.5`, `py-1.5` an
 `px-(--gutter)` (3rem, 1rem on phones). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
 The shell's content wrapper sets the one top offset below the header (`pt-6`); pages add none, and Home's first row drops its rule.
 Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones.
+Settings runs from identity (the Couch's name, then Devices) through Preferences, Media and Hardware to Updates, and opens on the first page; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last.
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
@@ -219,7 +220,7 @@ Messages:
   Offline, "with {name}", or its title); "This device" marks this window's own.
   Choosing one controls it, idle ones too. On the host with sharing on, the
   list ends with Pair a device, which opens the pairing dialog. Which Couch this window shows is
-  setup, in Settings → Connections. The Popover scrolls within the space Radix
+  setup, in Settings → Devices. The Popover scrolls within the space Radix
   reports.
 - **Where it plays** is one icon button in the band and the mini player, a
   mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be

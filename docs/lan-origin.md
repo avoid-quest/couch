@@ -36,8 +36,8 @@ around playback.
 
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
 The name must work from the TV and each phone that will use it. From the
-playback computer or a paired Administrator, open **Settings → Connections →
-Local network address**. Enter `http://couch.home` for port 80, or
+playback computer or a paired Administrator, open **Settings → Devices →
+Network address**. Enter `http://couch.home` for port 80, or
 `http://couch.home:4100` when port 80 is unavailable. A bare `couch.home` also
 uses port 80, which redirects to `https://couch.home:4100`. Couch checks DNS
 and the port 80 bind before saving, and names it in its certificate at the next

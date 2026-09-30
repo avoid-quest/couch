@@ -5,7 +5,7 @@ playback intent, authorization and persistent state. A remote never resolves
 private playback URLs or becomes another playback authority.
 
 The app runs in one of two modes, chosen on first run and in Settings →
-Connections, in its **Couch** section:
+Devices, in its **Couch** section:
 
 - **Full** (`operating-mode.json` `"local"`): Main starts Core in an Electron
   [`utilityProcess`](https://www.electronjs.org/docs/latest/api/utility-process)

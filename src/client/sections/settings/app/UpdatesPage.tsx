@@ -89,10 +89,11 @@ export function UpdatesPage() {
   const query = useQuery({ queryKey: ["updates", "targets"], enabled: administrator && !!credentials && connected, queryFn: ({ signal }) => apiJson<UpdateTarget[]>(credentials!, "/api/updates/targets", { signal }), refetchInterval: 5_000, retry: false });
   const targets = (query.data ?? []).filter(target => !couchApp?.updates || (!localHost || target.id !== "host") && target.id !== identity?.device?.id);
   const target = targets.find(target => target.id === selected) ?? targets[0];
+  // This app first, then the other Couch apps an admin updates.
   return <SettingsLayout section="updates">
+    {couchApp?.updates && <UpdateControls name="This app" tv={couchApp.tvPresentation} />}
     {targets.length > 1 && <SettingsSection><SettingsRow label="Couch app" htmlFor="update-target"><Select value={target?.id} onValueChange={setSelected}><SelectTrigger id="update-target" className="w-56"><SelectValue /></SelectTrigger><SelectContent>{targets.map(target => <SelectItem key={target.id} value={target.id}>{target.name}</SelectItem>)}</SelectContent></Select></SettingsRow></SettingsSection>}
     {target && credentials && <UpdateControls key={target.id} credentials={credentials} target={target.id} name={target.name} tv={target.tv} />}
-    {couchApp?.updates && <UpdateControls name="This app" tv={couchApp.tvPresentation} />}
     {query.error && <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription></Alert>}
     {!target && !couchApp?.updates && <p className="text-sm text-muted-foreground">{administrator ? "Waiting for a Couch app to connect…" : "Only an admin can update Couch apps."}</p>}
   </SettingsLayout>;
