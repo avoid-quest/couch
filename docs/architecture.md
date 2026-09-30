@@ -23,7 +23,8 @@ current origin's SDK key, and authenticated connections migrate their old device
 ID with the existing pairing token. The SDK's `storage` interface gives Couch
 and Sendspin the same key, including when browser storage is unavailable.
 General names this device. A remote administrator may rename the host's row
-in Devices; Main reads the same SQL name on the next snapshot. Clients send
+in Devices, including when Core runs alone without a registered host renderer;
+Main reads the same SQL name on the next snapshot. Clients send
 their saved name to each server when they reconnect. Older native bridges keep
 using origin storage until their app is updated.
 

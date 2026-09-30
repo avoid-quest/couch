@@ -73,20 +73,32 @@ test("existing pairing survives a native key migration, and clients own their na
     assert.equal(store.identify(clientToken, "c".repeat(43)), true);
     assert.equal(store.deviceForToken(clientToken)?.id, "c".repeat(43));
     assert.equal(store.deviceForToken(clientToken)?.name, "Laptop");
-    store.identify(null, "h".repeat(43));
     const devices = createDevices({ store, onChange: () => {} });
-    const rename = (id: string, name: string, token: string) => devices.handle(new Request(`http://localhost/api/devices/${id}/name`, {
+    const sendName = (path: string, name: string, token: string) => devices.handle(new Request(`http://localhost${path}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
     }), () => {
       const device = store.deviceForToken(token)!;
       return { device, authority: device.role === "administrator" ? "administrator" : "controller", claimAvailable: false };
     });
+    const rename = (id: string, name: string, token: string) => sendName(`/api/devices/${id}/name`, name, token);
+    const renameServer = (name: string, token: string) => sendName("/api/settings", name, token);
+    assert.equal(store.hostDevice(), null);
+    assert.equal((await renameServer("Denied", clientToken)).status, 403);
+    assert.equal(store.installationName(), "Couch");
+    assert.equal((await renameServer("Headless Couch", adminToken)).status, 200);
+    assert.equal(store.installationName(), "Headless Couch");
+    assert.equal(store.hostDevice(), null);
+    store.identify(null, "h".repeat(43));
+    assert.equal(store.hostDevice()?.name, "Headless Couch");
     assert.equal((await rename("c".repeat(43), "Per-server alias", adminToken)).status, 403);
     assert.equal(store.deviceForToken(clientToken)?.name, "Laptop");
     assert.equal((await rename("c".repeat(43), "Office laptop", clientToken)).status, 200);
     assert.equal(store.deviceForToken(clientToken)?.name, "Office laptop");
     assert.equal((await rename("h".repeat(43), "Living room", adminToken)).status, 200);
     assert.equal(store.installationName(), "Living room");
-    assert.equal(createDeviceIdentity(join(directory, "couch.sqlite"))().name, "Living room");
+    assert.equal((await renameServer("Kitchen", adminToken)).status, 200);
+    assert.equal(store.hostDevice()?.name, "Kitchen");
+    assert.equal((await renameServer("Denied", clientToken)).status, 403);
+    assert.equal(createDeviceIdentity(join(directory, "couch.sqlite"))().name, "Kitchen");
   } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
 });
