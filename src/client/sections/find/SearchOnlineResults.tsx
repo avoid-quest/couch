@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { collectionLocation } from "@/detail-navigation";
 import type { Action } from "../../../shared/protocol";
+import type { MediaCollection } from "../../../shared/media";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
 import { providerShape } from "../../../shared/providers";
-import { providerBrowseQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
+import { providerBrowseQuery, providerPageQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
 import { forLaterQuery } from "@/api/for-later";
 import { apiFetch } from "@/api/client";
 
@@ -12,16 +16,16 @@ export type SearchKind = "Video" | "Music" | "Live" | "Radio" | "Channels";
 export type SearchLength = "Under 10 min" | "10–60 min" | "Over 1 hr";
 export type SearchFacet = { kind: SearchKind; duration?: number | null };
 export type SearchHit = SearchFacet & {
-  id: string; source: string; title: string; meta: string; description?: string;
+  id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
   /** What an openable hit is, shown instead of a length. */
   collection?: "Channel" | "List";
   thumbnail?: string; video?: boolean;
-  primary: { label: string; disabled?: boolean; run: () => void };
+  primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode }>;
 };
-export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; playAll?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
-export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection };
+export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playAll?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
+export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
 export const lengthOf = (seconds: number): SearchLength => seconds < 600 ? "Under 10 min" : seconds <= 3600 ? "10–60 min" : "Over 1 hr";
 export function matchesFacet(item: SearchFacet, kind?: SearchKind, length?: SearchLength) {
   return (!kind || item.kind === kind) && (!length || item.duration != null && lengthOf(item.duration) === length);
@@ -47,9 +51,10 @@ export async function readSearch<T>(props: Pick<SearchPlaybackProps, "origin" | 
 type Props = SearchPlaybackProps & {
   provider: ProviderId; query: string; retry?: number; url?: string; quality: VideoQuality; onEnqueued: () => void;
   onOpenCollection?: (item: ProviderItem) => void;
+  paged?: boolean; cursor?: string; context?: MediaCollection;
 };
 export function SearchOnlineResults(props: Props) {
-  return <OnlineResults key={JSON.stringify([props.origin, props.token, props.provider, props.query, props.url])} {...props} />;
+  return <OnlineResults key={JSON.stringify([props.origin, props.token, props.provider, props.query, props.url, props.cursor])} {...props} />;
 }
 function OnlineResults(props: Props) {
   const { provider } = props;
@@ -57,8 +62,10 @@ function OnlineResults(props: Props) {
   const request = props.url ? { url: props.url } : { query: props.query };
   // Hidden sources still report search counts. Active controls presentation,
   // not whether a source participates in the cross-source search.
-  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, request), enabled: props.connected, refetchOnMount: !!props.retry ? "always" : true });
+  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, request), enabled: props.connected && !props.paged, refetchOnMount: !!props.retry ? "always" : true });
+  const single = useQuery({ ...providerPageQuery(props, provider, { ...request, cursor: props.cursor }), enabled: props.connected && !!props.paged });
   const page = useMemo<ProviderSearchPage | null>(() => {
+    if (props.paged) return single.data ?? null;
     if (!browse.data?.pages.length) return null;
     const pages = browse.data.pages, items: ProviderItem[] = [], ids = new Set<string>();
     for (const part of pages) for (const item of part.items) {
@@ -67,9 +74,10 @@ function OnlineResults(props: Props) {
     }
     const warning = [...new Set(pages.flatMap(part => part.warning ? [part.warning] : []))].join(" ");
     return { ...pages[0]!, items, nextCursor: pages.at(-1)?.nextCursor, ...(warning ? { warning } : {}) };
-  }, [browse.data]);
-  const loading = props.connected && browse.isFetching;
-  const error = browse.error ? searchError(browse.error) : "";
+  }, [browse.data, single.data, props.paged]);
+  const loading = props.connected && (props.paged ? single.isFetching : browse.isFetching);
+  const failure = props.paged ? single.error : browse.error;
+  const error = failure ? searchError(failure) : "";
   const [visible, setVisible] = useState(() => Math.max(60, page?.items.length ?? 0));
   const kept = useQuery({ ...providerFavoritesQuery(props), enabled: props.connected, retry: false });
   const favorites = kept.error ? null : kept.data?.favorites ?? null;
@@ -109,9 +117,10 @@ function OnlineResults(props: Props) {
       if (item.kind === "media") {
         const existing = savedWeb(item);
         if (!existing && item.collection) {
-          const fresh = await browse.refetch({ throwOnError: true });
+          const fresh = props.paged ? await single.refetch({ throwOnError: true }) : await browse.refetch({ throwOnError: true });
           signal.throwIfAborted();
-          if (!fresh.data?.pages.some(page => page.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index))) throw new Error("This collection changed. Refresh it before saving this item.");
+          const pages = fresh.data && ("pages" in fresh.data ? fresh.data.pages : [fresh.data]);
+          if (!pages?.some(page => page.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index))) throw new Error("This collection changed. Refresh it before saving this item.");
         }
         await readSearch(props, existing ? `/api/for-later/${encodeURIComponent(existing.id)}` : "/api/for-later", signal, { method: existing ? "DELETE" : "POST", ...(existing ? {} : { body: JSON.stringify({ reference: { kind: "web", url: item.url, title: item.title, ...(item.collection ? { collection: { url: item.collection.url, ...(item.collection.index === undefined ? {} : { index: item.collection.index }) } } : {}), thumbnail: webThumbnail(item.thumbnail), duration: typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration >= 0 && item.duration <= 86400 ? item.duration : undefined } }) }) });
         if (!signal.aborted) await client.invalidateQueries({ queryKey: ["for-later"] });
@@ -122,13 +131,14 @@ function OnlineResults(props: Props) {
     });
   }
   useEffect(() => {
-    const hits: SearchHit[] = (page?.items ?? []).slice(0, visible).map(item => {
+    const hits: SearchHit[] = (page?.items ?? []).slice(0, props.paged ? undefined : visible).map(item => {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
-      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : "List", thumbnail: item.thumbnail,
-        primary: { label: item.kind === "media" ? "Play" : "Open", disabled: item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => item.kind === "media" ? play(item, true) : props.onOpenCollection?.(item) },
+      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : "List", thumbnail: item.thumbnail,
+        primary: { label: item.kind === "media" ? "Play" : "Open", href: item.kind !== "media" ? collectionLocation(item) : undefined, disabled: item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => item.kind === "media" ? play(item, true) : props.onOpenCollection?.(item) },
         actions: item.kind === "media" ? [
+          { label: "Details", node: <Button asChild variant="ghost"><Link to={collectionLocation(item)} aria-label={`Details ${item.title}`}>Details</Link></Button> },
           { label: "Play next", disabled: busy || !props.onCommand, run: () => play(item, false, "next") },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(item, false) },
           saveAction,
@@ -141,18 +151,19 @@ function OnlineResults(props: Props) {
     ].filter(item => item.provider === provider && item.url === props.url) : [];
     const canonical = page?.item ?? known[0];
     const selected = canonical && { ...canonical,
+      collection: props.context ?? canonical.collection,
       thumbnail: canonical.thumbnail ?? known.find(item => item.thumbnail)?.thumbnail,
       description: canonical.description ?? known.find(item => item.description)?.description,
       subtitle: canonical.subtitle ?? known.find(item => item.subtitle)?.subtitle,
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
-    const list = (playNow: boolean) => props.onCommand && props.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: "playlist", playNow, quality: props.quality }) ?? Promise.resolve(false)) : undefined;
-    props.onResults?.(providerNames[provider], { count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: visible < (page?.items.length ?? 0) || browse.hasNextPage ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
+    const list = (playNow: boolean) => props.onCommand && props.url && page?.items.length ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality }) ?? Promise.resolve(false)) : undefined;
+    props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
       ...(props.url ? { collection: { title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected,
-        playAll: list(true), queueAll: list(false),
+        single: selected?.kind === "media", playAll: list(true), queueAll: list(false),
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, page?.item, page?.items, page?.title, page?.thumbnail, page?.description, page?.subtitle, page?.warning, visible, favorites, later.data, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection]);
+  }, [props.url, props.paged, JSON.stringify(props.context), page, visible, favorites, later.data, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection]);
   return null;
 }

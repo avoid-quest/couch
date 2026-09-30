@@ -4,6 +4,12 @@ import { apiFetch, apiJson, type ApiCredentials } from "./client";
 
 export type ProviderSearchPage = ProviderPage & { warning?: string };
 
+export const providerPageQuery = (credentials: ApiCredentials, provider: ProviderId, request: BrowseRequest) => queryOptions({
+  queryKey: ["search", "provider-page", provider, request] as const,
+  queryFn: ({ signal }) => browse(credentials, provider, request, signal),
+  staleTime: 60_000, retry: false,
+});
+
 async function browse(credentials: ApiCredentials, provider: ProviderId, target: BrowseRequest, signal: AbortSignal): Promise<ProviderSearchPage> {
   const read = (request: BrowseRequest) => apiFetch(credentials,
     `/api/providers/${provider}/items?${new URLSearchParams(Object.entries({ q: request.query, url: request.url, cursor: request.cursor }).filter((entry): entry is [string, string] => !!entry[1]))}`,

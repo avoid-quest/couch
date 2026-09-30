@@ -8,7 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SearchBar } from "@/components/SearchBar";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PageHeader } from "@/components/PageHeader";
+import { ChevronLeft } from "lucide-react";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
@@ -19,6 +19,7 @@ import { createId } from "../../session/session";
 import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
+import { formatDuration } from "@/time-format";
 
 export type Props = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
@@ -160,36 +161,39 @@ function FilterGroup<T extends string>({ label, value, onChange, options }: { la
 }
 
 /** Search hits as media rows under one time ruler. */
-export const HitList = memo(function HitList({ hits, label }: { hits: SearchHit[]; label: string }) {
+export const HitList = memo(function HitList({ hits, label, timeline = true, currentId }: { hits: SearchHit[]; label: string; timeline?: boolean; currentId?: string }) {
   if (!hits.length) return null;
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
-    {hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
+    {timeline && hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
     <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} description={hit.description} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
-      primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled }}
+      primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       actions={hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>)}>
-      {hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />}
+      {hit.id === currentId && <span className="text-sm font-medium">Now playing</span>}
+      {hit.collection ? <span className="text-sm">{hit.collection}</span> : timeline ? <DurationBar duration={hit.duration} position={hit.position} live={hit.live} /> : <span className="text-sm text-muted-foreground">{hit.live ? "Live" : hit.duration != null ? formatDuration(hit.duration) : undefined}</span>}
     </MediaRow>)}</MediaList>
   </div>;
 });
 
 /** An opened channel, list or show: back, title, and whole-list verbs. */
 export function CollectionHeader({ collection, back, onBack, canPlay }: { collection: SearchCollection; back: string; onBack: () => void; canPlay: boolean }) {
-  return <div className="space-y-4">
-    <PageHeader back={{ label: back, onClick: onBack }} title={collection.title} className="mb-0 [&_h1]:whitespace-normal [&_h1]:break-words" actions={<>
-    <Button disabled={!canPlay || collection.disabled || !collection.playAll} onClick={collection.playAll}>Play all</Button>
-    <Button variant="ghost" disabled={collection.disabled || !collection.queueAll} onClick={collection.queueAll}>Queue all</Button>
-    {collection.save && <Button variant="ghost" aria-pressed={collection.saved} disabled={collection.disabled || collection.saveDisabled} onClick={collection.save}>{collection.saved ? "Saved" : "Save"}</Button>}
-    </>} />
-    {(collection.thumbnail || collection.description || collection.subtitle) && <div data-collection-preview className="flex items-start gap-4 sm:gap-6">
-      {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="h-36 w-24 shrink-0 object-contain bg-transparent sm:h-48 sm:w-36" />}
-      <div className="min-w-0 space-y-2">
+  return <header className="space-y-4">
+    <Button variant="ghost" data-back className="-ml-2.5 text-muted-foreground" onClick={onBack}><ChevronLeft aria-hidden="true" />{back}</Button>
+    <div data-collection-preview className="flex flex-col items-start gap-6 sm:flex-row sm:gap-8">
+      {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="max-h-64 w-40 shrink-0 object-contain bg-transparent sm:max-h-80 sm:w-48" />}
+      <div className="min-w-0 space-y-4">
+        <h1 tabIndex={-1} className="max-w-3xl text-3xl font-semibold tracking-tight break-words sm:text-4xl">{collection.title}</h1>
         {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
         {collection.description && <p className="max-w-prose text-sm leading-relaxed break-words">{collection.description}</p>}
+        <div className="flex flex-wrap items-center gap-2 pt-2">
+          <Button disabled={!canPlay || collection.disabled || !collection.playAll} onClick={collection.playAll}>{collection.single ? "Play" : "Play all"}</Button>
+          <Button variant="ghost" disabled={collection.disabled || !collection.queueAll} onClick={collection.queueAll}>{collection.single ? "Queue" : "Queue all"}</Button>
+          {collection.save && <Button variant="ghost" aria-pressed={collection.saved} disabled={collection.disabled || collection.saveDisabled} onClick={collection.save}>{collection.saved ? "Saved" : "Save"}</Button>}
+        </div>
       </div>
-    </div>}
-  </div>;
+    </div>
+  </header>;
 }
 
 export function MoreResults({ summaries }: { summaries: Entry[] }) {
