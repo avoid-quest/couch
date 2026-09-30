@@ -10,6 +10,7 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { MoreHorizontal, Play } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PlayOnMenu, PlayOnSub, usePlayOn } from "@/components/PlayOn";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
@@ -171,7 +172,7 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
     <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
       primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
-      actions={timeline ? hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>) : <BrowseActions title={hit.title} actions={hit.actions} />}>
+      actions={timeline ? hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : action.playOn ? <PlayOnMenu key={action.label} title={hit.title} disabled={action.disabled} onPlay={action.playOn} /> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>) : <BrowseActions title={hit.title} actions={hit.actions} />}>
       {hit.id === currentId && <span className="text-sm font-medium">Now playing</span>}
       {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
     </MediaRow>)}</MediaList>
@@ -179,18 +180,21 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
 });
 
 export function BrowseActions({ title, actions }: { title: string; actions: SearchHit["actions"] }) {
+  const { devices, on } = usePlayOn();
   const play = actions.find(action => action.label === "Play");
-  const more = actions.filter(action => action !== play);
+  // Play on waits for a second online Device, so it alone doesn't open an empty menu.
+  const more = actions.filter(action => action !== play && (!action.playOn || devices.length));
   return <>
-    {play && <Button variant="ghost" size="icon" aria-label={`Play ${title}`} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4" /></Button>}
+    {play && <Button variant="ghost" size="icon" aria-label={on(`Play ${title}`)} title={on("Play")} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4" /></Button>}
     {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
+      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnSub key={action.label} disabled={action.disabled} onPlay={action.playOn} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>}
   </>;
 }
 
 /** Compact title and artwork; the breadcrumb owns navigation. */
 export function CollectionHeader({ collection, canPlay }: { collection: SearchCollection; canPlay: boolean }) {
+  const { on } = usePlayOn();
   return <header>
     <div data-collection-preview className="flex items-start gap-4">
       {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="size-20 shrink-0 object-contain bg-transparent sm:size-24" />}
@@ -198,8 +202,9 @@ export function CollectionHeader({ collection, canPlay }: { collection: SearchCo
         <h1 tabIndex={-1} className="max-w-3xl text-2xl font-semibold tracking-tight break-words">{collection.title}</h1>
         {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
         {(collection.playAll || collection.queueAll || collection.save) && <div className="flex items-center gap-1">
-          {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{collection.single ? "Play" : "Play all"}</Button>}
+          {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{on(collection.single ? "Play" : "Play all")}</Button>}
           <BrowseActions title={collection.title} actions={[
+            ...(collection.playOn ? [{ label: "Play on", disabled: !canPlay || collection.disabled, playOn: collection.playOn }] : []),
             ...(collection.queueAll ? [{ label: collection.single ? "Queue" : "Queue all", disabled: collection.disabled, run: collection.queueAll }] : []),
             ...(collection.save ? [{ label: collection.saved ? "Saved" : "Save", disabled: collection.disabled || collection.saveDisabled, run: collection.save }] : []),
           ]} />
@@ -236,11 +241,12 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
   const lifetime = useRef<AbortController | null>(null);
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setPending(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   const { hostname, pathname } = new URL(url);
-  async function send(playNow: boolean) {
+  const { on } = usePlayOn();
+  async function send(playNow: boolean, deviceId?: string) {
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
-    try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) onDone(); }
+    try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow, deviceId } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow, deviceId }) && !signal.aborted) onDone(); }
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setPending(false); }
   }
@@ -251,7 +257,8 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
       {mode === "Webpage" && supportsWebVideoQuality(url) && <SettingsRow label="Quality"><ChoiceGroup label="Video quality" value={quality} onValueChange={onQualityChange} disabled={disabled} options={videoQualityOptions} /></SettingsRow>}
     </SettingsSection>
     <div className="flex flex-wrap gap-2">
-      <Button disabled={disabled || !props.canPlay || !props.onCommand} onClick={() => void send(true)}>Play</Button>
+      <Button disabled={disabled || !props.canPlay || !props.onCommand} onClick={() => void send(true)}>{on("Play")}</Button>
+      <PlayOnMenu title={hostname + pathname} disabled={disabled || !props.canPlay || !props.onCommand} onPlay={deviceId => void send(true, deviceId)} />
       <Button variant="ghost" disabled={disabled || !props.onCommand} onClick={() => void send(false)}>Queue</Button>
       {/^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && <Button variant="ghost" onClick={() => props.onManageSources?.("streaming-community")}>StreamingCommunity settings</Button>}
     </div>

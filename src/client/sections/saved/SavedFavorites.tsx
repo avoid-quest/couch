@@ -8,6 +8,7 @@ import type { RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
@@ -91,11 +92,13 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const plan = over && favorite && reorderFavorites(favorites, favorite.kind, String(active.id), String(over.id));
     if (plan) reorder.mutate(plan);
   };
-  const enqueue = async (favorite: Favorite, playNow: boolean) => {
+  const { on, play } = usePlayOn();
+  const enqueue = async (favorite: Favorite, playNow: boolean, deviceId?: string) => {
     if (!connected || pending) return;
     setEnqueueing(true);
     try {
-      await (favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow) : onEnqueueRadio(favorite.item, playNow));
+      const work = () => favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow) : onEnqueueRadio(favorite.item, playNow);
+      await (playNow ? play(work, deviceId) : work());
     } finally { setEnqueueing(false); }
   };
 
@@ -110,7 +113,8 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         ? { label: "Open", onClick: () => onOpenProvider(favorite.item as ProviderItem), disabled: !connected || pending }
         : { label: "Play", onClick: () => void enqueue(favorite, true), disabled: !connected || !canPlay || pending }}
       actions={<>
-        {browse && <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void enqueue(favorite, true)}>Play</Button>}
+        {browse && <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={on(`Play ${itemTitle}`)} onClick={() => void enqueue(favorite, true)}>Play</Button>}
+        <PlayOnMenu title={itemTitle} disabled={!connected || !canPlay || pending} onPlay={deviceId => void enqueue(favorite, true, deviceId)} />
         <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${itemTitle}`} onClick={() => void enqueue(favorite, false)}>Queue</Button>
         <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle}`} onClick={() => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); }}>Remove</Button>
         {drag.handle}

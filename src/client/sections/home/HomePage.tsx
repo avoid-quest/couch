@@ -14,6 +14,7 @@ import { DurationBar, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { MediaList, MediaRow } from "@/components/MediaRow";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { apiFetch } from "@/api/client";
 import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/progress";
 import { forLaterQuery } from "@/api/for-later";
@@ -46,6 +47,7 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 export function HomePage() {
   const playbackClock = usePlaybackClock();
   const shell = useShell();
+  const { on } = usePlayOn();
   const { credentials, available, current, programme } = shell;
   const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
@@ -137,7 +139,7 @@ export function HomePage() {
       action={<Button variant="ghost" onClick={() => void navigate({ href: "/find?browse=radio" })}>Browse</Button>}>
       {lead && leadShow && <div className="mb-6"><Feature onInspect={() => details.open(itemLocation("radio", lead.id))} art={<MediaArtwork thumbnail={leadShow.artworkUrl ?? lead.logoUrl} title={lead.name} />} title={leadShow.title} meta={[lead.name, leadShow.genre].filter(Boolean).join(" · ")}
         detail={leadShow.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{leadShow.description}</p>}>
-        <Button data-page-first disabled={!available} onClick={() => void shell.enqueueRadio(lead, true)}><Play aria-hidden="true" className="fill-current" />Play {lead.name}</Button>
+        <Button data-page-first aria-label={on(`Play ${lead.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(lead, true)}><Play aria-hidden="true" className="fill-current" />Play {lead.name}</Button>
       </Feature></div>}
       <ul aria-label="Radio stations" className="grid border-t sm:grid-cols-2 sm:gap-x-6 xl:grid-cols-3">
         {stations.filter(station => station !== lead).slice(0, shown.radio).map(station => {
@@ -294,7 +296,8 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
     (controls?.[Math.min(target.index, controls.length - 1)]?.querySelector<HTMLElement>('[aria-label^="Details "]') ?? document.querySelector<HTMLElement>('[data-page-first]:not(:disabled)'))?.focus();
   });
   const playable = (item: HistoryItem) => connected && canPlay && !pending && !!(item.playable || item.queueEntryId);
-  async function act(item: HistoryItem, action: "resume" | "start" | "queue" | "remove") {
+  const { on, play } = usePlayOn();
+  async function act(item: HistoryItem, action: "resume" | "start" | "queue" | "remove", deviceId?: string) {
     if (pending) return;
     setPending(true);
     try {
@@ -309,13 +312,14 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
         return;
       }
       if (action !== "queue") removed.current = { id: item.mediaId, index: unfinished.findIndex(entry => entry.mediaId === item.mediaId) };
-      const ok = action === "queue" ? await onAdd(item) : await onPlay(item, { fromStart: action === "start" });
+      const ok = action === "queue" ? await onAdd(item) : await play(() => onPlay(item, { fromStart: action === "start" }), deviceId);
       if (!ok) removed.current = null;
       if (action === "queue" && !ok) toast.error(`Couldn't queue ${item.title}.`);
     } catch (reason) { removed.current = null; toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
     finally { setPending(false); }
   }
   const secondary = (item: HistoryItem) => <>
+    <PlayOnMenu title={item.title} disabled={!playable(item)} onPlay={deviceId => void act(item, "resume", deviceId)} />
     <Button variant="ghost" aria-label={`From start ${item.title}`} disabled={!playable(item)} onClick={() => void act(item, "start")}>From start</Button>
     <Button variant="ghost" aria-label={`Queue ${item.title}`} disabled={!connected || pending} onClick={() => void act(item, "queue")}>Queue</Button>
     <Button variant="ghost" aria-label={`Remove ${item.title} from Continue`} disabled={!connected || pending} onClick={() => void act(item, "remove")}>Remove</Button>
@@ -323,13 +327,13 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
 
   if (history.error) return <Alert variant="destructive" className="mb-6"><AlertDescription>{history.error.message || "Couldn't load Continue."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>;
   if (!unfinished.length) return null;
-  const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={`Resume ${item.title}`} onClick={() => void act(item, "resume")}>Resume</Button>;
+  const resume = (item: HistoryItem, featured = false) => <Button data-page-first disabled={!playable(item)} aria-label={on(`Resume ${item.title}`)} onClick={() => void act(item, "resume")}>{featured ? on("Resume") : "Resume"}</Button>;
   const preview = (item: HistoryItem, featured: boolean) => {
     const inspect = () => details.open(itemLocation("history", item.mediaId));
     return featured ? <div key={item.mediaId} data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork item={item} intrinsic />} artFit={item.thumbnail ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
-      </>}>{resume(item)}{secondary(item)}</Feature></div> : <MediaRow key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
+      </>}>{resume(item, true)}{secondary(item)}</Feature></div> : <MediaRow key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
         art={<Button variant="ghost" className="size-full rounded-none p-0 hover:opacity-80" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork item={item} /></Button>}
         primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />

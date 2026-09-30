@@ -13,6 +13,7 @@ import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
+import { announcePlay } from "./device-id";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -202,6 +203,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     setError(null);
     try {
       await command(action);
+      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow && current()) announcePlay(readObservation(), action.deviceId);
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";
         let after = readObservation();

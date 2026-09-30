@@ -42,8 +42,9 @@ function RadioResults(props: Props) {
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setBusy(false); }
   }
-  function play(station: RadioStation, playNow: boolean) {
-    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false);
+  function play(station: RadioStation, playNow: boolean, deviceId?: string) {
+    const on = deviceId ? { deviceId } : {};
+    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, ...on } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow, ...on }) ?? false);
   }
   function save(station: RadioStation, saved: boolean) {
     void action(async signal => {
@@ -63,6 +64,7 @@ function RadioResults(props: Props) {
         primary: props.browse ? { label: "Open", href: itemLocation("radio", station.id), run: () => navigation.open(itemLocation("radio", station.id)) } : { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
           ...(props.browse ? [{ label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) }] : []),
+          { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(station, true, deviceId) },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
           { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || favorites === null, run: () => save(station, saved) },
         ],

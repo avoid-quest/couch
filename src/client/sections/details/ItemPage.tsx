@@ -27,6 +27,7 @@ import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 import type { PlaybackCollection } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { sourceLabel } from "@/source-label";
+import { usePlayOn } from "@/components/PlayOn";
 
 const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = typeof kinds[number];
@@ -123,6 +124,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
   const shell = useShell();
   const session = useSessionGate();
   const action = useDetailAction();
+  const { on, play } = usePlayOn();
   const blocked = !session.connected || action.isPending;
   const playable = shell.available && !!(item.playable || item.queueEntryId);
   const remove = async () => {
@@ -131,9 +133,10 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     if (result.undoToken && result.expiresAt && result.expiresAt > Date.now()) session.offerUndo(`Removed ${item.title} from Continue.`, async () => { await undoProgressAction(shell.credentials, result.undoToken!); refresh(); }, result.expiresAt - Date.now());
   };
   return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} position={item.position} meta={[item.subtitle, item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
-    primary={<Button size="sm" disabled={blocked || !playable} onClick={() => action.mutate(() => shell.playHistory(item, { fromStart: item.position === 0 }))}>{item.position > 0 ? "Resume" : "Play"}</Button>}
+    primary={<Button size="sm" disabled={blocked || !playable} onClick={() => action.mutate(() => play(() => shell.playHistory(item, { fromStart: item.position === 0 })))}>{on(item.position > 0 ? "Resume" : "Play")}</Button>}
     actions={[
-      ...(item.position ? [{ label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => shell.playHistory(item, { fromStart: true })) }] : []),
+      { label: "Play on", disabled: blocked || !playable, playOn: deviceId => action.mutate(() => play(() => shell.playHistory(item, { fromStart: item.position === 0 }), deviceId)) },
+      ...(item.position ? [{ label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => play(() => shell.playHistory(item, { fromStart: true }))) }] : []),
       { label: "Queue", disabled: blocked, run: () => action.mutate(() => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id })) },
       ...(item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []),
     ]} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
@@ -144,25 +147,28 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
   const { connected } = useSessionGate();
   const client = useQueryClient();
   const action = useDetailAction();
+  const { on, play } = usePlayOn();
   const load = async (mode: "play" | "append") => {
     const result = await apiSend<{ notice?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load`, { mode }, "POST", 30_000);
     if (result?.notice) toast(result.notice);
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
   return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
-    primary={<Button size="sm" disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => load("play"))}>Play</Button>}
-    actions={[{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
+    primary={<Button size="sm" disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => play(() => load("play")))}>{on("Play")}</Button>}
+    actions={[{ label: "Play on", disabled: !connected || !shell.available || action.isPending, playOn: deviceId => action.mutate(() => play(() => load("play"), deviceId)) }, { label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
 }
 
 function RadioDetails({ item }: { item: RadioStation }) {
   const shell = useShell();
   const { connected, nativeHost } = useSessionGate();
   const action = useDetailAction();
+  const { on, play } = usePlayOn();
   const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && item.sourceId === avoidRadioPlaylistId, refetchInterval: 60_000 });
   const programme = programmes.data?.[item.id];
   return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre, programme?.artist, programme?.album, programme?.bitrate && `${programme.bitrate} kbps`].filter(Boolean).join(" · ")} description={programme?.description}
-    primary={<Button size="sm" aria-label={`Play ${item.name}`} disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => shell.enqueueRadio(item, true))}>Play</Button>}
+    primary={<Button size="sm" aria-label={on(`Play ${item.name}`)} disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => shell.enqueueRadio(item, true))}>{on("Play")}</Button>}
     actions={[
+      { label: "Play on", disabled: !connected || !shell.available || action.isPending, playOn: deviceId => action.mutate(() => play(() => shell.enqueueRadio(item, true), deviceId)) },
       { label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, false)) },
       ...(!nativeHost && programme?.programmeUrl ? [{ label: "Open show page", node: <a href={programme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a> }] : []),
     ]} /><RelatedRadio station={item} /></>;
