@@ -18,6 +18,7 @@ const when = (time: number) => new Date(time).toLocaleString(undefined, { dateSt
 const automatic = ({ version, automatic }: UpdateState) => {
   if (!automatic) return null;
   if (!automatic.installed) return "Run sudo couch-setup --tv once to turn on automatic updates.";
+  if (automatic.active === false) return "Automatic updates are off. You can still update and restart here.";
   const last = automatic.last;
   if (!last) return null;
   const release = last.version ?? "The update";
@@ -50,7 +51,7 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
     : state.status === "downloading" ? `Couch ${state.available}${state.progress === null ? "" : `, ${state.progress}%`}`
     : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : !tv ? "installs when you quit Couch."
       // The timer isn't there, or skips a release that didn't start.
-      : state.automatic?.installed === false ? "is available."
+      : state.automatic?.installed === false || state.automatic?.active === false ? "is ready. Restart to update."
       : state.automatic?.last?.failed === state.available ? "didn't start last time, so it only installs when you restart to update."
       : "installs automatically overnight when nothing is playing."}`
     : state.checkedAt ? `Checked ${when(state.checkedAt)}` : null;

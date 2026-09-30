@@ -1,4 +1,11 @@
-import type { UpdateAction, UpdateState } from "../shared/app-bridge";
+import type { UpdateAction, UpdateOutcome, UpdateState } from "../shared/app-bridge";
+
+const validOutcome = (last: UpdateOutcome | null) => last === null || typeof last === "object" && last !== null
+  && (last.version === null || typeof last.version === "string" && last.version.length <= 80)
+  && ["installed", "installed-unverified", "rolled-back", "failed", "skipped", "up-to-date", "waiting"].includes(last.outcome)
+  && typeof last.at === "number" && Number.isFinite(last.at)
+  && (last.error === null || typeof last.error === "string" && last.error.length <= 4096)
+  && (last.failed === undefined || last.failed === null || typeof last.failed === "string" && last.failed.length <= 80);
 
 const validState = (state: unknown): state is UpdateState => {
   if (!state || typeof state !== "object") return false;
@@ -8,7 +15,9 @@ const validState = (state: unknown): state is UpdateState => {
     && (value.available === null || typeof value.available === "string" && value.available.length <= 80)
     && (value.error === null || typeof value.error === "string" && value.error.length <= 4096)
     && (value.progress === null || typeof value.progress === "number" && Number.isFinite(value.progress) && value.progress >= 0 && value.progress <= 100)
-    && (value.checkedAt === null || typeof value.checkedAt === "number" && Number.isFinite(value.checkedAt));
+    && (value.checkedAt === null || typeof value.checkedAt === "number" && Number.isFinite(value.checkedAt))
+    && (value.automatic === undefined || value.automatic !== null && typeof value.automatic === "object"
+      && typeof value.automatic.installed === "boolean" && (value.automatic.active === undefined || typeof value.automatic.active === "boolean") && validOutcome(value.automatic.last));
 };
 
 // The existing Main/Core parent port carries requests; reads remain available

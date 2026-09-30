@@ -1,5 +1,9 @@
 # Native Debian TV setup
 
+**Settings > Updates** shows whether the automatic timer is active. A stopped
+or masked timer appears as off; administrators can still use **Update and
+restart** from their paired remote.
+
 The Linux `.deb` includes optional TV setup (`/usr/sbin/couch-setup`, with the session files in `/usr/share/couch/tv`). Installing the package alone leaves
 the current login, display manager and power policy unchanged.
 

@@ -19,7 +19,7 @@ export type UpdateState = {
   error: string | null;
   // The TV's root updates: whether setup installed them, and the last run's
   // outcome from /var/lib/couch-update/status (docs/native-tv.md).
-  automatic?: { installed: boolean; last: UpdateOutcome | null };
+  automatic?: { installed: boolean; active?: boolean; last: UpdateOutcome | null };
 };
 export type UpdateOutcome = {
   version: string | null;
