@@ -31,7 +31,7 @@ test("RaiPlay season pagination retains programme and season destinations", asyn
   expect(first.nextCursor).toBe("24");
   expect(second.items).toHaveLength(6);
   expect(second.parent).toEqual({ title: "The show", url: series });
-  expect(second.items[0]?.collection).toEqual({ title: "Season 1", url: season, parent: second.parent });
+  expect(second.items[0]?.collection).toEqual({ title: "Season 1", url: season, parent: second.parent, index: 24 });
 });
 
 test("a direct StreamingCommunity watch link opens the episode with its hierarchy", async () => {

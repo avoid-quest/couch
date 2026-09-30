@@ -175,7 +175,7 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
       : /\/ContentSet-/.test(url.pathname) ? items.find(item => item.collection)?.collection : undefined;
     const container = { title, url: blockId ? `${url.href}#block=${blockId}` : url.href, ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}) };
     const programme = /^\/(?:programmi|collezioni)\//.test(url.pathname);
-    return { ...page(items.map(item => item.kind === "media" && programme ? { ...item, collection: container } : item), offset, title),
+    return { ...page(items.map((item, index) => item.kind === "media" && programme ? { ...item, collection: { ...container, ...(index < 500 ? { index } : {}) } } : item), offset, title),
       ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}),
       ...(metadata?.thumbnail || items[0]?.thumbnail ? { thumbnail: metadata?.thumbnail ?? items[0]?.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) };
   };
