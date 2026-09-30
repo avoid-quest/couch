@@ -1,7 +1,9 @@
 import { useCallback, useState, type MouseEvent } from "react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
 import { collectionLocation } from "@/detail-navigation";
+import { searchLocation } from "@/search";
+import { SearchBar } from "@/components/SearchBar";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -10,11 +12,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrowsePagination } from "@/components/BrowsePagination";
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { CollectionHeader, HitList, SourceProblems } from "./SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
-import type { ProviderId } from "../../../shared/providers";
+import { providerForUrl, type ProviderId } from "../../../shared/providers";
 
 export function ProviderPage() {
   const { search } = useLocation();
@@ -41,6 +43,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(search.filter.toLocaleLowerCase()));
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
   const currentId = hits.find(hit => hit.url === source)?.id;
+  const emptyRoot = !url && connected && !!summary && !summary.loading && !summary.error && !summary.hits?.length;
   const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : /\/season-\d+|\/ContentSet-/.test(url) ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
   const href = (direction: "previous" | "next") => collectionLocation({ provider, url }, { ...search,
     ...(paging.remote ? { cursors: direction === "previous" ? search.cursors.slice(0, -1) : [...search.cursors, page!.nextCursor!], page: 1 } : { page: paging.page + (direction === "previous" ? -1 : 1) }) });
@@ -63,10 +66,12 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     <CollectionHeader collection={collection} canPlay={available} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {summary?.loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3.5" />Loading items…</p>}
-    {!collection.single && <>
+    {emptyRoot && <EmptyRoot provider={provider} />}
+    {!collection.single && !emptyRoot && <>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h2 id="collection-items" tabIndex={-1} className="text-sm text-muted-foreground">{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</h2>
         <div className="flex flex-wrap items-center gap-4">
+          {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: "https://www.twitch.tv/directory" })}>Categories</Link></Button>}
           {((summary?.hits?.length ?? 0) > 8 || search.filter) && <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={search.filter}
             onChange={event => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: event.target.value }), replace: true, resetScroll: false })} />}
           {pager}
@@ -78,4 +83,16 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
     {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} provider={provider} currentUrl={page?.item?.url ?? url} />}
   </section>;
+}
+
+// Sources without a home page of their own start from a search or, for Bandcamp, a link.
+function EmptyRoot({ provider }: { provider: ProviderId }) {
+  const navigate = useNavigate();
+  const [value, setValue] = useState("");
+  const name = providerNames[provider], linksOnly = provider === "bandcamp";
+  const open = () => { const query = value.trim(); if (query) void navigate({ href: providerForUrl(query) === provider ? collectionLocation({ provider, url: query }) : searchLocation({ query, source: name }) }); };
+  return <Empty className="py-0">
+    <EmptyHeader><EmptyDescription>{linksOnly ? `Paste a ${name} album or track link.` : provider === "youtube" ? "Search YouTube or paste a channel, playlist or video link." : `Search ${name} or paste a ${name} link.`}</EmptyDescription></EmptyHeader>
+    <EmptyContent><SearchBar id="collection-search" className="w-full" ariaLabel={linksOnly ? `Paste a ${name} link` : `Search ${name}`} value={value} onValueChange={setValue} onSubmit={open} onClear={() => setValue("")} /></EmptyContent>
+  </Empty>;
 }

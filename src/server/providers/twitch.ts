@@ -147,10 +147,6 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
     return withProviderItem("twitch", `https://www.twitch.tv/directory/category/${encodeURIComponent(target.slug)}`, "collection", { title: text(data.game.name) || target.slug, items: items(data.game.streams, streamItem) });
   }
   const data = await query(`{ streams(first:20) { ${streamEdges} } }`, {}, signal);
-  const url = "https://www.twitch.tv/directory";
-  const page: ProviderPage = { title: "Live on Twitch", items: [
-    { id: providerItemId("twitch", url), provider: "twitch", kind: "collection", title: "Browse categories", url },
-    ...items(data.streams, streamItem),
-  ] };
+  const page: ProviderPage = { title: "Live on Twitch", items: items(data.streams, streamItem) };
   return request.url ? withProviderItem("twitch", "https://www.twitch.tv/directory/all", "collection", page) : page;
 }

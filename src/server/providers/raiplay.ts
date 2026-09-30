@@ -201,13 +201,13 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
     const items = contents.flatMap(row => {
       if (Array.isArray(row.contents)) {
         const children = cards(array(row.contents));
-        if (!children.length || text(row.type).includes("Dirette") || !/^PublishingBlock-[a-f0-9-]+$/i.test(text(row.id))) return [];
+        if (!children.length || !/^PublishingBlock-[a-f0-9-]+$/i.test(text(row.id))) return [];
         return [collection(text(row.type).includes("Hero") ? "In evidenza" : text(row.name) || title, `${url.href}#block=${text(row.id)}`, children[0]?.thumbnail)];
       }
       const item = card(row);
       return item ? [item] : [];
     });
-    return catalogPage(home ? [collection("Dirette TV", `${origin}/dirette`), collection("Replay - ultimi 7 giorni", `${origin}/guidatv`), ...items] : items, title);
+    return catalogPage(items, title);
   }
   if (data.video) return catalogPage(cards([{ ...data, path_id: url.href }]), title);
   throw new ProviderError("RaiPlay returned an unsupported catalog response.");

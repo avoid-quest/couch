@@ -93,7 +93,12 @@ catalog provides interface icons, not brand identities.
   solid black page background on desktop and web. Native video alone clears
   its full-screen ancestors so the picture can show through. Source results
   pair artwork with available synopsis and episode metadata; collection
-  headers contain their artwork instead of cropping covers.
+  headers contain their artwork instead of cropping covers. A collection
+  without artwork shows a muted folder, not title initials.
+- **Real content only.** A browse page shows what its source returns, never
+  suggestions Couch picked. A source without a home page of its own (YouTube,
+  Bandcamp) opens on an Empty whose next step is a search field scoped to it,
+  or a link field where it only takes links.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29".
 - **Colour only when it means something.** Destructive red is the only colour.

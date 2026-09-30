@@ -57,13 +57,6 @@ function checkTrack(info: Metadata, source: Target) {
   if (!playable) throw new ProviderError("This Bandcamp track has no supported public audio stream. Account-only playback is not supported.");
 }
 
-function suggested(): ProviderPage {
-  return { title: "Suggested albums", items: [
-    { title: "Jazz Format Mixtape vol.1", subtitle: "Blazo", url: "https://blazo.bandcamp.com/album/jazz-format-mixtape-vol-1", thumbnail: "https://f4.bcbits.com/img/a1721150828_5.jpg" },
-    { title: "FTL", subtitle: "Ben Prunty", url: "https://benprunty.bandcamp.com/album/ftl", thumbnail: "https://f4.bcbits.com/img/a0460013667_5.jpg" },
-  ].map(item => ({ ...item, id: providerItemId("bandcamp", item.url), provider: "bandcamp", kind: "collection" })) };
-}
-
 export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
   async function extract(source: Target, signal?: AbortSignal): Promise<Metadata> {
     signal?.throwIfAborted();
@@ -116,7 +109,7 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
     if (request.query !== undefined && (typeof request.query !== "string" || request.query.length > 2_048 || /[\u0000-\u001f\u007f]/.test(request.query))) throw new ProviderError("Enter a public Bandcamp track or album link.", 400);
     if (request.url !== undefined && typeof request.url !== "string") throw new ProviderError("Enter a public Bandcamp track or album link.", 400);
     const value = request.url || request.query?.trim();
-    if (!value) return suggested();
+    if (!value) return { title: "Bandcamp", items: [] };
     const source = target(value);
     if (source.kind === "album") return album(source.url, signal);
     const info = await extract(source, signal);
