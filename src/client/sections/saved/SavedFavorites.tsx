@@ -107,7 +107,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const itemTitle = title(favorite);
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
     return <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${itemTitle}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
-      art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} />}
+      art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}
       primary={browse
