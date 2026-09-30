@@ -92,7 +92,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     const query = request.query?.trim() ?? "";
     if (!request.url && !query) {
       if (offset) throw new ProviderError("Invalid YouTube page. Start a new search.", 400);
-      return { title: "Suggested channels", items: ["NASA", "TED", "3blue1brown"].map(channel => ({ id: providerItemId("youtube", `https://www.youtube.com/@${channel}`), provider: "youtube", kind: "channel", title: channel === "3blue1brown" ? "3Blue1Brown" : channel, url: `https://www.youtube.com/@${channel}` })) };
+      return { title: "YouTube", items: [] };
     }
     const source = target(request.url || (/^https?:\/\//i.test(query) ? query : query.startsWith("@") ? `https://www.youtube.com/${encodeURIComponent(query).replace(/^%40/, "@")}` : searchUrl(query)));
     if (source.kind === "channel") {
