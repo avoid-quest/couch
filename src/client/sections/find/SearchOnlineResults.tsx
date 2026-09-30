@@ -117,7 +117,7 @@ function OnlineResults(props: Props) {
     void action(async signal => {
       if (item.kind === "media") {
         const existing = savedWeb(item);
-        if (!existing && item.collection) {
+        if (!existing && item.collection?.index !== undefined) {
           const fresh = await client.fetchQuery({ ...providerPageQuery(props, provider, { url: item.collection.url, cursor: providerCollectionCursor(provider, item.collection) }), staleTime: 0 });
           signal.throwIfAborted();
           if (!fresh.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index)) throw new Error("This collection changed. Refresh it before saving this item.");
