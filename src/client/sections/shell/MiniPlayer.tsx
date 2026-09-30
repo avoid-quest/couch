@@ -1,19 +1,19 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, type RefObject } from "react";
-import { ListMusic, Maximize2, Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
+import { ChevronUp, ListMusic, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { CollectionLinks } from "@/components/CollectionLinks";
 import { Link } from "@tanstack/react-router";
-import { PlaybackVolume, muted, playbackCapabilities } from "@/components/PlaybackTransport";
+import { PlayButton, PlaybackTimeline, PlaybackVolume, muted, playbackCapabilities } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
-import { PlaysOn } from "./Outputs";
-import { RangeControl } from "@/components/RangeControl";
+import { PlaysOn, WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
-import { offline } from "@/copy";
-import { formatDuration, formatEndTime } from "@/time-format";
+import { deviceName, offline } from "@/copy";
+import { sourceLabel } from "@/source-label";
+import { formatDuration } from "@/time-format";
 
 // Bars at the bottom of the viewport (mini player, player band) can overlap
 // for a commit during navigation, so the tallest registered one wins.
@@ -44,59 +44,57 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   if (!current) return null;
-  const { available, active, transportReady, nextReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
-  const paused = player.status === "paused";
-  const ended = player.status === "ended";
-  const live = current.live || current.kind === "radio" || current.source.startsWith("radio:");
+  const { nextReady, hasNext } = playbackCapabilities(state, connected);
+  const radio = current.kind === "radio" || current.source.startsWith("radio:");
+  const live = current.live || radio;
   const length = playbackClock.duration ?? current.duration ?? 0;
   const remaining = Math.max(0, length - playbackClock.position) / (player.speed || 1);
+  // The player's words, less the title shown right above them.
   const status = !connected ? offline(state.installationName)
-    : player.status === "error" ? `Can't play ${current.title}`
-    : player.status === "loading" ? "Loading…"
-    : player.status === "unavailable" ? "Player unavailable"
-    : player.status === "ended" ? "Finished"
-    : player.status === "idle" ? "Ready to play"
-    : paused ? "Paused"
-    : live ? "Live"
-    : length ? `Ends ${formatEndTime(remaining)}` : "Playing";
+    : player.status === "unavailable" ? player.error ?? `Nothing is playing on ${deviceName(state.installationName)}`
+    : player.status === "error" ? "Can't play"
+    : player.status === "loading" ? state.radioRetry?.retryAt != null ? "Reconnecting…" : player.buffering ? "Buffering…" : `Connecting to ${sourceLabel(current.source)}…`
+    : player.status === "ended" ? state.autoplay?.enabled && state.autoplay.pending ? "Finding the next item…" : "Finished"
+    : player.status === "paused" ? "Paused" : "";
+  // Below lg the timeline has no room, so its time reads here.
+  const time = live ? "Live" : length ? `−${formatDuration(remaining)}` : "";
   const at = playsOn(state);
   const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
   const context = programme ? current.title : current.subtitle;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
-  return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] sm:gap-x-4 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
-    <div className="flex min-w-0 items-center gap-3">
+  // Fixed slots, in the band's order: Play/Pause, Next, timeline · volume, Where it plays, Up next, Expand.
+  // A phone puts the title on its own row above them; unavailable controls stay in place, disabled.
+  return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
+    <div className="col-span-full flex min-w-0 items-center gap-3 sm:col-span-1">
       <span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full">{artwork}</span>
       <div className="min-w-0">
         <Button variant="ghost" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium touch:h-auto" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
+        {/* The context gives way first, so the status and the device stay readable. */}
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          {current.kind === "radio" || current.source.startsWith("radio:") ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}
-          <span role="status" className="truncate">{status}</span>
+          <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}</span>
+          <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
+          {!status && time && <span className="shrink-0 tabular-nums lg:hidden">{time}</span>}
           {at?.elsewhere && <PlaysOn state={state} at={at} />}
         </div>
       </div>
     </div>
-    <div className="grid min-w-0 justify-items-center">
-      <div className="flex items-center gap-0.5" role="group" aria-label="Playback controls">
-        {pausable || ended ? <Button variant="ghost" size="icon" aria-label={ended ? "Replay" : paused ? "Play" : "Pause"} title={ended ? "Replay" : paused ? "Play" : "Pause"} disabled={ended ? !available : !transportReady} onClick={() => { if (ended) void run({ type: "play", entryId: current.id, fromStart: true }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>{ended ? <RotateCcw aria-hidden="true" className="size-5" /> : paused ? <Play aria-hidden="true" className="size-5 fill-current" /> : <Pause aria-hidden="true" className="size-5 fill-current" />}</Button>
-          : <Button variant="ghost" size="icon" aria-label="Stop" title="Stop" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="size-4 fill-current" /></Button>}
-        {hasNext && <Button variant="ghost" size="icon" aria-label="Next" title="Next" disabled={!nextReady} onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="size-4 fill-current" /></Button>}
+    <div className="flex min-w-0 items-center gap-3 sm:justify-center lg:justify-start">
+      <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Playback controls">
+        <PlayButton state={state} connected={connected} run={run} />
+        <Button variant="ghost" size="icon-lg" aria-label="Next" title="Next" disabled={!nextReady || !hasNext} onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>
       </div>
-      {seekable && !!playbackClock.duration && <div className="hidden w-full min-w-0 items-center gap-2 text-xs tabular-nums text-muted-foreground sm:flex [&_[data-slot=slider]]:min-h-4">
-        <span>{formatDuration(playbackClock.position)}</span>
-        <RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position} max={playbackClock.duration} showValue={false} keyboardStep={10} disabled={!transportReady}
-          onCommit={position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : Promise.resolve(false)} />
-        <span>{formatDuration(length)}</span>
-      </div>}
+      <PlaybackTimeline state={state} connected={connected} run={run} compact className="min-w-0 flex-1 max-lg:hidden [&_[data-current-chapter]]:hidden max-[1100px]:[&_[data-end-time]]:hidden [&_[data-slot=slider]]:min-h-4" />
     </div>
     <div className="flex min-w-0 items-center justify-end gap-0.5">
       <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="mr-3 w-28 min-w-0 flex-none max-[1100px]:hidden" />
       <Popover>
-        <PopoverTrigger asChild><Button variant="ghost" size="icon" className="max-[480px]:hidden min-[1100px]:hidden" aria-label="Volume controls" title="Volume">{muted(state) ?<VolumeX aria-hidden="true" className="size-4" /> : <Volume2 aria-hidden="true" className="size-4" />}</Button></PopoverTrigger>
+        <PopoverTrigger asChild><Button variant="ghost" size="icon-lg" className="min-[1100px]:hidden" aria-label="Volume controls" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
         <PopoverContent side="top" align="end" aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
       </Popover>
-      <Button variant="ghost" size="icon" aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" className="size-4" /></Button>
-      <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Expand player" title="Expand player" onClick={() => onOpen()}><Maximize2 aria-hidden="true" className="size-4" /></Button>
+      <WhereItPlays state={state} run={run} compact />
+      <Button variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" /></Button>
+      <Button variant="ghost" size="icon-lg" aria-label="Expand player" title="Expand player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
     </div>
   </footer>;
 }

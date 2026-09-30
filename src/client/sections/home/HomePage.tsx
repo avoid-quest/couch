@@ -25,6 +25,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
 import { sourceLabel } from "@/source-label";
+import { playsOn } from "@/session/device-id";
 import { offline, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId } from "../../../shared/radio";
@@ -109,20 +110,22 @@ export function HomePage() {
   };
 
   const { pausable, transportReady, active: transportActive } = playbackCapabilities(state, connected);
-  const paused = player?.status === "paused";
+  const playing = player?.status === "playing";
   const live = !!(current?.live || current?.kind === "radio");
+  const at = playsOn(state);
   const playingArt = programme?.playbackId === player?.playbackId && programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : current && art(current);
+  // Where it plays reads "on {name}" here too, as in the mini player and the player.
   const playingStatus = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
-    : [sourceLabel(current.source), paused ? "Paused" : player?.status === "loading" ? "Loading…" : null, state?.playedBy?.name && `played from ${state.playedBy.name}`].filter(Boolean).join(", ");
+    : [sourceLabel(current.source), player?.status === "paused" ? "Paused" : player?.status === "loading" ? "Loading…" : null, at?.elsewhere && `on ${at.name}${at.more ? ` +${at.more}` : ""}`].filter(Boolean).join(", ");
 
   const rows: Record<HomeRowId, ReactNode> = {
     now: current && <HomeRow title="Now" time={live ? "Live" : remaining != null ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Feature art={playingArt} title={programme?.playbackId === player?.playbackId && programme?.title || current.title} meta={playingStatus}
         detail={!live && length ? <span className="flex items-center gap-3 text-sm tabular-nums text-muted-foreground"><Progress value={(playbackClock.position ?? 0) / length * 100} aria-label="Playback progress" className="h-1 max-w-xs flex-1 rounded-none bg-muted [&_[data-slot=progress-indicator]]:bg-foreground" />{formatDuration(playbackClock.position ?? 0)} / {formatDuration(length)}</span> : undefined}>
         <Button data-page-first onClick={() => shell.changeSection("Now")}>Open player</Button>
-        <Button variant="ghost" disabled={!connected || (pausable ? !transportReady : !transportActive)} onClick={() => { if (!pausable) void run({ type: "stop" }); else if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>
-          {!pausable ? <Square aria-hidden="true" className="fill-current" /> : paused ? <Play aria-hidden="true" className="fill-current" /> : <Pause aria-hidden="true" className="fill-current" />}{!pausable ? "Stop" : paused ? "Play" : "Pause"}
+        <Button variant="ghost" disabled={!connected || (pausable ? !transportReady : !transportActive)} onClick={() => { if (!pausable) void run({ type: "stop" }); else if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
+          {!pausable ? <Square aria-hidden="true" className="fill-current" /> : playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}{!pausable ? "Stop" : playing ? "Pause" : "Play"}
         </Button>
       </Feature>
     </HomeRow>,

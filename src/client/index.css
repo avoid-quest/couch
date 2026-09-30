@@ -143,7 +143,6 @@ html { view-transition-name: none; }
 .player-control-row { display: grid; grid-template-columns: auto minmax(0, 10rem) minmax(0, 1fr); align-items: center; gap: 1.5rem; }
 .player-volume { min-width: 0; width: 10rem; flex: 0 1 10rem; }
 @media (min-width: 960px) {
-  [data-artwork-stage] [data-panel="queue"] { visibility: hidden; }
   [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
   [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
   .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { bottom: var(--bottom-bar, 10rem); grid-template-columns: minmax(0, 1fr) 24rem; }
