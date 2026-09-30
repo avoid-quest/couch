@@ -90,7 +90,7 @@ function DetailLayout({ title, meta, description, thumbnail, position, duration,
       <div className="flex items-start gap-4">
         <MediaArtwork thumbnail={thumbnail} title={title} className="size-20 shrink-0 object-contain sm:size-24" />
         <div className="min-w-0 space-y-2">
-          <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight break-words">{title}</h1>
+          <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight break-words outline-none">{title}</h1>
           {(meta || duration != null) && <p className="text-sm text-muted-foreground">{[meta, duration != null && formatDuration(duration)].filter(Boolean).join(" · ")}</p>}
           {!!position && <p className="text-sm text-muted-foreground">Resume at {formatDuration(position)}</p>}
           <div className="flex items-center gap-1">{primary}<BrowseActions title={title} actions={actions} /></div>
