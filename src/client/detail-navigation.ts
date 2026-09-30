@@ -8,7 +8,8 @@ declare module "@tanstack/react-router" {
 }
 
 export const itemLocation = (kind: "history" | "saved" | "radio", id: string) => `/item${defaultStringifySearch({ kind, id })}`;
-export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url">) => `/collection?${new URLSearchParams({ provider: item.provider, url: item.url })}`;
+export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url" | "collection">, search: { cursors?: string[]; page?: number; filter?: string } = {}) => `/collection${defaultStringifySearch({ provider: item.provider, url: item.url, ...(item.collection ? { context: item.collection } : {}),
+  ...(search.cursors?.length ? { cursors: search.cursors } : {}), ...(search.page && search.page > 1 ? { page: search.page } : {}), ...(search.filter ? { filter: search.filter } : {}) })}`;
 
 function opener(selector?: string): FocusTarget | undefined {
   const active = document.activeElement;
@@ -45,7 +46,7 @@ export function useDetailNavigation() {
 export function DetailFocusRestoration() {
   const location = useLocation();
   useEffect(() => {
-    const target = location.state.detailFocus ?? (["/item", "/collection"].includes(location.pathname) ? { selector: "[data-page] [data-back]", index: 0 } : undefined);
+    const target = location.state.detailFocus ?? (["/item", "/collection"].includes(location.pathname) ? { selector: "[data-page] h1", index: 0 } : undefined);
     if (!target) return;
     const restore = () => {
       const element = document.querySelectorAll<HTMLElement>(target.selector)[target.index];
