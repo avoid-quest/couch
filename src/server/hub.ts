@@ -405,7 +405,7 @@ export async function createHub(options: HubOptions) {
     finally { playback.next = undefined; playback.joining = undefined; }
     broadcast();
   };
-  // Speakers panel (#644 Actions): a Device's sound joins or leaves, and a screen's tile toggles
+  // Where it plays (#644 Actions): a Device's sound joins or leaves, and a screen's tile toggles
   // its picture. A speaker's delay is its own (Sendspin).
   const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; sound?: boolean; delay?: number }, authorize: () => void) => {
     if (change.delay !== undefined) sendspin.setDelay(deviceId, change.delay);
