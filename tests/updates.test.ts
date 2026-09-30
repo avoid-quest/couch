@@ -23,6 +23,8 @@ let swaps: string[];
 let temporary: string;
 let bundles: string[];
 let timerActive: boolean;
+let delayedTimer: ((error: Error | null, stdout: string, stderr: string) => void) | null;
+let delayTimer: boolean;
 const autoUpdater = Object.assign(new EventEmitter(), {
   channel: "latest",
   autoDownload: true,
@@ -46,7 +48,7 @@ mock.module("electron", () => ({ app, Notification: class { show() {} } }));
 mock.module("electron-updater", () => ({ default: { autoUpdater } }));
 mock.module("node:child_process", () => ({
   execFile(command: string, args: string[], callback: (error: Error | null, stdout: string, stderr: string) => void) {
-    if (command === "systemctl" && args[0] === "is-active") { callback(timerActive ? null : new Error("inactive"), "", ""); return; }
+    if (command === "systemctl" && args[0] === "is-active") { if (delayTimer) delayedTimer = callback; else callback(timerActive ? null : new Error("inactive"), "", ""); return; }
     if (command === "ditto") {
       const directory = args.at(-1)!;
       mkdirSync(join(directory, "Couch.app"));
@@ -68,6 +70,7 @@ beforeEach(() => {
   bundles = []; downloads = []; swaps = [];
   available = null; checkError = null; installError = null;
   timerActive = false;
+  delayTimer = false; delayedTimer = null;
   app.isPackaged = false;
   app.removeAllListeners(); autoUpdater.removeAllListeners();
   autoUpdater.on("error", () => {}); // electron-updater's own logging listener.
@@ -189,4 +192,19 @@ test("an inactive TV timer is reported as off while manual updates remain ready"
   timerActive = true;
   await updates.check();
   expect(updates.state().automatic?.active).toBe(true);
+});
+
+test("a TV check reserves its action before waiting for systemctl", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: true, onState() {} });
+  app.isPackaged = true;
+  available = "0.3.1";
+  await updates.check();
+  delayTimer = true;
+  const check = updates.check();
+  expect(updates.state().status).toBe("checking");
+  await expect(updates.install("0.3.1")).rejects.toThrow("available update changed");
+  delayedTimer!(null, "", "");
+  await check;
+  expect(updates.state().status).toBe("ready");
 });
