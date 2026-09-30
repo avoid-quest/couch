@@ -50,7 +50,7 @@ the package above; an old AppImage installation stays as it is and its session i
 not switched.
 
 The TV checks for updates like the desktop app and shows them in **Settings >
-This app > Updates**, but root installs them. `couch-update.timer` runs
+Updates**, but root installs them. `couch-update.timer` runs
 `couch-update.service` 15 minutes after boot and daily between 04:00 and 05:00:
 it installs the newest release on the TV's channel (the one picked in Settings;
 by default Preview on a preview build, else Stable) unless something plays. It
@@ -58,7 +58,11 @@ never goes back to an older version, except from a preview to Stable. **Restart
 to update** installs a release sooner: the `couch-tv` account may only start
 `couch-update@<version>.service`. Both run a root script that downloads the
 release's `.deb` from avoid-quest/couch-releases, checks its sha512 against the
-release's update file, installs it and restarts the TV app.
+release's update file, installs it and restarts the TV app. The timer checks
+both Core and the TV window's fresh playback report, including Client-mode
+video and synced audio, and checks again after refreshing package lists. A
+missing Core without a fresh report waits for the next run. Manual updates
+from the administrator's button restart immediately, even during playback.
 
 From SSH, `sudo systemctl start couch-update@<version>.service` installs a release
 by hand, `systemctl list-timers couch-update.timer` shows the next run,

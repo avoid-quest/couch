@@ -56,7 +56,7 @@ mock.module("node:child_process", () => ({
 }));
 const { startUpdates } = await import("../app/update");
 const start = () => {
-  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: false, idle: async () => false, onState() {} });
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: false, onState() {} });
   app.isPackaged = true;
   return updates;
 };

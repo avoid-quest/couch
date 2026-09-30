@@ -48,6 +48,26 @@ fetch() {
         --output "$work/${1##*/}" "$1" || fail "Couldn't download ${1##*/}."
 }
 
+# Client mode has no local Core; Main reports the TV window's video and synced
+# sound every five seconds. Read user-controlled paths only as that user.
+idle() {
+    local data port heartbeat stamp now fresh=0 player
+    data=$(setting COUCH_DATA_DIR)
+    data=${data:-/home/couch-tv/.local/share/quest.avoid.couch}
+    heartbeat=$(runuser -u couch-tv -- timeout 5 head -c 64 -- "$data/update-playback" 2>/dev/null || true)
+    if [[ $heartbeat =~ ^([0-9]{1,12})[[:space:]](idle|loading|playing|paused|ended|error|unavailable)$ ]]; then
+        stamp=$((10#${BASH_REMATCH[1]})); player=${BASH_REMATCH[2]}; now=$(date +%s)
+        if (( stamp >= now - 15 && stamp <= now + 5 )); then
+            fresh=1
+            case "$player" in loading|playing|paused) return 1 ;; esac
+        fi
+    fi
+    port=$(setting COUCH_PORT)
+    [[ $port =~ ^[0-9]+$ ]] || port=4100
+    player=$(curl --silent --max-time 5 "http://127.0.0.1:$port/api/connection" | grep -oE '"player":"[a-z]*"' | cut -d'"' -f4 || true)
+    case "$player" in idle|stopped|ended|error|unavailable) return 0 ;; '') [[ $fresh = 1 ]] ;; *) return 1 ;; esac
+}
+
 if [[ $mode = auto ]]; then
     setting() { [[ -r /etc/couch/appliance.env ]] || return 0; sed -n "s/^$1=//p" /etc/couch/appliance.env | tail -1 | sed 's/^"//; s/"$//'; }
     # The TV account writes update-channel, so read it as that account, briefly.
@@ -89,22 +109,19 @@ file=$work/$deb
     || fail "$deb is not the Couch $version amd64 package."
 
 if [[ $mode = auto ]]; then
-    # Leave playback alone, checked last before the restart; if Core doesn't
-    # answer, nothing plays.
-    port=$(setting COUCH_PORT)
-    [[ $port =~ ^[0-9]+$ ]] || port=4100
-    player=$(curl --silent --max-time 5 "http://127.0.0.1:$port/api/connection" | grep -oE '"player":"[a-z]*"' | cut -d'"' -f4 || true)
-    case "$player" in ''|idle|stopped|ended|error|unavailable) ;; *) done_with waiting ;; esac
+    idle || done_with waiting
 fi
 
 # Fresh package lists let new dependencies resolve.
 apt-get update -qq || echo 'couch-update: apt-get update failed; using the current package lists.' >&2
+[[ $mode != auto ]] || idle || done_with waiting
 if [[ -n $installed ]] && dpkg --compare-versions "$(debian "$installed")" gt "$(debian "$version")"; then
     # APT resolves dependencies, then dpkg downgrades Couch alone.
     for field in Pre-Depends Depends; do
         dependencies=$(dpkg-deb -f "$file" "$field" 2>/dev/null || true)
         [[ -z $dependencies ]] || apt-get satisfy -y --no-install-recommends --no-remove "$dependencies"
     done
+    [[ $mode != auto ]] || idle || done_with waiting
     dpkg --install --force-downgrade "$file"
 else
     apt-get install -y --no-install-recommends --no-remove "$file"
