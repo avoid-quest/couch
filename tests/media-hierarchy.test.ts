@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { streamingCommunityBrowse } from "../src/server/streamingcommunity";
 import { browseRaiPlay } from "../src/server/providers/raiplay";
 import { providerMetadata } from "../src/server/provider-metadata";
+import { parseCommand } from "../src/server/validation";
 
 test("a season and its episodes retain separate series and season destinations", async () => {
   const origin = "https://streamingcommunityz.pictures";
@@ -54,4 +55,14 @@ test("a directly opened RaiPlay episode links to its programme", async () => {
   const fetchPage = (async () => Response.json({ name: "Episode", video: {}, program_name: "The show", program_url: "/programmi/the-show" })) as typeof fetch;
   const page = await browseRaiPlay({ url: video }, undefined, fetchPage);
   expect(page.item?.collection).toEqual({ title: "The show", url: "https://www.raiplay.it/programmi/the-show" });
+});
+
+test("playback accepts only bounded parent links from the same provider", () => {
+  const collection = { title: "Season 1", url: "https://www.raiplay.it/programmi/the-show/ContentSet-1234.json", parent: { title: "The show", url: "https://www.raiplay.it/programmi/the-show", ignored: true } };
+  const action = { type: "enqueueProvider", provider: "raiplay", shape: "atom", url: "https://www.raiplay.it/video/2026/09/episode.html", collection };
+  const command = (value: unknown) => JSON.stringify({ type: "command", requestId: "test", action: value });
+  expect(parseCommand(command(action)).action).toMatchObject({ collection: { ...collection, parent: { title: "The show", url: collection.parent.url } } });
+  expect("ignored" in (parseCommand(command(action)).action as typeof action).collection.parent).toBe(false);
+  expect(() => parseCommand(command({ ...action, collection: { ...collection, parent: { title: "Wrong provider", url: "https://www.youtube.com/@NASA" } } }))).toThrow();
+  expect(() => parseCommand(command({ ...action, collection: { ...collection, parent: { ...collection.parent, title: "x".repeat(301) } } }))).toThrow();
 });
