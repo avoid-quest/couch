@@ -1,5 +1,6 @@
 // Run as couch-tv with the app's own Node: ELECTRON_RUN_AS_NODE=1 /usr/bin/couch check-health.js <pid> <data dir>.
-// Read-only setup check; never expose tokens.
+// Read-only setup check: the running app is the installed Couch and, in This computer mode,
+// its Core has this data directory's couch.sqlite open and answers /api/health on loopback.
 import { readFile, readdir, readlink, stat } from "node:fs/promises";
 import process from "node:process";
 const [pid, data] = process.argv.slice(2);
@@ -21,9 +22,10 @@ if (!child && mode === "remote") {
 if (!child) throw new Error("Couch Core has not started.");
 // Electron can overwrite /proc's initial environment when setting process titles.
 // Verify the database Core actually opened, including data-directory symlinks.
+// Only stat descriptors that name a couch.sqlite, so a hung mount behind another fd cannot block the check.
 const descriptors = (await readdir(`/proc/${child}/fd`)).map(fd => `/proc/${child}/fd/${fd}`);
 const database = await stat(`${data}/couch.sqlite`);
-const files = await Promise.all(descriptors.map(fd => stat(fd).catch(() => null)));
+const files = await Promise.all(descriptors.map(fd => readlink(fd).then(target => target.endsWith("/couch.sqlite") ? stat(fd) : null).catch(() => null)));
 if (!files.some(file => file?.dev === database.dev && file.ino === database.ino)) throw new Error("Couch Core is using another data directory.");
 const sockets = new Set(await Promise.all(descriptors.map(async fd => {
   try { return (await readlink(fd)).match(/^socket:\[(\d+)\]$/)?.[1]; } catch { return null; }
