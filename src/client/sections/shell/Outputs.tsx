@@ -71,7 +71,7 @@ export function SendTo({ state, run }: Props) {
 
 /**
  * The Speakers panel: the owner's Mixer. Screens are one-press tiles; sound is a channel strip per
- * Device whose fader adds its sound (0 keeps it silent) and whose switch removes it. Sound on
+ * Device whose fader sets its volume and adds its sound (0 takes it out, as the switch does). Sound on
  * several Devices plays in sync over Sendspin (#644 ticket 10), and each speaker has its own delay.
  */
 export function Speakers({ state, run }: Props) {
@@ -106,14 +106,15 @@ export function Speakers({ state, run }: Props) {
         <div className="flex divide-x overflow-x-auto border-y">
           {devices.map(device => {
             const output = outputs.find(item => item.deviceId === device.id);
-            const level = output?.level ?? null;
+            // The fader is the Device's own volume while its sound is in, else 0.
+            const level = output?.sound ? device.volume : null;
             const disabled = !joinable(device);
             return <div key={device.id} className="grid w-28 shrink-0 content-start justify-items-center gap-2 px-2 py-3" data-in-mix={level !== null || undefined}>
-              <span className="text-xl font-medium tabular-nums">{level ?? "–"}</span>
+              <span className="text-xl font-medium tabular-nums">{level === null ? "–" : Math.round(level)}</span>
               <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} level`} value={level ?? 0} max={100} disabled={disabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} /></div>
               <span className="line-clamp-2 min-h-[2lh] text-center text-sm leading-tight">{device.name}</span>
               <span className="line-clamp-2 min-h-[2lh] w-full text-center text-xs leading-tight break-words text-muted-foreground" title={note(device) || undefined}>{note(device)}</span>
-              <Switch aria-label={`${device.name} sound`} checked={level !== null} disabled={disabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, level: on ? 50 : null })} />
+              <Switch aria-label={`${device.name} sound`} checked={level !== null} disabled={disabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, level: on ? device.volume || 50 : 0 })} />
               {level !== null && output?.delay !== undefined && <Delay name={device.name} delay={output.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
             </div>;
           })}

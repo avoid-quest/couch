@@ -164,7 +164,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
-          syncedStatus = message.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === deviceId() && output.level !== null))?.status ?? "idle";
+          syncedStatus = message.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === deviceId() && output.sound))?.status ?? "idle";
           reportPlayback();
           const { position, duration, ...player } = message.state.player;
           setState({ ...message.state, player });

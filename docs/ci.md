@@ -31,6 +31,9 @@ The update regressions run with `bun test tests/updates.test.ts` and
 Core's Node runtime: `bun build tests/remote-updates.integration.ts --target=node
 --outfile=build/remote-updates.integration.mjs`, then
 `node --test build/remote-updates.integration.mjs`.
+The device-volume regression uses the same runtime: `bun build
+tests/device-volume.integration.ts --target=node --outfile=build/device-volume.integration.mjs`,
+then `node --test build/device-volume.integration.mjs`.
 
 ## Releases
 
