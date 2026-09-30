@@ -199,6 +199,7 @@ export async function createHub(options: HubOptions) {
     const allowed = outputFor(output.deviceId, actor);
     if (output.picture && !allowed.picture || output.sound && !allowed.sound) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !allowed.picture ? "video" : "audio"}.`, 403);
   };
+  const requireReplacement = (deviceId: string, actor: string) => { const output = servedBy(deviceId)?.outputs.find(output => output.deviceId === deviceId); if (output) requireOutput(output, actor); };
   const requireControl = (id: string, actor: string) => { const output = outputFor(id, actor); if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(id)} is not sharing its outputs.`, 403); };
   const authorizePlayback = (playback: Playback, authorize: () => void, actor: string) => () => {
     authorize();
@@ -432,7 +433,7 @@ export async function createHub(options: HubOptions) {
   // Solo (#644 Actions): the Device takes over the Playback's outputs, and the current item
   // continues there where it was.
   const sendTo = async (playback: Playback, output: Output, authorize: () => void, actor: string) => {
-    const permitted = () => { authorize(); requireOutput(output, actor); };
+    const permitted = () => { authorize(); requireOutput(output, actor); requireReplacement(output.deviceId, actor); };
     permitted();
     const tab = newest(output.deviceId);
     if (!tab) throw new Error(`${nameOf(output.deviceId)} is offline.`);
@@ -467,6 +468,7 @@ export async function createHub(options: HubOptions) {
       if (!newest(deviceId)) throw new Error(`${nameOf(deviceId)} is offline.`);
       // A Device serves one Playback, so it leaves the one it served (#644 Outputs).
       const previous = servedBy(deviceId);
+      requireReplacement(deviceId, actor);
       if (previous) { release(previous, deviceId); reconcile(previous); }
       playback.outputs = [...playback.outputs, next];
     } else if (!next.picture && !next.sound) release(playback, deviceId);
@@ -1115,6 +1117,7 @@ export async function createHub(options: HubOptions) {
               }
             } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
+              if ((action.picture || action.level) && !target.outputs.some(output => output.deviceId === action.deviceId)) requireReplacement(action.deviceId, deviceId);
               if (action.picture !== undefined) requireOutput({ deviceId: action.deviceId, picture: true, sound: false }, deviceId);
               if (action.level) await setSound(action.deviceId, { volume: action.level }, permitted, deviceId);
               await setOutput(target, action.deviceId, { picture: action.picture, sound: action.level === undefined ? undefined : action.level > 0, delay: action.delay }, permitted, deviceId);
