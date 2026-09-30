@@ -16,12 +16,7 @@ export function collectionLinks(collection?: PlaybackCollection): ProviderItem[]
     .map(link => ({ id: link.url, url: link.url, title: link.title, provider, kind: "collection" }));
 }
 
-/** Start a saved episode at its show so every season remains reachable. */
+/** Open the exact containing list; its breadcrumb exposes the outer collection. */
 export function collectionTarget(collection?: PlaybackCollection): ProviderItem | undefined {
-  if (!collection) return;
-  const provider = providerForUrl(collection.url);
-  if (!provider) return;
-  const url = new URL(collection.url);
-  if (provider === "streamingcommunity") url.pathname = url.pathname.replace(/(\/titles\/\d+(?:-[\w-]*)?)\/season-\d+$/, "$1");
-  return { id: url.href, url: url.href, title: collection.title, provider, kind: "collection" };
+  return collectionLinks(collection).at(-1);
 }

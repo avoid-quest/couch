@@ -1,15 +1,21 @@
 import { useEffect } from "react";
 import { defaultStringifySearch, useLocation, useRouter } from "@tanstack/react-router";
-import type { ProviderItem } from "../shared/providers";
+import { providerForUrl, type ProviderItem } from "../shared/providers";
+import type { QueueEntry } from "../shared/protocol";
 
 type FocusTarget = { selector: string; index: number };
 declare module "@tanstack/react-router" {
   interface HistoryState { detailFocus?: FocusTarget }
 }
 
-export const itemLocation = (kind: "history" | "saved" | "radio", id: string) => `/item${defaultStringifySearch({ kind, id })}`;
+export const itemLocation = (kind: "history" | "saved" | "radio" | "queue", id: string) => `/item${defaultStringifySearch({ kind, id })}`;
 export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url" | "collection">, search: { cursors?: string[]; page?: number; filter?: string } = {}) => `/collection${defaultStringifySearch({ provider: item.provider, url: item.url, ...(item.collection ? { context: item.collection } : {}),
   ...(search.cursors?.length ? { cursors: search.cursors } : {}), ...(search.page && search.page > 1 ? { page: search.page } : {}), ...(search.filter ? { filter: search.filter } : {}) })}`;
+
+export function queueItemLocation(entry: Pick<QueueEntry, "id" | "source" | "collection">) {
+  const url = entry.source.replace(/^web:/, ""), provider = providerForUrl(url);
+  return entry.source.startsWith("radio:") ? itemLocation("radio", entry.source.slice(6)) : provider ? collectionLocation({ provider, url, collection: entry.collection }) : itemLocation("queue", entry.id);
+}
 
 function opener(selector?: string): FocusTarget | undefined {
   const active = document.activeElement;

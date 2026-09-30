@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { collectionPagination, providerCollectionCursor, readCollectionSearch } from "../src/client/collection-pagination";
 import { collectionLinks } from "../src/client/collection-target";
+import { queueItemLocation } from "../src/client/detail-navigation";
 
 test("a full album clamps a stale page after filtering and exposes the correct slice", () => {
   expect(collectionPagination(70, 2, [])).toMatchObject({ page: 2, pages: 3, start: 24, end: 48, previous: true, next: true });
@@ -37,4 +38,14 @@ test("legacy StreamingCommunity metadata exposes both the series and the exact s
   expect(collectionLinks({ title: "The show - Season 2", url: `${series}/season-2` }).map(({ title, url }) => ({ title, url })))
     .toEqual([{ title: "The show", url: series }, { title: "The show - Season 2", url: `${series}/season-2` }]);
   expect(collectionLinks({ title: "Season 2", url: `${series}/season-2`, parent: { title: "Wrong provider", url: "https://www.youtube.com/@NASA" } })).toHaveLength(1);
+});
+
+test("queue inspection opens the same provider or station page with its collection context", () => {
+  const collection = { title: "Album", url: "https://artist.bandcamp.com/album/album", index: 28 };
+  const page = new URL(queueItemLocation({ id: "entry", source: "web:https://artist.bandcamp.com/track/song", collection }), "https://couch.local");
+  expect(page.pathname).toBe("/collection");
+  expect(page.searchParams.get("url")).toBe("https://artist.bandcamp.com/track/song");
+  expect(JSON.parse(page.searchParams.get("context")!)).toEqual(collection);
+  expect(queueItemLocation({ id: "entry", source: "radio:station" })).toBe("/item?kind=radio&id=station");
+  expect(queueItemLocation({ id: "entry", source: "local-file" })).toBe("/item?kind=queue&id=entry");
 });

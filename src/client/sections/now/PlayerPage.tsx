@@ -1,6 +1,6 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square } from "lucide-react";
+import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -18,10 +18,13 @@ import { renderInto } from "@/session/renderer";
 import { playingElsewhere, showsPicture } from "@/session/device-id";
 import { SendTo, Speakers } from "@/sections/shell/Outputs";
 import { cn } from "@/lib/utils";
-import { collectionTarget } from "@/collection-target";
+import { Link } from "@tanstack/react-router";
+import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
+import { providerForUrl } from "../../../shared/providers";
+import { queueItemLocation } from "@/detail-navigation";
 
-type Panel = "tracks" | "settings" | "info";
-const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback", info: "About this show" };
+type Panel = "tracks" | "settings";
+const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback" };
 
 export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
@@ -40,14 +43,14 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const root = useRef<HTMLElement>(null);
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
-    (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus();
+    (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus();
   }, [setQueueOpen]);
   const band = useRef<HTMLDivElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
   const panelClose = useRef<HTMLButtonElement>(null);
   const [now, setNow] = useState(Date.now());
   const player = state?.player;
-  const panel = current && (active || panelState?.panel === "info") && panelState?.playbackId === player?.playbackId ? panelState?.panel ?? null : null;
+  const panel = current && active && panelState?.playbackId === player?.playbackId ? panelState?.panel ?? null : null;
   const playing = player?.status === "playing";
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
@@ -61,7 +64,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
-  useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus(); }, [queueOpen]);
+  useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
@@ -122,18 +125,14 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
 
   const buffering = player?.status === "loading" && player.buffering;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
-  const collection = collectionTarget(current?.collection);
-  const hasInfo = !!(currentProgramme || current?.description || collection);
-  const infoLabel = currentProgramme ? "About this show" : "Details";
+  const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
+  const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
+  const detailHref = current ? queueItemLocation(current) : undefined;
+  const details = detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref}><Info aria-hidden="true" /></Link></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
-  const programmeDetails = currentProgramme && <>
-    {(currentProgramme.genre || currentProgramme.artist || currentProgramme.album || currentProgramme.bitrate) && <p className="text-sm text-muted-foreground">{[currentProgramme.genre, currentProgramme.artist, currentProgramme.album, currentProgramme.bitrate && `${currentProgramme.bitrate} kbps`].filter(Boolean).join(" · ")}</p>}
-    {currentProgramme.description && <p className="max-w-prose text-sm text-muted-foreground">{currentProgramme.description}</p>}
-    {!nativeHost && currentProgramme.programmeUrl && <Button asChild variant="link" className="pointer-events-auto h-auto w-fit p-0"><a href={currentProgramme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a></Button>}
-  </>;
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
@@ -150,7 +149,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
     <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex items-center gap-3 p-4 transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
-      <Button data-back variant="ghost" className="h-11 bg-background" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" />{shell.playerBackLabel || "Find"}</Button>
+      <div className="min-w-0 bg-background"><ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} /></div>
       {buffering && <p role="status" className="flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
     </div>
     <div className="player-workspace">
@@ -160,7 +159,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         <div data-player-audio-copy className="grid min-w-0 max-w-xl gap-2 text-center">
           <div className="flex min-w-0 items-center justify-center gap-1">
             <h1 className="min-w-0 line-clamp-2 text-2xl font-medium tracking-tight break-words" title={currentProgramme?.title || current.title}>{currentProgramme?.title || current.title}</h1>
-            {hasInfo && <Button data-panel="info" variant="ghost" size="icon" className="player-info size-11" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}
+            {details}
           </div>
           {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
@@ -190,7 +189,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
       <div className="mx-auto grid max-w-6xl gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}{hasInfo && player?.playbackId && <Button data-panel="info" variant="ghost" size="icon" className="ml-auto size-11 shrink-0" aria-label={infoLabel} title={infoLabel} aria-pressed={panel === "info"} onClick={event => openPanel("info", event.currentTarget)}><Info aria-hidden="true" /></Button>}</div>}
+        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}<span className="ml-auto">{details}</span></div>}
         {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-control-row">
           {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
@@ -208,15 +207,15 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     <Sheet modal={false} open={panel !== null} onOpenChange={open => { if (!open) setPanelState(null); }}>
       <SheetContent side="right" data-player-sheet aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); panelClose.current?.focus(); }} onCloseAutoFocus={event => { event.preventDefault(); panelTrigger.current?.focus(); }}>
-        <SheetHeader className="sticky top-0 z-10 flex-row items-center gap-2 border-b bg-background px-6 py-4"><SheetClose asChild><Button ref={panelClose} variant="ghost" className="-ml-2.5"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle className="text-base font-medium">{panel === "info" ? infoLabel : panel && panelTitles[panel]}</SheetTitle></SheetHeader>
+        <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-2 border-b bg-background px-6 py-4"><SheetTitle className="text-base font-medium">{panel && panelTitles[panel]}</SheetTitle><SheetClose asChild><Button ref={panelClose} variant="ghost" size="icon" aria-label="Close"><X aria-hidden="true" /></Button></SheetClose></SheetHeader>
         <div className="px-6 pt-4 pb-8">
           {panel === "tracks" && <Button variant="ghost" className="-ml-2.5 mb-4 h-11" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "settings" }); }}><ArrowLeft aria-hidden="true" />Playback</Button>}
           {panel === "settings" && <div className="grid divide-y border-b">
             {!audioOnly && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "tracks" }); }}><Captions aria-hidden="true" />Audio & subtitles<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
-            {hasInfo && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "info" }); }}><Info aria-hidden="true" />{infoLabel}<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
+            {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
             <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" />Stop playback</Button>
           </div>}
-          {panel === "info" ? <div className="grid gap-3"><h3 className="text-base font-medium break-words">{currentProgramme?.title || current?.title}</h3>{currentProgramme ? programmeDetails : <>{!hasInfo && <p className="text-sm text-muted-foreground">Programme details are no longer available.</p>}{current?.subtitle && <p className="text-sm text-muted-foreground">{current.subtitle}</p>}{current?.description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{current.description}</p>}</>}{collection && <Button variant="ghost" className="w-fit" aria-label={`Browse ${collection.title}`} onClick={() => shell.openProvider(collection, '[data-panel="info"]')}>Browse</Button>}</div> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
+          {panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>
       </SheetContent>
     </Sheet>
