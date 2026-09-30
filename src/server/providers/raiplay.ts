@@ -58,10 +58,11 @@ function collection(title: string, url: string, image?: string): ProviderItem {
 }
 
 function programmeLink(raw: Record<string, unknown>) {
-  const title = text(raw.program_name, 200);
+  const info = object(raw.program_info);
+  const title = text(raw.program_name || info.name, 200);
   if (!title) return;
   try {
-    const url = catalogUrl(text(raw.program_url || raw.program_path_id, 2048));
+    const url = catalogUrl(text(raw.program_url || raw.program_path_id || info.weblink || info.path_id, 2048));
     if (!/^\/(?:programmi|collezioni)\/[^/]+$/.test(url.pathname)) return;
     url.pathname = url.pathname.replace(/\.json$/, "");
     return { title, url: url.href };

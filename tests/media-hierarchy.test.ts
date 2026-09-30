@@ -52,9 +52,14 @@ test("a direct StreamingCommunity watch link opens the episode with its hierarch
 
 test("a directly opened RaiPlay episode links to its programme", async () => {
   const video = "https://www.raiplay.it/video/2026/09/episode.html";
-  const fetchPage = (async () => Response.json({ name: "Episode", video: {}, program_name: "The show", program_url: "/programmi/the-show" })) as typeof fetch;
-  const page = await browseRaiPlay({ url: video }, undefined, fetchPage);
-  expect(page.item?.collection).toEqual({ title: "The show", url: "https://www.raiplay.it/programmi/the-show" });
+  for (const metadata of [
+    { program_name: "The show", program_url: "/programmi/the-show" },
+    { program_info: { name: "The show", weblink: "/programmi/the-show" } },
+  ]) {
+    const fetchPage = (async () => Response.json({ name: "Episode", video: {}, ...metadata })) as typeof fetch;
+    const page = await browseRaiPlay({ url: video }, undefined, fetchPage);
+    expect(page.item?.collection).toEqual({ title: "The show", url: "https://www.raiplay.it/programmi/the-show" });
+  }
 });
 
 test("playback accepts only bounded parent links from the same provider", () => {
