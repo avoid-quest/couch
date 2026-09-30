@@ -53,7 +53,7 @@ fetch() {
 idle() {
     local data port heartbeat stamp now fresh=0 player
     data=$(setting COUCH_DATA_DIR)
-    data=${data:-/home/couch-tv/.local/share/quest.avoid.couch}
+    data=${data:-/var/lib/couch/.local/share/quest.avoid.couch}
     heartbeat=$(runuser -u couch-tv -- timeout 5 head -c 64 -- "$data/update-playback" 2>/dev/null || true)
     if [[ $heartbeat =~ ^([0-9]{1,12})[[:space:]](idle|loading|playing|paused|ended|error|unavailable)$ ]]; then
         stamp=$((10#${BASH_REMATCH[1]})); player=${BASH_REMATCH[2]}; now=$(date +%s)
