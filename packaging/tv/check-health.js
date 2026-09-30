@@ -19,16 +19,19 @@ if (!child && mode === "remote") {
   process.exit(0);
 }
 if (!child) throw new Error("Couch Core has not started.");
-const environment = Object.fromEntries((await readFile(`/proc/${child}/environ`, "utf8")).split("\0").filter(Boolean).map(entry => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)]));
-if (environment.COUCH_DATA_DIR !== data) throw new Error("Couch Core is using another data directory.");
-if (!/^[a-f0-9]{64}$/.test(environment.COUCH_HOST_TOKEN ?? "")) throw new Error("Couch Core has no host identity.");
-const sockets = new Set(await Promise.all((await readdir(`/proc/${child}/fd`)).map(async fd => {
-  try { return (await readlink(`/proc/${child}/fd/${fd}`)).match(/^socket:\[(\d+)\]$/)?.[1]; } catch { return null; }
+// Electron can overwrite /proc's initial environment when setting process titles.
+// Verify the database Core actually opened, including data-directory symlinks.
+const descriptors = (await readdir(`/proc/${child}/fd`)).map(fd => `/proc/${child}/fd/${fd}`);
+const database = await stat(`${data}/couch.sqlite`);
+const files = await Promise.all(descriptors.map(fd => stat(fd).catch(() => null)));
+if (!files.some(file => file?.dev === database.dev && file.ino === database.ino)) throw new Error("Couch Core is using another data directory.");
+const sockets = new Set(await Promise.all(descriptors.map(async fd => {
+  try { return (await readlink(fd)).match(/^socket:\[(\d+)\]$/)?.[1]; } catch { return null; }
 })));
 const listener = (await readFile(`/proc/${child}/net/tcp`, "utf8")).trim().split("\n").slice(1).map(line => line.trim().split(/\s+/)).find(fields => fields[3] === "0A" && fields[1].startsWith("0100007F:") && sockets.has(fields[9]));
 if (!listener) throw new Error("Couch Core has no loopback listener.");
 const origin = `http://127.0.0.1:${parseInt(listener[1].split(":")[1], 16)}`;
-const response = await fetch(`${origin}/api/health`, { headers: { Authorization: `Bearer ${environment.COUCH_HOST_TOKEN}` }, signal: AbortSignal.timeout(3000) });
+// Health is read-only and needs no host token; the socket belongs to this Core.
+const response = await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(3000) });
 if (!response.ok || !(await response.json()).ok) throw new Error("Couch Core is unhealthy.");
-const build = await (await fetch(`${origin}/api/build`, { headers: { Authorization: `Bearer ${environment.COUCH_HOST_TOKEN}` }, signal: AbortSignal.timeout(3000) })).json();
-console.log(JSON.stringify({ version: build.version, revision: build.revision, mode: mode ?? "local", appPid: Number(pid), corePid: Number(child) }));
+console.log(JSON.stringify({ mode: mode ?? "local", appPid: Number(pid), corePid: Number(child) }));

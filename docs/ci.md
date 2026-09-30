@@ -34,6 +34,11 @@ Core's Node runtime: `bun build tests/remote-updates.integration.ts --target=nod
 The device-volume regression uses the same runtime: `bun build
 tests/device-volume.integration.ts --target=node --outfile=build/device-volume.integration.mjs`,
 then `node --test build/device-volume.integration.mjs`.
+The TV health regression needs native Linux `/proc` (CPU emulation changes the
+reported executable): `bun build tests/tv-health.integration.ts --target=node
+--outfile=build/tv-health.integration.mjs`, then
+`node --test build/tv-health.integration.mjs`. The installed app's Node also
+works: `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
 
 ## Releases
 

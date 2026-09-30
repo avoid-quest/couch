@@ -25,7 +25,12 @@ manual verification utility is needed.
 
 Keep your administrator account, password and SSH access. Setup does not alter
 them. From SSH or Ctrl+Alt+F3, use `sudo couch-session logs`, `status` or `restart`.
-The initial session offers **This computer** or **Another Couch**. Setup checks the running app with `check-health.js`, run by the app's own Node (`ELECTRON_RUN_AS_NODE=1`): in This computer mode Core must be a child of the app with the TV data directory and a healthy loopback listener; Another Couch runs no Core. Select this
+The initial session offers **This computer** or **Another Couch**. Setup checks
+the running app with `check-health.js`, run by the app's own Node
+(`ELECTRON_RUN_AS_NODE=1`): in This computer mode Core must be a child of the app
+with the TV's database open and a healthy loopback listener; Another Couch runs
+no Core. The check uses Core's open files and sockets rather than
+`/proc/<pid>/environ`, which Electron can clear when setting process titles. Select this
 computer for TV playback and allow remote control to pair a phone. On an
 unclaimed TV, open **Settings > Connections**. It shows the one-use administrator
 code under **Set up your administrator remote**; **Pair a remote** opens the
