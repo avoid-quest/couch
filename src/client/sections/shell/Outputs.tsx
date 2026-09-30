@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Monitor } from "lucide-react";
+import { Monitor, SlidersVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
@@ -7,7 +7,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { RangeControl } from "@/components/RangeControl";
 import { cn } from "@/lib/utils";
-import { deviceId, playsOn } from "@/session/device-id";
+import type { playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/native-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
@@ -18,26 +18,21 @@ type Props = { state: ClientSessionState; run: (action: Action) => Promise<boole
 const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
 
 /**
- * Where it plays: the band's button names the controlled Playback's Devices and opens the Mixer, one
- * channel strip per Device. The fader is the Device's one volume while its sound is in, else 0; 0 takes
- * the sound out and raising it puts the sound in. Sound on several Devices plays in sync over Sendspin.
+ * Where it plays: the band's mixer button opens the Mixer, one channel strip per Device. The fader is the
+ * Device's one volume while its sound is in, else 0; 0 takes the sound out and raising it puts the sound in.
+ * Sound on several Devices plays in sync over Sendspin.
  */
-export function WhereItPlays({ state, run, compact = false }: Props & { compact?: boolean }) {
+export function WhereItPlays({ state, run, className }: Props & { className?: string }) {
   const outputs = state.outputs ?? [];
-  const at = playsOn(state);
   const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
   const output = (id: string) => outputs.find(item => item.deviceId === id);
   // The Playback's Devices first, then the other online ones; an offline Device only while it is an output.
   const devices = (state.devices ?? []).filter(device => device.online || output(device.id)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
   // The All fader shows the loudest in-sound Device's volume, or 0 when none is.
   const loudest = Math.max(0, ...devices.filter(device => output(device.id)?.sound).map(device => device.volume));
-  const label = `Where it plays${at ? `: ${at.name}${at.more ? ` +${at.more}` : ""}` : ""}`;
   return <Sheet>
-    {/* The mini player shows the icon alone, so a long name can't push its other controls out of their slots. */}
-    <SheetTrigger asChild><Button variant="ghost" size={compact ? "icon-lg" : "default"} className={compact ? undefined : "h-11 min-w-11 max-w-56 gap-2"} disabled={!state.playback} aria-label={label} title={label}>
-      <DeviceIcon {...signalOf(state, at?.deviceId ?? state.controlling ?? deviceId())} />
-      {at && !compact && <span className="flex min-w-0 gap-1 max-lg:hidden"><span className="truncate">{at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>}
-    </Button></SheetTrigger>
+    {/* A mixer, not a device icon: device icons stand for devices (the header's switch, the strips), and this opens them all. */}
+    <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] gap-4 overflow-y-auto px-(--gutter) pb-6">
       <SheetHeader className="gap-0.5 px-0 pr-8 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="truncate">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
       <p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a fader, then raise it to play the sound there too." : "Raise a fader to play the sound there too."} At 0 that device's sound is off.</p>
@@ -77,9 +72,9 @@ export function WhereItPlays({ state, run, compact = false }: Props & { compact?
   </Sheet>;
 }
 
-/** "on {name} +N" with the named Device's signal: where the controlled Playback plays when that isn't only this Device. */
-export function PlaysOn({ state, at }: { state: ClientSessionState; at: NonNullable<ReturnType<typeof playsOn>> }) {
-  return <span className="inline-flex min-w-0 items-center gap-1.5"><DeviceIcon {...signalOf(state, at.deviceId)} /><span className="flex min-w-0 gap-1"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span></span>;
+/** "on {name} +N", plain text: where the controlled Playback plays when that isn't only this Device. */
+export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> }) {
+  return <span className="flex min-w-0 gap-1"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>;
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up: Sendspin's

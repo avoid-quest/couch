@@ -140,8 +140,12 @@ html { view-transition-name: none; }
 .player-timeline:has([role="slider"]) [data-time-labels] { display: contents; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:first-child { grid-column: 1; grid-row: 1; max-width: 9rem; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
-.player-control-row { display: grid; grid-template-columns: auto minmax(0, 10rem) minmax(0, 1fr); align-items: center; gap: 1.5rem; }
-.player-volume { min-width: 0; width: 10rem; flex: 0 1 10rem; }
+/* Transport, then the timeline's slot, then the tools. A timeline takes its own row above (it comes first in the
+   DOM, so focus lands on it); "Live" stays in the slot between transport and tools. */
+.player-control-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .25rem 1.5rem; }
+.player-control-row > .player-timeline:has([role="slider"]) { grid-column: 1 / -1; grid-row: 1; }
+.player-control-row > .player-transport { order: -1; }
+.player-control-row > [data-player-tools] { grid-column: -2; }
 @media (min-width: 960px) {
   [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
   [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
@@ -154,14 +158,11 @@ html { view-transition-name: none; }
   [data-queue-open] .player-main { display: none; }
   [data-queue-open] .player-summary { display: none; }
   [data-queue-open] .player-queue { display: flex; grid-row: 1; }
-  .player-control-row { grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
-  .player-transport { grid-column: 1 / -1; justify-self: center; }
+  .player-control-row { column-gap: .5rem; }
 }
 @media (max-width: 599px) {
   [data-player-audio-copy] h1 { font-size: 1.25rem; }
   .player-timeline [data-current-chapter], .player-timeline [data-end-time] { display: none; }
-  .player-volume { gap: .25rem; width: 5.5rem; flex-basis: 5.5rem; }
-  .player-volume [data-slot="slider"] { min-width: 2rem; }
 }
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace, [data-queue-open] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
@@ -169,7 +170,7 @@ html { view-transition-name: none; }
   .player-header { padding-block: .25rem; }
   [data-player-band] { padding-block: .25rem; }
   .player-band.player-video-controls { padding-top: 1.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 1.5rem, rgb(0 0 0 / 96%)); }
-  .player-control-row { gap: .5rem; }
+  .player-control-row { column-gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
   [data-player-audio-copy] h1 { font-size: 1.125rem; -webkit-line-clamp: 1; }
 }

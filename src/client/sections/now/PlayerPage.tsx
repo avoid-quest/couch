@@ -1,11 +1,11 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Settings2, Square, X } from "lucide-react";
+import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Settings, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { PlaybackTimeline, PlaybackTransport, PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
+import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities } from "@/components/PlaybackTransport";
 import { sourceLabel } from "@/source-label";
 import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
 import { deviceName, offline } from "@/copy";
@@ -75,7 +75,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
-  const live = !!(current?.live || current?.kind === "radio" || current?.source.startsWith("radio:"));
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;
   const wake = () => {
@@ -149,8 +148,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     : ended && !artworkStage ? { title: findingNext ? "Finding the next item…" : `Finished ${current.title}`, detail: findingNext ? "" : "Replay to watch again.", busy: !!findingNext }
     : null;
 
-  const volume = state && <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="player-volume" />;
-
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
@@ -171,7 +168,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           </div>
           {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && (player?.status === "paused" ? <span>Paused</span> : live && <span>Live</span>)}{!ended && (elsewhere && at ? <PlaysOn state={state!} at={at} /> : currentProgramme && <span>{current.title}</span>)}</p>
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && player?.status === "paused" && <span>Paused</span>}{!ended && (elsewhere && at ? <PlaysOn at={at} /> : currentProgramme && <span>{current.title}</span>)}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
@@ -196,18 +193,18 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </aside>}
     </div>
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
-      {/* Gutter to gutter like the mini player, in its order: transport, timeline (its own row here), volume, Where it plays, Up next, then settings and fullscreen. */}
+      {/* Gutter to gutter like the mini player, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
+          A timeline takes its own row above (index.css); live that can't seek leaves "Live" in its slot. Every tool is an icon. */}
       <div className="grid gap-1">
         {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
-        {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-control-row">
+          {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
           {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
-          {volume}
-          <div data-player-tools className="ml-auto flex shrink-0 items-center">
-            {state && <WhereItPlays state={state} run={run} />}
-            <Button ref={queueTrigger} data-panel="queue" variant="ghost" className="h-11" aria-label="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" />Up next</Button>
-            <Button data-panel="tracks" disabled={audioOnly || !player?.playbackId} variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>
-            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /></Button>
+          <div data-player-tools className="flex shrink-0 items-center">
+            {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
+            {state && <WhereItPlays state={state} run={run} className="size-11" />}
+            <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
+            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
             <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>
           </div>
         </div>
