@@ -15,21 +15,20 @@ export function deviceId() {
   return id;
 }
 
-type Outputs = { outputs?: SessionState["outputs"]; devices?: SessionState["devices"]; player: Pick<SessionState["player"], "status"> } | null | undefined;
+type Outputs = Pick<SessionState, "outputs" | "devices" | "controlling"> & { player: Pick<SessionState["player"], "status"> } | null | undefined;
 /**
- * Where the looked-at Playback plays when that isn't only this Device (#644 ticket 9): the first
- * other Device's name plus how many more serve it ("Playing on Studio Mac +2"), or "Playing here +2"
- * when this Device is one of them (ticket 12).
+ * Where the controlled Playback plays: the Device to name (the controlled one while it serves it, else
+ * the one showing the picture, else the first), how many more, and whether that is only this Device.
  */
-export function playingElsewhere(state: Outputs) {
-  const ids = [...new Set(state?.outputs?.map(output => output.deviceId))];
-  const others = ids.filter(id => id !== deviceId());
-  if (!others.length || !["loading", "playing", "paused", "ended"].includes(state!.player.status)) return null;
-  const first = state!.devices?.find(device => device.id === others[0])?.name ?? "another device";
-  const here = others.length < ids.length;
-  const more = here ? others.length : ids.length - 1;
-  const label = `${here ? "Playing here" : `Playing on ${first}`}${more ? ` +${more}` : ""}`;
-  return { deviceId: others[0]!, here, name: first, more, label };
+export function playsOn(state: Outputs) {
+  const outputs = state?.outputs ?? [];
+  const ids = [...new Set(outputs.map(output => output.deviceId))];
+  if (!ids.length) return null;
+  const controlled = state!.controlling ?? deviceId();
+  const id = ids.includes(controlled) ? controlled : (outputs.find(output => output.picture) ?? outputs[0]!).deviceId;
+  const name = state!.devices?.find(device => device.id === id)?.name ?? "another device";
+  const active = ["loading", "playing", "paused", "ended"].includes(state!.player.status);
+  return { deviceId: id, name, more: ids.length - 1, elsewhere: active && !(ids.length === 1 && ids[0] === deviceId()) };
 }
 
 /** Whether this Device shows the looked-at Playback's picture. */

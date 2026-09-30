@@ -4,8 +4,8 @@ Couch is one Electron app. Core, the Node coordinator, owns the Playbacks,
 playback intent, authorization and persistent state. A remote never resolves
 private playback URLs or becomes another playback authority.
 
-The app runs in one of two modes, chosen on first run and in the **Playing here**
-popover:
+The app runs in one of two modes, chosen on first run and in Settings →
+Connections, in its **Couch** section:
 
 - **Full** (`operating-mode.json` `"local"`): Main starts Core in an Electron
   [`utilityProcess`](https://www.electronjs.org/docs/latest/api/utility-process)
@@ -33,11 +33,22 @@ window sets `autoplayPolicy: "no-user-gesture-required"` and
 
 Many Playbacks run at once (`src/server/session.ts`, one session each). A Playback
 is a queue, current item, position, pause state, speed and tracks, with its own
-outputs: each Device's picture and sound level. A Device's outputs serve one
-Playback at a time. Every window looks at one Playback and controls it; looking
-never moves outputs. Play starts media on this Device; Send to hands the looked-at
-Playback's outputs to another Device, which reloads the item where it was with
-its pause state, speed, tracks and subtitle delay. An output that goes offline
+outputs: each Device's `Output` `{ picture, sound }` in it. A Device's outputs
+serve one Playback at a time. A Device owns one volume and mute, persisted in the
+`devices` table; it renders a Playback's sound at `sound && !muted ? volume : 0`,
+and on the Linux TV with system audio its volume and mute are the system's.
+Nothing else stores a volume: the band's volume shows the loudest in-sound
+Device's and scales them all proportionally, and its mute mutes them all.
+
+Every window controls one Device (`control`, idle ones too; by default its own)
+and looks at the Playback that Device serves; controlling never moves outputs.
+Play, Queue, transport and volume act on it, and Play on a Device (`deviceId` on
+Play now, the item menus' "Play on" and "Play on {name}") starts it there and
+controls that Device, with a "Playing on {name}" toast. `solo` leaves one Device
+with the Playback's picture and sound, and `allSpeakers` adds every online
+Device's sound; a Device that joins reloads the item where it was with its pause
+state, speed, tracks and subtitle delay, and windows controlling a Device the
+Playback left follow it. An output that goes offline
 pauses its Playback until it returns, and a Playback ends when its queue does.
 Each Playback keeps its Up next in the `playback` table.
 
@@ -75,8 +86,8 @@ hear". One FFmpeg per Playback reads the audio-only rendition (YouTube's separat
 audio, an HLS master's audio playlist or audio-only variant) with network protocols
 only and a 10 s read timeout, decodes once and encodes once per wire format: Opus in
 60 ms packets, and 100 ms PCM chunks for players that don't take Opus (Firefox). Every
-speaker on a wire gets the same chunk with the same timestamp; each applies its own
-level and delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
+speaker on a wire gets the same chunk with the same timestamp; each applies its Device's
+volume and its own delay (Sendspin static delay). Pause, seek and speed restart FFmpeg where
 the Playback is; when the outputs are back on one Device, it plays directly again.
 
 Every Device showing the picture of a synced Playback fetches the video itself,

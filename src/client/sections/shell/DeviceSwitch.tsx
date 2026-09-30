@@ -7,23 +7,30 @@ import { CouchChoice } from "@/sections/settings/device/CouchChoice";
 import { deviceName } from "@/copy";
 import { deviceId } from "@/session/device-id";
 import type { ClientSessionState, Credentials } from "@/session/session";
-import type { Action, DeviceSummary } from "../../../shared/protocol";
+import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 import { StatusDot } from "./StatusLine";
 
 type State = ClientSessionState | null | undefined;
-const served = (state: State, id: string) => state?.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === id));
+export const served = (state: State, id: string) => state?.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === id));
 // Online Devices first; an offline one only while it still serves a Playback (Settings → Devices lists the rest).
 const present = (state: State) => [...state?.devices ?? []].sort((a, b) => Number(b.online) - Number(a.online)).filter(device => device.online || served(state, device.id));
 
-/** What a Device is doing: its Playback's title, "with {name}" when it joins another Device's Playback, Idle or Offline. */
-function doing(state: State, device: DeviceSummary) {
+const statusText: Partial<Record<PlaybackSummary["status"], string>> = { loading: "Loading", playing: "Playing", paused: "Paused", ended: "Finished", error: "Can't play" };
+
+/**
+ * What a Device is doing: its Playback's title, "with {name}" when it joins another Device's Playback,
+ * Idle or Offline. Beside `current` (the Playback in view), another Playback reads "Playing {title}"
+ * and the one in view its status, as its title is already on screen.
+ */
+export function doing(state: State, device: DeviceSummary, current?: string | null) {
   if (!device.online) return "Offline";
   const playback = served(state, device.id);
   if (!playback) return "Idle";
+  if (current && playback.id !== current) return `Playing ${playback.title ?? "something else"}`;
   // A Playback belongs to the Device showing its picture, else to its first Device.
   const lead = (playback.outputs.find(output => output.picture) ?? playback.outputs[0])!.deviceId;
   const leader = lead !== device.id && state?.devices?.find(item => item.id === lead);
-  return leader ? `with ${leader.name}` : playback.title ?? "Playing";
+  return leader ? `with ${leader.name}` : current ? statusText[playback.status] ?? "Playing" : playback.title ?? "Playing";
 }
 
 /**

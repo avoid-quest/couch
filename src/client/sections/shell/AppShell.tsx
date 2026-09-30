@@ -102,7 +102,7 @@ function useShellValue() {
   const openPlayer = (panel?: "queue") => {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
-  // Keep the requested page on first sync; later picture changes, as after Send to, open the player (#644 ticket 9).
+  // Keep the requested page on first sync; later picture changes, as after Solo, open the player (#644 ticket 9).
   const picture = showsPicture(state) ? state?.playback : null;
   const shownPicture = useRef(state ? picture : undefined);
   useEffect(() => {

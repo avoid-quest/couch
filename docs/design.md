@@ -16,8 +16,8 @@ catalog provides interface icons, not brand identities.
 ## Principles
 
 - **Conventional structure, quiet style.** Home, Find, Saved and Settings, a
-  full-bleed player with a compact bottom control band, and "Playing on" one
-  step away.
+  full-bleed player with a compact bottom control band, and the Device you
+  control and where it plays one step away.
 - **The player is one tap away.** The mini dock opens the player through its
   artwork and title, with direct transport and Up next actions. Volume uses
   an inline slider where space permits and a Popover in compact windows.
@@ -39,10 +39,10 @@ catalog provides interface icons, not brand identities.
   Back, so no control may keep them all: the arrows past a radio group's first
   or last radio move on, and on the TV so do Up/Down across a horizontal slider,
   Up/Down in a one-line field and every arrow on a closed select (OK opens it).
-  A TV fader (the Speakers panel's vertical sliders, and every Volume, which
+  A TV fader (the Mixer's vertical faders, and every Volume, which
   has the player's tools beside it) moves on with every arrow until
   OK hands it the keys along it; OK, Back or leaving it ends that, as TV
-  equalisers do, and the Speakers hint says so on the TV. Playback position
+  equalisers do, and the Mixer's hint says so on the TV. Playback position
   keeps Left/Right for seeking, and a seek's brief stall keeps the transport
   enabled so focus stays where it was. Spatial navigation places a
   slider by its whole track, not its moving thumb. Screens shown before the
@@ -164,6 +164,12 @@ Shared building blocks in `src/client/components`:
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
+- `DeviceSignal`: the glyph beside every Device's name (header switch, Where it
+  plays, mini player). A tiny landscape screen, solid while the Device shows the
+  picture, and a thin meter filled to its volume while it is in the sound (dim
+  while muted); offline, both are dashed. A screen, not a second bar, so picture
+  with full sound can't read as Pause. Tokens only, `aria-hidden`; its only
+  motion is the meter's 150 ms fill.
 
 Release notes use `react-markdown` with GitHub-flavoured Markdown because the
 [shadcn catalog](https://ui.shadcn.com/docs/components) has no Markdown renderer.
@@ -178,25 +184,36 @@ Messages:
 - **Empty** for empty states. Say what goes here and offer the next step.
 - **Status line** (`Spinner` and muted text) for work in progress.
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
-  for confirmations; **Sheet** for player panels; **Popover** for "Playing
-  here" / "Playing on {Device}" with "+N" when more Devices serve the Playback. On a narrow header the
-  name truncates but the count never does, phones drop "Playing on" and say
-  "Here", and the header's Up next steps aside on phones while the mini dock's
-  own Up next shows.
-  The Popover reads top to bottom as Devices (online ones, plus offline ones
-  still serving a Playback; choosing one looks at its Playback, idle ones are
-  plain rows), Couch (which Couch this window shows: This computer or another
-  one in the app, the paired Couch in a browser) and Sound last, because a
-  focused slider owns the arrow keys. Sound outputs and Bluetooth appear only
-  where Couch controls the system's sound (Linux); elsewhere Settings hides
-  them. The Popover scrolls within the space Radix reports.
-- **Send to** is a menu of the online Devices in the player band; with none, it
-  says so instead of disabling the button. The **Speakers** Sheet is the Mixer:
-  screens are one-press tiles (pressed tiles invert, because Toggle's muted
-  pressed state barely shows on black), and sound is a channel strip per Device
-  whose fader adds it (0 keeps it silent) and whose switch removes it. A strip's
-  "Earlier" slider plays a late speaker sooner (Sendspin's static delay);
-  "Delay" read as the opposite.
+  for confirmations; **Sheet** for player panels; **Popover** for the header's Device switch: the
+  Device this window controls, with "+N" when its Playback spans more Devices.
+  On a narrow header the name truncates but the count never does, and the
+  header's Up next steps aside on phones while the mini dock's own Up next
+  shows. The Popover lists only Devices (online ones, plus offline ones still
+  serving a Playback), each with its DeviceSignal and what it is doing (Idle,
+  Offline, "with {name}", or its title); "This device" marks this window's own.
+  Choosing one controls it, idle ones too. Which Couch this window shows is
+  setup, in Settings → Connections. The Popover scrolls within the space Radix
+  reports.
+- **Where it plays** is one band button with the controlled Playback's
+  DeviceSignal and Device names ("Living room TV +1"; the name truncates,
+  never the count; icon only on narrow bands). It opens a
+  bottom Sheet, the Mixer, with All speakers at the top. Each Device is a
+  channel strip: the Playback's Devices first, then the other online ones
+  dimmed but fully operable. A strip reads top to bottom as a Picture tile
+  (pressed tiles invert, because Toggle's muted pressed state barely shows on
+  black), the fader's number, the fader, the Device's signal, name and what it
+  is doing, then Solo and Mute (pressed, they invert too). The fader is the
+  Device's one volume while its sound is in, else 0: 0 turns its sound off and
+  raising it turns it on. No other volume is ever shown. A strip's "Earlier"
+  slider, shown while its sound is in, plays a late speaker sooner (Sendspin's
+  static delay); "Delay" read as the opposite. The band and mini player volume
+  shows the loudest in-sound Device's and moves them all together; their Mute
+  mutes them all, and so does M.
+- **Play on** in item menus offers the other online Devices, hidden while this
+  is the only one; the primary Play says "Play on {name}" while you control
+  another Device, and a "Playing on {name}" toast confirms it. The mini player
+  and the player's summary say "on {name}" (+N) with its signal whenever the
+  controlled Playback plays anywhere but only here.
 
 ## Copy
 
@@ -205,7 +222,9 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | Say | Not |
 | --- | --- |
 | the device's name, or Couch | host, playback host/computer/device, coordinator, installation |
-| This computer / Playing here | this installation, this app |
+| This computer, This device | this installation, this app |
+| Where it plays, Picture, Solo, Mute, All speakers | Speakers panel, look at, host |
+| Play on {name}, Playing on {name} | Send to, Cast to |
 | device (a phone, browser, app window or TV) | remote, controller, client |
 | Share on network | Allow remotes, remote control |
 | admin, Make admin, Become admin | administrator, Claim administration |
