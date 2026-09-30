@@ -9,7 +9,8 @@ import { DurationBar } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { savedSourceLabel } from "@/saved-source";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { usePlayOn } from "@/components/PlayOn";
+import { BrowseActions } from "@/sections/find/SearchPanel";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
@@ -48,7 +49,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     mutationFn: (order: string[]) => apiSend(credentials, "/api/for-later/reorder", { order }, "POST", 10_000),
     onSettled: refresh,
   });
-  const { on, play } = usePlayOn();
+  const { play } = usePlayOn();
   const action = useMutation({
     mutationFn: ({ item, mode, deviceId }: { item: ForLaterItem; mode: Mode; deviceId?: string }) => {
       const path = `/api/for-later/${encodeURIComponent(item.id)}`;
@@ -103,7 +104,6 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             const art = <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />;
             const meta = [item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ");
             const inspect = () => details.open(itemLocation("saved", item.id));
-            const playButton = <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={on(`Play ${item.title}`)} onClick={() => act(item, "play", index)}>Play</Button>;
             return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
               art={<Button variant="ghost" className="h-auto p-0 touch:h-auto" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
               artFit="contain"
@@ -112,10 +112,12 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
               description={item.description}
               primary={{ label: "Details", onClick: inspect }}
               actions={<>
-                {playButton}
-                <PlayOnMenu title={item.title} disabled={!connected || !canPlay || pending} onPlay={deviceId => act(item, "play", index, deviceId)} />
-                <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => act(item, "append", index)}>Queue</Button>
-                <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title}`} onClick={() => act(item, "remove", index)}>Remove</Button>
+                <BrowseActions title={item.title} actions={[
+                  { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
+                  { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },
+                  { label: "Queue", disabled: !connected || pending, run: () => act(item, "append", index) },
+                  { label: "Remove", disabled: !connected || pending, run: () => act(item, "remove", index) },
+                ]} />
                 {drag.handle}
               </>}>
               {(item.duration != null || item.live) && <DurationBar duration={item.duration} live={item.live} />}

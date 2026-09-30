@@ -154,6 +154,8 @@ the TV and a desktop window show the same layout. Use Tailwind's rem sizes only.
 
 Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12, plus `gap-0.5`, `py-1.5` and `-ml-2.5` for compact rows and aligned controls. The page gutter is
 `px-(--gutter)` (3rem, 1rem on phones). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
+The shell's content wrapper sets the one top offset below the header (`pt-6`); pages add none, and Home's first row drops its rule.
+Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones.
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
@@ -169,7 +171,12 @@ owned by Couch; the Mira defaults were changed only where Clock needs it:
 Shared building blocks in `src/client/components`:
 
 - `MediaRow` / `MediaList`: thumbnail, title, meta, length bar, one main verb
-  and actions revealed on hover or focus. Home, Find and Saved.
+  and actions revealed on hover or focus. Home, Find and Saved. Every media
+  row ends with the same verbs (`BrowseActions`): a filled ▷ for Play (Resume
+  on Continue), then one "…" menu with Play on, Queue, Save and its other verbs.
+- `BrowsePagination`: every collection and radio list keeps its count, Filter
+  and pager in fixed slots, and the pager always shows Previous, "Page N of M"
+  and Next, disabled when they can't move.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.

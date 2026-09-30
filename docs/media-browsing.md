@@ -37,7 +37,7 @@ items. Browser history restores the collection page and scroll position.
 Collection rows open details through their title; a small Play control stays
 available, and secondary verbs use Couch's existing Dropdown Menu. The existing
 Find results, action layout, and time ruler remain as they are. Use one compact
-pager and omit unavailable directions rather than drawing disabled controls.
+pager with Previous, "Page N of M" and Next in fixed slots, disabling unavailable directions.
 
 Use the official shadcn [Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
 and [Pagination](https://ui.shadcn.com/docs/components/radix/pagination), together

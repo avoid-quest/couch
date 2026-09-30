@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Pause, Play, Square } from "lucide-react";
 import { toast } from "sonner";
@@ -14,8 +14,9 @@ import { DurationBar, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { apiFetch } from "@/api/client";
+import { usePlayOn } from "@/components/PlayOn";
+import { BrowseActions } from "@/sections/find/SearchPanel";
+import { apiFetch, apiSend } from "@/api/client";
 import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/progress";
 import { forLaterQuery } from "@/api/for-later";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
@@ -28,7 +29,7 @@ import { sourceLabel } from "@/source-label";
 import { playsOn } from "@/session/device-id";
 import { offline, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
-import { avoidRadioPlaylistId } from "../../../shared/radio";
+import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/viewing";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 export function HomePage() {
   const playbackClock = usePlaybackClock();
   const shell = useShell();
-  const { on } = usePlayOn();
+  const { on, play: playOn } = usePlayOn();
   const { credentials, available, current, programme } = shell;
   const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
@@ -66,6 +67,18 @@ export function HomePage() {
   const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && hasRow("radio") });
   // Built-in stations fill the row, so a fresh Couch opens on something playable.
   const builtIn = useQuery({ ...radioSearchQuery(credentials, "avoid radio", ""), enabled: connected && hasRow("radio") });
+  const client = useQueryClient();
+  const savedStation = (id: string) => !!favorites.data?.favorites.some(station => station.id === id);
+  const saveStation = useMutation({
+    mutationFn: (station: RadioStation) => savedStation(station.id) ? apiSend(credentials, `/api/radio/favorites/${encodeURIComponent(station.id)}`, undefined, "DELETE") : apiSend(credentials, "/api/radio/favorites", { station }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["radio", "favorites"] }),
+    onError: (error: Error) => toast.error(error.message || "Couldn't save this station."),
+  });
+  const stationActions = (station: RadioStation) => [
+    { label: "Play on", disabled: !available, playOn: (deviceId: string) => void playOn(() => shell.enqueueRadio(station, true), deviceId) },
+    { label: "Queue", disabled: !connected, run: () => void shell.enqueueRadio(station, false) },
+    { label: savedStation(station.id) ? "Saved" : "Save", pressed: savedStation(station.id), disabled: !connected || !favorites.data || saveStation.isPending, run: () => saveStation.mutate(station) },
+  ];
 
   const player = state?.player;
   const queue = state?.queue ?? [];
@@ -143,6 +156,7 @@ export function HomePage() {
       {lead && leadShow && <div className="mb-6"><Feature onInspect={() => details.open(itemLocation("radio", lead.id))} art={<MediaArtwork thumbnail={leadShow.artworkUrl ?? lead.logoUrl} title={lead.name} />} title={leadShow.title} meta={[lead.name, leadShow.genre].filter(Boolean).join(" · ")}
         detail={leadShow.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{leadShow.description}</p>}>
         <Button data-page-first aria-label={on(`Play ${lead.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(lead, true)}><Play aria-hidden="true" className="fill-current" />Play {lead.name}</Button>
+        <BrowseActions title={lead.name} actions={stationActions(lead)} />
       </Feature></div>}
       <ul aria-label="Radio stations" className="grid border-t sm:grid-cols-2 sm:gap-x-6 xl:grid-cols-3">
         {stations.filter(station => station !== lead).slice(0, shown.radio).map(station => {
@@ -154,7 +168,7 @@ export function HomePage() {
                 <span className="truncate text-base font-medium">{station.name}</span>
                 <span className="truncate text-sm text-muted-foreground">{[onNow?.title, onNow?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode)}</span>
               </span>
-            </Button><Button variant="ghost" aria-label={`Play ${station.name}`} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)}>Play</Button></div></li>;
+            </Button><BrowseActions title={station.name} actions={[{ label: "Play", disabled: !available, run: () => void shell.enqueueRadio(station, true) }, ...stationActions(station)]} /></div></li>;
         })}
       </ul>
     </HomeRow>,
@@ -164,11 +178,12 @@ export function HomePage() {
     </HomeRow>,
 
     recent: !!recent.length && <HomeRow title="Played recently" time={plural(recent.length, "title")}>
-      <RecentRail items={recent} disabled={!available} onPlay={item => void shell.playHistory(item, { fromStart: true }).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
+      <RecentRail items={recent} disabled={!available} onQueue={item => void queueHistory(item).then(ok => { if (!ok) toast.error(`Couldn't queue ${item.title}.`); }, () => toast.error(`Couldn't queue ${item.title}.`))}
+        onPlay={(item, deviceId) => void playOn(() => shell.playHistory(item, { fromStart: true }), deviceId).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
     </HomeRow>,
   };
 
-  return <section data-page="Home" aria-label="Home" className="pt-2">
+  return <section data-page="Home" aria-label="Home" className="[&>section:first-of-type]:border-t-0 [&>section:first-of-type]:pt-0">
     <h1 className="sr-only">Home</h1>
     {hasRow("recent") && !hasRow("continue") && history.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load Played recently.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive" className="mb-6"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
@@ -224,17 +239,21 @@ function UpNextStrip({ plan, more, now, disabled, pageFirst, art, onPlay, onMore
 }
 
 /** What played lately, with details and an explicit replay action. */
-function RecentRail({ items, disabled, onPlay }: { items: HistoryItem[]; disabled: boolean; onPlay: (item: HistoryItem) => void }) {
+function RecentRail({ items, disabled, onPlay, onQueue }: { items: HistoryItem[]; disabled: boolean; onPlay: (item: HistoryItem, deviceId?: string) => void; onQueue: (item: HistoryItem) => void }) {
   const details = useDetailNavigation();
   return <ol data-nav-row aria-label="Played recently" className="grid auto-cols-[minmax(10rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-1 lg:auto-cols-[minmax(12rem,1fr)]">
     {items.map(item => {
-      const play = <Button variant="ghost" aria-label={`Play ${item.title}`} disabled={disabled || !(item.playable || item.queueEntryId)} onClick={() => onPlay(item)}>Play</Button>;
+      const unplayable = disabled || !(item.playable || item.queueEntryId);
       return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><Button variant="ghost" aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))}
           className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork item={item} /></span>
           <span className="line-clamp-2 text-base font-medium">{item.title}</span>
           <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
-        </Button>{play}</li>;
+        </Button><div className="flex"><BrowseActions title={item.title} actions={[
+          { label: "Play", disabled: unplayable, run: () => onPlay(item) },
+          { label: "Play on", disabled: unplayable, playOn: deviceId => onPlay(item, deviceId) },
+          { label: "Queue", disabled: !item.playable, run: () => onQueue(item) },
+        ]} /></div></li>;
     })}
   </ol>;
 }
@@ -321,24 +340,24 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
     } catch (reason) { removed.current = null; toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
     finally { setPending(false); }
   }
-  const secondary = (item: HistoryItem) => <>
-    <PlayOnMenu title={item.title} disabled={!playable(item)} onPlay={deviceId => void act(item, "resume", deviceId)} />
-    <Button variant="ghost" aria-label={`From start ${item.title}`} disabled={!playable(item)} onClick={() => void act(item, "start")}>From start</Button>
-    <Button variant="ghost" aria-label={`Queue ${item.title}`} disabled={!connected || pending} onClick={() => void act(item, "queue")}>Queue</Button>
-    <Button variant="ghost" aria-label={`Remove ${item.title} from Continue`} disabled={!connected || pending} onClick={() => void act(item, "remove")}>Remove</Button>
-  </>;
+  const secondary = (item: HistoryItem) => [
+    { label: "Play on", disabled: !playable(item), playOn: (deviceId: string) => void act(item, "resume", deviceId) },
+    { label: "From start", disabled: !playable(item), run: () => void act(item, "start") },
+    { label: "Queue", disabled: !connected || pending, run: () => void act(item, "queue") },
+    { label: "Remove", disabled: !connected || pending, run: () => void act(item, "remove") },
+  ];
 
   if (history.error) return <Alert variant="destructive" className="mb-6"><AlertDescription>{history.error.message || "Couldn't load Continue."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>;
   if (!unfinished.length) return null;
-  const resume = (item: HistoryItem, featured = false) => <Button data-page-first disabled={!playable(item)} aria-label={on(`Resume ${item.title}`)} onClick={() => void act(item, "resume")}>{featured ? on("Resume") : "Resume"}</Button>;
+  const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={on(`Resume ${item.title}`)} onClick={() => void act(item, "resume")}>{on("Resume")}</Button>;
   const preview = (item: HistoryItem, featured: boolean) => {
     const inspect = () => details.open(itemLocation("history", item.mediaId));
     return featured ? <div key={item.mediaId} data-history-details={item.mediaId} tabIndex={-1}><Feature art={<Artwork item={item} intrinsic />} artFit={item.thumbnail ? "contain" : "cover"} onInspect={inspect} title={item.title} meta={historyMeta(item)} detail={<>
         {item.description && <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{item.description}</p>}
         <DurationBar duration={item.duration} position={item.position} />
-      </>}>{resume(item, true)}{secondary(item)}</Feature></div> : <MediaRow key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
+      </>}>{resume(item)}<BrowseActions title={item.title} actions={secondary(item)} /></Feature></div> : <MediaRow key={item.mediaId} title={item.title} meta={historyMeta(item)} description={item.description} artFit="contain"
         art={<Button variant="ghost" className="size-full rounded-none p-0 hover:opacity-80" aria-label={`Artwork details for ${item.title}`} onClick={inspect}><Artwork item={item} /></Button>}
-        primary={{ label: "Details", onClick: inspect }} actions={<>{resume(item)}{secondary(item)}</>} data-history-details={item.mediaId} tabIndex={-1}>
+        primary={{ label: "Details", onClick: inspect }} actions={<BrowseActions title={item.title} actions={[{ label: "Resume", disabled: !playable(item), run: () => void act(item, "resume") }, ...secondary(item)]} />} data-history-details={item.mediaId} tabIndex={-1}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaRow>;
   };

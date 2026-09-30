@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { BrowseActions } from "@/sections/find/SearchPanel";
 import { PageHeader } from "@/components/PageHeader";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
 import { ApiError, apiSend } from "@/api/client";
@@ -105,11 +106,11 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
         title={item.name}
         meta={summary(item)}
         primary={{ label: "Open", onClick: () => select(item.id), disabled }}
-        actions={<>
-          <Button variant="ghost" disabled={disabled || !canPlay || !item.entryCount} aria-label={on(`Play ${item.name}`)} onClick={() => void load(item, "play")}>Play</Button>
-          <PlayOnMenu title={item.name} disabled={disabled || !canPlay || !item.entryCount} onPlay={deviceId => void load(item, "play", deviceId)} />
-          <Button variant="ghost" disabled={disabled || !item.entryCount} aria-label={`Queue ${item.name}`} onClick={() => void load(item, "append")}>Queue</Button>
-        </>} />)}</MediaList>}
+        actions={<BrowseActions title={item.name} actions={[
+          { label: "Play", disabled: disabled || !canPlay || !item.entryCount, run: () => void load(item, "play") },
+          { label: "Play on", disabled: disabled || !canPlay || !item.entryCount, playOn: deviceId => void load(item, "play", deviceId) },
+          { label: "Queue", disabled: disabled || !item.entryCount, run: () => void load(item, "append") },
+        ]} />} />)}</MediaList>}
     </> : <>
       <PageHeader title={playlist?.name ?? playlists.find(item => item.id === openId)?.name ?? "List"} back={{ label: "Lists", onClick: () => select(null) }} actions={playlist && <>
         <Button disabled={disabled || !canPlay || !playlist.entries.length} onClick={() => void load(playlist, "play")}>{on("Play")}</Button>

@@ -8,7 +8,8 @@ import type { RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
+import { usePlayOn } from "@/components/PlayOn";
+import { BrowseActions } from "@/sections/find/SearchPanel";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
 import type { Credentials } from "../../session/session";
@@ -92,7 +93,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const plan = over && favorite && reorderFavorites(favorites, favorite.kind, String(active.id), String(over.id));
     if (plan) reorder.mutate(plan);
   };
-  const { on, play } = usePlayOn();
+  const { play } = usePlayOn();
   const enqueue = async (favorite: Favorite, playNow: boolean, deviceId?: string) => {
     if (!connected || pending) return;
     setEnqueueing(true);
@@ -106,17 +107,19 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const itemTitle = title(favorite);
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
     return <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${itemTitle}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
-      art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} />}
+      art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}
       primary={browse
         ? { label: "Open", onClick: () => onOpenProvider(favorite.item as ProviderItem), disabled: !connected || pending }
         : { label: "Play", onClick: () => void enqueue(favorite, true), disabled: !connected || !canPlay || pending }}
       actions={<>
-        {browse && <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={on(`Play ${itemTitle}`)} onClick={() => void enqueue(favorite, true)}>Play</Button>}
-        <PlayOnMenu title={itemTitle} disabled={!connected || !canPlay || pending} onPlay={deviceId => void enqueue(favorite, true, deviceId)} />
-        <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${itemTitle}`} onClick={() => void enqueue(favorite, false)}>Queue</Button>
-        <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle}`} onClick={() => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); }}>Remove</Button>
+        <BrowseActions title={itemTitle} actions={[
+          { label: "Play", disabled: !connected || !canPlay || pending, run: () => void enqueue(favorite, true) },
+          { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => void enqueue(favorite, true, deviceId) },
+          { label: "Queue", disabled: !connected || pending, run: () => void enqueue(favorite, false) },
+          { label: "Remove", disabled: !connected || pending, run: () => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); } },
+        ]} />
         {drag.handle}
       </>}>
       {favorite.kind === "radio" ? <DurationBar live /> : favorite.item.kind === "media" && (favorite.item.duration != null || favorite.item.live) && <DurationBar duration={favorite.item.duration} live={favorite.item.live} />}
