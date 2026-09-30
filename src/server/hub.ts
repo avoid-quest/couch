@@ -200,7 +200,13 @@ export async function createHub(options: HubOptions) {
     if (output.picture && !allowed.picture || output.sound && !allowed.sound) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !allowed.picture ? "video" : "audio"}.`, 403);
   };
   const requireControl = (id: string, actor: string) => { const output = outputFor(id, actor); if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(id)} is not sharing its outputs.`, 403); };
-  const authorizePlayback = (playback: Playback, authorize: () => void, actor: string) => () => { authorize(); for (const output of playback.outputs) requireOutput(output, actor); };
+  const authorizePlayback = (playback: Playback, authorize: () => void, actor: string) => () => {
+    authorize();
+    if (playback.outputs.length && !playback.outputs.some(output => {
+      const allowed = outputFor(output.deviceId, actor);
+      return (!output.picture || allowed.picture) && (!output.sound || allowed.sound);
+    })) throw new ControllerError("This playback is not sharing its outputs.", 403);
+  };
   const playerCommand = (playback: Playback, socket: Socket<SocketData>, command: PlaybackCommand) => {
     const output = playback.outputs.find(output => output.deviceId === deviceOf(socket));
     return JSON.stringify({ type: "player", command, local: !!output?.local, output: { picture: !!output?.picture, sound: !playback.synced && !!output?.sound } } satisfies ServerMessage);
@@ -410,7 +416,7 @@ export async function createHub(options: HubOptions) {
     let playback = servedBy(deviceId);
     if (playback) authorizePlayback(playback, () => {}, actorId)();
     if (!playback || playback.outputs.length > 1) { playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); }
-    playback.outputs = playback.outputs.map(output => ({ ...output, local: output.deviceId === actorId }));
+    playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
     return playback;
   };
   // Queue and control act on the looked-at Playback; with none, the controlled Device starts one.
@@ -419,8 +425,8 @@ export async function createHub(options: HubOptions) {
   const present = (playback: Playback, actor: PlaybackActor | undefined) => {
     const actorId = actor?.deviceId ?? hostId(), deviceId = controlled(actorId);
     authorizePlayback(playback, () => {}, actorId)();
-    playback.outputs = playback.outputs.map(output => ({ ...output, local: output.deviceId === actorId }));
-    if (!playback.renderer && mpvPlayback !== playback) { requireControl(deviceId, actorId); assign(playback, [outputFor(deviceId, actorId)]); }
+    playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
+    if (!playback.renderer && !playback.synced && mpvPlayback !== playback) { requireControl(deviceId, actorId); assign(playback, [outputFor(deviceId, actorId)]); }
     return playback;
   };
   // Solo (#644 Actions): the Device takes over the Playback's outputs, and the current item
@@ -442,13 +448,14 @@ export async function createHub(options: HubOptions) {
   // its picture. A speaker's delay is its own (Sendspin).
   const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; sound?: boolean; delay?: number }, authorize: () => void, actor: string) => {
     authorize();
-    if (change.delay !== undefined) { requireOutput({ deviceId, picture: false, sound: true }, actor); sendspin.setDelay(deviceId, change.delay); }
+    requireOutput({ deviceId, picture: change.picture !== undefined, sound: change.sound !== undefined || change.delay !== undefined }, actor);
+    if (change.delay !== undefined) sendspin.setDelay(deviceId, change.delay);
     if (change.picture === undefined && change.sound === undefined) return;
     // A change while the Device is still joining applies to the output it joins with.
     const joining = playback.joining?.deviceId === deviceId ? playback.joining : undefined;
     const current = playback.outputs.find(output => output.deviceId === deviceId) ?? joining;
     const next: Output = { deviceId, picture: change.picture ?? current?.picture ?? false, sound: change.sound ?? current?.sound ?? false, local: current?.local || deviceId === actor };
-    requireOutput(next, actor);
+    requireOutput(next, next.local ? deviceId : actor);
     if (joining) { Object.assign(joining, next); return; }
     if (!current && !playback.outputs.length) {
       if (next.picture || next.sound) await sendTo(playback, next, authorize, actor);
@@ -1108,6 +1115,7 @@ export async function createHub(options: HubOptions) {
               }
             } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
+              if (action.picture !== undefined) requireOutput({ deviceId: action.deviceId, picture: true, sound: false }, deviceId);
               if (action.level) await setSound(action.deviceId, { volume: action.level }, permitted, deviceId);
               await setOutput(target, action.deviceId, { picture: action.picture, sound: action.level === undefined ? undefined : action.level > 0, delay: action.delay }, permitted, deviceId);
             }

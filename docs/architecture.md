@@ -36,8 +36,10 @@ General; all three start off. The local identity persists these choices and its
 authenticated WebSocket advertises them. Core accepts changes only from that
 device's own connection, checks target consent for playback and mixer commands,
 and rechecks it after source resolution and before a native mpv fallback.
-An Output's `local` flag records an explicit self-play or self-join; that choice
-works without granting another controller access. Revoking sharing removes
+An Output's `local` flag records an explicit self-play or self-join. Joining a
+shared Playback accepts its group transport and queue controls; direct output
+changes still require that device's sharing consent. A fully private Playback
+can only be controlled by its output devices. Revoking sharing removes
 remote output channels and stops their renderer or Sendspin membership at once.
 The receiving client also enforces its saved consent. Native administration is
 separate: sharing speakers or a screen never grants permission to update or

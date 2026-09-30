@@ -107,19 +107,59 @@ test("native administration requires its own opt-in and revocation cancels pendi
   } finally { await f.close(); }
 });
 
-test("joining your own mixer output needs no sharing permission and retains that explicit local choice", { timeout: 15_000 }, async () => {
+test("a private self-join preserves shared group controls without granting direct output control", { timeout: 15_000 }, async () => {
   const f = await fixture();
+  let resolving = false;
+  const source = createServer(() => { resolving = true; });
+  await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   try {
+    const address = source.address(); assert.ok(address && typeof address === "object");
     await f.admin.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true, video: true } });
-    await f.admin.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: `${f.hub.origin}/api/health` } });
+    await f.admin.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: `http://127.0.0.1:${address.port}/media` } });
     assert.equal((await f.device.command({ type: "control", deviceId: f.adminId })).ok, true);
     assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, level: 25 })).ok, true);
     await until(() => !!f.device.state.outputs?.find(output => output.deviceId === f.deviceId));
     assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.local, true);
     assert.ok(f.device.messages.some(message => message.type === "sendspin" && message.listen && message.local));
+    await f.device.command({ type: "output", deviceId: f.deviceId, picture: true });
+    await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true } });
+    assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, level: 40 })).ok, true);
+    assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.picture, true);
+    assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, picture: false })).ok, false);
+    assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, level: 60, picture: false })).ok, false);
+    assert.equal(f.device.state.devices?.find(device => device.id === f.deviceId)?.volume, 40);
     await f.device.command({ type: "sharing", sharing: defaultDeviceSharing });
+    await f.device.command({ type: "output", deviceId: f.deviceId, picture: false });
     assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.sound, true);
-    assert.equal((await f.admin.command({ type: "volume", deviceId: f.deviceId, volume: 50 })).ok, false);
+    assert.equal((await f.admin.command({ type: "play", entryId: "waiting" })).ok, true);
+    await until(() => resolving);
+    assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.local, true);
+    const playbackId = f.admin.state.player.playbackId!;
+    assert.equal((await f.admin.command({ type: "pause", playbackId, paused: true })).ok, true);
+    assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "next", title: "Next", source: `${f.hub.origin}/api/health` } })).ok, true);
+    for (const action of [
+      { type: "volume", deviceId: f.deviceId, volume: 50 },
+      { type: "output", deviceId: f.deviceId, level: 0 },
+      { type: "output", deviceId: f.deviceId, picture: false },
+      { type: "output", deviceId: f.deviceId, delay: 0 },
+      { type: "solo", deviceId: f.deviceId },
+    ] satisfies Action[]) assert.equal((await f.admin.command(action)).ok, false);
+    assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.sound, true);
+    assert.equal((await f.admin.command({ type: "stop", playbackId })).ok, true);
+  } finally { await f.close(); source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve())); }
+});
+
+test("waiting queues with no outputs can be edited and played on an explicit local output", { timeout: 15_000 }, async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.device.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: `${f.hub.origin}/api/health` } })).ok, true);
+    assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, picture: false, level: 0 })).ok, true);
+    await until(() => !f.device.state.outputs?.length);
+    assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "next", title: "Next", source: `${f.hub.origin}/api/health` } })).ok, true);
+    assert.equal((await f.admin.command({ type: "play", entryId: "waiting" })).ok, true);
+    await until(() => f.admin.messages.some(message => message.type === "player" && message.command.type === "load"));
+    assert.deepEqual(f.admin.state.outputs?.map(output => [output.deviceId, output.local]), [[f.adminId, true]]);
+    assert.equal(f.device.messages.some(message => message.type === "player" && message.command.type === "load"), false);
   } finally { await f.close(); }
 });
 
