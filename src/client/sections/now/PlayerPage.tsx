@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { providerForUrl } from "../../../shared/providers";
-import { collectionLocation, itemLocation } from "@/detail-navigation";
+import { queueItemLocation } from "@/detail-navigation";
 
 type Panel = "tracks" | "settings";
 const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback" };
@@ -31,7 +31,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, tvPresentation, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, tvPresentation, videoQualityPreference } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -43,7 +43,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const root = useRef<HTMLElement>(null);
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
-    (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus();
+    (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus();
   }, [setQueueOpen]);
   const band = useRef<HTMLDivElement>(null);
   const panelTrigger = useRef<HTMLButtonElement>(null);
@@ -64,7 +64,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
-  useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLButtonElement>("[data-back]"))?.focus(); }, [queueOpen]);
+  useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
@@ -127,7 +127,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
-  const detailHref = current ? current.source.startsWith("radio:") ? itemLocation("radio", current.source.slice(6)) : provider ? collectionLocation({ provider, url: current.source.replace(/^web:/, ""), collection: current.collection }) : itemLocation("queue", current.id) : undefined;
+  const detailHref = current ? queueItemLocation(current) : undefined;
   const details = detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref}><Info aria-hidden="true" /></Link></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
