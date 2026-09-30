@@ -21,16 +21,23 @@ catalog provides interface icons, not brand identities.
 - **The player is one tap away.** The mini dock opens the player through its
   artwork and title. The mini player and the player band hold one control
   order: Play/Pause and Next, the timeline, volume, Where it plays, Up next,
-  then Expand (`ChevronUp`) in the mini player or Playback settings and
-  fullscreen in the band, whose timeline takes its own row above. Volume uses
-  an inline slider where space permits and a Popover in compact windows.
+  then Expand (`ChevronUp`) in the mini player or Playback settings (a gear;
+  Audio & subtitles lives inside) and fullscreen in the band, whose timeline
+  takes its own row above. Every control there is an icon with an
+  `aria-label` and a matching `title` tooltip, never visible text. The
+  transport is Play/Pause and Next alone; the keyboard and the timeline seek.
+  Volume is a speaker icon that opens its slider and Mute in a Popover. A
+  timeline shows only where it means something: seekable media, or media with
+  a length it will seek through once loaded. Live media that can't seek shows
+  no bar, no position and no total, just "Live" in the timeline's slot.
   Audio and remote playback place contained artwork beside a persistent
   desktop queue. On phones, Up next replaces the artwork while transport stays
   available. Video uses the full viewport until Up next opens beside it.
   Queue navigation survives playback changes; track-specific settings reset.
   Transport, volume and tools share one bottom dock across media modes. Keep
   unavailable controls in their slots so loading and queue changes preserve
-  muscle memory; adapt the rows to screen width, with content above the dock.
+  muscle memory (the live timeline is the exception: it gives way to "Live");
+  adapt the rows to screen width, with content above the dock.
   Audio keeps its solid controls visible. Video controls fade over a transparent
   black scrim, preserving the picture bounds; the gradient exists only to keep
   overlaid text readable without an abrupt edge that resembles cropping. Hidden
@@ -180,8 +187,10 @@ Shared building blocks in `src/client/components`:
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
-- `DeviceIcon`: the lucide icon beside every Device's name (header switch, Where
-  it plays, mini player), familiar like Spotify's device picker. Picture and
+- `DeviceIcon`: the lucide icon beside every Device's name in the header
+  switch, its list and the Mixer's strips, familiar like Spotify's device
+  picker. Device icons stand only for Devices: the Mixer's opener is a mixer
+  icon and the "on {name}" status line is plain text. Picture and
   sound: `MonitorSpeaker`; picture: `Monitor`; sound: `Volume`, `Volume1` or
   `Volume2` by its volume (0, up to 50, above); muted: `VolumeX`. Idle, a plain
   `Monitor` in muted ink; offline, dimmer still. `aria-hidden`. It replaced a
@@ -212,10 +221,9 @@ Messages:
   list ends with Pair a device, which opens the pairing dialog. Which Couch this window shows is
   setup, in Settings → Connections. The Popover scrolls within the space Radix
   reports.
-- **Where it plays** is one button in the band and the mini player with the controlled Playback's
-  DeviceIcon and Device names ("Living room TV +1"; the name truncates,
-  never the count; icon only on narrow bands and in the mini player). It opens a
-  bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
+- **Where it plays** is one icon button in the band and the mini player, a
+  mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
+  mistaken for the header's Device switch. It opens a bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
   a console's master fader, is All: its fader sets every online Device to one
   level (0 turns every Device's sound off), stores nothing and shows the
   loudest in-sound Device's volume; it has no Picture, Solo or Mute. Then each

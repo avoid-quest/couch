@@ -1,13 +1,12 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, type RefObject } from "react";
-import { ChevronUp, ListMusic, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { ChevronUp, ListMusic, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { CollectionLinks } from "@/components/CollectionLinks";
 import { Link } from "@tanstack/react-router";
-import { PlayButton, PlaybackTimeline, PlaybackVolume, muted, playbackCapabilities } from "@/components/PlaybackTransport";
+import { PlayButton, PlaybackTimeline, VolumeButton, playbackCapabilities } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
@@ -75,7 +74,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
           <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}</span>
           <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
           {!status && time && <span className="shrink-0 tabular-nums lg:hidden">{time}</span>}
-          {at?.elsewhere && <PlaysOn state={state} at={at} />}
+          {at?.elsewhere && <PlaysOn at={at} />}
         </div>
       </div>
     </div>
@@ -87,12 +86,8 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
       <PlaybackTimeline state={state} connected={connected} run={run} compact className="min-w-0 flex-1 max-lg:hidden [&_[data-current-chapter]]:hidden max-[1100px]:[&_[data-end-time]]:hidden [&_[data-slot=slider]]:min-h-4" />
     </div>
     <div className="flex min-w-0 items-center justify-end gap-0.5">
-      <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="mr-3 w-28 min-w-0 flex-none max-[1100px]:hidden" />
-      <Popover>
-        <PopoverTrigger asChild><Button variant="ghost" size="icon-lg" className="min-[1100px]:hidden" aria-label="Volume controls" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>
-        <PopoverContent side="top" align="end" aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
-      </Popover>
-      <WhereItPlays state={state} run={run} compact />
+      <VolumeButton state={state} connected={connected} run={run} />
+      <WhereItPlays state={state} run={run} />
       <Button variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" /></Button>
       <Button variant="ghost" size="icon-lg" aria-label="Expand player" title="Expand player" onClick={() => onOpen()}><ChevronUp aria-hidden="true" /></Button>
     </div>
