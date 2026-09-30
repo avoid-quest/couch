@@ -63,3 +63,19 @@ test("the Couch app's name comes from Main, not the origin's storage", () => che
   assert.equal(notifications, 3);
   unsubscribe();
 `));
+
+test("the Couch app shares one choice from Main with every Couch it joins", () => check(`
+  import assert from "node:assert/strict";
+  const values = new Map([["couch.device-sharing", JSON.stringify({ audio: true, video: true })]]);
+  let saved = { audio: true, video: false };
+  globalThis.window = Object.assign(new EventTarget(), { couchApp: { deviceSharing: async sharing => saved = sharing ?? saved } });
+  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  const identity = await import("./src/client/session/device-id.ts");
+  assert.deepEqual(identity.localDeviceSharing(), { audio: false, video: false });
+  await identity.loadLocalDeviceSharing();
+  assert.deepEqual(identity.localDeviceSharing(), { audio: true, video: false });
+  await identity.saveLocalDeviceSharing({ audio: false, video: true });
+  assert.deepEqual(saved, { audio: false, video: true });
+  assert.equal(values.get("couch.device-sharing"), JSON.stringify({ audio: true, video: true }));
+  await assert.rejects(identity.saveLocalDeviceSharing({ audio: true, video: true, extra: true }));
+`));

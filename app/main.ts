@@ -12,6 +12,7 @@ import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridg
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
 import { readDeviceName, saveDeviceName } from "./device-name";
+import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-identity";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -325,6 +326,14 @@ handle("device-name", (_event, name) => {
   const saved = saveDeviceName(join(dataDir, "couch.sqlite"), name);
   if (core && !core.stopping) core.child.postMessage({ type: "renamed" } satisfies AppMessage);
   return saved;
+});
+// One sharing choice for this computer, whichever Couch it joins.
+const sharingPath = join(dataDir, "device-sharing.json");
+handle("device-sharing", (_event, sharing) => {
+  if (sharing === undefined) { const saved: unknown = readJson(sharingPath); return isDeviceSharing(saved) ? saved : defaultDeviceSharing; }
+  if (!isDeviceSharing(sharing)) throw new Error("Choose which outputs to share.");
+  write(sharingPath, JSON.stringify(sharing));
+  return sharing;
 });
 handle("choose", async (event, mode, address, confirm) => {
   if (mode === "remote") {

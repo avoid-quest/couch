@@ -80,7 +80,7 @@ export type SessionState = {
 };
 
 export type Action =
-  | { type: "sharing"; sharing: DeviceSharing; updates?: boolean }
+  | { type: "sharing"; sharing: DeviceSharing }
   | { type: "navigate"; key: NavigationKey }
   // With playNow, deviceId plays on that Device, which this window then controls.
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }

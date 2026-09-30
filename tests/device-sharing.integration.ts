@@ -37,7 +37,7 @@ async function fixture() {
     }) };
   }
   const admin = await connect(adminToken, adminId), device = await connect(deviceToken, deviceId, "&updates=1");
-  return { hub, admin, device, adminId, deviceId,
+  return { hub, admin, device, adminId, deviceId, deviceToken, connect,
     api: (path: string, body?: unknown) => fetch(`${hub.origin}${path}`, { headers: { Authorization: `Bearer ${adminToken}`, ...body === undefined ? {} : { "Content-Type": "application/json" } }, ...body === undefined ? {} : { method: "POST", body: JSON.stringify(body) } }),
     subtitle: (playbackId: string) => fetch(`${hub.origin}/api/subtitles?playbackId=${playbackId}&name=subtitles.vtt`, { method: "POST", headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/octet-stream" }, body: "WEBVTT\n\n00:00.000 --> 00:01.000\nHello" }),
     close: async () => { for (const socket of sockets) socket.terminate(); await hub.close(); rmSync(directory, { recursive: true, force: true }); },
@@ -57,7 +57,7 @@ test("pairing grants no output consent, even to admins; audio sharing excludes v
       assert.equal((await f.admin.command(action)).ok, false);
     }
     assert.equal(f.device.messages.some(message => message.type === "player" && message.command.type === "load"), false);
-    assert.equal((await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true } })).ok, true);
+    assert.equal((await f.device.command({ type: "sharing", sharing: { audio: true, video: false } })).ok, true);
     assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "shared", title: "Shared", source: `${f.hub.origin}/api/health` }, playNow: true, deviceId: f.deviceId })).ok, true);
     await until(() => f.device.messages.some(message => message.type === "player" && message.command.type === "load"));
     const load = f.device.messages.find(message => message.type === "player" && message.command.type === "load");
@@ -82,7 +82,7 @@ test("explicit self playback works while private and a foreign playback ID canno
     f.device.socket.send(JSON.stringify({ type: "player", state: { ...f.device.state.player, status: "playing", duration: 100, seekable: true, speed: 1, buffering: false } }));
     await until(() => f.device.state.player.status === "playing");
     assert.equal((await f.subtitle(playbackId)).status, 403);
-    assert.equal((await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true, video: true } })).ok, true);
+    assert.equal((await f.device.command({ type: "sharing", sharing: { audio: true, video: true } })).ok, true);
     assert.equal((await f.device.command({ type: "sharing", sharing: defaultDeviceSharing })).ok, true);
     assert.equal(f.device.state.outputs?.[0]?.sound, true);
     assert.equal(f.device.state.outputs?.[0]?.picture, true);
@@ -90,20 +90,22 @@ test("explicit self playback works while private and a foreign playback ID canno
   } finally { await f.close(); }
 });
 
-test("native administration requires its own opt-in and revocation cancels pending requests", { timeout: 15_000 }, async () => {
+test("a sharing device that disconnects keeps its output and resumes when it reconnects", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
-    assert.deepEqual(await (await f.api("/api/updates/targets")).json(), []);
-    assert.equal((await f.api(`/api/updates?device=${f.deviceId}`)).status, 503);
-    assert.equal((await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true, video: true } })).ok, true);
-    assert.deepEqual(await (await f.api("/api/updates/targets")).json(), []);
-    assert.equal((await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, administration: true }, updates: true })).ok, true);
-    assert.equal((await (await f.api("/api/updates/targets")).json()).length, 1);
-    const pending = f.api(`/api/updates?device=${f.deviceId}`);
-    await until(() => f.device.messages.some(message => message.type === "updates"));
-    assert.equal((await f.device.command({ type: "sharing", sharing: defaultDeviceSharing })).ok, true);
-    assert.equal((await pending).status, 503);
-    assert.deepEqual(await (await f.api("/api/updates/targets")).json(), []);
+    await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
+    assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "shared", title: "Shared", source: `${f.hub.origin}/api/health` }, playNow: true, deviceId: f.deviceId })).ok, true);
+    await until(() => f.device.messages.some(message => message.type === "player" && message.command.type === "load"));
+    f.device.socket.terminate();
+    await until(() => f.admin.state.devices?.find(device => device.id === f.deviceId)?.online === false);
+    assert.equal(f.admin.state.controlling, f.deviceId);
+    assert.deepEqual(f.admin.state.outputs?.map(output => [output.deviceId, output.sound]), [[f.deviceId, true]]);
+    const back = await f.connect(f.deviceToken, f.deviceId, "&audio=1");
+    await until(() => back.messages.some(message => message.type === "player" && message.command.type === "load"));
+    back.socket.terminate();
+    await until(() => f.admin.state.devices?.find(device => device.id === f.deviceId)?.online === false);
+    await f.connect(f.deviceToken, f.deviceId);
+    await until(() => !f.admin.state.outputs?.length);
   } finally { await f.close(); }
 });
 
@@ -114,7 +116,7 @@ test("a private self-join preserves shared group controls without granting direc
   await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   try {
     const address = source.address(); assert.ok(address && typeof address === "object");
-    await f.admin.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true, video: true } });
+    await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } });
     await f.admin.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: `http://127.0.0.1:${address.port}/media` } });
     assert.equal((await f.device.command({ type: "control", deviceId: f.adminId })).ok, true);
     assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, level: 25 })).ok, true);
@@ -122,14 +124,14 @@ test("a private self-join preserves shared group controls without granting direc
     assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.local, true);
     assert.ok(f.device.messages.some(message => message.type === "sendspin" && message.listen && message.local));
     await f.device.command({ type: "output", deviceId: f.deviceId, picture: true });
-    await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true } });
+    await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
     assert.equal((await f.admin.command({ type: "solo", deviceId: f.deviceId })).ok, false);
     assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.picture, true);
     assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, level: 40 })).ok, true);
     assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.picture, true);
     assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, picture: false })).ok, false);
     assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, level: 60, picture: false })).ok, false);
-    assert.equal(f.device.state.devices?.find(device => device.id === f.deviceId)?.volume, 40);
+    assert.equal(f.admin.state.devices?.find(device => device.id === f.deviceId)?.volume, 40);
     await f.device.command({ type: "sharing", sharing: defaultDeviceSharing });
     await f.device.command({ type: "output", deviceId: f.deviceId, picture: false });
     assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.sound, true);
@@ -146,7 +148,11 @@ test("a private self-join preserves shared group controls without granting direc
       { type: "output", deviceId: f.deviceId, delay: 0 },
       { type: "solo", deviceId: f.deviceId },
     ] satisfies Action[]) assert.equal((await f.admin.command(action)).ok, false);
-    assert.equal(f.device.state.outputs?.find(output => output.deviceId === f.deviceId)?.sound, true);
+    const volume = f.admin.state.devices?.find(device => device.id === f.deviceId)?.volume;
+    assert.equal((await f.admin.command({ type: "volume", volume: 30 })).ok, true);
+    assert.equal((await f.admin.command({ type: "allSpeakers", level: 0 })).ok, true);
+    assert.equal(f.admin.state.devices?.find(device => device.id === f.deviceId)?.volume, volume);
+    assert.equal(f.admin.state.outputs?.find(output => output.deviceId === f.deviceId)?.sound, true);
     assert.equal((await f.admin.command({ type: "stop", playbackId })).ok, true);
   } finally { await f.close(); source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve())); }
 });
@@ -154,16 +160,16 @@ test("a private self-join preserves shared group controls without granting direc
 test("joining shared audio from another playback cannot replace that device's private video", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
-    await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true } });
+    await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.device.command({ type: "enqueue", entry: { id: "private", title: "Private", source: `${f.hub.origin}/api/health` } });
     const volume = f.device.state.devices?.find(device => device.id === f.deviceId)?.volume;
-    await f.admin.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true, video: true } });
+    await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } });
     await f.admin.command({ type: "enqueue", entry: { id: "shared", title: "Shared", source: `${f.hub.origin}/api/health` } });
     assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, level: 40 })).ok, false);
     assert.equal(f.device.state.devices?.find(device => device.id === f.deviceId)?.volume, volume);
     assert.deepEqual(f.device.state.queue.map(entry => entry.id), ["private"]);
     assert.deepEqual(f.device.state.outputs, [{ deviceId: f.deviceId, picture: true, sound: true, local: true }]);
-    await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true, video: true } });
+    await f.device.command({ type: "sharing", sharing: { audio: true, video: true } });
     assert.equal((await f.admin.command({ type: "output", deviceId: f.deviceId, level: 40 })).ok, true);
     await until(() => f.device.state.queue.some(entry => entry.id === "shared"));
     assert.deepEqual(f.device.state.outputs?.find(output => output.deviceId === f.deviceId), { deviceId: f.deviceId, picture: false, sound: true, local: false });
@@ -180,7 +186,7 @@ test("Solo rechecks existing private channels after resolving the destination so
   await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   try {
     const address = source.address(); assert.ok(address && typeof address === "object");
-    await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true } });
+    await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.device.command({ type: "enqueue", entry: { id: "private", title: "Private", source: `${f.hub.origin}/api/health` } });
     await f.device.command({ type: "output", deviceId: f.deviceId, picture: false });
     await f.admin.command({ type: "enqueue", entry: { id: "moving", title: "Moving", source: `http://127.0.0.1:${address.port}/media` }, playNow: true });
@@ -224,7 +230,7 @@ test("revoking consent while a source resolves prevents its late load from start
   });
   await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   try {
-    await f.device.command({ type: "sharing", sharing: { ...defaultDeviceSharing, audio: true } });
+    await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
     const address = source.address(); assert.ok(address && typeof address === "object");
     assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "pending", title: "Pending", source: `http://127.0.0.1:${address.port}/media` }, playNow: true, deviceId: f.deviceId })).ok, true);
     await until(() => !!release);

@@ -123,7 +123,7 @@ export async function createHub(options: HubOptions) {
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<Socket<SocketData>>();
   const clientUpdates = new Map<Socket<SocketData>, ReturnType<typeof createNativeUpdates>>();
-  const updateSocket = (id: string) => [...sockets].findLast(socket => socket.data.deviceId === id && clientUpdates.has(socket) && sharingOf(id).administration);
+  const updateSocket = (id: string) => [...sockets].findLast(socket => socket.data.deviceId === id && clientUpdates.has(socket));
   const updateTargets = (): UpdateTarget[] => [
     ...options.nativeUpdates ? [{ id: "host", name: store.installationName(), tv: process.env.COUCH_TV_PRESENTATION === "1" }] : [],
     ...store.devices().flatMap(device => { const socket = updateSocket(device.id); return socket ? [{ id: device.id, name: device.name, tv: socket.data.tv }] : []; }),
@@ -137,11 +137,6 @@ export async function createHub(options: HubOptions) {
   // A client that stops reading is dropped rather than buffered without limit. A pending state goes
   // first, so every message still follows the state it was sent after.
   const send = (socket: Socket<SocketData>, message: string) => { if (pending) flush(); return socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message); };
-  const registerUpdates = (socket: Socket<SocketData>) => {
-    if (socket.data.updates && socket.data.sharing.administration && !socket.data.trusted) {
-      if (!clientUpdates.has(socket)) clientUpdates.set(socket, createNativeUpdates((requestId, action) => send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage))));
-    } else { clientUpdates.get(socket)?.close(); clientUpdates.delete(socket); }
-  };
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   // Checked at start so saved pages load from the current address; afterwards only
   // StreamingCommunity requests wait for the check.
@@ -192,8 +187,10 @@ export async function createHub(options: HubOptions) {
     for (const deviceId of new Set([...[...sockets].map(deviceOf), ...controlling.keys()])) if (left.includes(controlled(deviceId))) control(deviceId, to);
   };
   const known = (deviceId: string) => { if (deviceId !== hostId() && !store.device(deviceId)) throw new Error("That device is no longer paired."); };
-  // Consent belongs to the target's own current connection. Server admins cannot grant it.
-  const sharingOf = (id: string): DeviceSharing => id === hostId() ? { audio: store.remoteControlEnabled(), video: store.remoteControlEnabled(), administration: true } : newest(id)?.data.sharing ?? defaultDeviceSharing;
+  // Consent is what the device itself last sent; server admins cannot grant it. A device that goes
+  // offline keeps it, so it resumes what it played when it reconnects.
+  const shared = new Map<string, DeviceSharing>();
+  const sharingOf = (id: string): DeviceSharing => id === hostId() ? { audio: store.remoteControlEnabled(), video: store.remoteControlEnabled() } : shared.get(id) ?? defaultDeviceSharing;
   const outputFor = (id: string, actor: string): Output => { known(id); const sharing = sharingOf(id); return { deviceId: id, picture: id === actor || sharing.video, sound: id === actor || sharing.audio, local: id === actor }; };
   const requireOutput = (output: Output, actor: string) => {
     const allowed = outputFor(output.deviceId, actor);
@@ -501,15 +498,15 @@ export async function createHub(options: HubOptions) {
   };
   const applyConsent = () => {
     if (closed) return;
-    for (const [actor, target] of controlling) { const output = outputFor(target, actor); if (!output.picture && !output.sound) controlling.delete(actor); }
+    for (const [actor, target] of controlling) { const sharing = sharingOf(target); if (!sharing.audio && !sharing.video) controlling.delete(actor); }
     for (const playback of all()) {
       let changed = false;
       for (const output of [...playback.outputs]) {
-        const allowed = outputFor(output.deviceId, output.local ? output.deviceId : "");
-        const next = { ...output, picture: output.picture && allowed.picture, sound: output.sound && allowed.sound };
+        const sharing = sharingOf(output.deviceId);
+        const next = { ...output, picture: output.picture && (!!output.local || sharing.video), sound: output.sound && (!!output.local || sharing.audio) };
         if (next.picture === output.picture && next.sound === output.sound) continue;
         changed = true;
-        for (const tab of playback.screens.keys()) if (deviceOf(tab) === output.deviceId) { send(tab, playerCommand(playback, tab, { type: "stop" })); playback.screens.delete(tab); }
+        if (output.picture && !next.picture) for (const tab of playback.screens.keys()) if (deviceOf(tab) === output.deviceId) { send(tab, playerCommand(playback, tab, { type: "stop" })); playback.screens.delete(tab); }
         if (!next.picture && !next.sound) release(playback, output.deviceId);
         else playback.outputs = playback.outputs.map(item => item === output ? next : item);
       }
@@ -733,6 +730,7 @@ export async function createHub(options: HubOptions) {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
     for (const playback of all()) if (playback.outputs.some(output => output.deviceId === id)) { release(playback, id); reconcile(playback); }
+    shared.delete(id);
     for (const [deviceId, target] of controlling) if (deviceId === id || target === id) controlling.delete(deviceId);
     for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
@@ -990,7 +988,7 @@ export async function createHub(options: HubOptions) {
         if (playback) authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId())();
       }));
       if (!websocket) return cors(request, await (/^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-      const sharing = { audio: url.searchParams.get("audio") === "1", video: url.searchParams.get("video") === "1", administration: url.searchParams.get("administration") === "1" };
+      const sharing = { audio: url.searchParams.get("audio") === "1", video: url.searchParams.get("video") === "1" };
       return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", updates: url.searchParams.get("updates") === "1", sharing, tv: url.searchParams.get("tv") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
   });
@@ -1014,8 +1012,8 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
-        registerUpdates(socket);
-        applyConsent();
+        if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
+        if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }
         // The newest tab renders for its Device (#644 Tabs); an output back online resumes, paused.
         const playback = servedBy(deviceOf(socket));
         if (playback && mpvPlayback !== playback) handOver(playback, socket);
@@ -1026,7 +1024,6 @@ export async function createHub(options: HubOptions) {
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
-        applyConsent();
         for (const playback of all()) if (playback.renderer === socket) {
           const tab = newest(deviceOf(socket));
           if (tab) handOver(playback, tab);
@@ -1077,10 +1074,7 @@ export async function createHub(options: HubOptions) {
             if (closed) return;
             playback = lookedAt(deviceId);
           } else if (action.type === "sharing") {
-            socket.data.sharing = action.sharing;
-            socket.data.updates = action.updates === true && action.sharing.administration;
-            registerUpdates(socket);
-            applyConsent();
+            if (socket.data.deviceId) { shared.set(socket.data.deviceId, { audio: action.sharing.audio, video: action.sharing.video }); applyConsent(); }
           } else if (action.type === "navigate") {
             requireControl(hostId(), deviceId);
             const hosts = [...sockets].filter(socket => socket.data.trusted);
@@ -1103,14 +1097,14 @@ export async function createHub(options: HubOptions) {
               const allowed = outputFor(action.deviceId, deviceId);
               const output = { ...allowed, picture: allowed.picture && (!target.outputs.length || target.outputs.some(output => output.picture)) };
               const left = target.outputs.map(item => item.deviceId).filter(id => id !== action.deviceId);
-              if (target.outputs.length && !left.length) await setOutput(target, action.deviceId, output, permitted, deviceId);
+              if (target.outputs.length && !left.length) { if (output.sound && !target.outputs[0]!.sound) await setOutput(target, action.deviceId, { sound: true }, permitted, deviceId); }
               else await sendTo(target, output, permitted, deviceId);
               follow(left, action.deviceId);
               broadcast();
             } else if (action.type === "allSpeakers") {
               // The All fader: more than 0 sets every online Device to that volume and puts its sound in (a busy
               // one leaves what it played); 0 takes every Device's sound out and keeps their volumes.
-              const ids = action.level ? [...new Set([...sockets].map(deviceOf))].filter(id => outputFor(id, deviceId).sound) : target.outputs.flatMap(output => output.sound ? [output.deviceId] : []);
+              const ids = (action.level ? [...new Set([...sockets].map(deviceOf))] : target.outputs.flatMap(output => output.sound ? [output.deviceId] : [])).filter(id => outputFor(id, deviceId).sound);
               for (const id of ids) {
                 if (action.level) await setSound(id, { volume: action.level }, permitted, deviceId);
                 await setOutput(target, id, { sound: action.level > 0 }, permitted, deviceId);
@@ -1118,12 +1112,14 @@ export async function createHub(options: HubOptions) {
             } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
               if ((action.picture || action.level) && !target.outputs.some(output => output.deviceId === action.deviceId)) requireReplacement(action.deviceId, deviceId);
+              // Checked before the volume below, so a refused picture leaves the volume as it was.
               if (action.picture !== undefined) requireOutput({ deviceId: action.deviceId, picture: true, sound: false }, deviceId);
               if (action.level) await setSound(action.deviceId, { volume: action.level }, permitted, deviceId);
               await setOutput(target, action.deviceId, { picture: action.picture, sound: action.level === undefined ? undefined : action.level > 0, delay: action.delay }, permitted, deviceId);
             }
           } else if (action.type === "volume" || action.type === "mute") {
-            const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), controlled(deviceId));
+            // Without a Device, the group changes only the speakers this device may control.
+            const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), controlled(deviceId)).filter(id => outputFor(id, deviceId).sound);
             if (action.type === "volume") await setVolume(targets, action.volume, authorize, deviceId);
             else for (const id of targets) await setSound(id, { muted: action.muted }, authorize, deviceId);
           } else {

@@ -24,7 +24,7 @@ test("a phone administrator updates a Client TV through its paired WebSocket", {
   const api = (token: string, path: string, body?: unknown) => fetch(`${hub.origin}${path}`, { headers: { Authorization: `Bearer ${token}`, ...body === undefined ? {} : { "Content-Type": "application/json" } }, ...body === undefined ? {} : { method: "POST", body: JSON.stringify(body) } });
   try {
     assert.equal((await api(tv, "/api/updates/install", { version: "0.3.1" })).status, 403);
-    socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${tv}&device=${"t".repeat(43)}&updates=1&administration=1&tv=1`, { headers: { Origin: hub.origin } });
+    socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${tv}&device=${"t".repeat(43)}&updates=1&tv=1`, { headers: { Origin: hub.origin } });
     socket.onmessage = event => {
       const message = JSON.parse(String(event.data));
       if (message.type !== "updates") return;

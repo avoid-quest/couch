@@ -16,13 +16,13 @@ const read = (key: string) => { if (memory.has(key)) return memory.get(key)!; tr
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); memory.delete(key); } catch { memory.set(key, value); } };
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
 let name = couchApp?.deviceName ? null : validName(read(nameKey));
-// Sharing consent stays in this origin's storage.
+// What this device shares, like its name: the Couch app's own choice, or this browser's storage.
 const sharingKey = "couch.device-sharing";
 const readSharing = (): DeviceSharing => {
   try { const value: unknown = JSON.parse(read(sharingKey) ?? "null"); return isDeviceSharing(value) ? value : defaultDeviceSharing; }
   catch { return defaultDeviceSharing; }
 };
-let sharing = readSharing();
+let sharing = couchApp?.deviceSharing ? defaultDeviceSharing : readSharing();
 
 /** The SDK and Couch use the same storage, including when browser storage is unavailable. */
 export const storage: SendspinStorage = { getItem: read, setItem: write };
@@ -43,17 +43,23 @@ export async function saveLocalDeviceName(value: string) {
   return next;
 }
 
+const announceSharing = (next: DeviceSharing) => { if (next.audio !== sharing.audio || next.video !== sharing.video) { sharing = next; window.dispatchEvent(new Event(changed)); } };
+/** Reads the Couch app's choice; older apps without the bridge keep browser storage. */
+export async function loadLocalDeviceSharing() {
+  if (couchApp?.deviceSharing) announceSharing(await couchApp.deviceSharing());
+}
+
 export const localDeviceSharing = () => sharing;
 export async function saveLocalDeviceSharing(value: DeviceSharing) {
-  if (!isDeviceSharing(value)) throw new Error("Choose which features to share.");
-  write(sharingKey, JSON.stringify(value));
-  sharing = value;
-  window.dispatchEvent(new Event(changed));
+  if (!isDeviceSharing(value)) throw new Error("Choose which outputs to share.");
+  if (couchApp?.deviceSharing) await couchApp.deviceSharing(value);
+  else write(sharingKey, JSON.stringify(value));
+  announceSharing(value);
 }
 
 export const subscribeDeviceIdentity = (listener: () => void) => {
   const update = (event: StorageEvent) => {
-    const named = !couchApp?.deviceName && (event.key === nameKey || event.key === null), shared = event.key === sharingKey || event.key === null;
+    const named = !couchApp?.deviceName && (event.key === nameKey || event.key === null), shared = !couchApp?.deviceSharing && (event.key === sharingKey || event.key === null);
     if (!named && !shared) return;
     if (event.key === null) memory.clear(); else memory.delete(event.key);
     if (named) name = validName(read(nameKey));

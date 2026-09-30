@@ -67,7 +67,7 @@ function validAction(value: unknown): value is Action {
     case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
     case "next": return id(value.playbackId);
     case "stop": return value.playbackId === undefined || id(value.playbackId);
-    case "sharing": return isDeviceSharing(value.sharing) && (value.updates === undefined || typeof value.updates === "boolean");
+    case "sharing": return isDeviceSharing(value.sharing);
     case "control": case "solo": return id(value.deviceId);
     case "allSpeakers": return number(value.level, 100);
     case "output": return id(value.deviceId) && (value.picture === undefined || typeof value.picture === "boolean")

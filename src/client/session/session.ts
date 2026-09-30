@@ -6,7 +6,8 @@ import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
-import { deviceId, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
+import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
+import type { DeviceSharing } from "../../shared/device-identity";
 import { couchApp } from "./native-context";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -67,11 +68,14 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const sharing = localDeviceSharing();
       return local || hostSharing || (!audio || sharing.audio) && (!video || sharing.video);
     };
+    // The socket's URL carries the sharing it opened with; only a later change is sent.
+    let advertised: DeviceSharing | undefined;
     const advertiseSharing = () => {
-      const connection = socket.current;
-      if (connection?.readyState !== WebSocket.OPEN || !sameCredentials(credentials, socketCredentials.current)) return;
-      const sharing = localDeviceSharing();
-      connection.send(JSON.stringify({ type: "command", requestId: createId(), action: { type: "sharing", sharing, updates: !!couchApp?.update && sharing.administration } } satisfies ClientMessage));
+      const connection = socket.current, sharing = localDeviceSharing();
+      if (connection?.readyState === WebSocket.OPEN && sameCredentials(credentials, socketCredentials.current) && (sharing.audio !== advertised?.audio || sharing.video !== advertised?.video)) {
+        advertised = sharing;
+        connection.send(JSON.stringify({ type: "command", requestId: createId(), action: { type: "sharing", sharing } } satisfies ClientMessage));
+      }
       if (rendered && !permits(rendered.local, rendered.output?.sound ?? true, rendered.output?.picture ?? true)) play({ type: "stop" });
       if (synced && !permits(synced.local, synced.listen, synced.watch)) listen(false, false, "Couch");
     };
@@ -145,15 +149,16 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         return;
       }
       if (!authenticate || !credentials) { setStatus("pairing-required"); attempt = 0; retry = setTimeout(() => void connect(), 5_000); return; }
+      await loadLocalDeviceSharing().catch(() => {});
+      if (disposed) return;
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
-      const sharing = localDeviceSharing();
-      for (const capability of ["audio", "video", "administration"] as const) if (sharing[capability]) url.searchParams.set(capability, "1");
+      advertised = localDeviceSharing();
+      for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
-      if (couchApp?.update && sharing.administration) url.searchParams.set("updates", "1");
-      if (couchApp?.tvPresentation) url.searchParams.set("tv", "1");
+      if (couchApp?.update) { url.searchParams.set("updates", "1"); if (couchApp.tvPresentation) url.searchParams.set("tv", "1"); }
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -209,8 +214,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
         } else if (message.type === "updates" && couchApp?.update) {
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
-          if (!localDeviceSharing().administration) reply({ error: "Remote administration is off on this device." });
-          else void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
+          void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
           if (message.command.type === "stop") { rendered = undefined; play(message.command); }
           else if (permits(message.local, message.output?.sound ?? true, message.output?.picture ?? true)) { rendered = message; play(message.command); }
