@@ -33,7 +33,10 @@ type Options = {
 export function startUpdates({ channelPath, tv, idle, onState }: Options) {
   const { autoUpdater } = updater;
   const mac = process.platform === "darwin";
-  autoUpdater.autoDownload = !mac && !tv;
+  // Keep a ready installer until it is used; a replacement download clears
+  // electron-updater's pending cache even when that download fails.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   let saved: string | null = null;
   try { saved = readFileSync(channelPath, "utf8").trim(); } catch {}
   let state: UpdateState = { version: app.getVersion(), channel: saved === "latest" || saved === "preview" ? saved : own, status: "idle", available: null, progress: null, checkedAt: null, error: null };
@@ -50,6 +53,7 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
   let relaunch = false;
   let notified: string | null = null;
   const ready = (version: string) => {
+    autoUpdater.autoInstallOnAppQuit = !mac && !tv;
     set({ status: "ready", available: version, progress: null });
     if (tv || notified === version) return;
     notified = version;
@@ -57,11 +61,15 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
   };
   autoUpdater.on("download-progress", ({ percent }) => set({ progress: Math.round(percent) }));
   autoUpdater.on("update-downloaded", ({ version }) => ready(version));
+  autoUpdater.on("error", () => {
+    if (state.status === "installing") set({ status: "ready", error: "Couldn't install the update. Try again later." });
+  });
   if (mac) app.once("quit", () => { if (bundle) swap(process.pid, bundle, resolve(app.getPath("exe"), "../../.."), relaunch); });
 
   async function install() {
     if (state.status !== "ready") return;
     if (!tv) {
+      set({ status: "installing", error: null });
       relaunch = true;
       if (mac) app.quit(); else autoUpdater.quitAndInstall(true, true);
       return;
@@ -82,11 +90,11 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
       const result = await autoUpdater.checkForUpdates();
       const found = result?.isUpdateAvailable ? result.updateInfo : null;
       set({ checkedAt: Date.now() });
-      if (!found) return set({ status: "up-to-date", available: null });
-      if (found.version === waiting) ready(found.version);
+      if (waiting) ready(waiting);
+      else if (!found) return set({ status: "up-to-date", available: null });
       else if (!mac && !tv) {
         set({ status: "downloading", available: found.version, progress: 0 });
-        await result!.downloadPromise;
+        await autoUpdater.downloadUpdate();
       } else if (mac) {
         set({ status: "downloading", available: found.version, progress: 0 });
         const zip = found.files.find(file => file.url.endsWith(".zip"));
@@ -119,10 +127,14 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
     install,
     async setChannel(channel: unknown) {
       if (channel !== "latest" && channel !== "preview") throw new Error("Choose Stable or Preview.");
-      writeFileSync(channelPath, channel);
-      follow(channel);
-      set({ channel });
       await running;
+      if (channel === state.channel) return state;
+      writeFileSync(channelPath, channel);
+      autoUpdater.autoInstallOnAppQuit = false;
+      if (bundle) await rm(dirname(bundle), { recursive: true, force: true });
+      bundle = null;
+      follow(channel);
+      set({ channel, status: "idle", available: null, progress: null, error: null });
       return check();
     },
   };
