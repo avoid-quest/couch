@@ -1,5 +1,9 @@
 # Native Debian TV setup
 
+**Settings > Updates** shows whether the automatic timer is active. A stopped
+or masked timer appears as off; administrators can still use **Update and
+restart** from their paired remote.
+
 The Linux `.deb` includes optional TV setup (`/usr/sbin/couch-setup`, with the session files in `/usr/share/couch/tv`). Installing the package alone leaves
 the current login, display manager and power policy unchanged.
 
@@ -76,6 +80,9 @@ The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
 error; `rollback=unavailable` means no previous package was at hand.
+**Settings > This app > Updates** shows the last install, rollback or failure
+under **Automatic updates**, and a failed **Restart to update** shows its error
+instead of installing forever.
 After each install, including a rollback, the script runs the installed
 package's `couch-setup --refresh`, so the one `sudo couch-setup --tv` is enough:
 on a completed setup it installs TV packages and links TV files a later release
@@ -85,4 +92,5 @@ session alone; `setup=failed` in the status means it failed and the update went
 ahead.
 `sudo systemctl disable --now couch-update.timer` and then `sudo systemctl mask
 couch-update.timer` turn unattended updates off for good.
-TVs set up before this rerun `sudo couch-setup --tv` once to get the units.
+TVs set up before this rerun `sudo couch-setup --tv` once to get the units; until
+then **Automatic updates** says so.

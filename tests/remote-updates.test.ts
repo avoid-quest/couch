@@ -51,3 +51,11 @@ test("native replies are correlated and validate untrusted client state", async 
   updates.close();
   expect((await pending).message).toBe("Couch is restarting.");
 });
+
+test("invalid automatic-update details cannot reach the remote settings page", async () => {
+  let id = "";
+  const updates = createNativeUpdates(next => { id = next; });
+  const result = updates.request({ op: "read" }).catch(error => error as Error);
+  updates.receive({ requestId: id, state: { ...state, automatic: { installed: true, active: false, last: { version: {}, at: 1, outcome: "failed", error: null } } } as unknown as UpdateState });
+  expect((await result).message).toBe("Invalid update reply.");
+});

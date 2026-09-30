@@ -2,19 +2,23 @@ import { app, Notification } from "electron";
 import updater from "electron-updater";
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createWriteStream, readFileSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import type { UpdateChannel, UpdateState } from "../src/shared/app-bridge";
+import type { UpdateChannel, UpdateOutcome, UpdateState } from "../src/shared/app-bridge";
 
 // package.json build.publish: the public repo electron-updater reads.
 const releases = "https://github.com/avoid-quest/couch-releases/releases/download";
 const every = 4 * 60 * 60 * 1000;
 // The channel this build was released on (scripts/package.ts).
 const own: UpdateChannel = /-preview\.\d+$/.test(app.getVersion()) ? "preview" : "latest";
+// The TV's root update script and where it records each run (packaging/tv).
+const units = ["/usr/lib/systemd/system/couch-update@.service", "/usr/lib/systemd/system/couch-update.timer"];
+const statusPath = "/var/lib/couch-update/status";
+const outcomes = new Set(["installed", "installed-unverified", "rolled-back", "failed", "skipped", "up-to-date", "waiting"]);
 
 type Options = {
   channelPath: string;
@@ -48,6 +52,20 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
   };
   follow(state.channel);
 
+  // On the TV, the root script's last run, read at each check and when it
+  // changes. A failed run for the release being installed ends Installing….
+  let installing = 0;
+  const automatic = async () => {
+    const active = await promisify(execFile)("systemctl", ["is-active", "--quiet", "couch-update.timer"]).then(() => true, () => false);
+    const last = lastOutcome();
+    const failed = state.status === "installing" && last?.version === state.available && last.at >= installing && (last.outcome === "failed" || last.outcome === "rolled-back");
+    set({ automatic: { installed: units.every(unit => existsSync(unit)), active, last }, ...failed && { status: "ready", error: last.error ?? `Couch ${last.version} didn't install.` } });
+  };
+  if (tv) {
+    void automatic();
+    setInterval(() => void automatic(), 10_000).unref();
+  }
+
   let bundle: string | null = null;
   let relaunch = false;
   let notified: string | null = null;
@@ -68,6 +86,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
   async function install(expected?: string, delay = 0) {
     if (state.status !== "ready") { if (expected) throw new Error("The available update changed. Check again."); return; }
     if (expected && state.available !== expected) throw new Error("The available update changed. Check again.");
+    if (tv) installing = Math.floor(Date.now() / 1000) * 1000;
     set({ status: "installing", error: null });
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
     if (!tv) {
@@ -88,6 +107,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     const waiting = state.status === "ready" ? state.available : null;
     set({ status: "checking", error: null });
     try {
+      if (tv) await automatic();
       const result = await autoUpdater.checkForUpdates();
       const found = result?.isUpdateAvailable ? result.updateInfo : null;
       set({ checkedAt: Date.now() });
@@ -140,6 +160,17 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
       return state;
     },
   };
+}
+
+// KEY=value lines from the TV's update script; null when absent or garbled.
+function lastOutcome(): UpdateOutcome | null {
+  let text: string;
+  try { text = readFileSync(statusPath, "utf8"); } catch { return null; }
+  const fields = Object.fromEntries([...text.matchAll(/^(\w+)=(.*)$/gm)].map(([, key, value]) => [key, value]));
+  const at = Date.parse(fields.at ?? "");
+  if (!outcomes.has(fields.outcome) || Number.isNaN(at)) return null;
+  const release = (value = "") => /^\d+\.\d+\.\d+(-preview\.\d+)?$/.test(value) ? value : null;
+  return { version: release(fields.version), outcome: fields.outcome as UpdateOutcome["outcome"], at, error: fields.error?.trim() || null, failed: release(fields.failed) };
 }
 
 // Downloads the zip into a temporary directory, checks it against the update
