@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { collectionLocation } from "@/detail-navigation";
+import { providerCollectionCursor } from "@/collection-pagination";
 import type { Action } from "../../../shared/protocol";
 import type { MediaCollection } from "../../../shared/media";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
@@ -117,10 +118,9 @@ function OnlineResults(props: Props) {
       if (item.kind === "media") {
         const existing = savedWeb(item);
         if (!existing && item.collection) {
-          const fresh = props.paged ? await single.refetch({ throwOnError: true }) : await browse.refetch({ throwOnError: true });
+          const fresh = await client.fetchQuery({ ...providerPageQuery(props, provider, { url: item.collection.url, cursor: providerCollectionCursor(provider, item.collection) }), staleTime: 0 });
           signal.throwIfAborted();
-          const pages = fresh.data && ("pages" in fresh.data ? fresh.data.pages : [fresh.data]);
-          if (!pages?.some(page => page.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index))) throw new Error("This collection changed. Refresh it before saving this item.");
+          if (!fresh.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index)) throw new Error("This collection changed. Refresh it before saving this item.");
         }
         await readSearch(props, existing ? `/api/for-later/${encodeURIComponent(existing.id)}` : "/api/for-later", signal, { method: existing ? "DELETE" : "POST", ...(existing ? {} : { body: JSON.stringify({ reference: { kind: "web", url: item.url, title: item.title, ...(item.collection ? { collection: { url: item.collection.url, ...(item.collection.index === undefined ? {} : { index: item.collection.index }) } } : {}), thumbnail: webThumbnail(item.thumbnail), duration: typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration >= 0 && item.duration <= 86400 ? item.duration : undefined } }) }) });
         if (!signal.aborted) await client.invalidateQueries({ queryKey: ["for-later"] });

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { collectionPagination, readCollectionSearch } from "../src/client/collection-pagination";
+import { collectionPagination, providerCollectionCursor, readCollectionSearch } from "../src/client/collection-pagination";
 import { collectionLinks } from "../src/client/collection-target";
 
 test("a full album clamps a stale page after filtering and exposes the correct slice", () => {
@@ -15,6 +15,14 @@ test("cursor trails round trip and malformed collection links are rejected", () 
   const route = { provider: "youtube", url: "https://www.youtube.com/playlist?list=abcdefghijk", cursors: ["24", "48"], page: 1, filter: "" };
   expect(readCollectionSearch(JSON.parse(JSON.stringify(route)))).toEqual(route);
   expect(readCollectionSearch({ ...route, provider: "raiplay", page: -1, cursors: [{}] })).toMatchObject({ provider: undefined, page: 1, cursors: [] });
+  expect(readCollectionSearch({ provider: "youtube", url: "x".repeat(4097) }).provider).toBeUndefined();
+});
+
+test("related items and saving use the page containing an episode or playlist occurrence", () => {
+  const collection = { title: "List", url: "https://www.raiplay.it/programmi/the-show", index: 53 };
+  expect(providerCollectionCursor("raiplay", collection)).toBe("48");
+  expect(providerCollectionCursor("youtube", collection)).toBe("48");
+  expect(providerCollectionCursor("bandcamp", collection)).toBeUndefined();
 });
 
 test("a provider catalogue can open directly and item links retain their album context", () => {
