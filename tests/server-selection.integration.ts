@@ -108,6 +108,28 @@ test("ordinary Play keeps a mix and explicit Play on isolates only its named out
   } finally { await f.close(); }
 });
 
+test("explicit Play on cannot replace a target's private video while its audio is shared", { timeout: 15_000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.speaker.command({ type: "sharing", sharing: { audio: true, video: false } });
+    await f.phone.command({ type: "enqueue", entry: f.entry("waiting") });
+    await f.speaker.command({ type: "output", deviceId: speakerId, picture: true, level: 30 });
+    await until(() => f.phone.state.outputs?.length === 2 && f.phone.state.outputs.some(output => output.deviceId === speakerId && output.picture && output.local));
+    const mix = f.phone.state.playback;
+    await assert.rejects(f.phone.command({ type: "enqueue", entry: f.entry("forbidden"), playNow: true, deviceId: speakerId }), /not sharing video/);
+    assert.equal(f.phone.state.playback, mix);
+    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [hostId, speakerId]);
+    assert.equal(f.phone.state.outputs?.find(output => output.deviceId === speakerId)?.picture, true);
+    await f.phone.command({ type: "volume", deviceId: speakerId, volume: 40 });
+    await until(() => f.phone.state.devices?.find(device => device.id === speakerId)?.volume === 40);
+    // The device itself can choose a new private playback without opting its screen into sharing.
+    await f.speaker.command({ type: "enqueue", entry: f.entry("self"), playNow: true, deviceId: speakerId });
+    await until(() => f.speaker.state.currentEntryId === "self");
+    assert.notEqual(f.speaker.state.playback, mix);
+    assert.deepEqual(f.speaker.state.outputs, [{ deviceId: speakerId, picture: true, sound: true, local: true }]);
+  } finally { await f.close(); }
+});
+
 test("removing an output follows the remaining mix even while its controller is away", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {

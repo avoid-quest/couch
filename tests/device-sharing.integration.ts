@@ -209,9 +209,11 @@ test("Solo rechecks existing private channels after resolving the destination so
 test("waiting queues with no outputs can be edited and played on an explicit local output", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
+    await f.device.command({ type: "control", deviceId: f.deviceId });
     assert.equal((await f.device.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: `${f.hub.origin}/api/health` } })).ok, true);
     assert.equal((await f.device.command({ type: "output", deviceId: f.deviceId, picture: false, level: 0 })).ok, true);
     await until(() => !f.device.state.outputs?.length);
+    await f.admin.command({ type: "control", deviceId: f.adminId });
     assert.equal((await f.admin.command({ type: "enqueue", entry: { id: "next", title: "Next", source: `${f.hub.origin}/api/health` } })).ok, true);
     assert.equal((await f.admin.command({ type: "play", entryId: "waiting" })).ok, true);
     await until(() => f.admin.messages.some(message => message.type === "player" && message.command.type === "load"));
