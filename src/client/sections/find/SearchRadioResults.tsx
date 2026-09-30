@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { itemLocation } from "@/detail-navigation";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { useDurationClock } from "@/components/DurationBar";
@@ -60,6 +63,7 @@ function RadioResults(props: Props) {
       return { id: `${title}:${station.id}`, source: title, title: station.name, meta: [...new Set([programme?.title, programme?.genre, programme?.artist, station.groupTitle, title].filter(Boolean))].join(" · "), description: programme?.description, kind: "Radio", live: true, thumbnail: programme?.artworkUrl ?? station.logoUrl,
         primary: { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
         actions: [
+          { label: "Details", node: <Button asChild variant="ghost"><Link to={itemLocation("radio", station.id)} aria-label={`Details ${station.name}`}>Details</Link></Button> },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
           { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || favorites === null, run: () => save(station, saved) },
         ],

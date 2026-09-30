@@ -5,6 +5,8 @@ import { ListMusic, Maximize2, Pause, Play, RotateCcw, SkipForward, Square, Volu
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { CollectionLinks } from "@/components/CollectionLinks";
+import { Link } from "@tanstack/react-router";
 import { PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
 import { RangeControl } from "@/components/RangeControl";
 import type { Action } from "../../../shared/protocol";
@@ -60,6 +62,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const context = programme ? current.title : current.subtitle;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
   return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] sm:gap-x-4 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
+    <div className="min-w-0">
     <Button variant="ghost" className="h-auto min-w-0 justify-start gap-3 p-0 text-left font-normal touch:h-auto" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
       <span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full">{artwork}</span>
       <span className="grid min-w-0 gap-0.5">
@@ -67,6 +70,8 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
         <span role="status" className="truncate text-xs text-muted-foreground">{context && <><span>{context}</span><span aria-hidden="true"> · </span></>}{status}</span>
       </span>
     </Button>
+    {current.kind === "radio" || current.source.startsWith("radio:") ? <Link to="/find" search={{ browse: "radio" }} className="ml-15 inline-flex min-h-8 items-center text-xs text-muted-foreground hover:text-foreground hover:underline sm:ml-17 touch:min-h-11">More stations</Link> : <CollectionLinks collection={current.collection} compact className="pl-15 sm:pl-17" />}
+    </div>
     <div className="grid min-w-0 justify-items-center">
       <div className="flex items-center gap-0.5" role="group" aria-label="Playback controls">
         {pausable || ended ? <Button variant="ghost" size="icon" aria-label={ended ? "Replay" : paused ? "Play" : "Pause"} title={ended ? "Replay" : paused ? "Play" : "Pause"} disabled={ended ? !available : !transportReady} onClick={() => { if (ended) void run({ type: "play", entryId: current.id, fromStart: true }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: !paused }); }}>{ended ? <RotateCcw aria-hidden="true" className="size-5" /> : paused ? <Play aria-hidden="true" className="size-5 fill-current" /> : <Pause aria-hidden="true" className="size-5 fill-current" />}</Button>

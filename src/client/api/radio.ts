@@ -5,6 +5,11 @@ import { apiFetch, type ApiCredentials } from "./client";
 const radioRequest = (credentials: ApiCredentials, path: string, init: RequestInit = {}) =>
   apiFetch(credentials, `/api/radio/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
 
+export const radioStationQuery = (credentials: ApiCredentials, id: string) => queryOptions({
+  queryKey: ["radio", "item", id], staleTime: 30_000, retry: false,
+  queryFn: ({ signal }) => radioRequest(credentials, `stations/${encodeURIComponent(id)}`, { signal }).then(response => response.json() as Promise<{ station: RadioStation }>).then(result => result.station),
+});
+
 export const radioFavoritesListQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["radio", "favorites"],
