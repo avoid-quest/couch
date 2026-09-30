@@ -76,6 +76,13 @@ The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
 error; `rollback=unavailable` means no previous package was at hand.
+After each install, including a rollback, the script runs the installed
+package's `couch-setup --refresh`, so the one `sudo couch-setup --tv` is enough:
+on a completed setup it installs TV packages and links TV files a later release
+adds, with the same preservation as setup, and enables `couch-update.timer`
+unless masked. It leaves accounts, sign-in and power policy and the running
+session alone; `setup=failed` in the status means it failed and the update went
+ahead.
 `sudo systemctl disable --now couch-update.timer` and then `sudo systemctl mask
 couch-update.timer` turn unattended updates off for good.
 TVs set up before this rerun `sudo couch-setup --tv` once to get the units.
