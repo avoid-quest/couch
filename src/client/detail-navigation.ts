@@ -46,7 +46,7 @@ export function useDetailNavigation() {
 export function DetailFocusRestoration() {
   const location = useLocation();
   useEffect(() => {
-    const target = location.state.detailFocus ?? (["/item", "/collection"].includes(location.pathname) ? { selector: "[data-page] [data-back]", index: 0 } : undefined);
+    const target = location.state.detailFocus ?? (["/item", "/collection"].includes(location.pathname) ? { selector: "[data-page] h1", index: 0 } : undefined);
     if (!target) return;
     const restore = () => {
       const element = document.querySelectorAll<HTMLElement>(target.selector)[target.index];

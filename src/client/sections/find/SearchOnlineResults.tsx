@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
 import { collectionLocation } from "@/detail-navigation";
 import { providerCollectionCursor } from "@/collection-pagination";
 import type { Action } from "../../../shared/protocol";
@@ -136,9 +134,9 @@ function OnlineResults(props: Props) {
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
       return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : "List", thumbnail: item.thumbnail,
-        primary: { label: item.kind === "media" ? "Play" : "Open", href: item.kind !== "media" ? collectionLocation(item) : undefined, disabled: item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => item.kind === "media" ? play(item, true) : props.onOpenCollection?.(item) },
+        primary: { label: !props.paged && item.kind === "media" ? "Play" : "Open", href: props.paged || item.kind !== "media" ? collectionLocation(item) : undefined, disabled: !props.paged && item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => !props.paged && item.kind === "media" ? play(item, true) : props.onOpenCollection?.(item) },
         actions: item.kind === "media" ? [
-          { label: "Details", node: <Button asChild variant="ghost"><Link to={collectionLocation(item)} aria-label={`Details ${item.title}`}>Details</Link></Button> },
+          ...(props.paged ? [{ label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(item, true) }] : []),
           { label: "Play next", disabled: busy || !props.onCommand, run: () => play(item, false, "next") },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(item, false) },
           saveAction,

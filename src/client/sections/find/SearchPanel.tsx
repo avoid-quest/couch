@@ -8,7 +8,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { SearchBar } from "@/components/SearchBar";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { ChevronLeft } from "lucide-react";
+import { MoreHorizontal, Play } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
@@ -166,33 +168,45 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
     {timeline && hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
-    <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} description={hit.description} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
+    <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} />}
       primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
-      actions={hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>)}>
+      actions={timeline ? hit.actions.map(action => action.node ? <span key={action.label} className="contents">{action.node}</span> : <Button key={action.label} variant="ghost" aria-label={`${action.label} ${hit.title}`} aria-pressed={action.pressed} disabled={action.disabled} onClick={action.run}>{action.label}</Button>) : <BrowseActions title={hit.title} actions={hit.actions} />}>
       {hit.id === currentId && <span className="text-sm font-medium">Now playing</span>}
-      {hit.collection ? <span className="text-sm">{hit.collection}</span> : timeline ? <DurationBar duration={hit.duration} position={hit.position} live={hit.live} /> : <span className="text-sm text-muted-foreground">{hit.live ? "Live" : hit.duration != null ? formatDuration(hit.duration) : undefined}</span>}
+      {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
     </MediaRow>)}</MediaList>
   </div>;
 });
 
-/** An opened channel, list or show: back, title, and whole-list verbs. */
-export function CollectionHeader({ collection, back, onBack, canPlay }: { collection: SearchCollection; back: string; onBack: () => void; canPlay: boolean }) {
-  return <header className="space-y-4">
-    <Button variant="ghost" data-back className="-ml-2.5 text-muted-foreground" onClick={onBack}><ChevronLeft aria-hidden="true" />{back}</Button>
-    <div data-collection-preview className="flex flex-col items-start gap-6 sm:flex-row sm:gap-8">
-      {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="max-h-64 w-40 shrink-0 object-contain bg-transparent sm:max-h-80 sm:w-48" />}
-      <div className="min-w-0 space-y-4">
-        <h1 tabIndex={-1} className="max-w-3xl text-3xl font-semibold tracking-tight break-words sm:text-4xl">{collection.title}</h1>
+export function BrowseActions({ title, actions }: { title: string; actions: SearchHit["actions"] }) {
+  const play = actions.find(action => action.label === "Play");
+  const more = actions.filter(action => action !== play);
+  return <>
+    {play && <Button variant="ghost" size="icon" aria-label={`Play ${title}`} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4" /></Button>}
+    {!!more.length && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
+      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
+    </DropdownMenu>}
+  </>;
+}
+
+/** Compact title and artwork; the breadcrumb owns navigation. */
+export function CollectionHeader({ collection, canPlay }: { collection: SearchCollection; canPlay: boolean }) {
+  return <header>
+    <div data-collection-preview className="flex items-start gap-4">
+      {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="size-20 shrink-0 object-contain bg-transparent sm:size-24" />}
+      <div className="min-w-0 space-y-2">
+        <h1 tabIndex={-1} className="max-w-3xl text-2xl font-semibold tracking-tight break-words">{collection.title}</h1>
         {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
-        {collection.description && <p className="max-w-prose text-sm leading-relaxed break-words">{collection.description}</p>}
-        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex flex-wrap items-center gap-2 pt-2">
-          <Button disabled={!canPlay || collection.disabled || !collection.playAll} onClick={collection.playAll}>{collection.single ? "Play" : "Play all"}</Button>
-          <Button variant="ghost" disabled={collection.disabled || !collection.queueAll} onClick={collection.queueAll}>{collection.single ? "Queue" : "Queue all"}</Button>
-          {collection.save && <Button variant="ghost" aria-pressed={collection.saved} disabled={collection.disabled || collection.saveDisabled} onClick={collection.save}>{collection.saved ? "Saved" : "Save"}</Button>}
+        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex items-center gap-1">
+          {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{collection.single ? "Play" : "Play all"}</Button>}
+          <BrowseActions title={collection.title} actions={[
+            ...(collection.queueAll ? [{ label: collection.single ? "Queue" : "Queue all", disabled: collection.disabled, run: collection.queueAll }] : []),
+            ...(collection.save ? [{ label: collection.saved ? "Saved" : "Save", disabled: collection.disabled || collection.saveDisabled, run: collection.save }] : []),
+          ]} />
         </div>}
       </div>
     </div>
+    {collection.description && <Collapsible className="mt-2"><CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="-ml-2.5 text-muted-foreground">About</Button></CollapsibleTrigger><CollapsibleContent><p className="max-w-prose pt-2 text-sm leading-relaxed break-words text-muted-foreground">{collection.description}</p></CollapsibleContent></Collapsible>}
   </header>;
 }
 
