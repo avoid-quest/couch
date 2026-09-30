@@ -16,6 +16,15 @@ const read = (key: string) => { if (memory.has(key)) return memory.get(key)!; tr
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); memory.delete(key); } catch { memory.set(key, value); } };
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
 let name = couchApp?.deviceName ? null : validName(read(nameKey));
+// A deliberate browser switch carries only the public name, never the Sendspin key.
+if (!couchApp && typeof location !== "undefined" && new URLSearchParams(location.hash.slice(1)).has("device-name")) {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const carried = validName(fragment.get("device-name"));
+  if (carried) { name = carried; write(nameKey, carried); }
+  fragment.delete("device-name");
+  history.replaceState(history.state, "", location.pathname + location.search + (fragment.size ? `#${fragment}` : ""));
+}
+export const deviceNameHash = () => name ? `#device-name=${encodeURIComponent(name)}` : "";
 // What this device shares, like its name: the Couch app's own choice, or this browser's storage.
 const sharingKey = "couch.device-sharing";
 const readSharing = (): DeviceSharing => {
