@@ -220,7 +220,7 @@ function episodeItem(context: TitleContext, seasonNumber: number, row: Record<st
     id: providerItemId("streamingcommunity", url), provider: "streamingcommunity", kind: "media",
     title: `S${pad(seasonNumber)}E${pad(number)}${name ? ` · ${name}` : ""}`, url,
     subtitle: context.name,
-    collection: { title: `${context.name} - Season ${seasonNumber}`, url: `${context.base}/season-${seasonNumber}` },
+    collection: { title: `Season ${seasonNumber}`, url: `${context.base}/season-${seasonNumber}`, parent: { title: context.name, url: context.base } },
     ...(description ? { description } : {}), ...(image ? { thumbnail: image } : {}), ...(minutes && minutes < 1440 ? { duration: minutes * 60 } : {}),
   };
 }
@@ -230,7 +230,7 @@ function seasonPageItems(page: InertiaPage, origin: string, season: number): Pro
   const loaded = object(page.props.loadedSeason) ? page.props.loadedSeason : undefined;
   const number = integer(loaded?.number) ?? season;
   const items = array(loaded?.episodes).sort((a, b) => (integer(a.number) ?? 0) - (integer(b.number) ?? 0)).map(row => episodeItem(context, number, row)).filter((item): item is ProviderItem => !!item);
-  return { title: `${context.name} - Season ${number}`, thumbnail: posterUrl(loaded ?? {}, cdnUrl(page.props, origin)) ?? context.poster, description: translated(loaded ?? {}, "plot") || clean(loaded?.plot, 2000) || context.plot, subtitle: subtitleFor(context, true), items };
+  return { title: `Season ${number}`, parent: { title: context.name, url: context.base }, thumbnail: posterUrl(loaded ?? {}, cdnUrl(page.props, origin)) ?? context.poster, description: translated(loaded ?? {}, "plot") || clean(loaded?.plot, 2000) || context.plot, subtitle: subtitleFor(context, true), items };
 }
 
 function titlePageItems(page: InertiaPage, origin: string): ProviderPage {
