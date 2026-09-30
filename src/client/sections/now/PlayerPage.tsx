@@ -1,6 +1,6 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Captions, ChevronRight, Info, ListVideo, Maximize, Minimize, Music2, Settings2, Square, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Settings2, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -17,6 +17,7 @@ import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
+import { DeviceSwitch } from "@/sections/shell/DeviceSwitch";
 import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -25,6 +26,10 @@ import { queueItemLocation } from "@/detail-navigation";
 
 type Panel = "tracks" | "settings";
 const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback" };
+// From 960px audio keeps Up next on screen beside the artwork (index.css), so the band's Up next has nothing to open.
+const wideQuery = "(min-width: 960px)";
+const subscribeWide = (onChange: () => void) => { const media = window.matchMedia(wideQuery); media.addEventListener("change", onChange); return () => media.removeEventListener("change", onChange); };
+const isWide = () => window.matchMedia(wideQuery).matches;
 
 export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
@@ -60,6 +65,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const elsewhere = !!at?.elsewhere;
   const picture = showsPicture(state);
   const artworkStage = audioOnly || !picture;
+  const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   const autoHide = playing && !artworkStage;
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
@@ -148,9 +154,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
-    <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex items-center gap-3 p-4 transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
+    {/* Same height and gutter as the app header, with its Device switch, so the controlled Device changes here too. */}
+    <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
       <div className="min-w-0 bg-background"><ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} /></div>
       {buffering && <p role="status" className="flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
+      <div className="ml-auto flex min-w-0 bg-background"><DeviceSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} paired state={state} run={run} /></div>
     </div>
     <div className="player-workspace">
       <div className="player-main">
@@ -163,7 +171,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           </div>
           {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere && at ? <PlaysOn state={state!} at={at} /> : currentProgramme && <span>{current.title}</span>)}</p>
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && (player?.status === "paused" ? <span>Paused</span> : live && <span>Live</span>)}{!ended && (elsewhere && at ? <PlaysOn state={state!} at={at} /> : currentProgramme && <span>{current.title}</span>)}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
@@ -188,18 +196,19 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </aside>}
     </div>
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
-      <div className="mx-auto grid max-w-6xl gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{live && <span className="text-sm text-muted-foreground">Live</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}<span className="ml-auto">{details}</span></div>}
-        {(!live || player?.seekable) && state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
+      {/* Gutter to gutter like the mini player, in its order: transport, timeline (its own row here), volume, Where it plays, Up next, then settings and fullscreen. */}
+      <div className="grid gap-1">
+        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
+        {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
         <div className="player-control-row">
           {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
           {volume}
           <div data-player-tools className="ml-auto flex shrink-0 items-center">
-            <Button data-panel="tracks" disabled={audioOnly || !player?.playbackId} variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>
             {state && <WhereItPlays state={state} run={run} />}
-            <Button ref={queueTrigger} data-panel="queue" variant="ghost" className="h-11" aria-label="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListVideo aria-hidden="true" />Up next</Button>
+            <Button ref={queueTrigger} data-panel="queue" variant="ghost" className="h-11" aria-label="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" />Up next</Button>
+            <Button data-panel="tracks" disabled={audioOnly || !player?.playbackId} variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>
             <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /></Button>
-            {fullscreen.supported && <Button variant="ghost" size="icon" className="size-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+            <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>
           </div>
         </div>
       </div>
@@ -212,7 +221,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {panel === "settings" && <div className="grid divide-y border-b">
             {!audioOnly && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "tracks" }); }}><Captions aria-hidden="true" />Audio & subtitles<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
             {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
-            <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" />Stop playback</Button>
+            <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" />Stop</Button>
           </div>}
           {panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>

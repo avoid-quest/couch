@@ -19,7 +19,10 @@ catalog provides interface icons, not brand identities.
   full-bleed player with a compact bottom control band, and the Device you
   control and where it plays one step away.
 - **The player is one tap away.** The mini dock opens the player through its
-  artwork and title, with direct transport and Up next actions. Volume uses
+  artwork and title. The mini player and the player band hold one control
+  order: Play/Pause and Next, the timeline, volume, Where it plays, Up next,
+  then Expand (`ChevronUp`) in the mini player or Playback settings and
+  fullscreen in the band, whose timeline takes its own row above. Volume uses
   an inline slider where space permits and a Popover in compact windows.
   Audio and remote playback place contained artwork beside a persistent
   desktop queue. On phones, Up next replaces the artwork while transport stays
@@ -100,7 +103,8 @@ catalog provides interface icons, not brand identities.
   Bandcamp) opens on an Empty whose next step is a search field scoped to it,
   or a link field where it only takes links.
 - **Time is the organising idea.** Every length is read as the clock time it
-  ends: "4:52, ends 10:29".
+  ends: "4:52, ends 10:29". The band and mini player read "−3:24 ends 20:59";
+  live reads "Live", with no total.
 - **Colour only when it means something.** Destructive red is the only colour.
   Live is the word "Live", not a red badge.
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
@@ -191,17 +195,17 @@ Messages:
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
   for confirmations; **Sheet** for player panels; **Popover** for the header's Device switch: the
   Device this window controls, with "+N" when its Playback spans more Devices.
-  On a narrow header the name truncates but the count never does, and the
-  header's Up next steps aside on phones while the mini dock's own Up next
-  shows. The Popover lists only Devices (online ones, plus offline ones still
+  On a narrow header the name truncates but the count never does. The
+  header's Up next is always there once paired (icon only on phones), so
+  the switch never moves, and the player's header carries the switch too. The Popover lists only Devices (online ones, plus offline ones still
   serving a Playback), each with its DeviceIcon and what it is doing (Idle,
   Offline, "with {name}", or its title); "This device" marks this window's own.
   Choosing one controls it, idle ones too. Which Couch this window shows is
   setup, in Settings → Connections. The Popover scrolls within the space Radix
   reports.
-- **Where it plays** is one band button with the controlled Playback's
+- **Where it plays** is one button in the band and the mini player with the controlled Playback's
   DeviceIcon and Device names ("Living room TV +1"; the name truncates,
-  never the count; icon only on narrow bands). It opens a
+  never the count; icon only on narrow bands and in the mini player). It opens a
   bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
   a console's master fader, is All: its fader sets every online Device to one
   level (0 turns every Device's sound off), stores nothing and shows the
@@ -219,8 +223,8 @@ Messages:
   mutes them all, and so does M.
 - **Play on** in item menus offers the other online Devices, hidden while this
   is the only one; the primary Play says "Play on {name}" while you control
-  another Device, and a "Playing on {name}" toast confirms it. The mini player
-  and the player's summary say "on {name}" (+N) with its icon whenever the
+  another Device, and a "Playing on {name}" toast confirms it. The mini player,
+  the player's summary and Home's Now row say "on {name}" (+N) whenever the
   controlled Playback plays anywhere but only here.
 
 ## Copy

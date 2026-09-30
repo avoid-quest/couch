@@ -313,8 +313,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              {/* On a phone the mini player's own Up next is on screen, so the header's goes and leaves room for the status (#644 ticket 12). */}
-              {paired && !!state?.queue.length && <Button variant="ghost" className={cn("shrink-0 touch:min-w-11", miniPlayer && "max-sm:hidden")} aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
+              {/* Always here once paired, empty queue or not, so the switch, shortcuts and clock never move; icon only on a phone. */}
+              {paired && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               <DeviceSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} paired={paired} state={state} run={run} />
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a device</Button>}
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}

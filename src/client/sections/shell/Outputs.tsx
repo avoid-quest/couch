@@ -22,7 +22,7 @@ const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground
  * channel strip per Device. The fader is the Device's one volume while its sound is in, else 0; 0 takes
  * the sound out and raising it puts the sound in. Sound on several Devices plays in sync over Sendspin.
  */
-export function WhereItPlays({ state, run }: Props) {
+export function WhereItPlays({ state, run, compact = false }: Props & { compact?: boolean }) {
   const outputs = state.outputs ?? [];
   const at = playsOn(state);
   const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
@@ -33,9 +33,10 @@ export function WhereItPlays({ state, run }: Props) {
   const loudest = Math.max(0, ...devices.filter(device => output(device.id)?.sound).map(device => device.volume));
   const label = `Where it plays${at ? `: ${at.name}${at.more ? ` +${at.more}` : ""}` : ""}`;
   return <Sheet>
-    <SheetTrigger asChild><Button variant="ghost" className="h-11 min-w-11 max-w-56 gap-2" disabled={!state.playback} aria-label={label} title={label}>
+    {/* The mini player shows the icon alone, so a long name can't push its other controls out of their slots. */}
+    <SheetTrigger asChild><Button variant="ghost" size={compact ? "icon-lg" : "default"} className={compact ? undefined : "h-11 min-w-11 max-w-56 gap-2"} disabled={!state.playback} aria-label={label} title={label}>
       <DeviceIcon {...signalOf(state, at?.deviceId ?? state.controlling ?? deviceId())} />
-      {at && <span className="flex min-w-0 gap-1 max-lg:hidden"><span className="truncate">{at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>}
+      {at && !compact && <span className="flex min-w-0 gap-1 max-lg:hidden"><span className="truncate">{at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>}
     </Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] gap-4 overflow-y-auto px-(--gutter) pb-6">
       <SheetHeader className="gap-0.5 px-0 pr-8 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="truncate">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>

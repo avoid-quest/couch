@@ -27,29 +27,49 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     transportReady: available && !!player?.playbackId && (["playing", "paused"].includes(player.status) || player.status === "loading" && player.buffering === true),
     nextReady: available && !!player?.playbackId && ["playing", "paused", "ended"].includes(player.status),
     seekable: !!player?.seekable,
-    pausable: !live || !!player?.seekable,
+    // Paused live media resumes, so it offers Play rather than Stop.
+    pausable: !live || !!player?.seekable || player?.status === "paused",
     hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.next || !!state.autoplay.pending)),
   };
 }
 
-export function PlaybackTimeline({ state, connected, run, pageFirst = false, compact = false }: Props & { pageFirst?: boolean; compact?: boolean }) {
+/** Position, the timeline and "−3:24 ends 20:59"; live reads "Live" with no total. The slider keeps its slot, disabled, when it can't seek. */
+export function PlaybackTimeline({ state, connected, run, pageFirst = false, compact = false, className }: Props & { pageFirst?: boolean; compact?: boolean; className?: string }) {
   const playbackClock = usePlaybackClock();
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
   if (!current) return null;
+  const live = current.live || current.kind === "radio" || current.source.startsWith("radio:");
   const length = playbackClock.duration || current.duration || 0;
   const remaining = (length - playbackClock.position) / (player.speed || 1);
+  const canSeek = seekable && !!playbackClock.duration;
   const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0)) ?? [];
   const chapter = player.chapters?.findLast(item => item.position <= playbackClock.position);
-  return <div className={cn("grid gap-1", compact && "player-timeline")}>
-    {seekable && playbackClock.duration ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={playbackClock.duration} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
-      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}</div> : null}
+  return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
+    {/* Live media that can't seek sits at its live edge: a full, disabled bar. */}
+    <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={live && !canSeek ? 1 : playbackClock.position || 0} max={canSeek ? playbackClock.duration! : live ? 1 : length} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady || !canSeek}
+      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}</div>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
-      {length ? <span className="shrink-0">−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></span> : null}
+      <span className="shrink-0">{live ? "Live" : length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
     </div>
   </div>;
+}
+
+/** The transport's first slot: Replay once ended, Try again after an error, Stop for live media that can't pause (with `stop`), else Play or Pause. */
+export function PlayButton({ state, connected, run, stop: canStop = true, pageFirst = false, className }: Props & { stop?: boolean; pageFirst?: boolean; className?: string }) {
+  const player = state.player;
+  const current = state.queue.find(entry => entry.id === state.currentEntryId);
+  const { available, active, transportReady, pausable } = playbackCapabilities(state, connected);
+  const playing = player.status === "playing";
+  const ended = player.status === "ended" && !!current, failed = player.status === "error" && !!current;
+  const stop = canStop && !pausable && !ended && !failed;
+  const label = ended ? "Replay" : failed ? "Try again" : stop ? "Stop" : playing ? "Pause" : "Play";
+  return <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" className={className} aria-label={label} title={label} disabled={stop ? !available || !active : ended || failed ? !available : !transportReady}
+    onClick={() => { if (stop) void run({ type: "stop" }); else if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
+    {ended ? <RotateCcw aria-hidden="true" /> : stop ? <Square aria-hidden="true" className="fill-current" /> : playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}
+  </Button>;
 }
 
 const seekLabel = <span aria-hidden="true" className="text-xs leading-none">10</span>;
@@ -58,15 +78,11 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { available, active, transportReady, nextReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
-  const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current;
-  const stop = prominent && !pausable && !ended;
-  const playLabel = stop ? "Stop" : ended ? "Replay" : playing ? "Pause" : "Play";
   const { seekBy } = useSessionGate();
   return <div className={cn("flex items-center gap-0.5", prominent && "player-transport gap-1")} role="group" aria-label="Playback controls">
     {(prominent || seekable) && <Button variant="ghost" size="icon-lg" className={cn("flex-col gap-0", prominent && "player-seek size-11")} aria-label="Back 10 seconds" title="Back 10 seconds" disabled={!transportReady || !seekable} onClick={() => seekBy(-10)}><RotateCcw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
-    {(prominent || pausable || ended) && <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={playLabel} title={playLabel} disabled={stop ? !available || !active : ended ? !available : !transportReady}
-      onClick={() => { if (stop) void run({ type: "stop" }); else if (ended && current) void run({ type: "play", entryId: current.id, fromStart: true }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>{stop ? <Square aria-hidden="true" className="fill-current" /> : ended ? <RotateCcw aria-hidden="true" /> : playing ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}</Button>}
+    {(prominent || pausable || ended) && <PlayButton state={state} connected={connected} run={run} stop={prominent} pageFirst={pageFirst} className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} />}
     {!prominent && <Button variant="ghost" size="icon-lg" aria-label="Stop" title="Stop" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>}
     {(prominent || seekable) && <Button variant="ghost" size="icon-lg" className={cn("flex-col gap-0", prominent && "player-seek size-11")} aria-label="Forward 10 seconds" title="Forward 10 seconds" disabled={!transportReady || !seekable} onClick={() => seekBy(10)}><RotateCw aria-hidden="true" className="size-4" />{seekLabel}</Button>}
     {(prominent || hasNext) && <Button variant="ghost" size="icon-lg" className={prominent ? "size-11 [&_svg]:size-5" : undefined} aria-label="Next" title="Next" disabled={!nextReady || !hasNext}
