@@ -49,7 +49,7 @@ function BrowserCouchChoice({ credentials, installationName }: Props) {
         {(item.origin !== origin || credentials && gate) && <Button variant="ghost" aria-label={`Forget ${item.name}`} onClick={() => setForgetting(item)}>Forget</Button>}
       </SettingsRow>)}
       {target ? <SettingsRow label={`Switch this browser to ${new URL(target).host}?`} description={`${name} keeps playing. You may need to pair.`}>
-        <Button onClick={() => location.assign(target + connectionHash(deviceNameHash(), { origin, name }))}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button>
+        <Button onClick={() => location.assign(target + connectionHash(deviceNameHash(), { origin, name }, target))}>Switch</Button><Button variant="ghost" onClick={() => setTarget(null)}>Cancel</Button>
       </SettingsRow> : <SettingsRow label="Another Couch" htmlFor="another-couch-address" description="Enter the address shown on that Couch.">
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); choose(address); }}>
           <Input id="another-couch-address" className="min-w-0 flex-1" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} />

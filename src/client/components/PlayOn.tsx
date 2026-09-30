@@ -16,15 +16,17 @@ export function usePlayOn() {
     here,
     /** A Play label that names the controlled Device when Play goes elsewhere: "Play on Studio". */
     on: (label: string) => target ? `${label} on ${target.name}` : label,
-    /** Plays through a path without a deviceId of its own (REST, the shell's enqueue): control the Device first, then say where it plays. */
-    play: async <T,>(work: () => Promise<T>, id?: string) => {
-      if (id && !await session?.run({ type: "control", deviceId: id })) return false;
-      const result = await work();
+    /** Plays, with Play on's Device passed to `work` for its request, then says where it plays. */
+    play: async <T,>(work: (on?: string) => Promise<T>, id?: string) => {
+      const result = await work(id);
       if (result !== false) announcePlay(state, id);
       return result;
     },
   };
 }
+
+/** Play on for a REST play request: Core isolates that Device when it reserves the play. */
+export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}` : "";
 
 function Devices({ onPlay }: { onPlay: (deviceId: string) => void }) {
   const { devices, here } = usePlayOn();

@@ -31,8 +31,10 @@ origin that made it. The SDK's `storage` interface gives Couch and Sendspin the
 same key, including when browser storage is unavailable. Sendspin admits the
 host's device only from this machine.
 Deliberate server switches carry the public device name and saved server
-labels/addresses in the URL fragment; the destination consumes these hints and
-removes them from the URL. Pairing credentials and keys remain in their original
+labels/addresses in the URL fragment: the whole saved list to a server already on
+it, only the current server to a newly typed address. The destination keeps the
+labels only when the page that sent it there is one of them, then removes the
+hints from the URL. Pairing credentials and keys remain in their original
 storage.
 
 Client devices opt into sharing audio and video independently in General; both
@@ -82,13 +84,18 @@ Device's and scales them all proportionally, and its mute mutes them all.
 The header selects a server. Within that server, each controller looks at the
 Playback its selected output Device serves; `device_targets` remembers that
 Device for each controller. A connection restores it while it still serves a
-permitted live Playback, otherwise it selects the server's own Device. Outputs
+permitted live Playback, otherwise it selects the server's own Device; when
+those outputs are offline, Play selects the controller's own Device. Outputs
 stay with the live Playback; a server restart restores queues without outputs.
 `control` can select an idle Device without moving outputs. Ordinary Play keeps
-the current mix. Explicit Play on a Device (`deviceId` on Play now, the item
-menus' "Play on" and "Play on {name}") isolates that Device and selects it,
-with a "Playing on {name}" toast. Removing a selected output follows another
-output in its mix, including for controllers currently away on another server.
+the current mix. Explicit Play on a Device (`deviceId` on WebSocket Play now,
+`?on=` on REST play requests; the item menus' "Play on" and "Play on {name}")
+isolates that Device and selects it when the play is reserved, after
+validation, with a "Playing on {name}" toast. A selected output that stops
+serving (fader to 0, sharing withdrawn, unpaired) moves its controllers to
+another output in its mix, including controllers away on another server; one
+that moves to another Playback keeps them, and a Playback that ends moves
+no one.
 `solo` leaves one Device
 with the Playback's picture and sound, and `allSpeakers` is the Mixer's All
 fader: a level above 0 sets every online Device to it with its sound in, 0 takes

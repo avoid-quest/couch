@@ -20,8 +20,8 @@ import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedSta
 import { savedNotice } from "@/copy";
 
 export type SavedFavoriteActions = {
-  onEnqueueProvider: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
-  onEnqueueRadio: (station: RadioStation, playNow: boolean) => Promise<boolean>;
+  onEnqueueProvider: (item: ProviderItem, playNow: boolean, deviceId?: string) => Promise<boolean>;
+  onEnqueueRadio: (station: RadioStation, playNow: boolean, deviceId?: string) => Promise<boolean>;
   onOpenProvider: (item: ProviderItem) => void;
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
@@ -98,7 +98,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     if (!connected || pending) return;
     setEnqueueing(true);
     try {
-      const work = () => favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow) : onEnqueueRadio(favorite.item, playNow);
+      const work = (on?: string) => favorite.kind === "provider" ? onEnqueueProvider(favorite.item, playNow, on) : onEnqueueRadio(favorite.item, playNow, on);
       await (playNow ? play(work, deviceId) : work());
     } finally { setEnqueueing(false); }
   };

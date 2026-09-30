@@ -16,12 +16,17 @@ const couches = (value: string | null): KnownCouch[] => {
 };
 const unique = (entries: KnownCouch[]) => [...new Map(entries.map(item => [item.origin, item])).values()];
 
+const save = (storageKey: string, value: unknown) => { const text = JSON.stringify(value); if (localStorage.getItem(storageKey) !== text) localStorage.setItem(storageKey, text); };
+const referrer = () => { try { return new URL(document.referrer).origin; } catch { return ""; } };
+
 // A deliberate browser switch carries public labels, while pairing stays in each origin's storage.
+// Only a Couch that sent this browser here may add them, so a link elsewhere cannot plant one.
 function receiveCouches() {
   if (typeof location === "undefined") return;
   const fragment = new URLSearchParams(location.hash.slice(1));
   if (!fragment.has("couches")) return;
-  try { localStorage.setItem(couchesKey, JSON.stringify(unique([...couches(localStorage.getItem(couchesKey)), ...couches(fragment.get("couches"))]))); }
+  const carried = couches(fragment.get("couches"));
+  try { if (carried.some(item => item.origin === referrer())) save(couchesKey, unique([...couches(localStorage.getItem(couchesKey)), ...carried])); }
   catch { /* The current address still works without a saved list. */ }
   fragment.delete("couches");
   history.replaceState(history.state, "", location.pathname + location.search + (fragment.size ? `#${fragment}` : ""));
@@ -43,17 +48,19 @@ export function knownConnections(): KnownCouch[] {
   catch { return current ? [{ origin: current.origin, name: current.details.name }] : []; }
 }
 
-export function connectionHash(nameHash: string, current: KnownCouch) {
+// The saved list goes only to a Couch already on it; a new address learns just where this browser came from.
+export function connectionHash(nameHash: string, current: KnownCouch, target: string) {
   const fragment = new URLSearchParams(nameHash.replace(/^#/, ""));
-  fragment.set("couches", JSON.stringify(unique([...knownConnections(), current])));
+  const saved = unique([...knownConnections(), current]);
+  fragment.set("couches", JSON.stringify(saved.some(item => item.origin === target) ? saved : [current]));
   return `#${fragment}`;
 }
 
 export function rememberConnection(origin: string, details: ConnectionDetails) {
   const previous = knownConnections();
   try {
-    localStorage.setItem(key, JSON.stringify({ origin, details }));
-    localStorage.setItem(couchesKey, JSON.stringify(unique([...previous, { origin, name: details.name }])));
+    save(key, { origin, details });
+    save(couchesKey, unique([...previous, { origin, name: details.name }]));
   } catch { /* The current address still works without saved labels. */ }
 }
 

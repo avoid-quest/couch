@@ -7,36 +7,14 @@ import { PairingDialog } from "@/components/PairingDialog";
 import { useSessionGate } from "@/session/session-context";
 import { CouchChoice } from "@/sections/settings/device/CouchChoice";
 import { deviceName } from "@/copy";
-import type { ClientSessionState, Credentials } from "@/session/session";
-import type { DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
+import type { Credentials } from "@/session/session";
 import { StatusDot } from "./StatusLine";
-
-type State = ClientSessionState | null | undefined;
-export const served = (state: State, id: string) => state?.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === id));
-
-const statusText: Partial<Record<PlaybackSummary["status"], string>> = { loading: "Loading", playing: "Playing", paused: "Paused", ended: "Finished", error: "Can't play" };
-
-/**
- * What a Device is doing: its Playback's title, "with {name}" when it joins another Device's Playback,
- * Idle or Offline. Beside `current` (the Playback in view), another Playback reads "Playing {title}"
- * and the one in view its status, as its title is already on screen.
- */
-export function doing(state: State, device: DeviceSummary, current?: string | null) {
-  if (!device.online) return "Offline";
-  const playback = served(state, device.id);
-  if (!playback) return "Idle";
-  if (current && playback.id !== current) return `Playing ${playback.title ?? "something else"}`;
-  // A Playback belongs to the Device showing its picture, else to its first Device.
-  const lead = (playback.outputs.find(output => output.picture) ?? playback.outputs[0])!.deviceId;
-  const leader = lead !== device.id && state?.devices?.find(item => item.id === lead);
-  return leader ? `with ${leader.name}` : current ? statusText[playback.status] ?? "Playing" : playback.title ?? "Playing";
-}
 
 /**
  * The header switches the Couch this window shows. Playback outputs stay in the Mixer.
  * The same Couch choice is available before pairing and in Settings.
  */
-export function DeviceSwitch({ credentials, connected, status, installationName }: {
+export function CouchSwitch({ credentials, connected, status, installationName }: {
   credentials: Credentials | null; connected: boolean; status: string; installationName?: string;
 }) {
   const [open, setOpen] = useState(false);

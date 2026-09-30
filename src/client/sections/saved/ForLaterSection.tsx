@@ -9,7 +9,7 @@ import { DurationBar } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { savedSourceLabel } from "@/saved-source";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { usePlayOn } from "@/components/PlayOn";
+import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { BrowseActions } from "@/sections/find/SearchPanel";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
 import { useOptionalSessionGate } from "@/session/session-context";
@@ -53,7 +53,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   const action = useMutation({
     mutationFn: ({ item, mode, deviceId }: { item: ForLaterItem; mode: Mode; deviceId?: string }) => {
       const path = `/api/for-later/${encodeURIComponent(item.id)}`;
-      const send = () => apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
+      const send = (on?: string) => apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load${playOnQuery(on)}`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
       return mode === "play" ? play(send, deviceId) : send();
     },
     onSuccess: async (body, { item, mode }) => {

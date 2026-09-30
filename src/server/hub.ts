@@ -178,10 +178,19 @@ export async function createHub(options: HubOptions) {
   // Each Couch remembers this controller's target; a new controller starts with its server's outputs.
   const controlled = (deviceId: string) => store.deviceTarget(deviceId) ?? hostId();
   const control = (deviceId: string, target: string) => store.saveDeviceTarget(deviceId, target);
+  // Play goes to the chosen outputs, else this server's; when those are offline, to the actor's own Device.
+  const select = (actorId: string, target = controlled(actorId)) => {
+    const live = (servedBy(target)?.outputs.map(output => output.deviceId) ?? [target]).some(id => newest(id));
+    control(actorId, live ? target : actorId);
+    return controlled(actorId);
+  };
+  // The Device a request's Play on names (the WS action's deviceId, or REST's ?on=).
+  const playOn = new WeakMap<PlaybackActor, string>();
+  const playingOn = (actor: PlaybackActor | undefined, on: string | null | undefined) => { if (actor && on) playOn.set(actor, on); return actor; };
   // A window looks at the Playback its controlled Device serves. An idle one looks at the newest
   // Playback waiting for a Device (a saved Up next, or one whose last output was switched off).
   const lookedAt = (deviceId: string) => servedBy(controlled(deviceId)) ?? all().findLast(playback => !playback.outputs.length);
-  // Windows controlling a Device that the Playback moved off follow it (Solo or mpv fallback).
+  // Windows controlling a Device that the Playback moved off follow it (Solo, mpv fallback, or the Device stops serving).
   const follow = (left: string[], to: string) => {
     for (const deviceId of new Set([...[...sockets].map(deviceOf), ...store.deviceTargetOwners()])) if ((deviceId === hostId() || store.device(deviceId)) && left.includes(controlled(deviceId))) {
       const output = outputFor(to, deviceId);
@@ -269,14 +278,19 @@ export async function createHub(options: HubOptions) {
   };
   const release = (playback: Playback, deviceId: string, wait = true) => {
     playback.outputs = playback.outputs.filter(output => output.deviceId !== deviceId);
-    const remaining = playback.outputs.find(output => output.picture) ?? playback.outputs[0];
-    if (remaining) follow([deviceId], remaining.deviceId);
     if (mpvPlayback === playback && deviceId === hostId()) { mpv.send({ type: "stop" }); mpvPlayback = null; }
     if (playback.renderer && deviceOf(playback.renderer) === deviceId) {
       send(playback.renderer, playerCommand({ type: "stop" }));
       playback.renderer = null;
     }
     if (wait && !playback.outputs.length) playback.session.wait("Waiting for a Device.");
+  };
+  // A Device that stops serving anything (its fader to 0, consent withdrawn, unpaired) leaves its
+  // controllers on the rest of the mix. One that moves to another Playback keeps them.
+  const leave = (playback: Playback, deviceId: string) => {
+    release(playback, deviceId);
+    const remaining = playback.outputs.find(output => output.picture) ?? playback.outputs[0];
+    if (remaining) follow([deviceId], remaining.deviceId);
   };
   // The newest tab of an output Device plays (#644 Tabs); an output back online resumes, paused.
   // In a synced Playback the picture Devices' newest tabs show the picture.
@@ -406,12 +420,15 @@ export async function createHub(options: HubOptions) {
     playbacks.set(id, playback);
     return playback;
   };
-  // Ordinary Play keeps the selected mix. Explicit Play on can isolate its named Device.
-  const own = (actor: PlaybackActor | undefined, exclusive = false) => {
-    const actorId = actor?.deviceId ?? hostId(), deviceId = controlled(actorId);
+  // Every Play reserves here. Ordinary Play keeps the selected mix; Play on isolates its named
+  // Device, which the actor then controls.
+  const own = (actor: PlaybackActor | undefined) => {
+    const actorId = actor?.deviceId ?? hostId(), on = actor && playOn.get(actor);
+    if (on) { requireControl(on, actorId); requireReplacement(on, actorId); control(actorId, on); }
+    const deviceId = on ?? select(actorId);
     requireControl(deviceId, actorId);
     let playback = servedBy(deviceId);
-    if (!playback || exclusive && playback.outputs.length > 1) { requireReplacement(deviceId, actorId); playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); control(actorId, deviceId); }
+    if (!playback || on && playback.outputs.length > 1) { playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); }
     else requirePlayback(playback, actorId);
     playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
     return playback;
@@ -420,10 +437,10 @@ export async function createHub(options: HubOptions) {
   const viewed = (actor: PlaybackActor | undefined) => { const playback = lookedAt(actor?.deviceId ?? hostId()) ?? own(actor); requirePlayback(playback, actor?.deviceId ?? hostId()); return playback; };
   // A saved Playback with no outputs starts on the selected Device.
   const present = (playback: Playback, actor: PlaybackActor | undefined) => {
-    const actorId = actor?.deviceId ?? hostId(), deviceId = controlled(actorId);
+    const actorId = actor?.deviceId ?? hostId();
     requirePlayback(playback, actorId);
     playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
-    if (!playback.outputs.length) { requireControl(deviceId, actorId); requireReplacement(deviceId, actorId); assign(playback, [outputFor(deviceId, actorId)]); }
+    if (!playback.outputs.length) { const deviceId = select(actorId); requireControl(deviceId, actorId); requireReplacement(deviceId, actorId); assign(playback, [outputFor(deviceId, actorId)]); }
     return playback;
   };
   // Solo (#644 Actions): the Device takes over the Playback's outputs, and the current item
@@ -467,7 +484,7 @@ export async function createHub(options: HubOptions) {
       requireReplacement(deviceId, actor);
       if (previous) { release(previous, deviceId); reconcile(previous); }
       playback.outputs = [...playback.outputs, next];
-    } else if (!next.picture && !next.sound) release(playback, deviceId);
+    } else if (!next.picture && !next.sound) leave(playback, deviceId);
     else playback.outputs = playback.outputs.map(output => output === current ? next : output);
     // A screen that joins a synced Playback loads the picture for itself and follows the clock.
     reconcile(playback);
@@ -506,7 +523,7 @@ export async function createHub(options: HubOptions) {
         if (next.picture === output.picture && next.sound === output.sound) continue;
         changed = true;
         if (output.picture && !next.picture) for (const tab of playback.screens.keys()) if (deviceOf(tab) === output.deviceId) { send(tab, playerCommand({ type: "stop" })); playback.screens.delete(tab); }
-        if (!next.picture && !next.sound) release(playback, output.deviceId);
+        if (!next.picture && !next.sound) leave(playback, output.deviceId);
         else playback.outputs = playback.outputs.map(item => item === output ? next : item);
       }
       if (changed) { reconcile(playback); if (!playback.synced && playback.outputs.length && mpvPlayback !== playback) playback.session.reload(); }
@@ -727,7 +744,7 @@ export async function createHub(options: HubOptions) {
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
-    for (const playback of all()) if (playback.outputs.some(output => output.deviceId === id)) { release(playback, id); reconcile(playback); }
+    for (const playback of all()) if (playback.outputs.some(output => output.deviceId === id)) { leave(playback, id); reconcile(playback); }
     shared.delete(id);
     for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
@@ -808,11 +825,13 @@ export async function createHub(options: HubOptions) {
     }
     return (async () => {
       if (!authorized()) return;
+      // Synchronous intake validates before Play moves any output; neither yields.
+      const pending = prepare();
+      if (pending instanceof Promise) pending.catch(() => {}); // Awaited below, unless Play is refused first.
       // Play starts on the controlled Device; Queue adds to the looked-at Playback (#644 ticket 9).
       const playback = action.playNow ? own(playedBy) : viewed(playedBy), { session } = playback;
       authorize = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
       const intent = action.playNow ? session.reservePlay() : undefined;
-      const pending = prepare();
       // Do not yield for synchronous intake: a following Stop must not overtake
       // an already prepared atom/album/radio command before its queue mutation.
       const prepared = pending instanceof Promise ? await pending : pending;
@@ -963,7 +982,7 @@ export async function createHub(options: HubOptions) {
     if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
     if (url.pathname === "/api/devices/me" && request.method === "GET") return cors(request, await devices.handle(request, identity));
     {
-      const playedBy = playbackActor(trusted ? null : caller.device!.id);
+      const playedBy = playingOn(playbackActor(trusted ? null : caller.device!.id), websocket ? null : url.searchParams.get("on"));
       const currentIdentity = identity;
       const authorize = () => {
         if (!identity()) throw new ControllerError("This device was removed. Pair again.", 401);
@@ -1013,10 +1032,11 @@ export async function createHub(options: HubOptions) {
         sockets.add(socket);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }
-        // A server switch returns to its live mix, or to that server's default outputs.
+        // A server switch returns to its live mix, else to that server's outputs, else to this Device.
         const id = deviceOf(socket), target = controlled(id);
-        try { requireControl(target, id); control(id, servedBy(target) ? target : hostId()); }
-        catch { control(id, hostId()); }
+        let mix = false;
+        try { requireControl(target, id); mix = !!servedBy(target); } catch { /* No longer shared: the server's outputs. */ }
+        select(id, mix ? target : hostId());
         // The newest tab renders for its Device (#644 Tabs); an output back online resumes, paused.
         const playback = servedBy(deviceOf(socket));
         if (playback && mpvPlayback !== playback) handOver(playback, socket);
@@ -1063,18 +1083,12 @@ export async function createHub(options: HubOptions) {
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
         const existing = new Set(playbacks.keys());
         try {
-          const playedBy = playbackActor(socket.data.deviceId);
+          const action = command.action;
+          const playedBy = playingOn(playbackActor(socket.data.deviceId), "playNow" in action && action.playNow ? action.deviceId : null);
           const deviceId = deviceOf(socket);
           const authorize = socket.data.authorize;
-          const action = command.action;
           let playback: Playback | undefined;
           let removed: string | undefined;
-          // Play on a Device: this window controls it from now on.
-          if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.deviceId) {
-            requireControl(action.deviceId, deviceId);
-            control(deviceId, action.deviceId);
-            if (action.playNow) own(playedBy, true);
-          }
           const enqueued = enqueueMedia(action, authorize, playedBy);
           if (enqueued) {
             await enqueued;

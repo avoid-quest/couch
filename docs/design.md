@@ -221,7 +221,8 @@ Messages:
   On the host with sharing on, it ends with Pair a device. It scrolls within
   the available space and keeps the same flat, divided settings rows.
   Switching servers returns to that controller's live output mix, or the
-  server's own outputs when the previous mix is gone. Ordinary Play keeps the
+  server's own outputs when the previous mix is gone, or this Device when
+  those are offline. Ordinary Play keeps the
   mix; Mixer and explicit Play on choose where it plays.
 - **Where it plays** is one icon button in the band and the mini player, a
   mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
