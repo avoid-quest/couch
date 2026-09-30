@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DeviceSignal, signalOf } from "@/components/DeviceSignal";
+import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { CouchChoice } from "@/sections/settings/device/CouchChoice";
 import { deviceName } from "@/copy";
 import { deviceId } from "@/session/device-id";
@@ -51,7 +51,7 @@ export function DeviceSwitch({ credentials, connected, status, installationName,
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
       <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11 max-sm:px-2" aria-label={`${name}${more && paired ? ` +${more}` : ""}: ${status}`}>
-        {paired ? <DeviceSignal {...signal} online={connected && (device?.online ?? true)} /> : <StatusDot connected={connected} />}
+        {paired ? <DeviceIcon {...signal} online={connected && (device?.online ?? true)} /> : <StatusDot connected={connected} />}
         <span className="flex min-w-0 max-w-48 gap-1 max-sm:max-w-32"><span className="truncate">{name}</span>{paired && !!more && <span className="shrink-0">+{more}</span>}</span>
       </Button>
     </PopoverTrigger>
@@ -64,7 +64,7 @@ export function DeviceSwitch({ credentials, connected, status, installationName,
         {present(state).map(item => {
           const chosen = item.id === controlled;
           const row = <>
-            <DeviceSignal {...signalOf(state, item.id)} />
+            <DeviceIcon {...signalOf(state, item.id)} />
             <span className="grid min-w-0 flex-1 text-left">
               <span className="flex min-w-0 items-baseline gap-2"><span className="truncate">{item.name}</span>{item.id === self && <span className="shrink-0 text-xs text-muted-foreground">This device</span>}</span>
               <span className="truncate text-xs text-muted-foreground">{doing(state, item)}</span>
