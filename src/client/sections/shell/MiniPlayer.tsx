@@ -62,15 +62,15 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const context = programme ? current.title : current.subtitle;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
   return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] sm:gap-x-4 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
-    <div className="min-w-0">
-    <Button variant="ghost" className="h-auto min-w-0 justify-start gap-3 p-0 text-left font-normal touch:h-auto" aria-label={`Open player: ${title}`} onClick={() => onOpen()}>
+    <div className="flex min-w-0 items-center gap-3">
       <span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full">{artwork}</span>
-      <span className="grid min-w-0 gap-0.5">
-        <span className="truncate text-sm font-medium" title={title}>{title}</span>
-        <span role="status" className="truncate text-xs text-muted-foreground">{context && <><span>{context}</span><span aria-hidden="true"> · </span></>}{status}</span>
-      </span>
-    </Button>
-    {current.kind === "radio" || current.source.startsWith("radio:") ? <Link to="/find" search={{ browse: "radio" }} className="ml-15 inline-flex min-h-8 items-center text-xs text-muted-foreground hover:text-foreground hover:underline sm:ml-17 touch:min-h-11">More stations</Link> : <CollectionLinks collection={current.collection} compact className="pl-15 sm:pl-17" />}
+      <div className="min-w-0">
+        <Button variant="ghost" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium touch:h-auto" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          {current.kind === "radio" || current.source.startsWith("radio:") ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}
+          <span role="status" className="truncate">{status}</span>
+        </div>
+      </div>
     </div>
     <div className="grid min-w-0 justify-items-center">
       <div className="flex items-center gap-0.5" role="group" aria-label="Playback controls">

@@ -5,6 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useState } from "react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { PageHeader } from "@/components/PageHeader";
+import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { HitList, SourceProblems } from "./SearchPanel";
 import { SearchRadioResults } from "./SearchRadioResults";
 import type { SearchPlaybackProps, SearchResultSummary } from "./SearchOnlineResults";
@@ -14,7 +15,7 @@ import { collectionPagination } from "@/collection-pagination";
 import { BrowsePagination } from "@/components/BrowsePagination";
 import { Input } from "@/components/ui/input";
 
-export function BrowseRadio({ onBack, ...props }: SearchPlaybackProps & { onBack: () => void }) {
+export function BrowseRadio(props: SearchPlaybackProps) {
   const name = useOptionalSessionGate()?.state?.installationName;
   const { search, searchStr } = useLocation();
   const navigate = useNavigate();
@@ -31,17 +32,21 @@ export function BrowseRadio({ onBack, ...props }: SearchPlaybackProps & { onBack
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
   return <section className="min-w-0 space-y-6" aria-label="Browse radio">
-    <PageHeader title="Radio" back={{ label: "Find", onClick: onBack }} />
+    <ContentBreadcrumb title="Radio" />
+    <PageHeader title="Radio" className="mb-0" />
     <ChoiceGroup label="Radio source" value={source} onValueChange={source => void navigate({ href: radioBrowseLocation(source) })} options={radioBrowseSources.map(value => ({ value, label: value }))} />
     {!props.connected && <p className="text-sm text-muted-foreground" role="status">{offline(name)}</p>}
     {summary?.loading && !summary.hits?.length && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />Loading stations…</p>}
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 id="radio-stations" tabIndex={-1} className="text-xl font-medium tracking-tight">Stations</h2><p role="status" className="mt-1 text-sm text-muted-foreground">{hits.length} stations{filter && " matching your filter"}</p></div>
-      <Input type="search" aria-label="Filter these stations" placeholder="Filter these stations" className="w-full sm:w-64" value={filter} onChange={event => void navigate({ href: radioBrowseLocation(source, 1, event.target.value), replace: true, resetScroll: false })} /></div>
-    <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? radioBrowseLocation(source, paging.page - 1, filter) : undefined} next={paging.next ? radioBrowseLocation(source, paging.page + 1, filter) : undefined} disabled={!props.connected || !!summary?.loading} onSelectPage={goToPage}
-      onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); goToPage(Number(new URL(href, location.origin).searchParams.get("page") ?? 1)); }} />
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><h2 id="radio-stations" tabIndex={-1} className="text-sm text-muted-foreground">{hits.length} {hits.length === 1 ? "station" : "stations"}</h2>
+      <div className="flex flex-wrap items-center gap-4">
+        {((summary?.hits?.length ?? 0) > 8 || filter) && <Input type="search" aria-label="Filter these stations" placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={filter} onChange={event => void navigate({ href: radioBrowseLocation(source, 1, event.target.value), replace: true, resetScroll: false })} />}
+        <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? radioBrowseLocation(source, paging.page - 1, filter) : undefined} next={paging.next ? radioBrowseLocation(source, paging.page + 1, filter) : undefined} disabled={!props.connected || !!summary?.loading} onSelectPage={goToPage}
+          onNavigate={(event, href) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); goToPage(Number(new URL(href, location.origin).searchParams.get("page") ?? 1)); }} />
+      </div>
+    </div>
     {hits.length ? <HitList hits={hits.slice(paging.start, paging.end)} timeline={false} label="Radio stations" /> : null}
     {summary && <SourceProblems summaries={[[source, summary]]} />}
     {summary && !summary.loading && !summary.error && !hits.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter ? "No stations match this filter. Try another name or clear the filter." : source === "avoid radio" ? "No stations are available right now. Try Radio playlists." : source === "Radio directory" ? "No stations are available right now. Try another source." : "No radio playlists yet. An admin can add one in Settings → Sources → Radio playlists."}</EmptyDescription></EmptyHeader></Empty>}
-    <SearchRadioResults {...props} source={source} query="" onResults={report} />
+    <SearchRadioResults {...props} browse source={source} query="" onResults={report} />
   </section>;
 }

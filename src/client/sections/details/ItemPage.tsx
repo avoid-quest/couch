@@ -13,10 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { savedSourceLabel } from "@/saved-source";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
-import { CollectionLinks } from "@/components/CollectionLinks";
+import { BrowseActions } from "@/sections/find/SearchPanel";
+import type { SearchHit } from "@/sections/find/SearchOnlineResults";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { RelatedRadio } from "@/components/RelatedRadio";
-import { useDetailNavigation } from "@/detail-navigation";
 import { useSessionGate } from "@/session/session-context";
 import { useShell } from "@/sections/shell/shell-context";
 import { formatDuration } from "@/time-format";
@@ -24,8 +25,10 @@ import type { ForLaterItem } from "../../../shared/for-later";
 import type { HistoryItem } from "../../../shared/viewing";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 import type { PlaybackCollection } from "../../../shared/protocol";
+import { providerForUrl } from "../../../shared/providers";
+import { sourceLabel } from "@/source-label";
 
-const kinds = ["history", "saved", "radio"] as const;
+const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = typeof kinds[number];
 type ItemDetails = { kind: "history"; item: HistoryItem } | { kind: "saved"; item: ForLaterItem } | { kind: "radio"; item: RadioStation };
 
@@ -34,7 +37,7 @@ export function readItemSearch(search: Record<string, unknown>): { kind?: Kind; 
   return kind && typeof search.id === "string" && search.id.trim() && search.id.length <= 2048 ? { kind, id: search.id } : {};
 }
 
-async function readDetails(credentials: ApiCredentials, kind: Kind, id: string, signal: AbortSignal): Promise<ItemDetails> {
+async function readDetails(credentials: ApiCredentials, kind: Exclude<Kind, "queue">, id: string, signal: AbortSignal): Promise<ItemDetails> {
   const read = <T,>(path: string) => apiJson<T>(credentials, path, { signal });
   const encoded = encodeURIComponent(id);
   switch (kind) {
@@ -51,22 +54,21 @@ async function readDetails(credentials: ApiCredentials, kind: Kind, id: string, 
 export function ItemPage() {
   const { search } = useLocation();
   const { kind, id } = readItemSearch(search);
-  const navigation = useDetailNavigation();
-  return <section data-page="Item" className="min-w-0">
-    {kind && id ? <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <PageHeader title="Item not found" back={{ label: "Back", onClick: () => navigation.back() }} />}
+  return <section data-page="Item" className="min-w-0 space-y-6">
+    {kind && id ? kind === "queue" ? <QueueDetails id={id} /> : <LoadedItem key={`${kind}:${id}`} kind={kind} id={id} /> : <><ContentBreadcrumb title="Item not found" /><PageHeader title="Item not found" /></>}
   </section>;
 }
 
-function LoadedItem({ kind, id }: { kind: Kind; id: string }) {
+function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) {
   const { credentials } = useShell();
   const { connected } = useSessionGate();
-  const navigation = useDetailNavigation();
   const query = useQuery({
     queryKey: [kind === "saved" ? "for-later" : kind === "history" ? "progress" : kind, "item", id],
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
   if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
-    <PageHeader title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} back={{ label: "Back", onClick: () => navigation.back() }} />
+    <ContentBreadcrumb title="Details" />
+    <PageHeader title={query.error instanceof ApiError && query.error.status === 404 ? "Item not found" : "Details"} />
     {query.error ? <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription><AlertAction><Button variant="ghost" onClick={() => void query.refetch()}>Try again</Button></AlertAction></Alert>
       : <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">{connected ? <><Spinner className="size-4" />Loading details…</> : "Connect to Couch to load this item."}</p>}
   </>;
@@ -78,29 +80,43 @@ function LoadedItem({ kind, id }: { kind: Kind; id: string }) {
   }
 }
 
-function DetailLayout({ title, meta, description, thumbnail, position, duration, actions, children, collection }: {
-  title: string; meta?: string; description?: string | null; thumbnail?: string; position?: number; duration?: number | null; actions: ReactNode; children?: ReactNode; collection?: PlaybackCollection;
+function DetailLayout({ title, meta, description, thumbnail, position, duration, primary, actions, children, collection, radio }: {
+  title: string; meta?: string; description?: string | null; thumbnail?: string; position?: number; duration?: number | null; primary: ReactNode; actions: SearchHit["actions"]; children?: ReactNode; collection?: PlaybackCollection; radio?: boolean;
 }) {
-  const navigation = useDetailNavigation();
   return <>
-    <ContentBreadcrumb title={title} collection={collection} />
-    <PageHeader title={title} back={{ label: "Back", onClick: () => navigation.back() }} className="[&_h1]:whitespace-normal [&_h1]:break-words" />
-    <div className="grid items-start gap-6 sm:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] sm:gap-8">
-      <MediaArtwork thumbnail={thumbnail} title={title} className="aspect-square h-auto w-full max-w-sm object-contain" />
-      <div className="min-w-0 space-y-5">
-        {(meta || duration != null) && <p className="text-sm text-muted-foreground">{[meta, duration != null && formatDuration(duration)].filter(Boolean).join(" · ")}</p>}
-        {description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed break-words">{description}</p>}
-        {!!position && <p className="text-sm text-muted-foreground">Resume at {formatDuration(position)}</p>}
-        <div className="flex flex-wrap gap-2">{actions}</div>
-        <CollectionLinks collection={collection} />
-        {children}
+    <ContentBreadcrumb title={title} collection={collection} radio={radio} />
+    <header>
+      <div className="flex items-start gap-4">
+        <MediaArtwork thumbnail={thumbnail} title={title} className="size-20 shrink-0 object-contain sm:size-24" />
+        <div className="min-w-0 space-y-2">
+          <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight break-words">{title}</h1>
+          {(meta || duration != null) && <p className="text-sm text-muted-foreground">{[meta, duration != null && formatDuration(duration)].filter(Boolean).join(" · ")}</p>}
+          {!!position && <p className="text-sm text-muted-foreground">Resume at {formatDuration(position)}</p>}
+          <div className="flex items-center gap-1">{primary}<BrowseActions title={title} actions={actions} /></div>
+        </div>
       </div>
-    </div>
+      {description && <Collapsible className="mt-2"><CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="-ml-2.5 text-muted-foreground">About</Button></CollapsibleTrigger><CollapsibleContent><p className="max-w-prose pt-2 text-sm leading-relaxed break-words text-muted-foreground">{description}</p></CollapsibleContent></Collapsible>}
+    </header>
+    {children}
   </>;
 }
 
 function useDetailAction() {
   return useMutation({ mutationFn: (run: () => Promise<unknown>) => run(), onError: (error: Error) => toast.error(error.message) });
+}
+
+function QueueDetails({ id }: { id: string }) {
+  const shell = useShell();
+  const { state, connected, run } = useSessionGate();
+  const action = useDetailAction();
+  const item = state?.queue.find(entry => entry.id === id);
+  if (!item) return <><ContentBreadcrumb title="Details" /><PageHeader title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
+  const radio = item.kind === "radio" || item.source.startsWith("radio:");
+  return <><DetailLayout title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} duration={item.duration} meta={[item.subtitle, sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
+    primary={<Button size="sm" disabled={!shell.available || action.isPending} onClick={() => action.mutate(() => run({ type: "play", entryId: item.id }))}>Play</Button>}
+    actions={[{ label: "Save for later", disabled: !connected || action.isPending, run: () => action.mutate(() => apiSend(shell.credentials, "/api/for-later", { reference: { kind: "queue", id: item.id } })) }]} />
+    {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
+  </>;
 }
 
 function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => void }) {
@@ -114,12 +130,13 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     refresh();
     if (result.undoToken && result.expiresAt && result.expiresAt > Date.now()) session.offerUndo(`Removed ${item.title} from Continue.`, async () => { await undoProgressAction(shell.credentials, result.undoToken!); refresh(); }, result.expiresAt - Date.now());
   };
-  return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} position={item.position} meta={[item.subtitle, item.sourceLabel].filter(Boolean).join(" · ")} description={item.description} actions={<>
-    <Button disabled={blocked || !playable} onClick={() => action.mutate(() => shell.playHistory(item, { fromStart: item.position === 0 }))}>{item.position > 0 ? "Resume" : "Play"}</Button>
-    {!!item.position && <Button variant="ghost" disabled={blocked || !playable} onClick={() => action.mutate(() => shell.playHistory(item, { fromStart: true }))}>From start</Button>}
-    <Button variant="ghost" disabled={blocked} onClick={() => action.mutate(() => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id }))}>Queue</Button>
-    {!!item.position && !item.watched && <Button variant="ghost" disabled={blocked} onClick={() => action.mutate(remove)}>Remove from Continue</Button>}
-  </>} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
+  return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} position={item.position} meta={[item.subtitle, item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
+    primary={<Button size="sm" disabled={blocked || !playable} onClick={() => action.mutate(() => shell.playHistory(item, { fromStart: item.position === 0 }))}>{item.position > 0 ? "Resume" : "Play"}</Button>}
+    actions={[
+      ...(item.position ? [{ label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => shell.playHistory(item, { fromStart: true })) }] : []),
+      { label: "Queue", disabled: blocked, run: () => action.mutate(() => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id })) },
+      ...(item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []),
+    ]} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
 }
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
@@ -132,20 +149,21 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     if (result?.notice) toast(result.notice);
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
-  return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description} actions={<>
-    <Button disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => load("play"))}>Play</Button>
-    <Button variant="ghost" disabled={!connected || action.isPending} onClick={() => action.mutate(() => load("append"))}>Queue</Button>
-  </>}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
+  return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
+    primary={<Button size="sm" disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => load("play"))}>Play</Button>}
+    actions={[{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
 }
 
 function RadioDetails({ item }: { item: RadioStation }) {
   const shell = useShell();
-  const { connected } = useSessionGate();
+  const { connected, nativeHost } = useSessionGate();
   const action = useDetailAction();
   const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && item.sourceId === avoidRadioPlaylistId, refetchInterval: 60_000 });
   const programme = programmes.data?.[item.id];
-  return <><DetailLayout title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre].filter(Boolean).join(" · ")} description={programme?.description} actions={<>
-    <Button disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => shell.enqueueRadio(item, true))}>Play {item.name}</Button>
-    <Button variant="ghost" disabled={!connected || action.isPending} onClick={() => action.mutate(() => shell.enqueueRadio(item, false))}>Queue</Button>
-  </>} /><RelatedRadio station={item} /></>;
+  return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre, programme?.artist, programme?.album, programme?.bitrate && `${programme.bitrate} kbps`].filter(Boolean).join(" · ")} description={programme?.description}
+    primary={<Button size="sm" aria-label={`Play ${item.name}`} disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => shell.enqueueRadio(item, true))}>Play</Button>}
+    actions={[
+      { label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, false)) },
+      ...(!nativeHost && programme?.programmeUrl ? [{ label: "Open show page", node: <a href={programme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a> }] : []),
+    ]} /><RelatedRadio station={item} /></>;
 }

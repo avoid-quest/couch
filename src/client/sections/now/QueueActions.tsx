@@ -7,6 +7,8 @@ import type { Credentials } from "../../session/session";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Link } from "@tanstack/react-router";
+import { itemLocation } from "@/detail-navigation";
 
 export function QueueActions({ entry, index, queue, connected, run, credentials, firstUpcomingIndex, lastUpcomingIndex }: {
   credentials: Credentials;
@@ -26,6 +28,7 @@ export function QueueActions({ entry, index, queue, connected, run, credentials,
   return <DropdownMenu modal={false} onOpenChange={open => { if (open) trigger.current?.focus(); }}>
     <DropdownMenuTrigger asChild><Button ref={trigger} data-queue-menu variant="ghost" size="icon" aria-label={`Options for ${entry.title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" onCloseAutoFocus={event => { if (!trigger.current?.isConnected) event.preventDefault(); }}>
+      <DropdownMenuItem asChild><Link to={itemLocation("queue", entry.id)}>Details</Link></DropdownMenuItem>
       {index >= firstUpcomingIndex && firstUpcomingIndex < lastUpcomingIndex && <>
       {index > firstUpcomingIndex && <><DropdownMenuItem disabled={!connected} onSelect={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[firstUpcomingIndex]?.id ?? null })}>Play next</DropdownMenuItem>
       <DropdownMenuItem disabled={!connected} onSelect={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index - 1]!.id })}>Earlier</DropdownMenuItem></>}
