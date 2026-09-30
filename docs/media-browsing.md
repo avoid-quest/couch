@@ -10,35 +10,38 @@ Reuse the existing palette: black ground `#000000`, white ink `#ffffff`, muted
 ink `#a3a3a3`, secondary surface `#171717`, popover `#0a0a0a`. Keep Inter Tight
 for titles, body and controls. Artwork supplies the colour.
 
-The content title is the anchor. Align copy and controls to the left, leave room
-around artwork, and use divided media rows rather than enclosing panels.
+The breadcrumb is the navigation. Do not add a separate Back row or repeat the
+same destinations below the title. Keep the existing 24px title scale, small
+artwork beside the title even on phones, and divided media rows. Descriptions
+are optional disclosure content rather than a large block above the list.
 
 ```text
-Back       Find / provider / series / season
+Find / provider / series / season
 
-Artwork    Season title
-           Description
-           Play all   Queue all   Save
+Artwork    Season title     Play all  …
+           About
 
-Episodes                         Filter this list
-Previous    Page 2    Next
+24 episodes             Filter       ‹ 2 / 4 ›
 ------------------------------------------------
-Episode artwork   Name and length   Play / Queue
+Episode artwork   Name and length       Play  …
 ------------------------------------------------
-Previous    Page 2    Next
 ```
 
-Playback keeps named series, season, album or radio destinations visible. Details
-offer the same path, so navigation does not depend on remembering where playback
-started. Browser history restores the collection page and scroll position.
+Playback keeps named series, season, album or radio destinations visible once.
+Details offer the same breadcrumb. Nearby items use a small list with one title
+and one link to the full list. Browser history restores the collection page and
+scroll position.
 
-The initial idea reused the search time ruler for collections. That hides the
-sequence of episodes and tracks, so collection browsing instead uses ordinary
-lengths and numbered pages. The find-results ruler remains as it is.
+Collection rows open details through their title; a small Play control stays
+available, and secondary verbs use Couch's existing Dropdown Menu. The existing
+Find results, action layout, and time ruler remain as they are. Use one compact
+pager and omit unavailable directions rather than drawing disabled controls.
 
 Use the official shadcn [Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
 and [Pagination](https://ui.shadcn.com/docs/components/radix/pagination), together
-with Couch's existing Button, Input, Select and media rows. Provider cursors are
+with Couch's existing Button, Input, Select, Collapsible, Dropdown Menu and media
+rows. The only extra composition is the provider-aware breadcrumb and browsing
+toolbar; the catalog has no media-domain equivalent. Provider cursors are
 opaque and do not report totals, so pagination only links to pages whose cursors
 are known; it never invents a last page. Full season and album lists can be paged
 locally. Relationships come from provider catalogues, with a fallback for older
