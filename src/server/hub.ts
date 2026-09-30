@@ -392,8 +392,9 @@ export async function createHub(options: HubOptions) {
     playback.session.wait(`${nameOf(deviceId)} is offline.`);
   };
   const createPlayback = (id: string = crypto.randomUUID()) => {
-    const playback = { id, outputs: [], mixTrim: 100, renderer: null, screens: new Map() } as unknown as Playback;
-    playback.session = createSession({ ...store, ...store.playback(id) }, command => sendPlayer(playback, command), (state, clock) => publish(playback, state, clock), {
+    const saved = store.playback(id);
+    const playback = { id, outputs: [], mixTrim: saved.mixTrim(), renderer: null, screens: new Map() } as unknown as Playback;
+    playback.session = createSession({ ...store, ...saved }, command => sendPlayer(playback, command), (state, clock) => publish(playback, state, clock), {
       systemAudio,
       invalidate: (...domains) => invalidate(...domains),
       resolveContinuation: (entry, signal) => continuation(entry, signal),
@@ -520,6 +521,16 @@ export async function createHub(options: HubOptions) {
     const volumes = deviceIds.map(id => loudest ? Math.round(soundOf(id).volume * volume / loudest) : volume);
     for (const [index, id] of deviceIds.entries()) await setSound(id, { volume: volumes[index] }, authorize, actor);
   };
+  // All trims a Playback's rendered sound and is saved with it; Device levels, mute and outputs stay as they are.
+  const setTrim = (playback: Playback, level: number) => {
+    playback.mixTrim = level;
+    store.playback(playback.id).saveMixTrim(level);
+    if (playback.synced) playback.synced.members(members(playback));
+    else deliver(playback, { type: "volume", volume: levelOf(playback) });
+    broadcast();
+  };
+  // Raising sound while All is at 0 brings All back to 100; muted and 0-level Devices stay silent.
+  const unsilence = (playback: Playback | undefined) => { if (playback?.mixTrim === 0) setTrim(playback, 100); };
   const applyConsent = () => {
     if (closed) return;
     for (const playback of all()) {
@@ -569,7 +580,7 @@ export async function createHub(options: HubOptions) {
     for (const socket of sockets) {
       const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket));
       // Volume keeps its saved level while muted, like each Device's mixer fader.
-      const volume = Math.max(0, ...sounding(playback, device).map(id => soundOf(id).volume)), view = `${playback?.id}:${device}:${volume}`;
+      const volume = playback?.mixTrim === 0 ? 0 : Math.max(0, ...sounding(playback, device).map(id => soundOf(id).volume)), view = `${playback?.id}:${device}:${volume}`;
       if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
@@ -1140,11 +1151,7 @@ export async function createHub(options: HubOptions) {
               follow(left, action.deviceId);
               broadcast();
             } else if (action.type === "allSpeakers") {
-              // All trims this Playback's existing sound. At zero the outputs remain selected for recovery.
-              target.mixTrim = action.level;
-              if (target.synced) target.synced.members(members(target));
-              else deliver(target, { type: "volume", volume: levelOf(target) });
-              broadcast();
+              setTrim(target, action.level);
             } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
               if ((action.picture || action.level) && !target.outputs.some(output => output.deviceId === action.deviceId)) requireReplacement(action.deviceId, deviceId);
@@ -1152,12 +1159,14 @@ export async function createHub(options: HubOptions) {
               if (action.picture !== undefined) requireOutput({ deviceId: action.deviceId, picture: true, sound: false }, deviceId);
               if (action.level) await setSound(action.deviceId, { volume: action.level }, permitted, deviceId);
               await setOutput(target, action.deviceId, { picture: action.picture, sound: action.level === undefined ? undefined : action.level > 0, delay: action.delay }, permitted, deviceId);
+              if (action.level) unsilence(target);
             }
           } else if (action.type === "volume" || action.type === "mute") {
             // Without a Device, the group changes only the speakers this device may control.
             const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), selected(deviceId)).filter(id => outputFor(id, deviceId).sound);
             if (action.type === "volume") await setVolume(targets, action.volume, authorize, deviceId);
             else for (const id of targets) await setSound(id, { muted: action.muted }, authorize, deviceId);
+            if (action.type === "volume" ? action.volume > 0 : !action.muted) for (const playback of new Set(targets.map(servedBy))) unsilence(playback);
           } else {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on the selected Device's.

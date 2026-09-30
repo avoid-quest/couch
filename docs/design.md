@@ -228,7 +228,8 @@ Messages:
   mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
   mistaken for the header's Couch switch. It opens a bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
   a console's master fader, is All: its fader trims the Playback's selected sound
-  from 100 (the Device levels) to 0 (silent). It shows its own trim, preserves
+  from 100 (the Device levels) to 0 (silent), and the Playback keeps it across
+  restarts. It shows its own trim, preserves
   Device levels and mute, and keeps outputs selected at zero so raising it
   restores their sound; it has no Picture, Solo or Mute. Then each
   Device is a channel strip: the Playback's Devices first, then the other
@@ -241,7 +242,8 @@ Messages:
   trim. A strip's "Earlier"
   slider, shown while its sound is in, plays a late speaker sooner (Sendspin's
   static delay); "Delay" read as the opposite. The band and mini player volume
-  shows the loudest in-sound Device's and moves them all together; their Mute
+  shows the loudest in-sound Device's, or 0 while All is at 0, and moves them all
+  together (raising it from All's 0 brings All back to 100); their Mute
   mutes them all, and so does M.
 - **Play on** in item menus offers the other online Devices, hidden while this
   is the only one; the primary Play says "Play on {name}" while you control

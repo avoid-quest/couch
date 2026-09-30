@@ -77,9 +77,11 @@ is a queue, current item, position, pause state, speed and tracks, with its own
 outputs: each Device's `Output` `{ picture, sound }` in it. A Device's outputs
 serve one Playback at a time. A Device owns one volume and mute, persisted in the
 `devices` table; it renders a Playback's sound at
-`sound && !muted ? round(volume * mixTrim / 100) : 0`. The Playback's `mixTrim`
-starts at 100 and attenuates its selected sound; zero keeps those outputs selected
-so raising it restores their sound. On the Linux TV with system audio its volume
+`sound && !muted ? round(volume * mixTrim / 100) : 0`. The Playback's `mixTrim`,
+saved with it in the `playback` table, starts at 100 and attenuates its selected
+sound; zero keeps those outputs selected so raising it restores their sound, and
+the band then shows 0. Raising a volume, a fader or unmuting while it is 0 sets it
+back to 100, which leaves muted and 0-level Devices silent. On the Linux TV with system audio its volume
 and mute are the system's, and Couch applies the trim to its stream instead.
 The band's volume shows the loudest in-sound Device's saved level and scales
 them all proportionally, and its mute mutes them all.

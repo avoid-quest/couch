@@ -103,6 +103,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     const legacy = db.query<{ queue: string; cursor: string | null; context: string | null }, []>("SELECT s.queue, q.entryId AS cursor, c.context FROM session s, queue_position q, playback_continuation c").get();
     if (legacy && legacy.queue !== "[]") db.query("INSERT INTO playback VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), legacy.queue, legacy.cursor, legacy.context);
   }).immediate();
+  // Each Playback keeps the Mixer's All trim; older rows play at the Devices' levels.
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(playback)").all().some(column => column.name === "mixTrim")) db.exec("ALTER TABLE playback ADD COLUMN mixTrim INTEGER NOT NULL DEFAULT 100");
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
 
@@ -187,7 +189,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     forgetPlayback(id: string) { db.query("DELETE FROM playback WHERE id = ?").run(id); },
     playback(id: string) {
       const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null }, [string]>("SELECT queue, cursor, continuation FROM playback WHERE id = ?").get(id);
-      const save = (column: "queue" | "cursor" | "continuation", value: string | null) => {
+      const save = (column: "queue" | "cursor" | "continuation" | "mixTrim", value: string | number | null) => {
         db.query("INSERT OR IGNORE INTO playback (id, queue) VALUES (?, '[]')").run(id);
         db.query(`UPDATE playback SET ${column} = ? WHERE id = ?`).run(value, id);
       };
@@ -195,6 +197,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
         queue: JSON.parse(row()?.queue ?? "[]") as QueueEntry[],
         queueCursorEntryId() { return row()?.cursor ?? null; },
         playbackContinuation(): PlaybackContinuation | null { const value = row()?.continuation; return value ? JSON.parse(value) : null; },
+        mixTrim() { return db.query<{ mixTrim: number }, [string]>("SELECT mixTrim FROM playback WHERE id = ?").get(id)?.mixTrim ?? 100; },
+        saveMixTrim(level: number) { save("mixTrim", level); },
         savePlaybackContinuation(context: PlaybackContinuation | null) { save("continuation", context ? JSON.stringify(context) : null); },
         saveQueueCursor(entryId: string, beforeCommit?: () => void) { db.transaction(() => { save("cursor", entryId); beforeCommit?.(); })(); },
         saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) { db.transaction(() => { save("queue", JSON.stringify(queue)); save("cursor", cursorEntryId); })(); },
