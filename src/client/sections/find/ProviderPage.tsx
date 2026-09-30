@@ -42,7 +42,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(search.filter.toLocaleLowerCase()));
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
   const currentId = hits.find(hit => hit.url === source)?.id;
-  const noun = provider === "bandcamp" ? "Tracks" : /\/season-\d+|\/ContentSet-/.test(url) ? "Episodes" : provider === "streamingcommunity" && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
+  const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : /\/season-\d+|\/ContentSet-/.test(url) ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
   const href = (direction: "previous" | "next") => collectionLocation({ provider, url }, { ...search,
     ...(paging.remote ? { cursors: direction === "previous" ? search.cursors.slice(0, -1) : [...search.cursors, page!.nextCursor!], page: 1 } : { page: paging.page + (direction === "previous" ? -1 : 1) }) });
   const goToPage = (href: string) => {
