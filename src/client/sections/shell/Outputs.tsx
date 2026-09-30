@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Monitor, MonitorUp, Speaker } from "lucide-react";
+import { Monitor, MonitorUp, Speaker } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -12,36 +12,15 @@ import { isTvPresentation } from "@/session/native-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
-// Devices, Send to and the Speakers panel (#644 ticket 9). Every window controls one Device and
+// Send to and the Speakers panel (#644 ticket 9). Every window controls one Device and
 // the Playback it serves; controlling never moves outputs.
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
 
 const statusText: Partial<Record<PlaybackSummary["status"], string>> = { loading: "Loading", playing: "Playing", paused: "Paused", ended: "Finished", error: "Can't play" };
 const served = (state: ClientSessionState, device: DeviceSummary) => state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === device.id));
-const describe = (playback: PlaybackSummary) => [playback.title ?? "Up next", statusText[playback.status]].filter(Boolean).join(" · ");
 const here = (device: DeviceSummary) => device.id === deviceId();
 // Online Devices first; offline ones stay listed, and skipped.
 const byPresence = (devices: DeviceSummary[] = []) => [...devices].sort((a, b) => Number(b.online) - Number(a.online));
-// An offline Device that serves no Playback is left out; Settings → Devices still lists it (#644 ticket 12).
-const present = (state: ClientSessionState) => byPresence(state.devices).filter(device => device.online || served(state, device));
-
-/** Every Device and what it plays. Choosing one controls it, idle ones too. */
-export function DeviceList({ state, run }: Props) {
-  const label = (name: string, detail: string) => <span className="grid min-w-0"><span className="truncate">{name}</span><span className="truncate text-xs text-muted-foreground">{detail}</span></span>;
-  if (!state.devices?.length) return null;
-  return <section aria-labelledby="devices-title" className="grid gap-1 border-t pt-3 first:border-t-0 first:pt-0">
-    <h3 id="devices-title" className="text-sm font-medium">Devices</h3>
-    <div className="-mx-2.5 grid">
-      {present(state).map(device => {
-        const playback = served(state, device), chosen = device.id === state.controlling;
-        return <Button key={device.id} variant="ghost" className="h-auto w-full justify-between gap-3 rounded-none px-2.5 py-2 text-left font-normal" aria-pressed={chosen} onClick={() => void run({ type: "control", deviceId: device.id })}>
-          {label(`${device.name}${here(device) ? " · Here" : ""}`, !device.online ? "Offline" : playback ? describe(playback) : "Idle")}
-          {chosen && <Check aria-hidden="true" />}
-        </Button>;
-      })}
-    </div>
-  </section>;
-}
 
 /** Solo on another Device: only it keeps the controlled Playback. */
 export function SendTo({ state, run }: Props) {

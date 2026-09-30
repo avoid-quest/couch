@@ -1,15 +1,11 @@
-import type { ClientSessionState } from "@/session/session";
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
@@ -19,12 +15,8 @@ import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
-import { SoundControls } from "./PlaybackStatus";
 import { Onboarding } from "./Onboarding";
-import { DeviceList } from "./Outputs";
-import { PlayingLabel, StatusDot, StatusLine } from "./StatusLine";
-import type { Action } from "../../../shared/protocol";
-import { playingElsewhere } from "@/session/device-id";
+import { StatusLine } from "./StatusLine";
 import { useNavigation } from "@/navigation";
 
 export type Choice = AppMode;
@@ -139,88 +131,73 @@ function DeviceForm() {
   </div>;
 }
 
-export function PlaybackDevice({ credentials = null, connected = false, installationName, state = null, run }: {
-  credentials?: Credentials | null;
-  connected?: boolean;
-  installationName?: string;
-  state?: ClientSessionState | null;
-  run?: (action: Action) => Promise<boolean>;
-  /** Offer this app's own updater (a remote-mode desktop app). */
-}) {
+// Native choices remember only addresses, so the shell records each Couch's name once it is seen.
+export function useRememberCouchName(installationName?: string) {
   const device = usePlaybackDevice();
-  const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<"address" | "confirmation" | "forget" | null>(null);
+  useEffect(() => {
+    if (device?.mode !== "remote" || !device.address || !installationName) return;
+    const names = targetNames();
+    if (names[device.address] === installationName) return;
+    try { localStorage.setItem(namesKey, JSON.stringify({ ...names, [device.address]: installationName })); } catch { /* Names are a convenience; addresses still work. */ }
+  }, [device?.mode, device?.address, installationName]);
+}
+
+/** Settings → Devices in the app: This computer, the Couches it knows, or another Couch's address. */
+export function AppCouchChoice({ installationName }: { installationName?: string }) {
+  const device = usePlaybackDevice();
+  const [dialog, setDialog] = useState<"confirmation" | "forget" | null>(null);
   const [address, setAddress] = useState("");
   const [warning, setWarning] = useState("");
-  const trigger = useRef<HTMLButtonElement>(null);
   const [names, setNames] = useState(targetNames);
-  useEffect(() => {
-    if (device?.mode !== "remote" || !device.address || !installationName || names[device.address] === installationName) return;
-    const next = { ...names, [device.address]: installationName };
-    setNames(next);
-    try { localStorage.setItem(namesKey, JSON.stringify(next)); } catch { /* Names are a convenience; addresses still work. */ }
-  }, [device?.mode, device?.address, installationName, names]);
   if (!device) return null;
-  const close = () => { setOpen(false); setDialog(null); };
-  const openDialog = (value: NonNullable<typeof dialog>) => { setOpen(false); setDialog(value); };
+  const close = () => setDialog(null);
+  // A known Couch that can't be reached puts its address in the field, beside the error.
   const select = async (mode: "local" | "remote", target?: string, confirmed = false) => {
     try {
       if (await device.choose(mode, target, confirmed)) close();
-      else if (target) { setAddress(target); openDialog("address"); }
+      else if (target) { setAddress(target); close(); }
     } catch (reason) {
-      if (message(reason).startsWith("confirmation-required:")) { setAddress(target!); setWarning(message(reason).split(":")[1]!); openDialog("confirmation"); }
+      if (message(reason).startsWith("confirmation-required:")) { setAddress(target!); setWarning(message(reason).split(":")[1]!); setDialog("confirmation"); }
     }
   };
   const failure = device.error && !device.error.startsWith("confirmation-required:") ? device.error : null;
   const nameOf = (target: string) => device.mode === "remote" && device.address === target && installationName || names[target];
-  const elsewhere = playingElsewhere(state);
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   const pendingGuard = (event: Event) => { if (device.pending) event.preventDefault(); };
+  const inUse = <span className="text-sm text-muted-foreground">In use</span>;
   return <>
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11"><StatusDot connected={connected} /><PlayingLabel renderer={elsewhere} /></Button></PopoverTrigger>
-      <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} onInteractOutside={pendingGuard} className="max-h-(--radix-popover-content-available-height) w-96 gap-4 overflow-y-auto">
-        {/* Devices first: looking at another Device's Playback is what this popover is for (#644 ticket 12). */}
-        {state && run && <DeviceList state={state} run={run} />}
-        <section aria-label="Couch" className="grid gap-3 border-t pt-3 first:border-t-0 first:pt-0">
-        <PopoverHeader><PopoverTitle>Couch</PopoverTitle></PopoverHeader>
-        <RadioGroup aria-label="Couch" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-0">
-          <Field orientation="horizontal" className="items-center py-1.5"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer font-normal">This computer</FieldLabel></Field>
-          {targets.map((target, index) => {
-            const named = nameOf(target);
-            return <Field orientation="horizontal" className="items-center py-1.5" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{named || hostOf(target)}</span>{named && <span className="truncate text-muted-foreground">{hostOf(target)}</span>}</FieldLabel><Button variant="ghost" size="sm" className="text-muted-foreground" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); openDialog("forget"); }}>Forget</Button></Field>;
-          })}
-        </RadioGroup>
-        <form onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
-        {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
-        </section>
-        {/* Sound last: a focused slider owns the arrow keys, so a TV remote reaches everything above it first. */}
-        <SoundControls credentials={credentials} connected={connected} open={open} state={state} run={run} onClose={close} />
-      </PopoverContent>
-    </Popover>
+    <SettingsSection title="Couch" description="The Couch this window shows." data-tv-local-only>
+      <SettingsRow label="This computer" description="Host Couch here. Phones, browsers and other computers on your network join it.">
+        {device.mode === "local" ? inUse : <Button variant="outline" disabled={device.pending} onClick={() => void select("local")}>Switch</Button>}
+      </SettingsRow>
+      {targets.map(target => {
+        const named = nameOf(target);
+        return <SettingsRow key={target} label={named || hostOf(target)} description={named ? hostOf(target) : undefined}>
+          {device.mode === "remote" && device.address === target ? inUse : <Button variant="outline" disabled={device.pending} onClick={() => void select("remote", target)}>Switch</Button>}
+          <Button variant="ghost" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); setDialog("forget"); }}>Forget</Button>
+        </SettingsRow>;
+      })}
+      <SettingsRow label="Another Couch" htmlFor="another-couch-address" description="Join a Couch that runs on another computer. This computer still plays.">
+        <form className="flex w-full flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
+          <Input id="another-couch-address" className="min-w-0 flex-1" value={address} onChange={event => setAddress(event.target.value)} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
+          <Button type="submit" variant="outline" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>
+        </form>
+      </SettingsRow>
+      {failure && dialog !== "forget" && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
+    </SettingsSection>
     <AlertDialog open={dialog === "confirmation"} onOpenChange={value => { if (!value) close(); }}>
-      <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onEscapeKeyDown={pendingGuard}>
+      <AlertDialogContent data-tv-local-only onEscapeKeyDown={pendingGuard}>
         <AlertDialogHeader><AlertDialogTitle>Switch to {hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>{confirmationText(warning)}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction onClick={event => { event.preventDefault(); void select("remote", address, true); }} disabled={device.pending}>Stop and switch</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
     <AlertDialog open={dialog === "forget"} onOpenChange={value => { if (!value) close(); }}>
-      <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onEscapeKeyDown={pendingGuard}>
+      <AlertDialogContent data-tv-local-only onEscapeKeyDown={pendingGuard}>
         <AlertDialogHeader><AlertDialogTitle>Forget {nameOf(address) || hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>This computer will forget its address and pairing. That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
         {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
         <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={async event => { event.preventDefault(); if (await device.forget(address)) { setNames(targetNames()); setAddress(""); close(); } }} disabled={device.pending}>{device.pending ? "Forgetting…" : "Forget"}</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    <Dialog open={dialog === "address"} onOpenChange={value => { if (!value) close(); }}>
-      <DialogContent data-tv-local-only showCloseButton={!device.pending} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onInteractOutside={pendingGuard} onEscapeKeyDown={pendingGuard}>
-        <DialogHeader><DialogTitle>Another Couch</DialogTitle><DialogDescription>Enter the address shown on that Couch.</DialogDescription></DialogHeader>
-        <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
-          <Field><FieldLabel htmlFor="another-couch-address">Couch address</FieldLabel><Input id="another-couch-address" autoFocus value={address} onChange={event => setAddress(event.target.value)} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} /></Field>
-          {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
-          <DialogFooter><Button type="button" variant="ghost" onClick={close} disabled={device.pending}>Cancel</Button><Button type="submit" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button></DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   </>;
 }
 

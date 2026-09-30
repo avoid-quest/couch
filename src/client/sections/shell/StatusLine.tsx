@@ -13,14 +13,6 @@ export function StatusLine({ busy = false, actions, children, className }: { bus
   );
 }
 
-/** The header's "Playing on X +N": on a narrow header the name truncates, never the count (#644 ticket 12). */
-export function PlayingLabel({ renderer }: { renderer: { here: boolean; name: string; more: number } | null }) {
-  return <span className="flex min-w-0 max-w-48 gap-1 max-sm:max-w-40">
-    <span className="truncate">{renderer && !renderer.here ? <><span className="max-sm:sr-only">Playing on </span>{renderer.name}</> : <><span className="max-sm:hidden">Playing here</span><span className="sm:hidden">Here</span></>}</span>
-    {!!renderer?.more && <span className="shrink-0">+{renderer.more}</span>}
-  </span>;
-}
-
 /** Filled while connected, hollow while not. */
 export function StatusDot({ connected }: { connected: boolean }) {
   return <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full border border-current", connected && "bg-current")} />;
