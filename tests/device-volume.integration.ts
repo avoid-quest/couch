@@ -36,6 +36,12 @@ test("mute preserves the displayed volume and allows changing it before unmuting
   });
   try {
     await initial;
+    await command({ type: "control", deviceId: id });
+    const deadline = Date.now() + 3_000;
+    while (state!.controlling !== id) {
+      if (Date.now() > deadline) throw new Error("The selected output was not published.");
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
     assert.equal(state!.player.volume, 70);
     await command({ type: "mute", muted: true });
     assert.equal(state!.devices?.find(device => device.id === id)?.volume, 70);

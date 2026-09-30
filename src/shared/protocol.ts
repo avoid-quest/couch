@@ -46,7 +46,7 @@ export type PlaybackSummary = { id: string; title: string | null; status: Player
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
-// controlling: the Device this window controls; it looks at the Playback that Device serves.
+// controlling: this server's selected output Device (the server's own by default), whose Playback is in view.
 export type SessionState = {
   controlling?: string;
   queue: QueueEntry[];

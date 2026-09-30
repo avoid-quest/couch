@@ -95,6 +95,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
     CREATE TABLE IF NOT EXISTS sendspin_identity (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS device_targets (deviceId TEXT PRIMARY KEY, targetId TEXT NOT NULL);
   `);
 
   // Playbacks replace the one saved queue; it becomes the first Playback once (#644 ticket 9).
@@ -125,6 +126,10 @@ export function openStore(path: string, remoteControlEnabled = false) {
     return deviceId ? { id: deviceId, name, role: "host", createdAt: null, lastSeenAt: null } : null;
   };
   const device = (id: string) => hostDevice()?.id === id ? hostDevice() : pairedDevice(id);
+  const moveDeviceTargets = (from: string, to: string) => {
+    db.query("UPDATE device_targets SET deviceId = ? WHERE deviceId = ?").run(to, from);
+    db.query("UPDATE device_targets SET targetId = ? WHERE targetId = ?").run(to, from);
+  };
   const deviceForToken = (token: string) => token.length <= 128 ? db.query<Device, [string]>(`SELECT ${deviceColumns} FROM devices WHERE token_hash = ?`).get(hash(token)) : null;
   const administratorExists = () => db.query("SELECT 1 FROM devices WHERE role = 'administrator' LIMIT 1").get() !== null;
   const requireDevice = (id: string) => {
@@ -389,14 +394,23 @@ export function openStore(path: string, remoteControlEnabled = false) {
       if (!isDeviceId(id)) return false;
       if (token === null) {
         if (installation().deviceId === id || pairedDevice(id)) return false;
-        db.query("UPDATE installation SET deviceId = ? WHERE id = 1").run(id);
+        db.transaction(() => {
+          moveDeviceTargets(installation().deviceId ?? "host", id);
+          db.query("UPDATE installation SET deviceId = ? WHERE id = 1").run(id);
+        }).immediate();
         return true;
       }
       const current = deviceForToken(token);
       if (!current || current.id === id || device(id)) return false;
-      db.query("UPDATE devices SET id = ? WHERE id = ?").run(id, current.id);
+      db.transaction(() => {
+        moveDeviceTargets(current.id, id);
+        db.query("UPDATE devices SET id = ? WHERE id = ?").run(id, current.id);
+      }).immediate();
       return true;
     },
+    deviceTarget(id: string) { return db.query<{ targetId: string }, [string]>("SELECT targetId FROM device_targets WHERE deviceId = ?").get(id)?.targetId ?? null; },
+    saveDeviceTarget(id: string, target: string) { db.query("INSERT INTO device_targets VALUES (?, ?) ON CONFLICT(deviceId) DO UPDATE SET targetId = excluded.targetId").run(id, target); },
+    deviceTargetOwners() { return db.query<{ deviceId: string }, []>("SELECT deviceId FROM device_targets").all().map(row => row.deviceId); },
     device,
     hostDevice,
     devices(): Device[] {
@@ -421,6 +435,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       db.transaction(() => {
         requireDevice(id);
         db.query("DELETE FROM devices WHERE id = ?").run(id);
+        db.query("DELETE FROM device_targets WHERE deviceId = ? OR targetId = ?").run(id, id);
       }).immediate();
     },
     deviceForToken,

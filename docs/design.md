@@ -191,9 +191,8 @@ Shared building blocks in `src/client/components`:
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
-- `DeviceIcon`: the lucide icon beside every Device's name in the header
-  switch, its list and the Mixer's strips, familiar like Spotify's device
-  picker. Device icons stand only for Devices: the Mixer's opener is a mixer
+- `DeviceIcon`: the lucide icon beside every Device's name in the Mixer's
+  strips, familiar like Spotify's device picker. Device icons stand only for Devices: the Mixer's opener is a mixer
   icon and the "on {name}" status line is plain text. Picture and
   sound: `MonitorSpeaker`; picture: `Monitor`; sound: `Volume`, `Volume1` or
   `Volume2` by its volume (0, up to 50, above); muted: `VolumeX`. Idle, a plain
@@ -213,21 +212,20 @@ Messages:
 - **Empty** for empty states. Say what goes here and offer the next step.
 - **Status line** (`Spinner` and muted text) for work in progress.
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
-  for confirmations; **Sheet** for player panels; **Popover** for the header's Device switch: the
-  Device this window controls, with "+N" when its Playback spans more Devices.
-  On a narrow header the name truncates but the count never does. The
-  header holds only the section nav, the Device switch, the TV remote (phones
-  paired with a TV), Keyboard shortcuts and the clock; the player's header
-  carries the switch too. The Popover lists Devices (online ones, plus offline ones still
-  serving a Playback), each with its DeviceIcon and what it is doing (Idle,
-  Offline, "with {name}", or its title); "This device" marks this window's own.
-  Choosing one controls it, idle ones too. On the host with sharing on, the
-  list ends with Pair a device, which opens the pairing dialog. Which Couch this window shows is
-  setup, in Settings → Devices. The Popover scrolls within the space Radix
-  reports.
+  for confirmations; **Sheet** for player panels; **Popover** for the header's
+  Couch switch: the server this window shows, with its connection status.
+  The header holds only the section nav, the Couch switch, the TV remote
+  (phones paired with a TV), Keyboard shortcuts and the clock; the player's
+  header carries the switch too. The Popover reuses Settings → Devices' Couch
+  choice: saved servers, the app's This computer option, and another address.
+  On the host with sharing on, it ends with Pair a device. It scrolls within
+  the available space and keeps the same flat, divided settings rows.
+  Switching servers returns to that controller's live output mix, or the
+  server's own outputs when the previous mix is gone. Ordinary Play keeps the
+  mix; Mixer and explicit Play on choose where it plays.
 - **Where it plays** is one icon button in the band and the mini player, a
   mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
-  mistaken for the header's Device switch. It opens a bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
+  mistaken for the header's Couch switch. It opens a bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
   a console's master fader, is All: its fader sets every online Device to one
   level (0 turns every Device's sound off), stores nothing and shows the
   loudest in-sound Device's volume; it has no Picture, Solo or Mute. Then each

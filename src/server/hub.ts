@@ -164,8 +164,6 @@ export async function createHub(options: HubOptions) {
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState };
   const playbacks = new Map<string, Playback>();
-  // The Device each Device's windows control, when it isn't their own.
-  const controlling = new Map<string, string>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
   const all = () => [...playbacks.values()];
@@ -177,14 +175,15 @@ export async function createHub(options: HubOptions) {
   const servedBy = (deviceId: string) => all().find(playback => playback.outputs.some(output => output.deviceId === deviceId));
   const holding = (entryId: string) => all().find(playback => stateOf(playback).queue.some(entry => entry.id === entryId));
   const playing = (playbackId: string) => all().find(playback => stateOf(playback).player.playbackId === playbackId);
-  const controlled = (deviceId: string) => controlling.get(deviceId) ?? deviceId;
-  const control = (deviceId: string, target: string) => { if (target === deviceId) controlling.delete(deviceId); else controlling.set(deviceId, target); };
+  // Each Couch remembers this controller's target; a new controller starts with its server's outputs.
+  const controlled = (deviceId: string) => store.deviceTarget(deviceId) ?? hostId();
+  const control = (deviceId: string, target: string) => store.saveDeviceTarget(deviceId, target);
   // A window looks at the Playback its controlled Device serves. An idle one looks at the newest
   // Playback waiting for a Device (a saved Up next, or one whose last output was switched off).
   const lookedAt = (deviceId: string) => servedBy(controlled(deviceId)) ?? all().findLast(playback => !playback.outputs.length);
   // Windows controlling a Device that the Playback moved off follow it (Solo or mpv fallback).
   const follow = (left: string[], to: string) => {
-    for (const deviceId of new Set([...[...sockets].map(deviceOf), ...controlling.keys()])) if (left.includes(controlled(deviceId))) {
+    for (const deviceId of new Set([...[...sockets].map(deviceOf), ...store.deviceTargetOwners()])) if ((deviceId === hostId() || store.device(deviceId)) && left.includes(controlled(deviceId))) {
       const output = outputFor(to, deviceId);
       control(deviceId, output.picture || output.sound ? to : deviceId);
     }
@@ -270,6 +269,8 @@ export async function createHub(options: HubOptions) {
   };
   const release = (playback: Playback, deviceId: string, wait = true) => {
     playback.outputs = playback.outputs.filter(output => output.deviceId !== deviceId);
+    const remaining = playback.outputs.find(output => output.picture) ?? playback.outputs[0];
+    if (remaining) follow([deviceId], remaining.deviceId);
     if (mpvPlayback === playback && deviceId === hostId()) { mpv.send({ type: "stop" }); mpvPlayback = null; }
     if (playback.renderer && deviceOf(playback.renderer) === deviceId) {
       send(playback.renderer, playerCommand({ type: "stop" }));
@@ -405,25 +406,24 @@ export async function createHub(options: HubOptions) {
     playbacks.set(id, playback);
     return playback;
   };
-  // Play starts media on the controlled Device (#644 Actions): in the Playback it serves, or in a
-  // new one that takes its outputs.
-  const own = (actor: PlaybackActor | undefined) => {
+  // Ordinary Play keeps the selected mix. Explicit Play on can isolate its named Device.
+  const own = (actor: PlaybackActor | undefined, exclusive = false) => {
     const actorId = actor?.deviceId ?? hostId(), deviceId = controlled(actorId);
     requireControl(deviceId, actorId);
-    requireReplacement(deviceId, actorId);
     let playback = servedBy(deviceId);
-    if (!playback || playback.outputs.length > 1) { playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); }
+    if (!playback || exclusive && playback.outputs.length > 1) { requireReplacement(deviceId, actorId); playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); control(actorId, deviceId); }
+    else requirePlayback(playback, actorId);
     playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
     return playback;
   };
   // Queue and control act on the looked-at Playback; with none, the controlled Device starts one.
   const viewed = (actor: PlaybackActor | undefined) => { const playback = lookedAt(actor?.deviceId ?? hostId()) ?? own(actor); requirePlayback(playback, actor?.deviceId ?? hostId()); return playback; };
-  // Playing an item of a Playback with no online output plays it on the controlled Device.
+  // A saved Playback with no outputs starts on the selected Device.
   const present = (playback: Playback, actor: PlaybackActor | undefined) => {
     const actorId = actor?.deviceId ?? hostId(), deviceId = controlled(actorId);
     requirePlayback(playback, actorId);
     playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
-    if (!playback.renderer && !playback.synced && mpvPlayback !== playback) { requireControl(deviceId, actorId); requireReplacement(deviceId, actorId); assign(playback, [outputFor(deviceId, actorId)]); }
+    if (!playback.outputs.length) { requireControl(deviceId, actorId); requireReplacement(deviceId, actorId); assign(playback, [outputFor(deviceId, actorId)]); }
     return playback;
   };
   // Solo (#644 Actions): the Device takes over the Playback's outputs, and the current item
@@ -497,7 +497,7 @@ export async function createHub(options: HubOptions) {
   };
   const applyConsent = () => {
     if (closed) return;
-    for (const [actor, target] of controlling) { const sharing = sharingOf(target); if (!sharing.audio && !sharing.video) controlling.delete(actor); }
+    for (const actor of store.deviceTargetOwners()) { const target = controlled(actor), sharing = sharingOf(target); if (target !== actor && !sharing.audio && !sharing.video) control(actor, hostId()); }
     for (const playback of all()) {
       let changed = false;
       for (const output of [...playback.outputs]) {
@@ -729,7 +729,6 @@ export async function createHub(options: HubOptions) {
     sendspin.drop(id);
     for (const playback of all()) if (playback.outputs.some(output => output.deviceId === id)) { release(playback, id); reconcile(playback); }
     shared.delete(id);
-    for (const [deviceId, target] of controlling) if (deviceId === id || target === id) controlling.delete(deviceId);
     for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
@@ -1014,6 +1013,10 @@ export async function createHub(options: HubOptions) {
         sockets.add(socket);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }
+        // A server switch returns to its live mix, or to that server's default outputs.
+        const id = deviceOf(socket), target = controlled(id);
+        try { requireControl(target, id); control(id, servedBy(target) ? target : hostId()); }
+        catch { control(id, hostId()); }
         // The newest tab renders for its Device (#644 Tabs); an output back online resumes, paused.
         const playback = servedBy(deviceOf(socket));
         if (playback && mpvPlayback !== playback) handOver(playback, socket);
@@ -1067,7 +1070,11 @@ export async function createHub(options: HubOptions) {
           let playback: Playback | undefined;
           let removed: string | undefined;
           // Play on a Device: this window controls it from now on.
-          if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.deviceId) { requireControl(action.deviceId, deviceId); control(deviceId, action.deviceId); }
+          if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.deviceId) {
+            requireControl(action.deviceId, deviceId);
+            control(deviceId, action.deviceId);
+            if (action.playNow) own(playedBy, true);
+          }
           const enqueued = enqueueMedia(action, authorize, playedBy);
           if (enqueued) {
             await enqueued;
