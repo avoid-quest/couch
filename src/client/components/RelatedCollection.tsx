@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { collectionLocation } from "@/detail-navigation";
 import { collectionLinks } from "@/collection-target";
+import { providerCollectionCursor } from "@/collection-pagination";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { HitList, SourceProblems } from "@/sections/find/SearchPanel";
@@ -26,7 +27,7 @@ function RelatedItems({ collection, currentUrl, currentTitle }: { collection: Me
   const currentIndex = hits.findIndex(isCurrent);
   const start = Math.max(0, currentIndex - 2);
   const nearby = hits.slice(start, start + 7).filter(hit => !isCurrent(hit)).slice(0, 6);
-  const cursor = target.provider === "youtube" && collection.index != null && collection.index >= 24 ? String(Math.floor(collection.index / 24) * 24) : undefined;
+  const cursor = providerCollectionCursor(target.provider, collection);
   return <section aria-label={`More from ${collection.title}`} className="mt-8 min-w-0 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="text-lg font-medium tracking-tight">More from {collection.title}</h2>
