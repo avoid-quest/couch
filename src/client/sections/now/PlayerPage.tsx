@@ -23,6 +23,9 @@ import { Link } from "@tanstack/react-router";
 import { CollectionLinks } from "@/components/CollectionLinks";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { RelatedRadio } from "@/components/RelatedRadio";
+import { providerForUrl } from "../../../shared/providers";
+import { collectionLocation } from "@/detail-navigation";
+import { providerNames } from "@/sections/find/SearchOnlineResults";
 
 type Panel = "tracks" | "settings" | "info" | "related";
 const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback", info: "About this show", related: "Browse" };
@@ -127,9 +130,10 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const buffering = player?.status === "loading" && player.buffering;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const collection = collectionTarget(current?.collection);
+  const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
   const relatedLabel = radio ? "Stations" : collection?.provider === "bandcamp" ? "Tracks" : collection && /\/season-\d+|\/ContentSet-/.test(collection.url) ? "Episodes" : "More";
-  const relatedLinks = radio ? <Button asChild variant="link" className="h-auto min-h-8 p-1 touch:min-h-11"><Link to="/find" search={{ browse: "radio" }}>Radio</Link></Button> : <CollectionLinks collection={current?.collection} />;
+  const relatedLinks = radio ? <Button asChild variant="link" className="h-auto min-h-8 p-1 touch:min-h-11"><Link to="/find" search={{ browse: "radio" }}>Radio</Link></Button> : collection ? <CollectionLinks collection={current?.collection} /> : provider ? <Button asChild variant="link" className="h-auto min-h-8 p-1 touch:min-h-11"><Link to={collectionLocation({ provider, url: "" })}>{providerNames[provider]}</Link></Button> : null;
   const hasInfo = !!(currentProgramme || current?.description || collection);
   const infoLabel = currentProgramme ? "About this show" : "Details";
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
@@ -205,7 +209,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
           {volume}
           <div data-player-tools className="ml-auto flex shrink-0 items-center">
-            {(collection || radio) && <Button data-panel="related" variant="ghost" className="h-11" aria-pressed={panel === "related"} onClick={event => openPanel("related", event.currentTarget)}>{relatedLabel}</Button>}
+            {(collection || radio || provider) && <Button data-panel="related" variant="ghost" className="h-11" aria-pressed={panel === "related"} onClick={event => openPanel("related", event.currentTarget)}>{relatedLabel}</Button>}
             <Button data-panel="tracks" disabled={audioOnly || !player?.playbackId} variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>
             {state && <SendTo state={state} run={run} />}
             {state && <Speakers state={state} run={run} />}
@@ -226,7 +230,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {hasInfo && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "info" }); }}><Info aria-hidden="true" />{infoLabel}<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
             <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" />Stop playback</Button>
           </div>}
-          {panel === "related" ? <>{relatedLinks}{radio ? <RelatedRadio stationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} /> : <RelatedCollection collection={current?.collection} currentUrl={current?.source.replace(/^web:/, "")} />}</>
+          {panel === "related" ? <>{relatedLinks}{radio ? <RelatedRadio stationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} /> : <RelatedCollection collection={current?.collection} provider={provider} currentUrl={current?.source.replace(/^web:/, "")} />}</>
             : panel === "info" ? <div className="grid gap-3"><h3 className="text-base font-medium break-words">{currentProgramme?.title || current?.title}</h3>{currentProgramme ? programmeDetails : <>{!hasInfo && <p className="text-sm text-muted-foreground">Programme details are no longer available.</p>}{current?.subtitle && <p className="text-sm text-muted-foreground">{current.subtitle}</p>}{current?.description && <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{current.description}</p>}</>}{relatedLinks}</div> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>
       </SheetContent>
