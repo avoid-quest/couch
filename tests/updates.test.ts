@@ -1,0 +1,176 @@
+import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { EventEmitter } from "node:events";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+const originalFetch = globalThis.fetch;
+const app = Object.assign(new EventEmitter(), {
+  isPackaged: false,
+  getVersion: () => "0.3.0",
+  getPath: () => "/unused/Couch.app/Contents/MacOS/couch",
+  quit() { this.emit("quit"); },
+});
+const bytes = new Uint8Array([1, 2, 3]);
+const sha512 = createHash("sha512").update(bytes).digest("base64");
+let available: string | null;
+let checkError: Error | null;
+let installError: Error | null;
+let downloads: string[];
+let swaps: string[];
+let temporary: string;
+let bundles: string[];
+const autoUpdater = Object.assign(new EventEmitter(), {
+  channel: "latest",
+  autoDownload: true,
+  autoInstallOnAppQuit: true,
+  async checkForUpdates() {
+    if (checkError) throw checkError;
+    return {
+      isUpdateAvailable: available !== null,
+      updateInfo: { version: available, files: [{ url: "update.zip", sha512 }] },
+      downloadPromise: available && this.autoDownload ? new Promise(resolve => setImmediate(() => this.downloadUpdate().then(resolve))) : null,
+    };
+  },
+  async downloadUpdate() {
+    downloads.push(available!);
+    this.emit("update-downloaded", { version: available });
+    return [];
+  },
+  quitAndInstall() { if (installError) this.emit("error", installError); },
+});
+mock.module("electron", () => ({ app, Notification: class { show() {} } }));
+mock.module("electron-updater", () => ({ default: { autoUpdater } }));
+mock.module("node:child_process", () => ({
+  execFile(command: string, args: string[], callback: (error: Error | null, stdout: string, stderr: string) => void) {
+    if (command === "ditto") {
+      const directory = args.at(-1)!;
+      mkdirSync(join(directory, "Couch.app"));
+      bundles.push(directory);
+    }
+    callback(null, "", "");
+  },
+  spawn(_command: string, args: string[]) { swaps.push(args[3]!); return { unref() {} }; },
+}));
+const { startUpdates } = await import("../app/update");
+const start = () => {
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: false, idle: async () => false, onState() {} });
+  app.isPackaged = true;
+  return updates;
+};
+
+beforeEach(() => {
+  temporary = mkdtempSync(join(tmpdir(), "couch-update-test-"));
+  bundles = []; downloads = []; swaps = [];
+  available = null; checkError = null; installError = null;
+  app.isPackaged = false;
+  app.removeAllListeners(); autoUpdater.removeAllListeners();
+  autoUpdater.on("error", () => {}); // electron-updater's own logging listener.
+  autoUpdater.autoDownload = true; autoUpdater.autoInstallOnAppQuit = true;
+  globalThis.fetch = async () => new Response(bytes);
+});
+afterEach(() => {
+  Object.defineProperty(process, "platform", platform);
+  globalThis.fetch = originalFetch;
+  for (const directory of [temporary, ...bundles]) rmSync(directory, { recursive: true, force: true });
+});
+
+test("returning to Stable discards the staged Mac Preview bundle", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "darwin" });
+  const updates = start();
+  available = "0.3.1-preview.1";
+  await updates.setChannel("preview");
+  await updates.check();
+  expect(updates.state().status).toBe("ready");
+  available = null;
+  await updates.setChannel("latest");
+  await updates.check();
+  expect(updates.state().status).toBe("up-to-date");
+  app.quit();
+  expect(swaps).toEqual([]);
+});
+
+test("a missing Stable feed cannot offer the previous Preview release", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1-preview.1";
+  await updates.setChannel("preview");
+  await updates.check();
+  checkError = Object.assign(new Error("No Stable release"), { code: "ERR_UPDATER_LATEST_VERSION_NOT_FOUND" });
+  await updates.setChannel("latest");
+  await updates.check();
+  expect(updates.state().status).toBe("error");
+  expect(updates.state().available).toBeNull();
+  expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
+});
+
+test("checks keep a downloaded installer instead of replacing its cache", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  available = "0.3.2";
+  await updates.check();
+  expect(autoUpdater.autoDownload).toBe(false);
+  expect(downloads).toEqual(["0.3.1"]);
+  expect(updates.state().status).toBe("ready");
+  expect(updates.state().available).toBe("0.3.1");
+});
+
+test("a same-channel check failure keeps its downloaded installer ready", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  checkError = new Error("Offline");
+  await updates.check();
+  expect(updates.state().status).toBe("ready");
+  expect(updates.state().available).toBe("0.3.1");
+});
+
+test("an installer error ends Installing and reaches Settings", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  installError = new Error("Authentication was cancelled");
+  await updates.install();
+  expect(updates.state().status).toBe("ready");
+  expect(updates.state().error).toBe("Couldn't install the update. Try again later.");
+});
+
+test("remote installation reserves the version before acknowledging a restart", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  const install = updates.install("0.3.1", 10);
+  expect(updates.state().status).toBe("installing");
+  await expect(updates.setChannel("preview")).rejects.toThrow("Wait for the update");
+  await updates.check();
+  expect(updates.state().status).toBe("installing");
+  await install;
+});
+
+test("a remote restart rejects a stale available version", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  await expect(updates.install("0.3.2")).rejects.toThrow("available update changed");
+  expect(updates.state().status).toBe("ready");
+});
+
+test("a TV check offers a newer release because root owns its package downloads", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: true, idle: async () => false, onState() {} });
+  app.isPackaged = true;
+  available = "0.3.1";
+  await updates.check();
+  available = "0.3.2";
+  await updates.check();
+  expect(updates.state().available).toBe("0.3.2");
+  expect(downloads).toEqual([]);
+});

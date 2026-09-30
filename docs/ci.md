@@ -26,6 +26,12 @@ The old test suite was deleted when the rebuild in
 [#644](https://github.com/avoid-quest/couch/issues/644) started. Add a test only
 where a behaviour must stay locked, and run it with `bun test <path>`.
 
+The update regressions run with `bun test tests/updates.test.ts` and
+`bun test tests/remote-updates.test.ts`. The paired-device integration uses
+Core's Node runtime: `bun build tests/remote-updates.integration.ts --target=node
+--outfile=build/remote-updates.integration.mjs`, then
+`node --test build/remote-updates.integration.mjs`.
+
 ## Releases
 
 Couch ships on two channels, both published on the public
@@ -47,10 +53,13 @@ build ([scripts/release.ts](../scripts/release.ts)).
 Couch and Couch Preview share an appId and a data directory, so only one of
 them runs at a time. electron-updater keeps each on its channel: a preview
 follows only previews (`preview-*.yml`), production only the latest production
-release (`latest-*.yml`). Windows and Linux install updates with
-electron-updater. The Mac app is unsigned, and Squirrel.Mac only updates signed
-apps, so it downloads the zip itself, checks its sha512 and swaps its bundle
-when Couch quits ([app/update.ts](../app/update.ts)).
+release (`latest-*.yml`). **Settings > Updates** switches channel; leaving
+Preview for Stable installs the older stable release. The app checks at start
+and every 4 hours. Windows and Linux install updates with electron-updater. The
+Mac app is unsigned, and Squirrel.Mac only updates signed apps, so it downloads
+the zip itself, checks its sha512 and swaps its bundle when Couch quits or
+restarts to update ([app/update.ts](../app/update.ts)). The TV installs through
+a root unit ([native TV](native-tv.md)).
 
 [Release](../.github/workflows/release.yml) resolves the version, opens a draft
 release with GitHub's generated notes, builds with

@@ -43,6 +43,9 @@ import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
+import { updateSettings } from "./updates-settings";
+import { createNativeUpdates } from "./updates-native";
+import type { UpdateAction, UpdateState, UpdateTarget } from "../shared/app-bridge";
 import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
 import { helper } from "./helpers";
 import { Identity } from "@sonn-audio/node-sendspin";
@@ -60,6 +63,7 @@ type HubOptions = {
   adminRecoveryCode?: string;
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
+  nativeUpdates?: (action: UpdateAction) => Promise<UpdateState>;
   native?: boolean;
   advertisedUrls?: string[];
 };
@@ -77,7 +81,7 @@ const originDomainUrl = (value: string, port: number, legacy = false) => {
 // vp9: the tab's engine is Chromium, which plays YouTube's VP9 (#644 ticket 1); others get H.264.
 // origin and userAgent: what the tab sends when it fetches a source (Pass-through, #644 ticket 7).
 // sendspin: this tab plays its Device's synced sound (#644 ticket 10), or follows its clock for a picture (ticket 11).
-type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string };
+type SocketData = { trusted: boolean; deviceId: string | null; vp9: boolean; updates: boolean; tv: boolean; origin: string; userAgent: string; authorize: () => void; window: number; count: number; sendspin?: string };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...providerMetadata(item), ...(item.collection ? { collection: item.collection } : {}), ...(quality ? { quality } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export async function createHub(options: HubOptions) {
@@ -117,6 +121,18 @@ export async function createHub(options: HubOptions) {
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<Socket<SocketData>>();
+  const clientUpdates = new Map<Socket<SocketData>, ReturnType<typeof createNativeUpdates>>();
+  const updateSocket = (id: string) => [...sockets].findLast(socket => socket.data.deviceId === id && clientUpdates.has(socket));
+  const updateTargets = (): UpdateTarget[] => [
+    ...options.nativeUpdates ? [{ id: "host", name: store.installationName(), tv: process.env.COUCH_TV_PRESENTATION === "1" }] : [],
+    ...store.devices().flatMap(device => { const socket = updateSocket(device.id); return socket ? [{ id: device.id, name: device.name, tv: socket.data.tv }] : []; }),
+  ];
+  const invokeUpdate = (action: UpdateAction, id: string) => {
+    if (id === "host" && options.nativeUpdates) return options.nativeUpdates(action);
+    const socket = updateSocket(id);
+    if (!socket) return Promise.reject(new Error("This Couch app is offline. Wait for it to reconnect."));
+    return clientUpdates.get(socket)!.request(action);
+  };
   // A client that stops reading is dropped rather than buffered without limit. A pending state goes
   // first, so every message still follows the state it was sent after.
   const send = (socket: Socket<SocketData>, message: string) => { if (pending) flush(); return socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message); };
@@ -434,7 +450,7 @@ export async function createHub(options: HubOptions) {
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs };
       }),
-      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id) })),
+      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id) })),
     };
     const views = new Map<Playback | undefined, string>();
     // A speaker's delay is its player's own; it shows once the speaker is connected.
@@ -769,7 +785,7 @@ export async function createHub(options: HubOptions) {
   const frontend = createFrontend();
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
-    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", systemAudio })) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": async request => {
       if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
       const respond = (body: unknown, status = 200) => cors(request, json(body, status));
@@ -864,13 +880,14 @@ export async function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/bluetooth(?:\/|$)/.test(url.pathname)) return cors(request, await bluetoothSettings(request, currentIdentity, options.nativeBluetooth));
       if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
       if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
+      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updateSettings(request, currentIdentity, invokeUpdate, updateTargets));
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
       if (!websocket && (/^\/api\/devices(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await devices.handle(request, currentIdentity));
       if (!websocket && /^\/api\/radio\/(?:avoid(?:\/programmes)?|sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
-      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      return upgrade({ trusted, deviceId: trusted ? null : caller.device!.id, vp9: url.searchParams.get("vp9") === "1", updates: url.searchParams.get("updates") === "1", tv: url.searchParams.get("tv") === "1", origin: request.headers.get("origin") ?? "", userAgent: request.headers.get("user-agent") ?? "", authorize, window: Date.now(), count: 0 }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     }
   });
   const serveOptions = {
@@ -893,6 +910,7 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         // The newest tab renders for its Device (#644 Tabs); an output back online resumes, paused.
         const playback = servedBy(deviceOf(socket));
         if (playback && mpvPlayback !== playback) handOver(playback, socket);
@@ -900,6 +918,8 @@ export async function createHub(options: HubOptions) {
       },
       close(socket: Socket<SocketData>) {
         sockets.delete(socket);
+        clientUpdates.get(socket)?.close();
+        clientUpdates.delete(socket);
         for (const playback of all()) if (playback.renderer === socket) {
           const tab = newest(deviceOf(socket));
           if (tab) handOver(playback, tab);
@@ -915,6 +935,12 @@ export async function createHub(options: HubOptions) {
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
         if (message === null) { socket.close(1003, "JSON text messages required."); return; }
+        if (clientUpdates.has(socket)) {
+          try {
+            const reply = JSON.parse(message);
+            if (reply?.type === "updates") { clientUpdates.get(socket)!.receive(reply); return; }
+          } catch { /* The normal command parser rejects invalid JSON. */ }
+        }
         const player = parsePlayer(message);
         if (player) {
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));

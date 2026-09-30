@@ -110,6 +110,12 @@ bun run app
   version in `package.json` builds Couch Preview. The
   [Package](../.github/workflows/package.yml) workflow builds all three, and
   [releases](ci.md#releases) publish them. The installed app checks for updates
-  on start.
+  at start and every 4 hours; **Settings > Updates** shows them.
+
+From a paired administrator phone, **Settings > Updates** lists the host app
+and connected Couch apps, including TVs in **Another Couch** mode. Choose the
+TV, check for updates, then click **Update and restart** when its update is
+ready. The TV installs and reconnects itself; no keyboard, SSH or physical
+access is needed. Controllers can play media but cannot update devices.
 
 See [checks](ci.md) for typecheck and build.

@@ -15,3 +15,5 @@ polkitd
 x11-xserver-utils
 va-driver-all
 mpv
+curl
+ca-certificates

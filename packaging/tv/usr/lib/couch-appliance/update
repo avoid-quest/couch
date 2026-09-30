@@ -1,0 +1,62 @@
+#!/bin/bash
+# Root-side Couch update, started as couch-update@<version>.service. The TV
+# account only picks which official release; trust rests on HTTPS to the fixed
+# couch-releases repository, as electron-updater's does on the other platforms.
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH DEBIAN_FRONTEND=noninteractive
+fail() { echo "couch-update: $*" >&2; exit 1; }
+[[ $EUID = 0 ]] || fail 'Run as root.'
+[[ $# = 1 && $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$ ]] || fail 'usage: update VERSION'
+version=$1
+exec 9>/run/couch-update.lock
+flock -x 9
+# The package spells X.Y.Z-preview.N as X.Y.Z~preview.N, which Debian orders
+# before X.Y.Z; releases and the TV account use the first spelling.
+packaged=$(sed 's/-preview\./~preview./' <<< "$version")
+installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
+[[ $installed != "$packaged" ]] || exit 0
+
+channel=latest-linux.yml
+[[ $version != *-preview.* ]] || channel=preview-linux.yml
+deb=couch_${version}_amd64.deb
+work=$(mktemp -d /var/lib/couch-update.XXXXXX)
+trap 'rm -rf "$work"' EXIT
+fetch() {
+    curl --fail --silent --show-error --location --proto =https --proto-redir =https --retry 3 \
+        --output "$work/$1" "https://github.com/avoid-quest/couch-releases/releases/download/v$version/$1"
+}
+fetch "$channel"
+[[ $(awk '$1 == "version:" { print $2; exit }' "$work/$channel") = "$version" ]] || fail "$channel does not describe $version."
+entry=$(awk '$1 == "-" && $2 == "url:" { url = $3 } $1 == "sha512:" && url ~ /\.deb$/ { print url, $2; exit }' "$work/$channel")
+[[ ${entry% *} = "$deb" ]] || fail "$channel lists no $deb."
+fetch "$deb"
+file=$work/$deb
+[[ $(sha512sum "$file" | cut -d' ' -f1 | tr a-f A-F | basenc --base16 -d | base64 -w0) = "${entry#* }" ]] \
+    || fail "$deb does not match the sha512 in $channel."
+[[ $(dpkg-deb -f "$file" Package):$(dpkg-deb -f "$file" Version):$(dpkg-deb -f "$file" Architecture) = "couch:$packaged:amd64" ]] \
+    || fail "$deb is not the Couch $version amd64 package."
+
+if [[ -n $installed ]] && dpkg --compare-versions "$installed" gt "$packaged"; then
+    # Leaving previews for an older stable release. APT resolves dependencies,
+    # then dpkg downgrades Couch alone.
+    for field in Pre-Depends Depends; do
+        dependencies=$(dpkg-deb -f "$file" "$field" 2>/dev/null || true)
+        [[ -z $dependencies ]] || apt-get satisfy -y --no-install-recommends --no-remove "$dependencies"
+    done
+    dpkg --install --force-downgrade "$file"
+else
+    apt-get install -y --no-install-recommends --no-remove "$file"
+fi
+[[ $(dpkg-query -W -f='${Version}' couch) = "$packaged" ]] || fail "Couch $version did not install."
+
+# Bring the TV back on the new version.
+uid=$(id -u couch-tv)
+user_systemctl() {
+    runuser -u couch-tv -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user "$@"
+}
+if [[ -S /run/user/$uid/bus ]]; then
+    user_systemctl daemon-reload
+    user_systemctl restart couch-tv.service
+fi
+echo "couch-update: installed Couch $version."

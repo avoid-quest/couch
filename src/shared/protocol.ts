@@ -42,7 +42,7 @@ export type PlayerState = {
 // Sendspin delay in milliseconds, present while it is connected (ticket 10).
 export type Output = { deviceId: string; picture: boolean; level: number | null; delay?: number };
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
-export type DeviceSummary = { id: string; name: string; online: boolean };
+export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean };
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 export type SessionState = {
@@ -107,8 +107,10 @@ export type Action =
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
+export type UpdateReply = { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
+  | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
@@ -146,8 +148,10 @@ export type ConnectionInfo = {
 };
 
 // Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
-export type AppMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "shutdown" };
+export type AppMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string }
+  | { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string } | { type: "shutdown" };
 export type CoreMessage =
   | { type: "ready"; origin: string; urls: string[]; pairingCode: string }
   | { type: "addresses"; urls: string[] }
-  | { type: "display"; requestId: string; action: import("./display").DisplayAction };
+  | { type: "display"; requestId: string; action: import("./display").DisplayAction }
+  | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction };

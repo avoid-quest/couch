@@ -34,6 +34,12 @@ Use **Now** for playback and Up next, **Find** for search and sources, and
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
+A paired administrator's **Settings > Updates** updates this TV remotely with
+**Update and restart**. A TV in **Another Couch** mode appears by its paired
+Device name in that Couch's Updates page; the request travels over its existing
+connection to the TV app. The TV keeps its saved mode, channel and pairing after
+restarting. It must be online to receive the request.
+
 Setup refuses an unrelated existing display manager or Couch service override.
 Repeated setup preserves administrator configuration, data-directory overrides,
 disabled autologin and logind masks. It does not restart LightDM or logind. Reboot
@@ -41,5 +47,13 @@ when convenient to apply first-time session and power configuration.
 
 The retired 0.1.0 AppImage installation is not migrated. Fresh installations use
 the package above; an old AppImage installation stays as it is and its session is
-not switched. The TV skips electron-updater's check; it updates through the package, and
-setup grants no package-manager privileges.
+not switched.
+
+The TV checks for updates like the desktop app and installs them itself when
+nothing is playing. Its `couch-tv` account may only start
+`couch-update@<version>.service`; that unit's root script downloads the release's
+`.deb` from avoid-quest/couch-releases, checks its sha512 against the release's
+update file, installs it and restarts the TV app. From SSH, `sudo systemctl start
+couch-update@<version>.service` installs a release by hand and `journalctl -u
+'couch-update@*'` shows how updates went. TVs set up before this rerun `sudo
+couch-setup --tv` once to get the unit.

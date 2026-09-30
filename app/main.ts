@@ -8,9 +8,9 @@ import { connect as connectTls } from "node:tls";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { DisplayAction, DisplayState } from "../src/shared/display";
-import type { AppMode } from "../src/shared/app-bridge";
+import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
-import { checkForUpdates } from "./update";
+import { startUpdates } from "./update";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -56,6 +56,8 @@ const save = (next: Choice) => {
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+let updatePlayback = "unavailable";
+const reportPlayback = () => { if (tv) write(join(dataDir, "update-playback"), `${Math.floor(Date.now() / 1000)} ${updatePlayback}\n`); };
 
 type Ready = Extract<CoreMessage, { type: "ready" }>;
 let core: { child: UtilityProcess; token: string; ready: Promise<Ready>; stopping: boolean } | null = null;
@@ -78,6 +80,9 @@ function startCore() {
       else if (message.type === "display") void display(message.action).then(
         state => child.postMessage({ type: "display", requestId: message.requestId, state } satisfies AppMessage),
         (error: Error) => child.postMessage({ type: "display", requestId: message.requestId, error: error.message } satisfies AppMessage));
+      else if (message.type === "updates") void updateAction(message.action).then(
+        state => child.postMessage({ type: "updates", requestId: message.requestId, state } satisfies AppMessage),
+        (error: Error) => child.postMessage({ type: "updates", requestId: message.requestId, error: error.message } satisfies AppMessage));
     });
     child.once("exit", code => {
       reject(new Error(`Couch stopped with code ${code}.`));
@@ -286,9 +291,11 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  contents.on("did-start-loading", () => { updatePlayback = "loading"; });
   // A page that dies, usually out of memory on a long session, loads again, at most 3 times a minute.
   let gone: number[] = [];
   contents.on("render-process-gone", (_event, { reason }) => {
+    updatePlayback = "unavailable";
     console.error(`Couch's page stopped: ${reason}`);
     gone = [...gone.filter(at => Date.now() - at < 60_000), Date.now()];
     if (["crashed", "oom", "abnormal-exit"].includes(reason) && gone.length <= 3) void load();
@@ -347,6 +354,29 @@ handle("connection", async event => {
   if (choice.mode === "remote" || new URL(event.senderFrame!.url).origin !== localOrigin) throw new Error("Only this computer's Couch can connect as its host.");
   const ready = await startCore();
   return { origin: localOrigin, token: core!.token, pairingCode: ready.pairingCode, urls };
+});
+// Set when the app is ready, in the same turn that creates the window.
+let updates: ReturnType<typeof startUpdates>;
+async function updateAction(action: UpdateAction): Promise<UpdateState> {
+  if (!action || !["read", "check", "channel", "install"].includes(action.op)) throw new Error("Invalid update action.");
+  if (action.op === "check") void updates.check();
+  else if (action.op === "channel") return updates.setChannel(action.channel);
+  else if (action.op === "install") {
+    if (updates.state().status !== "ready" || updates.state().available !== action.version) throw new Error("The available update changed. Check again.");
+    // Reserve the installer now; allow the reply to leave before the app quits.
+    void updates.install(action.version, 250).catch(error => console.error(error));
+  }
+  return updates.state();
+}
+handle("updates", () => updates.state());
+handle("update-action", (_event, action) => updateAction(action as UpdateAction));
+handle("check-for-updates", () => updates.check());
+handle("set-update-channel", (_event, channel) => updates.setChannel(channel));
+handle("install-update", () => updates.install());
+handle("show-logs", () => shell.showItemInFolder(logPath));
+handle("update-playback", (_event, status) => {
+  if (typeof status !== "string" || !["unavailable", "idle", "loading", "playing", "paused", "ended", "error"].includes(status)) throw new Error("Invalid playback status.");
+  if (updatePlayback !== status) { updatePlayback = status; reportPlayback(); }
 });
 handle("interface-size", (_event, size) => {
   if (size === undefined) return interfaceSize();
@@ -412,6 +442,12 @@ else {
       callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
     });
     createWindow();
-    if (app.isPackaged && !tv) checkForUpdates().catch(error => console.error(`Update check failed: ${error.message}`));
+    if (tv) setInterval(() => { try { reportPlayback(); } catch (error) { console.error(error); } }, 5_000).unref();
+    updates = startUpdates({
+      channelPath: join(dataDir, "update-channel"),
+      tv,
+      idle: async () => !(await interruption().catch(() => null))?.includes("playback"),
+      onState: state => window?.webContents.send("couch:updates", state),
+    });
   });
 }

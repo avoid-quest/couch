@@ -12,6 +12,7 @@ export const settingsPages = {
   sound: { label: "Sound", path: "/settings/sound", manage: "administrator" },
   display: { label: "Display", path: "/settings/display", manage: "administrator" },
   "tv-appearance": { label: "TV appearance", path: "/settings/tv-appearance", manage: "administrator" },
+  updates: { label: "Updates", path: "/settings/updates", manage: "always" },
 } as const;
 export type SettingsPage = keyof typeof settingsPages;
 export const settingsPageForPath = (pathname: string): SettingsPage | null =>
