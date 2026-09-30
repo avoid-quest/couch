@@ -8,8 +8,7 @@ import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { BrowsePagination } from "@/components/BrowsePagination";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { CollectionHeader, HitList, SourceProblems } from "./SearchPanel";
@@ -55,7 +54,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); goToPage(href);
   };
-  const pager = <CollectionPager page={paging.page} pages={paging.pages} previous={paging.previous ? href("previous") : undefined} next={paging.next ? href("next") : undefined} disabled={!connected || !!summary?.loading} onNavigate={turnPage}
+  const pager = <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? href("previous") : undefined} next={paging.next ? href("next") : undefined} disabled={!connected || !!summary?.loading} onNavigate={turnPage}
     onSelectPage={page => goToPage(collectionLocation({ provider, url }, { ...search, page }))} />;
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
@@ -77,22 +76,4 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
   </section>;
-}
-
-function CollectionPager({ page, pages, previous, next, disabled, onNavigate, onSelectPage }: {
-  page: number; pages?: number; previous?: string; next?: string; disabled: boolean;
-  onNavigate: (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
-  onSelectPage: (page: number) => void;
-}) {
-  if (!previous && !next) return null;
-  return <Pagination aria-label="Collection pages" className="justify-start">
-    <PaginationContent>
-      <PaginationItem>{previous && !disabled ? <PaginationPrevious href={previous} onClick={event => onNavigate(event, previous)} /> : <Button variant="ghost" disabled>Previous</Button>}</PaginationItem>
-      <PaginationItem>{pages && pages > 1 ? <Select value={String(page)} onValueChange={value => onSelectPage(Number(value))} disabled={disabled}>
-        <SelectTrigger aria-label="Page" className="w-auto"><SelectValue /></SelectTrigger>
-        <SelectContent>{Array.from({ length: pages }, (_, index) => <SelectItem key={index} value={String(index + 1)}>Page {index + 1} of {pages}</SelectItem>)}</SelectContent>
-      </Select> : <span aria-current="page" className="px-3 text-sm text-muted-foreground">Page {page}</span>}</PaginationItem>
-      <PaginationItem>{next && !disabled ? <PaginationNext href={next} onClick={event => onNavigate(event, next)} /> : <Button variant="ghost" disabled>Next</Button>}</PaginationItem>
-    </PaginationContent>
-  </Pagination>;
 }
