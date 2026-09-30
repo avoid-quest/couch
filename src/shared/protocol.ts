@@ -45,7 +45,9 @@ export type PlaybackSummary = { id: string; title: string | null; status: Player
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; volume: number; muted: boolean };
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
+// controlling: the Device this window controls; it looks at the Playback that Device serves.
 export type SessionState = {
+  controlling?: string;
   queue: QueueEntry[];
   autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
@@ -78,10 +80,11 @@ export type SessionState = {
 
 export type Action =
   | { type: "navigate"; key: NavigationKey }
-  | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
-  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection }
-  | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next" }
-  | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next" }
+  // With playNow, deviceId plays on that Device, which this window then controls.
+  | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
+  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection; deviceId?: string }
+  | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next"; deviceId?: string }
+  | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next"; deviceId?: string }
   | { type: "remove"; entryId: string }
   | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
@@ -89,8 +92,8 @@ export type Action =
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
-  // A Device's volume or mute. Without deviceId: every Device in the looked-at Playback's sound, the
-  // volumes scaled so the loudest reaches `volume`, or this window's Device when none is.
+  // A Device's volume or mute. Without deviceId: every Device in the controlled Playback's sound, the
+  // volumes scaled so the loudest reaches `volume`, or the controlled Device when none is.
   | { type: "mute"; muted: boolean; deviceId?: string }
   | { type: "volume"; volume: number; deviceId?: string }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
@@ -101,10 +104,13 @@ export type Action =
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
-  // Look at a Playback; Send to a Device; set a Device's picture and sound in the looked-at Playback.
-  // level is the fader: 0 takes the Device's sound out, more sets its volume and puts its sound in.
-  | { type: "look"; playback: string | null }
-  | { type: "sendTo"; deviceId: string }
+  // Control a Device, idle ones too. Solo: only that Device keeps the controlled Playback, with its
+  // picture (when it shows one) and sound. All speakers: every online Device joins its sound.
+  | { type: "control"; deviceId: string }
+  | { type: "solo"; deviceId: string }
+  | { type: "allSpeakers" }
+  // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the
+  // Device's sound out, more sets its volume and puts its sound in.
   | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };

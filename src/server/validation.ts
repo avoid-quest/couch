@@ -9,7 +9,8 @@ const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) => value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
 const playOptions = (value: Record<string, unknown>) => (value.playNow === undefined || typeof value.playNow === "boolean")
   && (value.fromStart === undefined || value.playNow === true && typeof value.fromStart === "boolean")
-  && (value.placement === undefined || value.placement === "next" && value.playNow !== true);
+  && (value.placement === undefined || value.placement === "next" && value.playNow !== true)
+  && (value.deviceId === undefined || value.playNow === true && id(value.deviceId));
 const httpUrl = (value: unknown): value is string => {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value)) return false;
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
@@ -65,8 +66,8 @@ function validAction(value: unknown): value is Action {
     case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
     case "next": return id(value.playbackId);
     case "stop": return value.playbackId === undefined || id(value.playbackId);
-    case "look": return value.playback === null || id(value.playback);
-    case "sendTo": return id(value.deviceId);
+    case "control": case "solo": return id(value.deviceId);
+    case "allSpeakers": return true;
     case "output": return id(value.deviceId) && (value.picture === undefined || typeof value.picture === "boolean")
       && (value.level === undefined || number(value.level, 100)) &&(value.delay === undefined || number(value.delay, 5000))
       && (value.picture !== undefined || value.level !== undefined || value.delay !== undefined);
@@ -100,15 +101,15 @@ export function parseCommand(message: string): ClientMessage {
   }
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
   if (value.action.type === "enqueueProvider") {
-    const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection } = value.action;
+    const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection, deviceId } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
       ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
       ...(collection === undefined ? {} : { collection: { title: collection.title, url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }), ...(collection.parent ? { parent: { title: collection.parent.title, url: collection.parent.url } } : {}) } }),
-      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }) } };
+      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }), ...(deviceId === undefined ? {} : { deviceId }) } };
   }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
-    return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }), ...(value.action.placement === undefined ? {} : { placement: value.action.placement }) } };
+    return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }), ...(value.action.placement === undefined ? {} : { placement: value.action.placement }), ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }) } };
   }
   if (value.action.type === "preferences") {
     const { audioLanguage, subtitleLanguage, subtitles, speed, autoplay } = value.action.preferences;

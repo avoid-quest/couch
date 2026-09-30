@@ -148,13 +148,13 @@ export async function createHub(options: HubOptions) {
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   // Playbacks (#644 ticket 9). Each Playback is one session with its own queue, current item,
   // position, pause state, speed and tracks, and its own outputs. A Device's screen and speakers
-  // serve one Playback at a time, and every window looks at one Playback, which it controls.
+  // serve one Playback at a time, and every window controls one Device and the Playback it serves.
   // When a Playback's outputs are on one Device, its newest tab fetches the source itself and
   // reports back (Direct, ticket 6). Sources Chromium can't decode play in Core's own mpv, on the
   // Device that runs Core (ticket 1). When they span Devices, its Sendspin group plays the sound on
   // every speaker and reports back, and every picture Device's newest tab shows the picture, muted,
   // following the group's clock (Synced, ticket 11).
-  // next and joining: the tab and output a Send to is moving to, while the source is resolved for it.
+  // next and joining: the tab and output a Solo is moving to, while the source is resolved for it.
   // loaded and media: the last load, and its source as Core fetches it, for the Sendspin group.
   // resolved: the last resolution, which a screen with the same engine reuses.
   // screens: while Synced, the tabs showing the picture and the item each loaded; heard and seen:
@@ -163,8 +163,8 @@ export async function createHub(options: HubOptions) {
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState };
   const playbacks = new Map<string, Playback>();
-  // The Playback each Device looks at; "" after the one it looked at ended.
-  const looking = new Map<string, string>();
+  // The Device each Device's windows control, when it isn't their own.
+  const controlling = new Map<string, string>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
   const all = () => [...playbacks.values()];
@@ -176,11 +176,16 @@ export async function createHub(options: HubOptions) {
   const servedBy = (deviceId: string) => all().find(playback => playback.outputs.some(output => output.deviceId === deviceId));
   const holding = (entryId: string) => all().find(playback => stateOf(playback).queue.some(entry => entry.id === entryId));
   const playing = (playbackId: string) => all().find(playback => stateOf(playback).player.playbackId === playbackId);
-  // A window looks at the Playback it chose, else the one its Device plays, else the newest.
-  const lookedAt = (deviceId: string) => {
-    const chosen = looking.get(deviceId);
-    return chosen === undefined ? servedBy(deviceId) ?? all().at(-1) : playbacks.get(chosen);
+  const controlled = (deviceId: string) => controlling.get(deviceId) ?? deviceId;
+  const control = (deviceId: string, target: string) => { if (target === deviceId) controlling.delete(deviceId); else controlling.set(deviceId, target); };
+  // A window looks at the Playback its controlled Device serves. An idle one looks at the newest
+  // Playback waiting for a Device (a saved Up next, or one whose last output was switched off).
+  const lookedAt = (deviceId: string) => servedBy(controlled(deviceId)) ?? all().findLast(playback => !playback.outputs.length);
+  // Windows controlling a Device that Solo moved the Playback off follow it (devices UX).
+  const follow = (left: string[], to: string) => {
+    for (const deviceId of new Set([...[...sockets].map(deviceOf), ...controlling.keys()])) if (left.includes(controlled(deviceId))) control(deviceId, to);
   };
+  const known = (deviceId: string) => { if (deviceId !== hostId() && !store.device(deviceId)) throw new Error("That device is no longer paired."); };
   const playerCommand = (command: PlaybackCommand) => JSON.stringify({ type: "player", command } satisfies ServerMessage);
   // Every Device has one volume and mute; on the TV with system audio they are the system's.
   const soundOf = (deviceId: string) => systemAudio && deviceId === hostId() ? { volume: common.systemAudio?.volume ?? 0, muted: !!common.systemAudio?.muted } : store.deviceSound(deviceId);
@@ -228,11 +233,10 @@ export async function createHub(options: HubOptions) {
     for (const output of outputs) {
       const previous = servedBy(output.deviceId);
       if (previous && previous !== playback) { release(previous, output.deviceId); reconcile(previous); }
-      looking.set(output.deviceId, playback.id);
     }
     for (const output of playback.outputs) if (!outputs.some(item => item.deviceId === output.deviceId)) release(playback, output.deviceId, false);
     playback.outputs = outputs;
-    // Send to hands everything to one Device, which plays it directly.
+    // Solo hands everything to one Device, which plays it directly.
     if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
   };
@@ -353,7 +357,7 @@ export async function createHub(options: HubOptions) {
       resolveContinuation: (entry, signal) => continuation(entry, signal),
       ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
       resolveSource: async (entry, playbackId, signal) => {
-        // Send to resolves for the Device it moves to: its engine and origin choose formats and Pass-through.
+        // Solo resolves for the Device it moves to: its engine and origin choose formats and Pass-through.
         const tab = playback.next ?? playback.renderer;
         const resolving = resolveEntry(entry, playbackId, signal, tab, playback);
         playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: resolving };
@@ -373,23 +377,22 @@ export async function createHub(options: HubOptions) {
     playbacks.set(id, playback);
     return playback;
   };
-  // Play starts media on this Device (#644 Actions): in the Playback it serves, or in a new one
-  // that takes its outputs.
+  // Play starts media on the controlled Device (#644 Actions): in the Playback it serves, or in a
+  // new one that takes its outputs.
   const own = (actor: PlaybackActor | undefined) => {
-    const deviceId = actor?.deviceId ?? hostId();
+    const deviceId = controlled(actor?.deviceId ?? hostId());
     let playback = servedBy(deviceId);
     if (!playback || playback.outputs.length > 1) assign(playback = createPlayback(), [{ deviceId, picture: true, sound: true }]);
-    looking.set(deviceId, playback.id);
     return playback;
   };
-  // Queue and control act on the looked-at Playback; with none, this Device starts one.
+  // Queue and control act on the looked-at Playback; with none, the controlled Device starts one.
   const viewed = (actor: PlaybackActor | undefined) => lookedAt(actor?.deviceId ?? hostId()) ?? own(actor);
-  // Playing an item of a Playback with no online output plays it on this Device.
+  // Playing an item of a Playback with no online output plays it on the controlled Device.
   const present = (playback: Playback, actor: PlaybackActor | undefined) => {
-    if (!playback.renderer && mpvPlayback !== playback) assign(playback, [{ deviceId: actor?.deviceId ?? hostId(), picture: true, sound: true }]);
+    if (!playback.renderer && mpvPlayback !== playback) assign(playback, [{ deviceId: controlled(actor?.deviceId ?? hostId()), picture: true, sound: true }]);
     return playback;
   };
-  // Send to (#644 Actions): the Device takes over the Playback's outputs, and the current item
+  // Solo (#644 Actions): the Device takes over the Playback's outputs, and the current item
   // continues there where it was.
   const sendTo = async (playback: Playback, output: Output, authorize: () => void) => {
     const tab = newest(output.deviceId);
@@ -423,7 +426,6 @@ export async function createHub(options: HubOptions) {
       // A Device serves one Playback, so it leaves the one it served (#644 Outputs).
       const previous = servedBy(deviceId);
       if (previous) { release(previous, deviceId); reconcile(previous); }
-      looking.set(deviceId, playback.id);
       playback.outputs = [...playback.outputs, next];
     } else if (!next.picture && !next.sound) release(playback, deviceId);
     else playback.outputs = playback.outputs.map(output => output === current ? next : output);
@@ -434,7 +436,7 @@ export async function createHub(options: HubOptions) {
   };
   // A Device's volume or mute reaches its player live, Direct or Synced.
   const setSound = async (deviceId: string, change: { volume?: number; muted?: boolean }, authorize: () => void) => {
-    if (deviceId !== hostId() && !store.device(deviceId)) throw new Error("That device is no longer paired.");
+    known(deviceId);
     if (systemAudio && deviceId === hostId()) {
       if (change.volume !== undefined) await soundRouting!.volume(change.volume, authorize);
       if (change.muted !== undefined) await soundRouting!.mute(change.muted, authorize);
@@ -482,10 +484,10 @@ export async function createHub(options: HubOptions) {
     const delays = (outputs: Output[]) => outputs.map(output => { const delay = sendspin.delay(output.deviceId); return delay === undefined ? output : { ...output, delay }; });
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
-      const playback = lookedAt(deviceOf(socket));
+      const playback = lookedAt(deviceOf(socket)), device = controlled(deviceOf(socket));
       // Volume keeps its saved level while muted, like each Device's mixer fader.
-      const volume = Math.max(0, ...sounding(playback, deviceOf(socket)).map(id => soundOf(id).volume)), view = `${playback?.id}:${volume}`;
-      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
+      const volume = Math.max(0, ...sounding(playback, device).map(id => soundOf(id).volume)), view = `${playback?.id}:${device}:${volume}`;
+      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
@@ -510,7 +512,6 @@ export async function createHub(options: HubOptions) {
     if (!done || state.queue.length > cursor + 1) return;
     playbacks.delete(playback.id);
     for (const output of [...playback.outputs]) release(playback, output.deviceId, false);
-    for (const [deviceId, id] of looking) if (id === playback.id) looking.set(deviceId, "");
     if (radioPlayback === playback) radioPlayback = null;
     playback.synced?.close();
     hide(playback);
@@ -665,6 +666,7 @@ export async function createHub(options: HubOptions) {
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
+    for (const [deviceId, target] of controlling) if (deviceId === id || target === id) controlling.delete(deviceId);
     for (const socket of sockets) if (socket.data.deviceId === id) {
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
@@ -744,7 +746,7 @@ export async function createHub(options: HubOptions) {
     }
     return (async () => {
       if (!authorized()) return;
-      // Play starts on this Device; Queue adds to the looked-at Playback (#644 ticket 9).
+      // Play starts on the controlled Device; Queue adds to the looked-at Playback (#644 ticket 9).
       const { session } = action.playNow ? own(playedBy) : viewed(playedBy);
       const intent = action.playNow ? session.reservePlay() : undefined;
       const pending = prepare();
@@ -989,6 +991,8 @@ export async function createHub(options: HubOptions) {
           const action = command.action;
           let playback: Playback | undefined;
           let removed: string | undefined;
+          // Play on a Device: this window controls it from now on.
+          if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.deviceId) { known(action.deviceId); control(deviceId, action.deviceId); }
           const enqueued = enqueueMedia(action, authorize, playedBy);
           if (enqueued) {
             await enqueued;
@@ -999,27 +1003,38 @@ export async function createHub(options: HubOptions) {
             if (!hosts.length) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             const navigation = JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage);
             for (const host of hosts) send(host, navigation);
-          } else if (action.type === "look") {
-            // Looking keeps outputs as they are (#644 Actions).
-            if (action.playback !== null && !playbacks.has(action.playback)) throw new Error("That Playback has ended.");
-            looking.set(deviceId, action.playback ?? "");
+          } else if (action.type === "control") {
+            // Controlling keeps outputs as they are; an idle Device can be controlled too.
+            known(action.deviceId);
+            control(deviceId, action.deviceId);
             broadcast();
-          } else if (action.type === "sendTo" || action.type === "output") {
+          } else if (action.type === "solo" || action.type === "allSpeakers" || action.type === "output") {
             const target = lookedAt(deviceId);
             if (!target) throw new Error("Play something first.");
-            if (action.type === "sendTo") await sendTo(target, { deviceId: action.deviceId, picture: !target.outputs.length || target.outputs.some(output => output.picture), sound: true }, authorize);
-            else {
+            if (action.type === "solo") {
+              // Only this Device keeps the Playback: its picture, when it shows one, and its sound.
+              known(action.deviceId);
+              const output = { deviceId: action.deviceId, picture: !target.outputs.length || target.outputs.some(output => output.picture), sound: true };
+              const left = target.outputs.map(item => item.deviceId).filter(id => id !== action.deviceId);
+              if (target.outputs.length && !left.length) await setOutput(target, action.deviceId, output, authorize);
+              else await sendTo(target, output, authorize);
+              follow(left, action.deviceId);
+              broadcast();
+            } else if (action.type === "allSpeakers") {
+              // Every online Device joins its sound; a busy one leaves what it played.
+              for (const id of new Set([...sockets].map(deviceOf))) if (!target.outputs.some(output => output.deviceId === id && output.sound)) await setOutput(target, id, { sound: true }, authorize);
+            } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
               if (action.level) await setSound(action.deviceId, { volume: action.level }, authorize);
               await setOutput(target, action.deviceId, { picture: action.picture, sound: action.level === undefined ? undefined : action.level > 0, delay: action.delay }, authorize);
             }
           } else if (action.type === "volume" || action.type === "mute") {
-            const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), deviceId);
+            const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), controlled(deviceId));
             if (action.type === "volume") await setVolume(targets, action.volume, authorize);
             else for (const id of targets) await setSound(id, { muted: action.muted }, authorize);
           } else {
             // Transport commands name their player and queue commands their entry; the rest act on
-            // the looked-at Playback, and Play now on this Device's.
+            // the looked-at Playback, and Play now on the controlled Device's.
             playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;
             playback ??= action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
             if (action.type === "play") present(playback, playedBy);
