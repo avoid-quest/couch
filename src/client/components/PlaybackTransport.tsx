@@ -5,8 +5,8 @@ import { Pause, Play, RotateCcw, RotateCw, SkipForward, Square, Volume2, VolumeX
 import { Button } from "@/components/ui/button";
 import type { Action } from "../../shared/protocol";
 import type { Credentials } from "@/session/session";
-import { deviceName } from "@/copy";
 import { cn } from "@/lib/utils";
+import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { RangeControl } from "./RangeControl";
@@ -75,12 +75,20 @@ export function PlaybackTransport({ state, credentials, connected, run, showSett
   </div>;
 }
 
+/** Whether the controlled Devices are muted: every one in the controlled Playback's sound, else the controlled Device. */
+export function muted(state: ClientSessionState | null | undefined) {
+  const sounding = new Set(state?.outputs?.filter(output => output.sound).map(output => output.deviceId));
+  if (!sounding.size) sounding.add(state?.controlling ?? deviceId());
+  const devices = state?.devices?.filter(device => sounding.has(device.id)) ?? [];
+  return devices.length > 0 && devices.every(device => device.muted);
+}
+
+/** The controlled Devices' volume: the loudest one's, as Core reports it; moving it scales them all. */
 export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className }: Props & { showSlider?: boolean; showValue?: boolean; className?: string }) {
   const { available, audioReady } = playbackCapabilities(state, connected);
-  const target = deviceName(state.installationName);
-  const muted = state.systemAudio?.muted;
-  return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} data-volume role="group" aria-label={`${target} volume`}>
-    {state.systemAudio ? <Button variant="ghost" size="icon-lg" aria-label={`${muted ? "Unmute" : "Mute"} ${target}`} title={`${muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !muted })}>{muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" className="size-4 shrink-0" />}
+  const silent = muted(state);
+  return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} data-volume role="group" aria-label="Volume">
+    <Button variant="ghost" size="icon-lg" aria-label={silent ? "Unmute" : "Mute"} title={silent ? "Unmute" : "Mute"} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !silent })}>{silent ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button>
     {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady} onCommit={volume => run({ type: "volume", volume })} />}
     {showValue && <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "—" : `${Math.round(state.player.volume)}%`}</span>}
   </div>;

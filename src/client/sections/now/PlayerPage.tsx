@@ -15,8 +15,8 @@ import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
-import { playingElsewhere, showsPicture } from "@/session/device-id";
-import { SendTo, Speakers } from "@/sections/shell/Outputs";
+import { playsOn, showsPicture } from "@/session/device-id";
+import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
 import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -56,8 +56,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
   const audioOnly = current?.kind === "radio" || !!current?.source.startsWith("radio:") || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
-  const renderer = playingElsewhere(state);
-  const elsewhere = !!renderer;
+  const at = playsOn(state);
+  const elsewhere = !!at?.elsewhere;
   const picture = showsPicture(state);
   const artworkStage = audioOnly || !picture;
   const autoHide = playing && !artworkStage;
@@ -163,7 +163,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           </div>
           {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere || currentProgramme) && <span>{elsewhere ? renderer?.label : current.title}</span>}</p>
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && live && <span>Live</span>}{!ended && (elsewhere && at ? <PlaysOn state={state!} at={at} /> : currentProgramme && <span>{current.title}</span>)}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
@@ -196,8 +196,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {volume}
           <div data-player-tools className="ml-auto flex shrink-0 items-center">
             <Button data-panel="tracks" disabled={audioOnly || !player?.playbackId} variant="ghost" size="icon" className="hidden size-11 md:inline-flex" aria-label="Audio & subtitles" title="Audio & subtitles" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" /></Button>
-            {state && <SendTo state={state} run={run} />}
-            {state && <Speakers state={state} run={run} />}
+            {state && <WhereItPlays state={state} run={run} />}
             <Button ref={queueTrigger} data-panel="queue" variant="ghost" className="h-11" aria-label="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListVideo aria-hidden="true" />Up next</Button>
             <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" /></Button>
             {fullscreen.supported && <Button variant="ghost" size="icon" className="size-11" disabled={fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}

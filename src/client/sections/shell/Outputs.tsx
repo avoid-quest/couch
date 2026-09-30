@@ -1,101 +1,76 @@
 import { useState } from "react";
-import { Monitor, MonitorUp, Speaker } from "lucide-react";
+import { Monitor, Speaker } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Toggle } from "@/components/ui/toggle";
+import { DeviceSignal, signalOf } from "@/components/DeviceSignal";
 import { RangeControl } from "@/components/RangeControl";
-import { deviceId } from "@/session/device-id";
+import { cn } from "@/lib/utils";
+import { deviceId, playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/native-context";
 import type { ClientSessionState } from "@/session/session";
-import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
+import type { Action } from "../../../shared/protocol";
+import { doing } from "./DeviceSwitch";
 
-// Send to and the Speakers panel (#644 ticket 9). Every window controls one Device and
-// the Playback it serves; controlling never moves outputs.
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
-
-const statusText: Partial<Record<PlaybackSummary["status"], string>> = { loading: "Loading", playing: "Playing", paused: "Paused", ended: "Finished", error: "Can't play" };
-const served = (state: ClientSessionState, device: DeviceSummary) => state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === device.id));
-const here = (device: DeviceSummary) => device.id === deviceId();
-// Online Devices first; offline ones stay listed, and skipped.
-const byPresence = (devices: DeviceSummary[] = []) => [...devices].sort((a, b) => Number(b.online) - Number(a.online));
-
-/** Solo on another Device: only it keeps the controlled Playback. */
-export function SendTo({ state, run }: Props) {
-  const outputs = state.outputs ?? [];
-  // A speaker of a synced Playback can take it over too; only the one Device playing it alone is left out.
-  // Only online Devices can take over, so the menu says what to do when there is none (#644 ticket 12).
-  const devices = byPresence(state.devices).filter(device => device.online && !(outputs.length && outputs.every(output => output.deviceId === device.id)));
-  return <DropdownMenu>
-    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-11" disabled={!state.playback} aria-label="Send to" title="Send to"><MonitorUp aria-hidden="true" /><span className="max-lg:sr-only">Send to</span></Button></DropdownMenuTrigger>
-    <DropdownMenuContent align="end" className="min-w-56">
-      {devices.map(device => {
-        const other = served(state, device);
-        return <DropdownMenuItem key={device.id} onSelect={() => void run({ type: "solo", deviceId: device.id })}>
-          <span className="min-w-0 flex-1 truncate">{device.name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">{here(device) ? "Here" : other ? statusText[other.status] ?? "Busy" : ""}</span>
-        </DropdownMenuItem>;
-      })}
-      {!devices.length && <DropdownMenuItem disabled className="whitespace-normal">No other device is online. Open Couch on one to send there.</DropdownMenuItem>}
-    </DropdownMenuContent>
-  </DropdownMenu>;
-}
+// Pressed toggles invert, like focus: the default muted pressed state is nearly invisible on Clock's black.
+const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
 
 /**
- * The Speakers panel: the owner's Mixer. Screens are one-press tiles; sound is a channel strip per
- * Device whose fader sets its volume and adds its sound (0 takes it out, as the switch does). Sound on
- * several Devices plays in sync over Sendspin (#644 ticket 10), and each speaker has its own delay.
+ * Where it plays: the band's button names the controlled Playback's Devices and opens the Mixer, one
+ * channel strip per Device. The fader is the Device's one volume while its sound is in, else 0; 0 takes
+ * the sound out and raising it puts the sound in. Sound on several Devices plays in sync over Sendspin.
  */
-export function Speakers({ state, run }: Props) {
+export function WhereItPlays({ state, run }: Props) {
   const outputs = state.outputs ?? [];
-  const devices = byPresence(state.devices).filter(device => device.online || outputs.some(output => output.deviceId === device.id));
+  const at = playsOn(state);
   const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
-  const joinable = (device: DeviceSummary) => device.online || outputs.some(output => output.deviceId === device.id);
-  const note = (device: DeviceSummary) => {
-    const other = served(state, device);
-    return !device.online ? "Offline" : other && other.id !== state.playback ? `Playing ${other.title ?? "something else"}` : here(device) ? "Here" : "";
-  };
+  const output = (id: string) => outputs.find(item => item.deviceId === id);
+  // The Playback's Devices first, then the other online ones; an offline Device only while it is an output.
+  const devices = (state.devices ?? []).filter(device => device.online || output(device.id)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
+  const label = `Where it plays${at ? `: ${at.name}${at.more ? ` +${at.more}` : ""}` : ""}`;
   return <Sheet>
-    <SheetTrigger asChild><Button variant="ghost" size="icon" className="size-11" disabled={!state.playback} aria-label="Speakers" title="Speakers"><Speaker aria-hidden="true" /></Button></SheetTrigger>
-    <SheetContent side="bottom" className="max-h-[85dvh] gap-6 overflow-y-auto px-(--gutter) pb-6">
-      <SheetHeader className="px-0"><SheetTitle>Speakers</SheetTitle><SheetDescription>{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
-      <section aria-labelledby="screens-title" className="grid gap-2">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3"><h3 id="screens-title" className="text-xs font-medium text-muted-foreground">Picture</h3><p className="text-xs text-muted-foreground">Tap a screen to show or hide the picture.</p></div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {devices.map(device => {
-            const on = !!outputs.find(output => output.deviceId === device.id)?.picture;
-            // Pressed tiles invert, like focus: the default muted pressed state is nearly invisible on Clock's black.
-            return <Toggle key={device.id} variant="outline" pressed={on} disabled={!joinable(device)} aria-label={`${device.name} picture`} onPressedChange={picture => void run({ type: "output", deviceId: device.id, picture })}
-              className="group h-auto min-w-32 touch:h-auto shrink-0 flex-col items-start gap-2 px-3 py-3 text-left font-normal data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background">
-              <Monitor aria-hidden="true" className="size-5" />
-              <span className="grid"><span className="text-sm font-medium">{device.name}</span><span className="text-xs text-muted-foreground group-data-[state=on]:text-background/70">{on ? "Showing" : note(device) || "Off"}</span></span>
-            </Toggle>;
-          })}
-        </div>
-      </section>
-      <section aria-labelledby="sound-title" className="grid gap-2">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3"><h3 id="sound-title" className="text-xs font-medium text-muted-foreground">Sound</h3><p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a fader, then raise it to add a speaker." : "Raise a fader to add a speaker."} The switch removes it. Play a late speaker earlier.</p></div>
-        <div className="flex divide-x overflow-x-auto border-y">
-          {devices.map(device => {
-            const output = outputs.find(item => item.deviceId === device.id);
-            // The fader is the Device's own volume while its sound is in, else 0.
-            const level = output?.sound ? device.volume : null;
-            const disabled = !joinable(device);
-            return <div key={device.id} className="grid w-28 shrink-0 content-start justify-items-center gap-2 px-2 py-3" data-in-mix={level !== null || undefined}>
-              <span className="text-xl font-medium tabular-nums">{level === null ? "–" : Math.round(level)}</span>
-              <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} level`} value={level ?? 0} max={100} disabled={disabled} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} /></div>
-              <span className="line-clamp-2 min-h-[2lh] text-center text-sm leading-tight">{device.name}</span>
-              <span className="line-clamp-2 min-h-[2lh] w-full text-center text-xs leading-tight break-words text-muted-foreground" title={note(device) || undefined}>{note(device)}</span>
-              <Switch aria-label={`${device.name} sound`} checked={level !== null} disabled={disabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, level: on ? device.volume || 50 : 0 })} />
-              {level !== null && output?.delay !== undefined && <Delay name={device.name} delay={output.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
-            </div>;
-          })}
-        </div>
-      </section>
+    <SheetTrigger asChild><Button variant="ghost" className="h-11 min-w-11 max-w-56 gap-2" disabled={!state.playback} aria-label={label} title={label}>
+      <DeviceSignal {...signalOf(state, at?.deviceId ?? state.controlling ?? deviceId())} />
+      {at && <span className="flex min-w-0 gap-1 max-lg:hidden"><span className="truncate">{at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span>}
+    </Button></SheetTrigger>
+    <SheetContent side="bottom" className="max-h-[85dvh] gap-4 overflow-y-auto px-(--gutter) pb-6">
+      <SheetHeader className="flex-row items-start justify-between gap-4 px-0 pr-8 pb-0">
+        <div className="grid min-w-0 gap-0.5"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="truncate">{title ?? "Nothing is playing."}</SheetDescription></div>
+        <Button variant="outline" className="shrink-0" disabled={!state.playback} onClick={() => void run({ type: "allSpeakers" })}><Speaker aria-hidden="true" />All speakers</Button>
+      </SheetHeader>
+      <p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a fader, then raise it to play the sound there too." : "Raise a fader to play the sound there too."} At 0 that device's sound is off.</p>
+      <div className="flex divide-x overflow-x-auto border-y">
+        {devices.map(device => {
+          const current = output(device.id);
+          const sound = !!current?.sound;
+          const only = outputs.length > 0 && outputs.every(item => item.deviceId === device.id);
+          const status = doing(state, device, state.playback);
+          // Devices outside the Playback are dimmed, and still fully operable.
+          return <div key={device.id} className={cn("grid w-32 shrink-0 content-start justify-items-center gap-2 px-2 py-3", !current && "text-muted-foreground")}>
+            <Toggle variant="outline" pressed={!!current?.picture} aria-label={`${device.name} picture`} onPressedChange={picture => void run({ type: "output", deviceId: device.id, picture })} className={cn("w-full", inverts)}><Monitor aria-hidden="true" />Picture</Toggle>
+            <span className="text-xl font-medium tabular-nums">{sound ? Math.round(device.volume) : "–"}</span>
+            <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} volume`} value={sound ? device.volume : 0} max={100} disabled={false} onCommit={level => run({ type: "output", deviceId: device.id, level })} /></div>
+            <span className="grid w-full justify-items-center gap-0.5 text-center">
+              <span className="flex max-w-full items-center gap-1.5"><DeviceSignal {...signalOf(state, device.id)} /><span className="truncate text-sm" title={device.name}>{device.name}</span></span>
+              <span className="w-full truncate text-xs text-muted-foreground" title={status}>{status}</span>
+            </span>
+            <div className="grid w-full grid-cols-2 gap-1">
+              <Toggle variant="outline" pressed={only} disabled={!device.online} aria-label={`Solo ${device.name}`} onPressedChange={() => { if (!only) void run({ type: "solo", deviceId: device.id }); }} className={inverts}>Solo</Toggle>
+              <Toggle variant="outline" pressed={device.muted} aria-label={`Mute ${device.name}`} onPressedChange={muted => void run({ type: "mute", deviceId: device.id, muted })} className={inverts}>Mute</Toggle>
+            </div>
+            {sound && current?.delay !== undefined && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+          </div>;
+        })}
+      </div>
     </SheetContent>
   </Sheet>;
+}
+
+/** "on {name} +N" with the named Device's signal: where the controlled Playback plays when that isn't only this Device. */
+export function PlaysOn({ state, at }: { state: ClientSessionState; at: NonNullable<ReturnType<typeof playsOn>> }) {
+  return <span className="inline-flex min-w-0 items-center gap-1.5"><DeviceSignal {...signalOf(state, at.deviceId)} /><span className="flex min-w-0 gap-1"><span className="truncate">on {at.name}</span>{!!at.more && <span className="shrink-0">+{at.more}</span>}</span></span>;
 }
 
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up: Sendspin's

@@ -7,7 +7,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { CollectionLinks } from "@/components/CollectionLinks";
 import { Link } from "@tanstack/react-router";
-import { PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
+import { PlaybackVolume, muted, playbackCapabilities } from "@/components/PlaybackTransport";
+import { playsOn } from "@/session/device-id";
+import { PlaysOn } from "./Outputs";
 import { RangeControl } from "@/components/RangeControl";
 import type { Action } from "../../../shared/protocol";
 import { offline } from "@/copy";
@@ -57,7 +59,8 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
     : paused ? "Paused"
     : live ? "Live"
     : length ? `Ends ${formatEndTime(remaining)}` : "Playing";
-  const programme = connected && state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
+  const at = playsOn(state);
+  const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
   const context = programme ? current.title : current.subtitle;
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
@@ -69,6 +72,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           {current.kind === "radio" || current.source.startsWith("radio:") ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}
           <span role="status" className="truncate">{status}</span>
+          {at?.elsewhere && <PlaysOn state={state} at={at} />}
         </div>
       </div>
     </div>
@@ -88,7 +92,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
     <div className="flex min-w-0 items-center justify-end gap-0.5">
       <PlaybackVolume state={state} connected={connected} run={run} showValue={false} className="mr-3 w-28 min-w-0 flex-none max-[1100px]:hidden" />
       <Popover>
-        <PopoverTrigger asChild><Button variant="ghost" size="icon" className="max-[480px]:hidden min-[1100px]:hidden" aria-label="Volume controls" title="Volume">{state.systemAudio?.muted ? <VolumeX aria-hidden="true" className="size-4" /> : <Volume2 aria-hidden="true" className="size-4" />}</Button></PopoverTrigger>
+        <PopoverTrigger asChild><Button variant="ghost" size="icon" className="max-[480px]:hidden min-[1100px]:hidden" aria-label="Volume controls" title="Volume">{muted(state) ?<VolumeX aria-hidden="true" className="size-4" /> : <Volume2 aria-hidden="true" className="size-4" />}</Button></PopoverTrigger>
         <PopoverContent side="top" align="end" aria-label="Volume controls" className="w-64"><PlaybackVolume state={state} connected={connected} run={run} /></PopoverContent>
       </Popover>
       <Button variant="ghost" size="icon" aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" className="size-4" /></Button>

@@ -1,7 +1,7 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useSessionGate } from "@/session/session-context";
 import { usePlaybackClock } from "@/session/playback-clock";
-import { playbackCapabilities } from "@/components/PlaybackTransport";
+import { muted, playbackCapabilities } from "@/components/PlaybackTransport";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useShell } from "./shell-context";
 
@@ -40,7 +40,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
     { hotkey: "ArrowUp", action: () => volume(5), enabled: canVolume && shell.section === "Now", backgroundOnly: true },
     { hotkey: "ArrowDown", action: () => volume(-5), enabled: canVolume && shell.section === "Now", backgroundOnly: true },
     ...(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] as const).map((hotkey, digit) => ({ hotkey, enabled: canSeek && clock.playbackId === player?.playbackId && !!clock.duration, action: () => { if (player?.playbackId && clock.duration) void run({ type: "seek", playbackId: player.playbackId, position: clock.duration * digit / 10 }); } })),
-    { hotkey: "M", enabled: available && audioReady && !!state?.systemAudio, action: () => void run({ type: "mute", muted: !state?.systemAudio?.muted }) },
+    { hotkey: "M", enabled: canVolume, action: () => void run({ type: "mute", muted: !muted(state) }) },
     { hotkey: "C", enabled: transportReady && subtitles.length > 0, action: () => { if (player?.playbackId) void run({ type: "track", playbackId: player.playbackId, kind: "subtitle", index: subtitles.some(track => track.selected) ? -1 : subtitles[0]!.index }); } },
     { hotkey: "Shift+N", enabled: nextReady && hasNext, action: () => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); } },
     { hotkey: "H", action: () => shell.changeSection("Home") },
