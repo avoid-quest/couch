@@ -51,7 +51,7 @@ not switched.
 
 The TV checks for updates like the desktop app and shows them in **Settings >
 Updates**, but root installs them. `couch-update.timer` runs
-`couch-update.service` 15 minutes after boot and daily between 04:00 and 05:00:
+`couch-update.service` roughly 15–75 minutes after boot and daily between 04:00 and 05:00:
 it installs the newest release on the TV's channel (the one picked in Settings;
 by default Preview on a preview build, else Stable) unless something plays. It
 never goes back to an older version, except from a preview to Stable. **Restart
