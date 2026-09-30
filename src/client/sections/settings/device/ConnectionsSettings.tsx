@@ -77,23 +77,8 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
     if (!saveDomain.isPending) saveDomain.mutate(domain.trim());
   }
 
+  // Sharing and pairing, then the paired Devices (like Bluetooth), then the rare admin handover; the Couch choice with Forget follows on the page.
   return <>
-    <SettingsSection data-devices>
-      {devices.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
-        : devices.isError ? <Alert variant="destructive"><AlertDescription>Couldn't load devices.</AlertDescription><AlertAction><Button variant="outline" size="sm" onClick={() => void devices.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>
-        : !devices.data.length ? <Empty className="py-0"><EmptyHeader><EmptyDescription>No devices yet. Use Pair a device to connect one.</EmptyDescription></EmptyHeader></Empty>
-        : devices.data.map(device => (
-            <SettingsRow key={device.id} data-device={device.id} label={<>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this device)</span>}</>}
-              description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", online.has(device.id) ? "Online" : formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>
-              {(manager || device.id === selfId) && <Button variant="outline" disabled={pending || rename.isPending} onClick={() => startRename(device)}>Rename</Button>}
-              {manager && device.role !== "host" && device.id !== selfId && <>
-                <Button variant="outline" disabled={pending} onClick={() => act(device, "role")}>{device.role === "administrator" ? "Remove admin" : "Make admin"}</Button>
-                <Button variant="ghost" disabled={pending} onClick={() => setRemoving(device)}>Remove</Button>
-              </>}
-            </SettingsRow>
-          ))}
-      {deviceChange.error && <Alert variant="destructive"><AlertDescription>{message(deviceChange.error, "Couldn't update the device. Try again.")}</AlertDescription></Alert>}
-    </SettingsSection>
     {manager && <SettingsSection>
       {host && <SettingsRow label="Share on network" description="Phones, browsers and other computers on your network can pair and play.">
         <Switch aria-label="Share on network" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
@@ -111,6 +96,22 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
       <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />
     </SettingsSection>}
+    <SettingsSection data-devices>
+      {devices.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
+        : devices.isError ? <Alert variant="destructive"><AlertDescription>Couldn't load devices.</AlertDescription><AlertAction><Button variant="outline" size="sm" onClick={() => void devices.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>
+        : !devices.data.length ? <Empty className="py-0"><EmptyHeader><EmptyDescription>No devices yet. Use Pair a device to connect one.</EmptyDescription></EmptyHeader></Empty>
+        : devices.data.map(device => (
+            <SettingsRow key={device.id} data-device={device.id} label={<>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this device)</span>}</>}
+              description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", online.has(device.id) ? "Online" : formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>
+              {(manager || device.id === selfId) && <Button variant="outline" disabled={pending || rename.isPending} onClick={() => startRename(device)}>Rename</Button>}
+              {manager && device.role !== "host" && device.id !== selfId && <>
+                <Button variant="outline" disabled={pending} onClick={() => act(device, "role")}>{device.role === "administrator" ? "Remove admin" : "Make admin"}</Button>
+                <Button variant="ghost" disabled={pending} onClick={() => setRemoving(device)}>Remove</Button>
+              </>}
+            </SettingsRow>
+          ))}
+      {deviceChange.error && <Alert variant="destructive"><AlertDescription>{message(deviceChange.error, "Couldn't update the device. Try again.")}</AlertDescription></Alert>}
+    </SettingsSection>
     {host && remoteControlEnabled && !administratorClaimed && (
       <SettingsSection title="Make a device the admin" description="Pair a device, then enter this one-time code on it." data-administrator-setup>
         <div className="flex min-w-0 flex-col gap-1">
