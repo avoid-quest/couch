@@ -1,13 +1,12 @@
 import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Keyboard, ListMusic, Tv, X } from "lucide-react";
+import { Keyboard, Tv, X } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
-import { PairingDialog } from "@/components/PairingDialog";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { DeviceSwitch } from "@/sections/shell/DeviceSwitch";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
@@ -54,7 +53,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
+  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -74,8 +73,6 @@ function useShellValue() {
   const installationId = credentials?.installationId ?? details?.installationId;
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
   const [remoteOpen, setRemoteOpen] = useState(false);
-  const [pairingRequested, setPairingOpen] = useState(false);
-  const pairingOpen = pairingRequested && remoteControlEnabled;
   useEffect(() => { setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
@@ -191,9 +188,9 @@ function useShellValue() {
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
-    openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
+    openSources, openProvider, setRemoteOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, playHistory,
-    remoteOpen, pairingOpen, setupSource, sourcesOpen,
+    remoteOpen, setupSource, sourcesOpen,
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
 }
@@ -265,7 +262,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
-  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, host, error, setError, remoteControlEnabled } = useSessionGate();
+  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, error, setError } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
@@ -289,7 +286,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
       toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
     }
   }, [state?.activity?.id, identity?.device?.id]);
-  const pairingRef = useRef<HTMLButtonElement>(null);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
   const onPlayer = paired && section === "Now";
@@ -313,10 +309,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              {/* Always here once paired, empty queue or not, so the switch, shortcuts and clock never move; icon only on a phone. */}
-              {paired && <Button variant="ghost" className="shrink-0 touch:min-w-11" aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
               <DeviceSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} paired={paired} state={state} run={run} />
-              {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a device</Button>}
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>
               {paired && !tvPresentation && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
@@ -334,7 +327,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
           </>}
         </div>
         <Toaster />
-        {host && remoteControlEnabled && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={shell.pairingOpen} onOpenChange={shell.setPairingOpen} openerRef={pairingRef} />}
       </main>
     </div>
   );

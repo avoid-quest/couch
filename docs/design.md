@@ -78,7 +78,7 @@ catalog provides interface icons, not brand identities.
   the built-in stations, so a fresh Couch opens on something playable. With
   nothing playing or to continue, the first show on air leads its row.
   Settings → Home controls each device's row visibility and order. Saved
-  visibility always applies; the header keeps Up next reachable while stopped.
+  visibility always applies; Up next stays reachable from the mini player and the player band.
   Home ends with its content. Up next is off by default and, when enabled,
   appears as one ruler split by each entry's length.
 - **Keep discovery context visible.** Opened shows, seasons and albums retain
@@ -203,11 +203,13 @@ Messages:
   for confirmations; **Sheet** for player panels; **Popover** for the header's Device switch: the
   Device this window controls, with "+N" when its Playback spans more Devices.
   On a narrow header the name truncates but the count never does. The
-  header's Up next is always there once paired (icon only on phones), so
-  the switch never moves, and the player's header carries the switch too. The Popover lists only Devices (online ones, plus offline ones still
+  header holds only the section nav, the Device switch, the TV remote (phones
+  paired with a TV), Keyboard shortcuts and the clock; the player's header
+  carries the switch too. The Popover lists Devices (online ones, plus offline ones still
   serving a Playback), each with its DeviceIcon and what it is doing (Idle,
   Offline, "with {name}", or its title); "This device" marks this window's own.
-  Choosing one controls it, idle ones too. Which Couch this window shows is
+  Choosing one controls it, idle ones too. On the host with sharing on, the
+  list ends with Pair a device, which opens the pairing dialog. Which Couch this window shows is
   setup, in Settings → Connections. The Popover scrolls within the space Radix
   reports.
 - **Where it plays** is one button in the band and the mini player with the controlled Playback's

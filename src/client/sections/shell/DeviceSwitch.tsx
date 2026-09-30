@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { Check } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { PairingDialog } from "@/components/PairingDialog";
+import { useSessionGate } from "@/session/session-context";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { CouchChoice } from "@/sections/settings/device/CouchChoice";
 import { deviceName } from "@/copy";
@@ -35,22 +38,27 @@ export function doing(state: State, device: DeviceSummary, current?: string | nu
 
 /**
  * The header's Device switch: the Device this window controls, with "+N" when its Playback spans more
- * Devices; on a narrow header the name truncates, never the count. Its popover lists only Devices, and
- * choosing one controls it, idle ones too. Before pairing it names the Couch this window pairs with.
+ * Devices; on a narrow header the name truncates, never the count. Its popover lists Devices, and
+ * choosing one controls it, idle ones too. On the host with sharing on, it ends with Pair a device.
+ * Before pairing it names the Couch this window pairs with.
  */
 export function DeviceSwitch({ credentials, connected, status, installationName, paired, state, run }: {
   credentials: Credentials | null; connected: boolean; status: string; installationName?: string; paired: boolean;
   state: State; run: (action: Action) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
+  const [pairing, setPairing] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const { host, remoteControlEnabled } = useSessionGate();
+  const canPair = !!host && remoteControlEnabled;
   const self = deviceId(), controlled = state?.controlling ?? self;
   const device = state?.devices?.find(item => item.id === controlled);
   const name = paired ? device?.name ?? "This device" : deviceName(installationName);
   const more = Math.max(0, new Set(served(state, controlled)?.outputs.map(output => output.deviceId)).size - 1);
   const signal = signalOf(state, controlled);
-  return <Popover open={open} onOpenChange={setOpen}>
+  return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11 max-sm:px-2" aria-label={`${name}${more && paired ? ` +${more}` : ""}: ${status}`}>
+      <Button ref={trigger} variant="ghost" className="min-w-0 shrink gap-2 touch:min-w-11 max-sm:px-2" aria-label={`${name}${more && paired ? ` +${more}` : ""}: ${status}`}>
         {paired ? <DeviceIcon {...signal} online={connected && (device?.online ?? true)} /> : <StatusDot connected={connected} />}
         <span className="flex min-w-0 max-w-48 gap-1 max-sm:max-w-32"><span className="truncate">{name}</span>{paired && !!more && <span className="shrink-0">+{more}</span>}</span>
       </Button>
@@ -77,6 +85,9 @@ export function DeviceSwitch({ credentials, connected, status, installationName,
         })}
         {!state?.devices?.length && <p role="status" className="px-2.5 py-2 text-muted-foreground">{status}</p>}
       </div>
+      {canPair && <><Separator className="my-1.5" /><Button variant="ghost" className="h-auto w-full justify-start gap-3 px-2.5 py-2 font-normal" onClick={() => { setOpen(false); setPairing(true); }}><Plus aria-hidden="true" />Pair a device</Button></>}
     </PopoverContent>}
-  </Popover>;
+  </Popover>
+  {canPair && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={pairing} onOpenChange={setPairing} openerRef={trigger} />}
+  </>;
 }
