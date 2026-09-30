@@ -299,6 +299,13 @@ export async function streamingCommunityBrowse(request: BrowseRequest, origin = 
     const page = catalogueTarget(search.href, request.cursor);
     return listPage(parseInertiaPage(await streamingCommunityBody(page, {}, signal, fetchPage)), origin, Number(page.searchParams.get("page") ?? 1));
   }
+  if (/^https:\/\/[^/]+\/(?:[a-z]{2}\/)?watch\/\d+/.test(request.url)) {
+    const context = await streamingCommunityWatchContext(request.url, signal, fetchPage);
+    const page = await streamingCommunityBrowse({ url: context.seasonUrl ?? context.titleUrl }, origin, signal, fetchPage);
+    const item = context.episodeId ? page.items.find(item => new URL(item.url).searchParams.get("e") === String(context.episodeId)) : page.item;
+    if (!item || item.kind !== "media") throw new ProviderError("This episode is no longer available.", 404);
+    return { item, title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, parent: item.collection, items: [item] };
+  }
   const target = catalogueTarget(request.url, request.cursor);
   const page = parseInertiaPage(await streamingCommunityBody(target, {}, signal, fetchPage));
   if (page.component === "Titles/Title") {

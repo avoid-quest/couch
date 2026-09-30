@@ -33,6 +33,22 @@ test("RaiPlay season pagination retains programme and season destinations", asyn
   expect(second.items[0]?.collection).toEqual({ title: "Season 1", url: season, parent: second.parent });
 });
 
+test("a direct StreamingCommunity watch link opens the episode with its hierarchy", async () => {
+  const origin = "https://streamingcommunityz.pictures";
+  const title = { id: 42, slug: "the-show", name: "The show", seasons: [{ number: 2 }] };
+  const fetchPage = (async (url: string | URL | Request) => {
+    const watch = String(url).includes("/watch/");
+    const data = { component: watch ? "Titles/Watch" : "Titles/Title", props: { title,
+      ...(watch ? { episode: { id: 10, season: { number: 2 } } } : { loadedSeason: { number: 2, episodes: [{ id: 10, number: 1, name: "First episode" }] } }),
+    } };
+    return new Response(`<div data-page="${JSON.stringify(data).replaceAll('"', "&quot;")}"></div>`);
+  }) as typeof fetch;
+  const page = await streamingCommunityBrowse({ url: `${origin}/it/watch/42?e=10` }, origin, undefined, fetchPage);
+  expect(page.item?.title).toBe("S02E01 · First episode");
+  expect(page.items).toHaveLength(1);
+  expect(page.item?.collection?.parent?.title).toBe("The show");
+});
+
 test("a directly opened RaiPlay episode links to its programme", async () => {
   const video = "https://www.raiplay.it/video/2026/09/episode.html";
   const fetchPage = (async () => Response.json({ name: "Episode", video: {}, program_name: "The show", program_url: "/programmi/the-show" })) as typeof fetch;

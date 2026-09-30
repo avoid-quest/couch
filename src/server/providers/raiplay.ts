@@ -177,7 +177,7 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
     const programme = /^\/(?:programmi|collezioni)\//.test(url.pathname);
     return { ...page(items.map(item => item.kind === "media" && programme ? { ...item, collection: container } : item), offset, title),
       ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}),
-      ...(metadata?.thumbnail ? { thumbnail: metadata.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) };
+      ...(metadata?.thumbnail || items[0]?.thumbnail ? { thumbnail: metadata?.thumbnail ?? items[0]?.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) };
   };
   if (Array.isArray(data.items)) return catalogPage(cards(array(data.items)), title);
   if (data.contents && typeof data.contents === "object" && !Array.isArray(data.contents)) {
