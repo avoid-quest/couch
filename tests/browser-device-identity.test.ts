@@ -17,7 +17,7 @@ test("full storage keeps Couch and Sendspin on one key and accepts later cross-t
   assert.equal(identity.deviceId(), loadSendspinClientIdentity(identity.storage).clientId);
   await identity.saveLocalDeviceName("Laptop");
   assert.equal(identity.storage.getItem("couch.device-name"), "Laptop");
-  const unsubscribe = identity.subscribeDeviceName(() => {});
+  const unsubscribe = identity.subscribeDeviceIdentity(() => {});
   values.set("couch.device-name", "Office laptop");
   window.dispatchEvent(Object.assign(new Event("storage"), { key: "couch.device-name" }));
   assert.equal(identity.localDeviceName(), "Office laptop");
@@ -49,7 +49,7 @@ test("the Couch app's name comes from Main, not the origin's storage", () => che
   const identity = await import("./src/client/session/device-id.ts");
   assert.equal(identity.localDeviceName(), null);
   let notifications = 0;
-  const unsubscribe = identity.subscribeDeviceName(() => notifications++);
+  const unsubscribe = identity.subscribeDeviceIdentity(() => notifications++);
   await identity.loadLocalDeviceName();
   assert.equal(identity.localDeviceName(), "Canonical laptop");
   await identity.saveLocalDeviceName("Laptop");

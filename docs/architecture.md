@@ -32,7 +32,7 @@ same key, including when browser storage is unavailable. Sendspin admits the
 host's device only from this machine.
 
 Client devices opt into audio, video and native administration independently in
-General; all three start off. The local identity persists these choices and its
+General; all three start off. The origin's storage persists these choices and its
 authenticated WebSocket advertises them. Core accepts changes only from that
 device's own connection, checks target consent for playback and mixer commands,
 and rechecks it after source resolution and before a native mpv fallback.
