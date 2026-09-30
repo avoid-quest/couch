@@ -159,6 +159,8 @@ test("a private self-join preserves shared group controls without granting direc
 test("joining shared audio from another playback cannot replace that device's private video", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
+    await f.device.command({ type: "control", deviceId: f.deviceId });
+    await f.admin.command({ type: "control", deviceId: f.adminId });
     await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.device.command({ type: "enqueue", entry: { id: "private", title: "Private", source: `${f.hub.origin}/api/health` } });
     const volume = f.device.state.devices?.find(device => device.id === f.deviceId)?.volume;
@@ -185,6 +187,8 @@ test("Solo rechecks existing private channels after resolving the destination so
   await new Promise<void>(resolve => source.listen(0, "127.0.0.1", resolve));
   try {
     const address = source.address(); assert.ok(address && typeof address === "object");
+    await f.device.command({ type: "control", deviceId: f.deviceId });
+    await f.admin.command({ type: "control", deviceId: f.adminId });
     await f.device.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.device.command({ type: "enqueue", entry: { id: "private", title: "Private", source: `${f.hub.origin}/api/health` } });
     await f.device.command({ type: "output", deviceId: f.deviceId, picture: false });
