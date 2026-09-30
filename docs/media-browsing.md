@@ -28,9 +28,11 @@ Episode artwork   Name and length       Play  …
 ```
 
 Playback keeps named series, season, album or radio destinations visible once.
-Details offer the same breadcrumb. Nearby items use a small list with one title
-and one link to the full list. Browser history restores the collection page and
-scroll position.
+Every item opens a full detail page, including inspection from playback and
+Up next. Details offer the same breadcrumb; there is no item-detail dialog or
+separate related-content sheet. Nearby items use four divided rows and a small
+heading that links to the full list. Hide this section when there are no nearby
+items. Browser history restores the collection page and scroll position.
 
 Collection rows open details through their title; a small Play control stays
 available, and secondary verbs use Couch's existing Dropdown Menu. The existing
@@ -51,4 +53,5 @@ StreamingCommunity episodes whose saved season URL already identifies the series
 
 1. Retain programme and series hierarchy in provider results and playback metadata.
 2. Add collection breadcrumbs, direct item links, filtering and route-backed pages.
-3. Expose collection links and nearby content from playback, saved items and radio.
+3. Use full detail pages from playback and Up next, and keep nearby content,
+   saved items and radio browsing compact.
