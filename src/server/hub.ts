@@ -483,8 +483,8 @@ export async function createHub(options: HubOptions) {
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
       const playback = lookedAt(deviceOf(socket));
-      // The volume is the loudest one heard of the Devices a volume change acts on.
-      const volume = Math.max(0, ...sounding(playback, deviceOf(socket)).map(heard)), view = `${playback?.id}:${volume}`;
+      // Volume keeps its saved level while muted, like each Device's mixer fader.
+      const volume = Math.max(0, ...sounding(playback, deviceOf(socket)).map(id => soundOf(id).volume)), view = `${playback?.id}:${volume}`;
       if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
