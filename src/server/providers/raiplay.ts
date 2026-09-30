@@ -195,7 +195,7 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
     if (blockId) {
       const block = contents.find(row => row.id === blockId);
       if (!block) throw new ProviderError("This RaiPlay collection is no longer available.", 404);
-    return catalogPage(cards(array(block.contents)), text(block.name) || title);
+      return catalogPage(cards(array(block.contents)), text(block.name) || title);
     }
     const items = contents.flatMap(row => {
       if (Array.isArray(row.contents)) {
