@@ -7,6 +7,8 @@ usr/lib/systemd/logind.conf.d/50-couch.conf
 usr/lib/systemd/user/couch-tv.service
 usr/lib/systemd/system/couch-autostart@.service
 usr/lib/systemd/system/couch-update@.service
+usr/lib/systemd/system/couch-update.service
+usr/lib/systemd/system/couch-update.timer
 usr/sbin/couch-session
 usr/share/couch-appliance/openbox.xml
 usr/share/lightdm/lightdm.conf.d/50-couch.conf

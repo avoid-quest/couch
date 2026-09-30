@@ -19,8 +19,6 @@ const own: UpdateChannel = /-preview\.\d+$/.test(app.getVersion()) ? "preview" :
 type Options = {
   channelPath: string;
   tv: boolean;
-  // Nothing plays, so the TV may restart on the new version now.
-  idle(): Promise<boolean>;
   onState(state: UpdateState): void;
 };
 
@@ -28,9 +26,10 @@ type Options = {
 // default. electron-updater downloads and installs on Windows and Linux. On
 // macOS it installs through Squirrel.Mac, which only updates signed apps, and
 // Couch is unsigned, so there Couch swaps its own bundle when it quits, as the
-// Tauri app did. The TV runs as an account that can't install packages, so it
-// starts couch-update@<version>.service (docs/native-tv.md) once nothing plays.
-export function startUpdates({ channelPath, tv, idle, onState }: Options) {
+// Tauri app did. The TV runs as an account that can't install packages: root's
+// couch-update.timer installs overnight while nothing plays, and Restart to
+// update starts couch-update@<version>.service (docs/native-tv.md).
+export function startUpdates({ channelPath, tv, onState }: Options) {
   const { autoUpdater } = updater;
   const mac = process.platform === "darwin";
   // Keep a ready installer until it is used; a replacement download clears
@@ -106,7 +105,6 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
         bundle = next;
         ready(found.version);
       } else ready(found.version);
-      if (tv && await idle()) await install();
     } catch (error) {
       console.error(`Update failed: ${error instanceof Error ? error.message : error}`);
       const code = (error as { code?: string }).code ?? "";

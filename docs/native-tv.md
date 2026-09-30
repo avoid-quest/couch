@@ -49,11 +49,26 @@ The retired 0.1.0 AppImage installation is not migrated. Fresh installations use
 the package above; an old AppImage installation stays as it is and its session is
 not switched.
 
-The TV checks for updates like the desktop app and installs them itself when
-nothing is playing. Its `couch-tv` account may only start
-`couch-update@<version>.service`; that unit's root script downloads the release's
-`.deb` from avoid-quest/couch-releases, checks its sha512 against the release's
-update file, installs it and restarts the TV app. From SSH, `sudo systemctl start
-couch-update@<version>.service` installs a release by hand and `journalctl -u
-'couch-update@*'` shows how updates went. TVs set up before this rerun `sudo
-couch-setup --tv` once to get the unit.
+The TV checks for updates like the desktop app and shows them in **Settings >
+Updates**, but root installs them. `couch-update.timer` runs
+`couch-update.service` roughly 15–75 minutes after boot and daily between 04:00 and 05:00:
+it installs the newest release on the TV's channel (the one picked in Settings;
+by default Preview on a preview build, else Stable) unless something plays. It
+never goes back to an older version, except from a preview to Stable. **Restart
+to update** installs a release sooner: the `couch-tv` account may only start
+`couch-update@<version>.service`. Both run a root script that downloads the
+release's `.deb` from avoid-quest/couch-releases, checks its sha512 against the
+release's update file, installs it and restarts the TV app. The timer checks
+both Core and the TV window's fresh playback report, including Client-mode
+video and synced audio, and checks again after refreshing package lists. A
+missing Core without a fresh report waits for the next run. Manual updates
+from the administrator's button restart immediately, even during playback.
+
+From SSH, `sudo systemctl start couch-update@<version>.service` installs a release
+by hand, `systemctl list-timers couch-update.timer` shows the next run,
+`/var/lib/couch-update/status` holds the last run's outcome (`installed`,
+`up-to-date`, `waiting` while something plays, or `failed` with its error) and
+`journalctl -u couch-update.service -u 'couch-update@*'` shows how updates went.
+`sudo systemctl disable --now couch-update.timer` and then `sudo systemctl mask
+couch-update.timer` turn unattended updates off for good.
+TVs set up before this rerun `sudo couch-setup --tv` once to get the units.

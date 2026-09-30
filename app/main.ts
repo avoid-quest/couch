@@ -446,7 +446,6 @@ else {
     updates = startUpdates({
       channelPath: join(dataDir, "update-channel"),
       tv,
-      idle: async () => !(await interruption().catch(() => null))?.includes("playback"),
       onState: state => window?.webContents.send("couch:updates", state),
     });
   });

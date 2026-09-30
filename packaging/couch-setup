@@ -105,6 +105,8 @@ while IFS= read -r path; do
     fi
 done < "$templates/files"
 systemctl daemon-reload
+# A mask keeps unattended updates off.
+[[ $(systemctl is-enabled couch-update.timer 2>/dev/null || true) = masked* ]] || systemctl enable --now couch-update.timer
 data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
 data=${data#\"}; data=${data%\"}
 install -d -m 0755 /etc/systemd/user

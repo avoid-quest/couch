@@ -35,7 +35,7 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
   const install = () => credentials ? send("install", { version: state!.available }) : couchApp!.installUpdate();
   const description = !state ? null
     : state.status === "downloading" ? `Couch ${state.available}${state.progress === null ? "" : `, ${state.progress}%`}`
-    : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : tv ? "installs when nothing is playing." : "installs when you quit Couch."}`
+    : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : tv ? "installs automatically overnight when nothing is playing." : "installs when you quit Couch."}`
     : state.checkedAt ? `Checked ${new Date(state.checkedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : null;
   const channelId = credentials ? "remote-update-channel" : "update-channel";
 
