@@ -92,7 +92,7 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
       const result = await autoUpdater.checkForUpdates();
       const found = result?.isUpdateAvailable ? result.updateInfo : null;
       set({ checkedAt: Date.now() });
-      if (waiting) ready(waiting);
+      if (waiting && !tv) ready(waiting);
       else if (!found) return set({ status: "up-to-date", available: null });
       else if (!mac && !tv) {
         set({ status: "downloading", available: found.version, progress: 0 });

@@ -162,3 +162,15 @@ test("a remote restart rejects a stale available version", async () => {
   await expect(updates.install("0.3.2")).rejects.toThrow("available update changed");
   expect(updates.state().status).toBe("ready");
 });
+
+test("a TV check offers a newer release because root owns its package downloads", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: true, idle: async () => false, onState() {} });
+  app.isPackaged = true;
+  available = "0.3.1";
+  await updates.check();
+  available = "0.3.2";
+  await updates.check();
+  expect(updates.state().available).toBe("0.3.2");
+  expect(downloads).toEqual([]);
+});
