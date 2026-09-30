@@ -14,6 +14,8 @@ const httpUrl = (value: unknown): value is string => {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value)) return false;
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
 };
+const collectionLink = (value: unknown, provider: unknown) => object(value) && httpUrl(value.url) && providerForUrl(value.url) === provider
+  && typeof value.title === "string" && value.title.length > 0 && value.title.length <= 300 && !/[\u0000-\u001f\u007f]/.test(value.title);
 
 function validEntry(value: unknown): value is QueueEntry {
   if (!object(value) || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;
@@ -33,9 +35,9 @@ function validAction(value: unknown): value is Action {
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
       && playOptions(value) && videoQuality(value.quality)
-      && (value.collection === undefined || object(value.collection) && httpUrl(value.collection.url) && providerForUrl(value.collection.url) === value.provider
-        && providerForUrl(value.url) === value.provider && typeof value.collection.title === "string" && value.collection.title.length > 0 && value.collection.title.length <= 300
-        && !/[\u0000-\u001f\u007f]/.test(value.collection.title) && (value.collection.index === undefined || number(value.collection.index, 499) && Number.isInteger(value.collection.index)))
+      && (value.collection === undefined || object(value.collection) && collectionLink(value.collection, value.provider) && providerForUrl(value.url) === value.provider
+        && (value.collection.parent === undefined || collectionLink(value.collection.parent, value.provider))
+        && (value.collection.index === undefined || number(value.collection.index, 499) && Number.isInteger(value.collection.index)))
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail));
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
@@ -101,7 +103,7 @@ export function parseCommand(message: string): ClientMessage {
     const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
       ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
-      ...(collection === undefined ? {} : { collection: { title: collection.title, url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }) } }),
+      ...(collection === undefined ? {} : { collection: { title: collection.title, url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }), ...(collection.parent ? { parent: { title: collection.parent.title, url: collection.parent.url } } : {}) } }),
       ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }) } };
   }
   if (value.action.type === "enqueue") {

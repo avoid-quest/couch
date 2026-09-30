@@ -108,6 +108,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     const entries = Array.isArray(info.entries) ? info.entries : [info];
     const page: ProviderPage = {
       title: label(info.title) ?? "YouTube",
+      ...(/\/(?:videos|shorts|streams|playlists)$/.test(new URL(source.url).pathname) ? { parent: { title: label(info.channel) ?? label(info.uploader) ?? "Channel", url: source.url.replace(/\/(?:videos|shorts|streams|playlists)$/, "") } } : {}),
       ...(source.kind === "collection" ? { thumbnail: thumbnail(info, source), description: label(info.description, 2000), subtitle: label(info.channel) ?? label(info.uploader) } : {}),
       items: entries.slice(0, pageSize).map((raw, index) => {
         const entry = item(raw);

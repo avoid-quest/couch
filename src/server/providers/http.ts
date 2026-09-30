@@ -10,7 +10,7 @@ export const providerItemId = (provider: ProviderId, url: string) => `${provider
 /** The browsed target is independently saveable after a direct page load. */
 export function withProviderItem(provider: ProviderId, url: string, kind: ProviderItem["kind"], page: ProviderPage): ProviderPage {
   const item = kind === "media" ? page.items.find(item => item.url === url) : undefined;
-  return { ...page, item: item ?? { id: providerItemId(provider, url), provider, kind, url, title: (page.title || provider).slice(0, 200), thumbnail: page.thumbnail, description: page.description, subtitle: page.subtitle } };
+  return { ...page, item: item ?? { id: providerItemId(provider, url), provider, kind, url, title: (page.title || provider).slice(0, 200), thumbnail: page.thumbnail, description: page.description, subtitle: page.subtitle, ...(page.parent ? { collection: page.parent } : {}) } };
 }
 
 export async function providerJson(url: string, init: RequestInit = {}, request: typeof fetch = globalThis.fetch): Promise<unknown> {

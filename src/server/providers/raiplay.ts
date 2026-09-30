@@ -57,6 +57,18 @@ function collection(title: string, url: string, image?: string): ProviderItem {
   return { id: providerItemId("raiplay", url), provider: "raiplay", kind: "collection", title: title.slice(0, 200), url, ...(image ? { thumbnail: image } : {}) };
 }
 
+function programmeLink(raw: Record<string, unknown>) {
+  const info = object(raw.program_info);
+  const title = text(raw.program_name || info.name, 200);
+  if (!title) return;
+  try {
+    const url = catalogUrl(text(raw.program_url || raw.program_path_id || info.weblink || info.path_id, 2048));
+    if (!/^\/(?:programmi|collezioni)\/[^/]+$/.test(url.pathname)) return;
+    url.pathname = url.pathname.replace(/\.json$/, "");
+    return { title, url: url.href };
+  } catch { return; }
+}
+
 function card(raw: Record<string, unknown>): ProviderItem | undefined {
   const path = text(raw.weblink || raw.webLink || raw.url || raw.path_id || raw.pathID || raw.PathID, 2048);
   if (!path) return;
@@ -79,6 +91,7 @@ function card(raw: Record<string, unknown>): ProviderItem | undefined {
     id: providerItemId("raiplay", url.href), provider: "raiplay", kind: media ? "media" : "collection", title, url: url.href,
     ...(image ? { thumbnail: image } : {}), ...(description ? { description } : {}), ...(subtitle ? { subtitle } : {}),
     ...(seconds !== undefined ? { duration: seconds } : {}), ...(live ? { live: true } : {}),
+    ...(media && !live && programmeLink(raw) ? { collection: programmeLink(raw) } : {}),
   };
 }
 
@@ -158,7 +171,15 @@ async function readRaiPlay(request: BrowseRequest, signal?: AbortSignal, fetch: 
   const title = text(data.name || data.title || object(data.program_info).name) || "RaiPlay";
   const info = object(data.program_info);
   const metadata = card({ ...data, ...info, name: title, weblink: url.href });
-  const catalogPage = (items: ProviderItem[], title: string) => ({ ...page(items, offset, title), ...(metadata?.thumbnail ? { thumbnail: metadata.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) });
+  const catalogPage = (items: ProviderItem[], title: string): ProviderPage => {
+    const parent = blockId ? { title: metadata?.title || title, url: url.href }
+      : /\/ContentSet-/.test(url.pathname) ? items.find(item => item.collection)?.collection : undefined;
+    const container = { title, url: blockId ? `${url.href}#block=${blockId}` : url.href, ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}) };
+    const programme = /^\/(?:programmi|collezioni)\//.test(url.pathname);
+    return { ...page(items.map((item, index) => item.kind === "media" && programme ? { ...item, collection: { ...container, ...(index < 500 ? { index } : {}) } } : item), offset, title),
+      ...(parent ? { parent: { title: parent.title, url: parent.url } } : {}),
+      ...(metadata?.thumbnail || items[0]?.thumbnail ? { thumbnail: metadata?.thumbnail ?? items[0]?.thumbnail } : {}), ...(metadata?.description ? { description: metadata.description } : {}) };
+  };
   if (Array.isArray(data.items)) return catalogPage(cards(array(data.items)), title);
   if (data.contents && typeof data.contents === "object" && !Array.isArray(data.contents)) {
     const letters = object(data.contents);

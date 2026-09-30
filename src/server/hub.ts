@@ -734,7 +734,7 @@ export async function createHub(options: HubOptions) {
       }
       if ("entry" in prepared) {
         const { entry, inspectUrl } = prepared;
-        if (action.type === "enqueueProvider" && action.collection) entry.collection = action.collection;
+        if (action.type === "enqueueProvider" && action.collection) entry.collection = providers.cachedItem(action.url, action.collection)?.collection ?? action.collection;
         if (intent !== undefined) session.playNewEntries([entry], { intent, fromStart: prepared.fromStart, authorize, playedBy });
         else session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
         if (entry.source.startsWith("web:")) {

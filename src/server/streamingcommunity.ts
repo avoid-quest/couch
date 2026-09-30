@@ -220,7 +220,7 @@ function episodeItem(context: TitleContext, seasonNumber: number, row: Record<st
     id: providerItemId("streamingcommunity", url), provider: "streamingcommunity", kind: "media",
     title: `S${pad(seasonNumber)}E${pad(number)}${name ? ` · ${name}` : ""}`, url,
     subtitle: context.name,
-    collection: { title: `${context.name} - Season ${seasonNumber}`, url: `${context.base}/season-${seasonNumber}` },
+    collection: { title: `Season ${seasonNumber}`, url: `${context.base}/season-${seasonNumber}`, parent: { title: context.name, url: context.base } },
     ...(description ? { description } : {}), ...(image ? { thumbnail: image } : {}), ...(minutes && minutes < 1440 ? { duration: minutes * 60 } : {}),
   };
 }
@@ -230,7 +230,7 @@ function seasonPageItems(page: InertiaPage, origin: string, season: number): Pro
   const loaded = object(page.props.loadedSeason) ? page.props.loadedSeason : undefined;
   const number = integer(loaded?.number) ?? season;
   const items = array(loaded?.episodes).sort((a, b) => (integer(a.number) ?? 0) - (integer(b.number) ?? 0)).map(row => episodeItem(context, number, row)).filter((item): item is ProviderItem => !!item);
-  return { title: `${context.name} - Season ${number}`, thumbnail: posterUrl(loaded ?? {}, cdnUrl(page.props, origin)) ?? context.poster, description: translated(loaded ?? {}, "plot") || clean(loaded?.plot, 2000) || context.plot, subtitle: subtitleFor(context, true), items };
+  return { title: `Season ${number}`, parent: { title: context.name, url: context.base }, thumbnail: posterUrl(loaded ?? {}, cdnUrl(page.props, origin)) ?? context.poster, description: translated(loaded ?? {}, "plot") || clean(loaded?.plot, 2000) || context.plot, subtitle: subtitleFor(context, true), items };
 }
 
 function titlePageItems(page: InertiaPage, origin: string): ProviderPage {
@@ -298,6 +298,13 @@ export async function streamingCommunityBrowse(request: BrowseRequest, origin = 
     search.searchParams.set("q", query);
     const page = catalogueTarget(search.href, request.cursor);
     return listPage(parseInertiaPage(await streamingCommunityBody(page, {}, signal, fetchPage)), origin, Number(page.searchParams.get("page") ?? 1));
+  }
+  if (/^https:\/\/[^/]+\/(?:[a-z]{2}\/)?watch\/\d+/.test(request.url)) {
+    const context = await streamingCommunityWatchContext(request.url, signal, fetchPage);
+    const page = await streamingCommunityBrowse({ url: context.seasonUrl ?? context.titleUrl }, origin, signal, fetchPage);
+    const item = context.episodeId ? page.items.find(item => new URL(item.url).searchParams.get("e") === String(context.episodeId)) : page.item;
+    if (!item || item.kind !== "media") throw new ProviderError("This episode is no longer available.", 404);
+    return { item, title: item.title, thumbnail: item.thumbnail, description: item.description, subtitle: item.subtitle, parent: item.collection, items: [item] };
   }
   const target = catalogueTarget(request.url, request.cursor);
   const page = parseInertiaPage(await streamingCommunityBody(target, {}, signal, fetchPage));
