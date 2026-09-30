@@ -56,8 +56,8 @@ export const deviceNameHash = () => name ? `#device-name=${encodeURIComponent(na
 export async function saveLocalDeviceName(value: string) {
   const next = normalizeDeviceName(value);
   if (couchApp?.deviceIdentity) nativeIdentity = await couchApp.deviceIdentity({ name: next });
+  else write(nameKey, next);
   name = next;
-  write(nameKey, next);
   window.dispatchEvent(new Event(changed));
   return next;
 }
@@ -65,13 +65,14 @@ export async function saveLocalDeviceName(value: string) {
 export async function saveLocalDeviceSharing(value: DeviceSharing) {
   if (!isDeviceSharing(value)) throw new Error("Choose which features to share.");
   if (couchApp?.deviceIdentity) nativeIdentity = await couchApp.deviceIdentity({ sharing: value });
+  else write(sharingKey, JSON.stringify(value));
   sharing = value;
-  write(sharingKey, JSON.stringify(value));
   window.dispatchEvent(new Event(changed));
 }
 
 export const subscribeDeviceIdentity = (listener: () => void) => {
   const update = (event: StorageEvent) => {
+    if (couchApp?.deviceIdentity) return;
     if (event.key === null) memory.clear(); else memory.delete(event.key);
     if (event.key === nameKey || event.key === null) name = validName(read(nameKey));
     if (event.key === sharingKey || event.key === null) sharing = readSharing();
