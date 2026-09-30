@@ -183,7 +183,7 @@ export function BrowseActions({ title, actions }: { title: string; actions: Sear
   const more = actions.filter(action => action !== play);
   return <>
     {play && <Button variant="ghost" size="icon" aria-label={`Play ${title}`} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4" /></Button>}
-    {!!more.length && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
+    {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>}
   </>;
