@@ -6,6 +6,8 @@ import type { ConnectionInfo } from "./protocol";
 export type AppMode = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 // This app's own updates (app/update.ts). "latest" is the stable channel, as in electron-updater.
 export type UpdateChannel = "latest" | "preview";
+export type UpdateAction = { op: "read" | "check" } | { op: "channel"; channel: UpdateChannel } | { op: "install"; version: string };
+export type UpdateTarget = { id: string; name: string; tv: boolean };
 export type UpdateState = {
   version: string;
   channel: UpdateChannel;
@@ -27,10 +29,13 @@ export type CouchApp = {
   interfaceSize(size?: InterfaceSize): Promise<InterfaceSize>;
   onAddresses(listener: (urls: string[]) => void): () => void;
   updates(): Promise<UpdateState>;
+  update?(action: UpdateAction): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateState>;
   setUpdateChannel(channel: UpdateChannel): Promise<UpdateState>;
   // Restarts Couch on the downloaded version.
   installUpdate(): Promise<void>;
   onUpdates(listener: (state: UpdateState) => void): () => void;
   showLogs(): Promise<void>;
+  // The TV's own renderer also plays in Client mode, without a local Core.
+  reportPlayback?(status: import("./protocol").PlayerState["status"]): Promise<void>;
 };

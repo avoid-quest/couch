@@ -82,9 +82,11 @@ test("returning to Stable discards the staged Mac Preview bundle", async () => {
   const updates = start();
   available = "0.3.1-preview.1";
   await updates.setChannel("preview");
+  await updates.check();
   expect(updates.state().status).toBe("ready");
   available = null;
   await updates.setChannel("latest");
+  await updates.check();
   expect(updates.state().status).toBe("up-to-date");
   app.quit();
   expect(swaps).toEqual([]);
@@ -95,8 +97,10 @@ test("a missing Stable feed cannot offer the previous Preview release", async ()
   const updates = start();
   available = "0.3.1-preview.1";
   await updates.setChannel("preview");
+  await updates.check();
   checkError = Object.assign(new Error("No Stable release"), { code: "ERR_UPDATER_LATEST_VERSION_NOT_FOUND" });
   await updates.setChannel("latest");
+  await updates.check();
   expect(updates.state().status).toBe("error");
   expect(updates.state().available).toBeNull();
   expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
@@ -135,4 +139,26 @@ test("an installer error ends Installing and reaches Settings", async () => {
   await updates.install();
   expect(updates.state().status).toBe("ready");
   expect(updates.state().error).toBe("Couldn't install the update. Try again later.");
+});
+
+test("remote installation reserves the version before acknowledging a restart", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  const install = updates.install("0.3.1", 10);
+  expect(updates.state().status).toBe("installing");
+  await expect(updates.setChannel("preview")).rejects.toThrow("Wait for the update");
+  await updates.check();
+  expect(updates.state().status).toBe("installing");
+  await install;
+});
+
+test("a remote restart rejects a stale available version", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  await expect(updates.install("0.3.2")).rejects.toThrow("available update changed");
+  expect(updates.state().status).toBe("ready");
 });

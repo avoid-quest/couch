@@ -66,15 +66,16 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
   });
   if (mac) app.once("quit", () => { if (bundle) swap(process.pid, bundle, resolve(app.getPath("exe"), "../../.."), relaunch); });
 
-  async function install() {
-    if (state.status !== "ready") return;
+  async function install(expected?: string, delay = 0) {
+    if (state.status !== "ready") { if (expected) throw new Error("The available update changed. Check again."); return; }
+    if (expected && state.available !== expected) throw new Error("The available update changed. Check again.");
+    set({ status: "installing", error: null });
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
     if (!tv) {
-      set({ status: "installing", error: null });
       relaunch = true;
       if (mac) app.quit(); else autoUpdater.quitAndInstall(true, true);
       return;
     }
-    set({ status: "installing" });
     // Root installs the release and restarts the TV app.
     await promisify(execFile)("systemctl", ["start", "--no-block", `couch-update@${state.available}.service`]).catch(error => {
       console.error(`Couldn't start the TV update: ${error.message}`);
@@ -83,6 +84,7 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
   }
 
   async function run() {
+    if (state.status === "installing") return state;
     if (!app.isPackaged) return set({ status: "error", error: "Only the installed app updates." });
     const waiting = state.status === "ready" ? state.available : null;
     set({ status: "checking", error: null });
@@ -127,15 +129,17 @@ export function startUpdates({ channelPath, tv, idle, onState }: Options) {
     install,
     async setChannel(channel: unknown) {
       if (channel !== "latest" && channel !== "preview") throw new Error("Choose Stable or Preview.");
-      await running;
+      if (running || ["checking", "downloading", "installing"].includes(state.status)) throw new Error("Wait for the update to finish.");
       if (channel === state.channel) return state;
       writeFileSync(channelPath, channel);
       autoUpdater.autoInstallOnAppQuit = false;
-      if (bundle) await rm(dirname(bundle), { recursive: true, force: true });
+      const previous = bundle;
       bundle = null;
       follow(channel);
-      set({ channel, status: "idle", available: null, progress: null, error: null });
-      return check();
+      set({ channel, status: "checking", available: null, progress: null, error: null });
+      if (previous) await rm(dirname(previous), { recursive: true, force: true }).catch(error => console.error(error));
+      void check();
+      return state;
     },
   };
 }

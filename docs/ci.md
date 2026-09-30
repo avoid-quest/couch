@@ -26,6 +26,12 @@ The old test suite was deleted when the rebuild in
 [#644](https://github.com/avoid-quest/couch/issues/644) started. Add a test only
 where a behaviour must stay locked, and run it with `bun test <path>`.
 
+The update regressions run with `bun test tests/updates.test.ts` and
+`bun test tests/remote-updates.test.ts`. The paired-device integration uses
+Core's Node runtime: `bun build tests/remote-updates.integration.ts --target=node
+--outfile=build/remote-updates.integration.mjs`, then
+`node --test build/remote-updates.integration.mjs`.
+
 ## Releases
 
 Couch ships on two channels, both published on the public

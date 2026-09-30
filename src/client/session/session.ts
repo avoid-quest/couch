@@ -7,6 +7,7 @@ import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
 import { deviceId } from "./device-id";
+import { couchApp } from "./native-context";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
@@ -56,6 +57,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let retry: ReturnType<typeof setTimeout> | undefined;
     let handshake: ReturnType<typeof setTimeout> | undefined;
     let stopRendering: (() => void) | undefined;
+    let rendererStatus: SessionState["player"]["status"] = "idle";
+    let syncedStatus: SessionState["player"]["status"] = "idle";
+    const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
+    const stopPlayback = () => { stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -126,6 +131,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
       if (playsVp9) url.searchParams.set("vp9", "1");
+      if (couchApp?.update) { url.searchParams.set("updates", "1"); if (couchApp.tvPresentation) url.searchParams.set("tv", "1"); }
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -138,7 +144,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       connection.onopen = () => {
         if (!isCurrent()) return;
         setStatus("syncing");
-        stopRendering = connectRenderer(state => { if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); });
+        stopRendering = connectRenderer(state => {
+          rendererStatus = state.status; reportPlayback();
+          if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
+        });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -155,6 +164,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
+          syncedStatus = message.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === deviceId() && output.level !== null))?.status ?? "idle";
+          reportPlayback();
           const { position, duration, ...player } = message.state.player;
           setState({ ...message.state, player });
           setClock({ playbackId: player.playbackId, position, duration });
@@ -171,6 +182,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (previous?.player.playbackId !== message.playbackId) return;
           observation.current = { ...previous, player: { ...previous.player, position: message.position, duration: message.duration } };
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
+        } else if (message.type === "updates" && couchApp?.update) {
+          const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
+          void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
           play(message.command);
         } else if (message.type === "sendspin") {
@@ -194,7 +208,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         socket.current = null;
         socketCredentials.current = null;
         clearTimeout(handshake);
-        stopRendering?.();
+        stopPlayback();
         ready.current = false;
         observation.current = null;
         setClock(emptyPlaybackClock);
@@ -226,7 +240,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       clearTimeout(retry);
       clearTimeout(handshake);
       rejectPending();
-      stopRendering?.();
+      stopPlayback();
       socket.current?.close();
       socket.current = null;
       socketCredentials.current = null;

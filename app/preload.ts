@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("couchApp", {
     return () => { ipcRenderer.off("couch:addresses", handler); };
   },
   updates: () => call("updates"),
+  update: action => call("update-action", action),
   checkForUpdates: () => call("check-for-updates"),
   setUpdateChannel: channel => call("set-update-channel", channel),
   installUpdate: () => call("install-update"),
@@ -39,4 +40,5 @@ contextBridge.exposeInMainWorld("couchApp", {
     return () => { ipcRenderer.off("couch:updates", handler); };
   },
   showLogs: () => call("show-logs"),
+  reportPlayback: status => call("update-playback", status),
 } satisfies CouchApp);
