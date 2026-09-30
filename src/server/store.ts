@@ -26,7 +26,7 @@ function profileName(value: unknown) {
 
 export function openStore(path: string, remoteControlEnabled = false) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const db = new Database(path);
+  const db = new Database(path, { timeout: 5_000 });
   db.exec("PRAGMA journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS session (
@@ -121,7 +121,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
   const installation = () => db.query<{ name: string; deviceId: string | null }, []>("SELECT name, deviceId FROM installation WHERE id = 1").get()!;
   const hostDevice = (): Device | null => {
     const { name, deviceId } = installation();
-    return deviceId ? { id: deviceId, name, role: "host", createdAt: null, lastSeenAt: null } : null;
+    return deviceId ? { id: deviceId, name: name || "Couch", role: "host", createdAt: null, lastSeenAt: null } : null;
   };
   const device = (id: string) => hostDevice()?.id === id ? hostDevice() : pairedDevice(id);
   const deviceForToken = (token: string) => token.length <= 128 ? db.query<Device, [string]>(`SELECT ${deviceColumns} FROM devices WHERE token_hash = ?`).get(hash(token)) : null;
@@ -457,7 +457,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
         return pairedDevice(id)!;
       }).immediate();
     },
-    installationName() { return db.query<{ name: string }, []>("SELECT name FROM installation WHERE id = 1").get()!.name; },
+    installationName() { return db.query<{ name: string }, []>("SELECT name FROM installation WHERE id = 1").get()!.name || "Couch"; },
     renameInstallation(value: unknown) {
       const name = deviceName(value);
       db.query("UPDATE installation SET name = ? WHERE id = 1").run(name);

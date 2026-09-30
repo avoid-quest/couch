@@ -217,7 +217,6 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   const sharing = useMutation({
     mutationFn: async (enabled: boolean) => {
       const value = savedName ?? (name.trim() || defaultDeviceName(deviceId()));
-      await apiSend(credentials!, "/api/settings", { name: value }, "POST", 10_000);
       await saveLocalDeviceName(value);
       await apiSend(credentials!, "/api/settings/sharing", { enabled }, "POST", 10_000);
       await device!.completeLocalSetup();

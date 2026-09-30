@@ -14,16 +14,18 @@ Devices, in its **Couch** section:
   loads the other Couch's own UI, so both always run the same build. That page
   pairs like any browser.
 
-Main keeps this app's device identity in `device-identity.json`: one Sendspin key
-and one device name across Full and Client modes and every server it joins.
-The first load adopts the current origin's existing SDK key; authenticated
-connections migrate their old device ID with the existing pairing token.
-The SDK's `storage` interface gives Couch and Sendspin the same key, including
-when browser storage is unavailable. Device names belong to their device;
-administrators can name the server, while each client names itself in General.
-An existing paired name seeds the local identity once, and a server receives
-the saved name when that device reconnects. A live administrator rename of the
-host also updates its local identity.
+The `installation` row in `couch.sqlite` owns this computer's identity:
+one name, SDK client key and sharing choices across Full and Client modes and
+every server it joins. The hosted server uses that same name. Main reads and
+updates it directly while Core is stopped, and notifies a running Core to refresh
+its snapshots. Existing installation names survive; the first load adopts the
+current origin's SDK key, and authenticated connections migrate their old device
+ID with the existing pairing token. The SDK's `storage` interface gives Couch
+and Sendspin the same key, including when browser storage is unavailable.
+General names this device. A remote administrator may rename the host's row
+in Devices; Main reads the same SQL name on the next snapshot. Clients send
+their saved name to each server when they reconnect. Older native bridges keep
+using origin storage until their app is updated.
 
 Browsers keep their keys private to each origin. Deliberate server switches
 carry only the public device name in a fragment, which replaces an older name
@@ -41,7 +43,7 @@ reissues it for new addresses or before its 825 days run out, so pins survive.
 An HTTPS page can't load `http://` media, so Pass-through relays those streams.
 
 Main and Core talk over the utilityProcess parent port (`ready`, `addresses`,
-`display` and `shutdown`). The window's preload (`app/preload.ts`) exposes
+`display`, `identity-changed` and `shutdown`). The window's preload (`app/preload.ts`) exposes
 `window.couchApp`: the mode choice, the host token for this computer's Core (Full
 mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and

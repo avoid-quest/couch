@@ -43,7 +43,7 @@ const macChrome = process.platform === "darwin" && !tv;
 const readJson = (path: string) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; } };
 const readText = (path: string) => { try { return readFileSync(path, "utf8").trim() || null; } catch { return null; } };
 const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
-const deviceIdentity = createDeviceIdentity(join(dataDir, "device-identity.json"));
+const deviceIdentity = createDeviceIdentity(join(dataDir, "couch.sqlite"));
 
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
 // pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
@@ -326,7 +326,9 @@ handle("device-identity", (_event, update) => {
     || Object.keys(update).some(key => !["key", "name", "sharing"].includes(key)))) throw new Error("Invalid device identity.");
   const value = update as DeviceIdentityUpdate | undefined;
   if (value?.key !== undefined && (typeof value.key !== "string" || !/^[\w-]{43}$/.test(value.key))) throw new Error("Invalid device identity.");
-  return deviceIdentity(value);
+  const identity = deviceIdentity(value);
+  if ((value?.name !== undefined || value?.sharing !== undefined) && core && !core.stopping) core.child.postMessage({ type: "identity-changed" } satisfies AppMessage);
+  return identity;
 });
 handle("choose", async (event, mode, address, confirm) => {
   if (mode === "remote") {

@@ -1138,5 +1138,5 @@ export async function createHub(options: HubOptions) {
     if (failed?.status === "rejected") throw failed.reason;
   })();
 
-  return { server, pairingCode, urls, origin, close };
+  return { server, pairingCode, urls, origin, close, refreshDeviceIdentity: () => invalidate("devices") };
 }

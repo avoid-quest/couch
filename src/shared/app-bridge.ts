@@ -32,7 +32,7 @@ export type UpdateOutcome = {
 };
 export type CouchApp = {
   tvPresentation: boolean;
-  deviceIdentity(update?: DeviceIdentityUpdate): Promise<LocalDeviceIdentity>;
+  deviceIdentity?(update?: DeviceIdentityUpdate): Promise<LocalDeviceIdentity>;
   mode(): Promise<AppMode>;
   // null: the window is loading the chosen Couch.
   choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;

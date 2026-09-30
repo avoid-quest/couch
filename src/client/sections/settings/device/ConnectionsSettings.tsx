@@ -8,6 +8,8 @@ import { PairingDialog } from "@/components/PairingDialog";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,6 +37,8 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const [code, setCode] = useState("");
   const [pairingOpen, setPairingOpen] = useState(false);
   const [removing, setRemoving] = useState<Device | null>(null);
+  const [renaming, setRenaming] = useState<Device | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
   const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
   const refreshDevices = () => queryClient.invalidateQueries({ queryKey: devicesQuery(credentials).queryKey });
@@ -45,6 +49,10 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       : apiSend(credentials, `/api/devices/${target.id}`, undefined, "DELETE"),
     onSuccess: refreshDevices,
   });
+  const rename = useMutation({
+    mutationFn: ({ target, name }: { target: Device; name: string }) => apiSend(credentials, `/api/devices/${target.id}/name`, { name }),
+    onSuccess: () => { setRenaming(null); void refreshDevices(); },
+  });
   // The server bumps the devices revision, which refreshes remoteControlEnabled.
   const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
   const saveDomain = useMutation({
@@ -54,6 +62,11 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const message = (error: Error | null, fallback: string) => error ? error.message || fallback : null;
   const pending = deviceChange.isPending;
   const act = (target: Device, action: "role" | "remove") => { if (!pending) deviceChange.mutate({ target, action }); };
+  const startRename = (target: Device) => { rename.reset(); setNameDraft(target.name); setRenaming(target); };
+  function submitName(event: FormEvent) {
+    event.preventDefault();
+    if (renaming && !rename.isPending) rename.mutate({ target: renaming, name: nameDraft.trim() });
+  }
   function claim(event: FormEvent) {
     event.preventDefault();
     if (!claiming.isPending) claiming.mutate(code.trim());
@@ -89,6 +102,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         : devices.data.map(device => (
             <SettingsRow key={device.id} data-device={device.id} label={<>{device.name}{device.id === selfId && <span className="text-muted-foreground"> (this device)</span>}</>}
               description={device.role === "host" ? "Runs this Couch" : [device.role === "administrator" && "Admin", online.has(device.id) ? "Online" : formatSeen(device.lastSeenAt)].filter(Boolean).join(" · ")}>
+              {!host && manager && device.role === "host" && <Button variant="outline" disabled={!connected || rename.isPending} onClick={() => startRename(device)}>Rename</Button>}
               {manager && device.role !== "host" && device.id !== selfId && <>
                 <Button variant="outline" disabled={pending} onClick={() => act(device, "role")}>{device.role === "administrator" ? "Remove admin" : "Make admin"}</Button>
                 <Button variant="ghost" disabled={pending} onClick={() => setRemoving(device)}>Remove</Button>
@@ -117,6 +131,16 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         {claiming.error && <Alert variant="destructive"><AlertDescription>{message(claiming.error, "Couldn't make you admin. Check the code.")}</AlertDescription></Alert>}
       </SettingsSection>
     )}
+    <Dialog open={!!renaming} onOpenChange={open => { if (!open && !rename.isPending) setRenaming(null); }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Rename {renaming?.name}</DialogTitle><DialogDescription>Every device shows the new name.</DialogDescription></DialogHeader>
+        <form className="grid gap-4" onSubmit={submitName}>
+          <Field><FieldLabel htmlFor="device-rename">Name</FieldLabel><Input id="device-rename" autoFocus autoComplete="off" maxLength={60} value={nameDraft} onChange={event => setNameDraft(event.target.value)} required disabled={rename.isPending} /></Field>
+          {rename.error && <Alert variant="destructive"><AlertDescription>{message(rename.error, "Couldn't rename the device.")}</AlertDescription></Alert>}
+          <DialogFooter><Button type="button" variant="ghost" disabled={rename.isPending} onClick={() => setRenaming(null)}>Cancel</Button><Button type="submit" disabled={!connected || rename.isPending || !nameDraft.trim() || nameDraft.trim() === renaming?.name}>{rename.isPending ? "Saving…" : "Save"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
     <AlertDialog open={!!removing} onOpenChange={open => { if (!open) setRemoving(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>

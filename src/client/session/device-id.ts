@@ -11,8 +11,8 @@ const nameKey = "couch.device-name";
 const sharingKey = "couch.device-sharing";
 const changed = "couch-device-identity";
 const memory = new Map<string, string>();
-const read = (key: string) => { try { return localStorage.getItem(key); } catch { return memory.get(key) ?? null; } };
-const write = (key: string, value: string) => { memory.set(key, value); try { localStorage.setItem(key, value); } catch { /* Keep this tab's identity. */ } };
+const read = (key: string) => { if (memory.has(key)) return memory.get(key)!; try { return localStorage.getItem(key); } catch { return null; } };
+const write = (key: string, value: string) => { try { localStorage.setItem(key, value); memory.delete(key); } catch { memory.set(key, value); } };
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
 let name = validName(read(nameKey));
 const readSharing = (): DeviceSharing => {
@@ -38,13 +38,15 @@ const storage: SendspinStorage = {
 export const deviceStorage = () => storage;
 
 export async function initializeDeviceIdentity() {
-  if (!couchApp) return;
+  if (!couchApp?.deviceIdentity) return;
+  const previousName = name, previousSharing = sharing;
   const key = read("sendspin-identity-sk");
   nativeIdentity = await couchApp.deviceIdentity(key && /^[\w-]{43}$/.test(key) ? { key } : {});
   if (!nativeIdentity.name && name) nativeIdentity = await couchApp.deviceIdentity({ name });
   name = nativeIdentity.name;
   sharing = nativeIdentity.sharing;
   id = undefined;
+  if (name !== previousName || JSON.stringify(sharing) !== JSON.stringify(previousSharing)) window.dispatchEvent(new Event(changed));
 }
 
 export const localDeviceName = () => name;
@@ -53,7 +55,7 @@ export const deviceNameHash = () => name ? `#device-name=${encodeURIComponent(na
 
 export async function saveLocalDeviceName(value: string) {
   const next = normalizeDeviceName(value);
-  if (couchApp) nativeIdentity = await couchApp.deviceIdentity({ name: next });
+  if (couchApp?.deviceIdentity) nativeIdentity = await couchApp.deviceIdentity({ name: next });
   name = next;
   write(nameKey, next);
   window.dispatchEvent(new Event(changed));
@@ -62,7 +64,7 @@ export async function saveLocalDeviceName(value: string) {
 
 export async function saveLocalDeviceSharing(value: DeviceSharing) {
   if (!isDeviceSharing(value)) throw new Error("Choose which features to share.");
-  if (couchApp) nativeIdentity = await couchApp.deviceIdentity({ sharing: value });
+  if (couchApp?.deviceIdentity) nativeIdentity = await couchApp.deviceIdentity({ sharing: value });
   sharing = value;
   write(sharingKey, JSON.stringify(value));
   window.dispatchEvent(new Event(changed));
@@ -70,6 +72,7 @@ export async function saveLocalDeviceSharing(value: DeviceSharing) {
 
 export const subscribeDeviceIdentity = (listener: () => void) => {
   const update = (event: StorageEvent) => {
+    if (event.key === null) memory.clear(); else memory.delete(event.key);
     if (event.key === nameKey || event.key === null) name = validName(read(nameKey));
     if (event.key === sharingKey || event.key === null) sharing = readSharing();
     if ([nameKey, sharingKey, null].includes(event.key)) listener();
