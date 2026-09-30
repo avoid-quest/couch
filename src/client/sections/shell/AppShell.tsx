@@ -8,8 +8,8 @@ import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { LocalSharingPrompt, PlaybackDevice, useLocalSetupPending, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
-import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
+import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
+import { DeviceSwitch } from "@/sections/shell/DeviceSwitch";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { MiniPlayer } from "./MiniPlayer";
@@ -181,7 +181,7 @@ function useShellValue() {
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
-  // Terse, stable labels for the header's screen-reader status and the Play on popover.
+  // Terse, stable labels for the header's screen-reader status and the Device switch.
   const statusLabel = booting ? "Starting" : {
     connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Access refused", "build-mismatch": "Couch updated",
   }[status];
@@ -295,6 +295,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
+  useRememberCouchName(installationName);
   const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now";
 
   if (setupPending) return <div className="app-shell drag-region flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
@@ -314,8 +315,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
               {/* On a phone the mini player's own Up next is on screen, so the header's goes and leaves room for the status (#644 ticket 12). */}
               {paired && !!state?.queue.length && <Button variant="ghost" className={cn("shrink-0 touch:min-w-11", miniPlayer && "max-sm:hidden")} aria-label="Up next" title="Up next" onClick={() => shell.openPlayer("queue")}><ListMusic aria-hidden="true" /><span className="max-sm:hidden">Up next</span></Button>}
-              {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} localHost={localHost} state={state} run={run} />}
-              {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={installationName} state={state} run={run} />}
+              <DeviceSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} paired={paired} state={state} run={run} />
               {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut max-sm:hidden" onClick={() => shell.setPairingOpen(true)}>Pair a device</Button>}
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>
