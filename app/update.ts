@@ -104,10 +104,10 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
   async function run() {
     if (state.status === "installing") return state;
     if (!app.isPackaged) return set({ status: "error", error: "Only the installed app updates." });
-    if (tv) await automatic();
     const waiting = state.status === "ready" ? state.available : null;
     set({ status: "checking", error: null });
     try {
+      if (tv) await automatic();
       const result = await autoUpdater.checkForUpdates();
       const found = result?.isUpdateAvailable ? result.updateInfo : null;
       set({ checkedAt: Date.now() });
