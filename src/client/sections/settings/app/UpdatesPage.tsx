@@ -63,11 +63,11 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
 }
 
 export function UpdatesPage() {
-  const { credentials, identity, connected } = useSessionGate();
+  const { credentials, identity, connected, localHost } = useSessionGate();
   const [selected, setSelected] = useState("host");
   const administrator = identity?.authority === "administrator" || identity?.authority === "host";
   const query = useQuery({ queryKey: ["updates", "targets"], enabled: administrator && !!credentials && connected, queryFn: ({ signal }) => apiJson<UpdateTarget[]>(credentials!, "/api/updates/targets", { signal }), refetchInterval: 5_000, retry: false });
-  const targets = (query.data ?? []).filter(target => !couchApp?.updates || target.id !== "host" && target.id !== identity?.device?.id);
+  const targets = (query.data ?? []).filter(target => !couchApp?.updates || (!localHost || target.id !== "host") && target.id !== identity?.device?.id);
   const target = targets.find(target => target.id === selected) ?? targets[0];
   return <SettingsLayout section="updates">
     {targets.length > 1 && <SettingsSection><SettingsRow label="Couch app" htmlFor="update-target"><Select value={target?.id} onValueChange={setSelected}><SelectTrigger id="update-target" className="w-56"><SelectValue /></SelectTrigger><SelectContent>{targets.map(target => <SelectItem key={target.id} value={target.id}>{target.name}</SelectItem>)}</SelectContent></Select></SettingsRow></SettingsSection>}
