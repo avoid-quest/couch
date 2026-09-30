@@ -182,10 +182,16 @@ export async function createHub(options: HubOptions) {
     return chosen === undefined ? servedBy(deviceId) ?? all().at(-1) : playbacks.get(chosen);
   };
   const playerCommand = (command: PlaybackCommand) => JSON.stringify({ type: "player", command } satisfies ServerMessage);
-  // On the TV the system volume is the level; the stream stays at 100.
-  const levelOf = (playback: Playback) => systemAudio ? 100 : playback.outputs.find(output => output.level !== null)?.level ?? 0;
+  // Every Device has one volume and mute; on the TV with system audio they are the system's.
+  const soundOf = (deviceId: string) => systemAudio && deviceId === hostId() ? { volume: common.systemAudio?.volume ?? 0, muted: !!common.systemAudio?.muted } : store.deviceSound(deviceId);
+  const heard = (deviceId: string) => { const { volume, muted } = soundOf(deviceId); return muted ? 0 : volume; };
+  // What an output's player plays at. On the TV the system volume does the rest; the stream stays at 100.
+  const rendered = (output: Output | undefined) => !output?.sound ? 0 : systemAudio && output.deviceId === hostId() ? 100 : heard(output.deviceId);
+  const levelOf = (playback: Playback) => rendered(playback.outputs[0]);
   const spans = (playback: Playback) => new Set(playback.outputs.map(output => output.deviceId)).size > 1;
-  const members = (playback: Playback) => playback.outputs.flatMap(output => output.level === null ? [] : [{ deviceId: output.deviceId, level: output.level }]);
+  const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(output) }] : []);
+  // The Devices a volume without a Device acts on: those in the Playback's sound, else the window's own.
+  const sounding = (playback: Playback | undefined, deviceId: string) => { const ids = playback?.outputs.flatMap(output => output.sound ? [output.deviceId] : []) ?? []; return ids.length ? ids : [deviceId]; };
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
   const deliver = (playback: Playback, command: PlaybackCommand) => {
     if (mpvPlayback === playback) mpv.send(command);
@@ -197,7 +203,7 @@ export async function createHub(options: HubOptions) {
       if (command.mpv) {
         // Only the Device that runs Core has mpv, so its outputs move to this Playback.
         if (playback.renderer) send(playback.renderer, playerCommand({ type: "stop" }));
-        assign(playback, [{ deviceId: hostId(), picture: true, level: playback.outputs[0]?.level ?? store.volume() }]);
+        assign(playback, [{ deviceId: hostId(), picture: true, sound: playback.outputs[0]?.sound ?? true }]);
         mpvPlayback = playback;
       } else { mpv.send({ type: "stop" }); mpvPlayback = null; }
     }
@@ -372,7 +378,7 @@ export async function createHub(options: HubOptions) {
   const own = (actor: PlaybackActor | undefined) => {
     const deviceId = actor?.deviceId ?? hostId();
     let playback = servedBy(deviceId);
-    if (!playback || playback.outputs.length > 1) assign(playback = createPlayback(), [{ deviceId, picture: true, level: store.volume() }]);
+    if (!playback || playback.outputs.length > 1) assign(playback = createPlayback(), [{ deviceId, picture: true, sound: true }]);
     looking.set(deviceId, playback.id);
     return playback;
   };
@@ -380,7 +386,7 @@ export async function createHub(options: HubOptions) {
   const viewed = (actor: PlaybackActor | undefined) => lookedAt(actor?.deviceId ?? hostId()) ?? own(actor);
   // Playing an item of a Playback with no online output plays it on this Device.
   const present = (playback: Playback, actor: PlaybackActor | undefined) => {
-    if (!playback.renderer && mpvPlayback !== playback) assign(playback, [{ deviceId: actor?.deviceId ?? hostId(), picture: true, level: store.volume() }]);
+    if (!playback.renderer && mpvPlayback !== playback) assign(playback, [{ deviceId: actor?.deviceId ?? hostId(), picture: true, sound: true }]);
     return playback;
   };
   // Send to (#644 Actions): the Device takes over the Playback's outputs, and the current item
@@ -396,23 +402,22 @@ export async function createHub(options: HubOptions) {
     finally { playback.next = undefined; playback.joining = undefined; }
     broadcast();
   };
-  // Speakers panel (#644 Actions): a fader adds a Device's sound (0 keeps it silent), the switch
-  // removes it, and a screen's tile toggles its picture. A speaker's delay is its own (Sendspin).
-  const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; level?: number | null; delay?: number }, authorize: () => void) => {
+  // Speakers panel (#644 Actions): a Device's sound joins or leaves, and a screen's tile toggles
+  // its picture. A speaker's delay is its own (Sendspin).
+  const setOutput = async (playback: Playback, deviceId: string, change: { picture?: boolean; sound?: boolean; delay?: number }, authorize: () => void) => {
     if (change.delay !== undefined) sendspin.setDelay(deviceId, change.delay);
-    if (change.picture === undefined && change.level === undefined) return;
+    if (change.picture === undefined && change.sound === undefined) return;
     // A change while the Device is still joining applies to the output it joins with.
     const joining = playback.joining?.deviceId === deviceId ? playback.joining : undefined;
     const current = playback.outputs.find(output => output.deviceId === deviceId) ?? joining;
-    const next: Output = { deviceId, picture: change.picture ?? current?.picture ?? false, level: change.level === undefined ? current?.level ?? null : change.level };
-    if (next.level !== null) store.saveVolume(next.level);
+    const next: Output = { deviceId, picture: change.picture ?? current?.picture ?? false, sound: change.sound ?? current?.sound ?? false };
     if (joining) { Object.assign(joining, next); return; }
     if (!current && !playback.outputs.length) {
-      if (next.picture || next.level !== null) await sendTo(playback, next, authorize);
+      if (next.picture || next.sound) await sendTo(playback, next, authorize);
       return;
     }
     if (!current) {
-      if (!next.picture && next.level === null) return;
+      if (!next.picture && !next.sound) return;
       if (mpvPlayback === playback) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       if (!newest(deviceId)) throw new Error(`${nameOf(deviceId)} is offline.`);
       // A Device serves one Playback, so it leaves the one it served (#644 Outputs).
@@ -420,12 +425,32 @@ export async function createHub(options: HubOptions) {
       if (previous) { release(previous, deviceId); reconcile(previous); }
       looking.set(deviceId, playback.id);
       playback.outputs = [...playback.outputs, next];
-    } else if (!next.picture && next.level === null) release(playback, deviceId);
+    } else if (!next.picture && !next.sound) release(playback, deviceId);
     else playback.outputs = playback.outputs.map(output => output === current ? next : output);
     // A screen that joins a synced Playback loads the picture for itself and follows the clock.
     reconcile(playback);
-    if (!playback.synced && current && next.level !== current.level) deliver(playback, { type: "volume", volume: levelOf(playback) });
+    if (!playback.synced && current && next.sound !== current.sound) deliver(playback, { type: "volume", volume: levelOf(playback) });
     broadcast();
+  };
+  // A Device's volume or mute reaches its player live, Direct or Synced.
+  const setSound = async (deviceId: string, change: { volume?: number; muted?: boolean }, authorize: () => void) => {
+    if (deviceId !== hostId() && !store.device(deviceId)) throw new Error("That device is no longer paired.");
+    if (systemAudio && deviceId === hostId()) {
+      if (change.volume !== undefined) await soundRouting!.volume(change.volume, authorize);
+      if (change.muted !== undefined) await soundRouting!.mute(change.muted, authorize);
+      return;
+    }
+    store.saveDeviceSound(deviceId, change);
+    const playback = servedBy(deviceId);
+    if (playback?.synced) playback.synced.members(members(playback));
+    else if (playback) deliver(playback, { type: "volume", volume: levelOf(playback) });
+    broadcast();
+  };
+  // Several Devices move together: the loudest reaches `volume`, the others keep their proportion.
+  const setVolume = async (deviceIds: string[], volume: number, authorize: () => void) => {
+    const loudest = Math.max(0, ...deviceIds.map(id => soundOf(id).volume));
+    const volumes = deviceIds.map(id => loudest ? Math.round(soundOf(id).volume * volume / loudest) : volume);
+    for (const [index, id] of deviceIds.entries()) await setSound(id, { volume: volumes[index] }, authorize);
   };
 
   // What every window shares, whichever Playback it looks at.
@@ -434,7 +459,7 @@ export async function createHub(options: HubOptions) {
     appearance: { size: store.tvInterfaceSize(), confirmedSize: store.tvInterfaceSize(), preview: null },
     administratorClaimed: store.administratorExists(), activeProfile: store.activeProfile(), preferences: store.playbackPreferences(store.activeProfile().id),
   };
-  const idle = (): SessionState => ({ queue: [], currentEntryId: null, activeProfile: common.activeProfile, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: store.volume(), seekable: false, error: null } });
+  const idle = (): SessionState => ({ queue: [], currentEntryId: null, activeProfile: common.activeProfile, player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 0, seekable: false, error: null } });
   // State goes out once per turn of the event loop: a hundred speakers leaving at once send one
   // state, not a hundred to every socket, which filled the 4 MB above and dropped every client (#644 ticket 10).
   let pending = false;
@@ -450,16 +475,18 @@ export async function createHub(options: HubOptions) {
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs };
       }),
-      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id) })),
+      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), ...soundOf(device.id) })),
     };
-    const views = new Map<Playback | undefined, string>();
+    const views = new Map<string, string>();
     // A speaker's delay is its player's own; it shows once the speaker is connected.
     const delays = (outputs: Output[]) => outputs.map(output => { const delay = sendspin.delay(output.deviceId); return delay === undefined ? output : { ...output, delay }; });
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
       const playback = lookedAt(deviceOf(socket));
-      if (!views.has(playback)) views.set(playback, JSON.stringify({ type: "state", state: { ...playback ? stateOf(playback) : idle(), ...shared, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage));
-      send(socket, views.get(playback)!);
+      // The volume is the loudest one heard of the Devices a volume change acts on.
+      const volume = Math.max(0, ...sounding(playback, deviceOf(socket)).map(heard)), view = `${playback?.id}:${volume}`;
+      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
+      send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
       if (socket.data.sendspin !== `${listen}${watch}`) { socket.data.sendspin = `${listen}${watch}`; send(socket, JSON.stringify({ type: "sendspin", listen, watch } satisfies ServerMessage)); }
@@ -980,17 +1007,17 @@ export async function createHub(options: HubOptions) {
           } else if (action.type === "sendTo" || action.type === "output") {
             const target = lookedAt(deviceId);
             if (!target) throw new Error("Play something first.");
-            if (action.type === "output") await setOutput(target, action.deviceId, action, authorize);
-            else await sendTo(target, { deviceId: action.deviceId, picture: !target.outputs.length || target.outputs.some(output => output.picture), level: target.outputs.find(output => output.level !== null)?.level ?? store.volume() }, authorize);
-          } else if (action.type === "volume") {
-            // The volume is the level of the looked-at Playback's sound.
-            const target = lookedAt(deviceId);
-            const output = target?.outputs.find(item => item.level !== null) ?? target?.outputs[0];
-            if (soundRouting && (!output || output.deviceId === hostId())) await soundRouting.volume(action.volume, authorize);
-            else if (target && output) await setOutput(target, output.deviceId, { level: action.volume }, authorize);
-            else { store.saveVolume(action.volume); broadcast(); }
-          } else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
-          else {
+            if (action.type === "sendTo") await sendTo(target, { deviceId: action.deviceId, picture: !target.outputs.length || target.outputs.some(output => output.picture), sound: true }, authorize);
+            else {
+              // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
+              if (action.level) await setSound(action.deviceId, { volume: action.level }, authorize);
+              await setOutput(target, action.deviceId, { picture: action.picture, sound: action.level === undefined ? undefined : action.level > 0, delay: action.delay }, authorize);
+            }
+          } else if (action.type === "volume" || action.type === "mute") {
+            const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), deviceId);
+            if (action.type === "volume") await setVolume(targets, action.volume, authorize);
+            else for (const id of targets) await setSound(id, { muted: action.muted }, authorize);
+          } else {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on this Device's.
             playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;

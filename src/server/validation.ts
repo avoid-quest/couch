@@ -50,8 +50,8 @@ function validAction(value: unknown): value is Action {
     case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));
     case "pause": return id(value.playbackId) && typeof value.paused === "boolean";
     case "seek": return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
-    case "mute": return typeof value.muted === "boolean";
-    case "volume": return number(value.volume, 100);
+    case "mute": return typeof value.muted === "boolean" && (value.deviceId === undefined || id(value.deviceId));
+    case "volume": return number(value.volume, 100) && (value.deviceId === undefined || id(value.deviceId));
     case "preferences": return id(value.profileId) && object(value.preferences)
       && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed", "autoplay"].includes(key))
       && (value.preferences.autoplay === undefined || typeof value.preferences.autoplay === "boolean")
@@ -68,7 +68,7 @@ function validAction(value: unknown): value is Action {
     case "look": return value.playback === null || id(value.playback);
     case "sendTo": return id(value.deviceId);
     case "output": return id(value.deviceId) && (value.picture === undefined || typeof value.picture === "boolean")
-      && (value.level === undefined || value.level === null || number(value.level, 100)) && (value.delay === undefined || number(value.delay, 5000))
+      && (value.level === undefined || number(value.level, 100)) &&(value.delay === undefined || number(value.delay, 5000))
       && (value.picture !== undefined || value.level !== undefined || value.delay !== undefined);
     default: return false;
   }

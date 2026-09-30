@@ -61,7 +61,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     activeProfile,
     preferences: store.playbackPreferences(activeProfile.id),
     autoplay: { enabled: store.playbackPreferences(activeProfile.id).profile.autoplay !== false, contextTitle: continuation?.title ?? null, next: continuation?.entries[0] ?? null },
-    player: { playbackId: null, status: "idle", position: 0, duration: null, volume: store.volume(), seekable: false, error: null },
+    player: { playbackId: null, status: "idle", position: 0, duration: null, volume: 100, seekable: false, error: null },
   };
   let published: Omit<SessionState, "player"> | undefined;
   let publishedPlayer: string | undefined;

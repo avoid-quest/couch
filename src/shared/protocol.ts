@@ -37,12 +37,12 @@ export type PlayerState = {
   nowPlaying?: NowPlaying | null;
 };
 
-// A Device's picture and sound in one Playback (#644 ticket 9). level is 0–100, or null when
-// the Device's sound is not in the mix; 0 keeps it in the mix, silent. delay is the speaker's own
-// Sendspin delay in milliseconds, present while it is connected (ticket 10).
-export type Output = { deviceId: string; picture: boolean; level: number | null; delay?: number };
+// A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
+// volume. delay is the speaker's own Sendspin delay in milliseconds, present while it is connected (ticket 10).
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number };
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
-export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean };
+// Every Device has one volume and mute; on the TV with system audio they are the system's.
+export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; volume: number; muted: boolean };
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 export type SessionState = {
@@ -89,8 +89,10 @@ export type Action =
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
-  | { type: "mute"; muted: boolean }
-  | { type: "volume"; volume: number }
+  // A Device's volume or mute. Without deviceId: every Device in the looked-at Playback's sound, the
+  // volumes scaled so the loudest reaches `volume`, or this window's Device when none is.
+  | { type: "mute"; muted: boolean; deviceId?: string }
+  | { type: "volume"; volume: number; deviceId?: string }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
   | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
@@ -100,9 +102,10 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
   // Look at a Playback; Send to a Device; set a Device's picture and sound in the looked-at Playback.
+  // level is the fader: 0 takes the Device's sound out, more sets its volume and puts its sound in.
   | { type: "look"; playback: string | null }
   | { type: "sendTo"; deviceId: string }
-  | { type: "output"; deviceId: string; picture?: boolean; level?: number | null; delay?: number };
+  | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
 
 export type ClientMessage = { type: "command"; requestId: string; action: Action };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).

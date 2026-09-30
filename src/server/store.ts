@@ -109,6 +109,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
   if (!db.query<{ name: string }, []>("PRAGMA table_info(installation)").all().some(column => column.name === "deviceId")) {
     db.exec("ALTER TABLE installation ADD COLUMN deviceId TEXT");
   }
+  // Every Device keeps one volume and mute; they start at the one volume Couch kept before.
+  for (const table of ["devices", "installation"]) if (!db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().some(column => column.name === "volume")) {
+    const { volume } = db.query<{ volume: number }, []>("SELECT volume FROM session WHERE id = 1").get()!;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN volume REAL NOT NULL DEFAULT ${Number(volume)}; ALTER TABLE ${table} ADD COLUMN muted INTEGER NOT NULL DEFAULT 0`);
+  }
   // Each row is a paired Device; the app window that runs this Couch is the
   // installation's Device, named by the installation name (#644 ticket 5).
   const deviceColumns = "id, name, role, createdAt, lastSeenAt";
@@ -194,8 +199,6 @@ export function openStore(path: string, remoteControlEnabled = false) {
         saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) { db.transaction(() => { save("queue", JSON.stringify(queue)); save("cursor", cursorEntryId); })(); },
       };
     },
-    // The level a Device's sound joins a Playback at.
-    volume() { return db.query<{ volume: number }, []>("SELECT volume FROM session WHERE id = 1").get()!.volume; },
     profiles() { return db.query<WatchingProfile & { confirmedName: number }, []>("SELECT id, name, confirmedName FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all().map(profileView); },
     activeProfile,
     playbackPreferences(profileId: string): PlaybackPreferences {
@@ -349,8 +352,16 @@ export function openStore(path: string, remoteControlEnabled = false) {
         }
       }).immediate();
     },
-    saveVolume(volume: number) {
-      db.query("UPDATE session SET volume = ? WHERE id = 1").run(volume);
+    // The app window that runs this Couch keeps its volume with the installation; "host" until it has an ID.
+    deviceSound(id: string): { volume: number; muted: boolean } {
+      const row = id === (installation().deviceId ?? "host") ? db.query<{ volume: number; muted: number }, []>("SELECT volume, muted FROM installation WHERE id = 1").get()
+        : db.query<{ volume: number; muted: number }, [string]>("SELECT volume, muted FROM devices WHERE id = ?").get(id);
+      return { volume: row?.volume ?? 0, muted: !!row?.muted };
+    },
+    saveDeviceSound(id: string, { volume = null, muted = null }: { volume?: number | null; muted?: boolean | null }) {
+      const sql = "SET volume = coalesce(?, volume), muted = coalesce(?, muted)";
+      if (id === (installation().deviceId ?? "host")) db.query(`UPDATE installation ${sql} WHERE id = 1`).run(volume, muted === null ? null : Number(muted));
+      else db.query(`UPDATE devices ${sql} WHERE id = ?`).run(volume, muted === null ? null : Number(muted), id);
     },
     /** Pairs the Device whose key is `id`, or gives an already paired key a new token. */
     pair(id: unknown, name?: unknown) {
@@ -363,7 +374,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
         if (pairedDevice(id)) db.query("UPDATE devices SET token_hash = ?, name = ?, lastSeenAt = ? WHERE id = ?").run(hash(token), label, now, id);
         else {
           const role = db.query("SELECT 1 FROM devices LIMIT 1").get() ? "controller" : "administrator";
-          db.query("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), id, label, role, now, now);
+          db.query("INSERT INTO devices (token_hash, id, name, role, createdAt, lastSeenAt) VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), id, label, role, now, now);
         }
       }).immediate();
       return token;
