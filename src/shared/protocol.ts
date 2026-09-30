@@ -3,6 +3,7 @@ import type { MediaCollection, MediaShape } from "./media";
 import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
+import type { DeviceSharing } from "./device-identity";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
@@ -39,10 +40,10 @@ export type PlayerState = {
 
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
 // volume. delay is the speaker's own Sendspin delay in milliseconds, present while it is connected (ticket 10).
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number };
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; local?: boolean };
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
-export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; volume: number; muted: boolean };
+export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 // controlling: the Device this window controls; it looks at the Playback that Device serves.
@@ -79,6 +80,7 @@ export type SessionState = {
 };
 
 export type Action =
+  | { type: "sharing"; sharing: DeviceSharing; updates?: boolean }
   | { type: "navigate"; key: NavigationKey }
   // With playNow, deviceId plays on that Device, which this window then controls.
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
@@ -124,10 +126,10 @@ export type ServerMessage =
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
-  | { type: "player"; command: PlaybackCommand }
+  | { type: "player"; command: PlaybackCommand; local: boolean; output: Pick<Output, "picture" | "sound"> }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
-  | { type: "sendspin"; listen: boolean; watch: boolean }
+  | { type: "sendspin"; listen: boolean; watch: boolean; local: boolean }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 // A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the

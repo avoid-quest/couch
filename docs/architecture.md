@@ -31,6 +31,20 @@ origin that made it. The SDK's `storage` interface gives Couch and Sendspin the
 same key, including when browser storage is unavailable. Sendspin admits the
 host's device only from this machine.
 
+Client devices opt into audio, video and native administration independently in
+General; all three start off. The local identity persists these choices and its
+authenticated WebSocket advertises them. Core accepts changes only from that
+device's own connection, checks target consent for playback and mixer commands,
+and rechecks it after source resolution and before a native mpv fallback.
+An Output's `local` flag records an explicit self-play or self-join; that choice
+works without granting another controller access. Revoking sharing removes
+remote output channels and stops their renderer or Sendspin membership at once.
+The receiving client also enforces its saved consent. Native administration is
+separate: sharing speakers or a screen never grants permission to update or
+restart the app. Full-mode host outputs and administration retain the existing
+server network-sharing and administrator policy; Devices manages server
+sharing, while client-specific consent switches appear only when joining one.
+
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
 on the same port serves only this machine (the app window's `localhost`); the LAN

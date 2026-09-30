@@ -6,7 +6,7 @@ import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
-import { deviceId } from "./device-id";
+import { deviceId, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
 import { couchApp } from "./native-context";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -59,6 +59,23 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let stopRendering: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
+    let hostSharing = false;
+    let hostIdentity = false;
+    let rendered: Extract<ServerMessage, { type: "player" }> | undefined;
+    let synced: Extract<ServerMessage, { type: "sendspin" }> | undefined;
+    const permits = (local: boolean, audio: boolean, video: boolean) => {
+      const sharing = localDeviceSharing();
+      return local || hostSharing || (!audio || sharing.audio) && (!video || sharing.video);
+    };
+    const advertiseSharing = () => {
+      const connection = socket.current;
+      if (connection?.readyState !== WebSocket.OPEN || !sameCredentials(credentials, socketCredentials.current)) return;
+      const sharing = localDeviceSharing();
+      connection.send(JSON.stringify({ type: "command", requestId: createId(), action: { type: "sharing", sharing, updates: !!couchApp?.update && sharing.administration } } satisfies ClientMessage));
+      if (rendered && !permits(rendered.local, rendered.output?.sound ?? true, rendered.output?.picture ?? true)) play({ type: "stop" });
+      if (synced && !permits(synced.local, synced.listen, synced.watch)) listen(false, false, "Couch");
+    };
+    const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
     const stopPlayback = () => { stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
@@ -119,6 +136,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const caller = await response.json() as DeviceIdentity;
           if (disposed) return;
           setIdentity(caller);
+          hostIdentity = caller.authority === "host";
+          hostSharing = hostIdentity && next.remoteControlEnabled === true;
           setCredentialRejected(false);
         }
       } catch {
@@ -130,8 +149,11 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
+      const sharing = localDeviceSharing();
+      for (const capability of ["audio", "video", "administration"] as const) if (sharing[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
-      if (couchApp?.update) { url.searchParams.set("updates", "1"); if (couchApp.tvPresentation) url.searchParams.set("tv", "1"); }
+      if (couchApp?.update && sharing.administration) url.searchParams.set("updates", "1");
+      if (couchApp?.tvPresentation) url.searchParams.set("tv", "1");
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -144,6 +166,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       connection.onopen = () => {
         if (!isCurrent()) return;
         setStatus("syncing");
+        advertiseSharing();
         stopRendering = connectRenderer(state => {
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
@@ -159,6 +182,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           return;
         }
         if (message.type === "state") {
+          const ownSharing = message.state.devices?.find(device => device.id === deviceId())?.sharing;
+          hostSharing = hostIdentity && !!(ownSharing?.audio || ownSharing?.video);
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;
@@ -184,11 +209,16 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setClock({ playbackId: message.playbackId, position: message.position, duration: message.duration });
         } else if (message.type === "updates" && couchApp?.update) {
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
-          void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
+          if (!localDeviceSharing().administration) reply({ error: "Remote administration is off on this device." });
+          else void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
-          play(message.command);
+          if (message.command.type === "stop") { rendered = undefined; play(message.command); }
+          else if (permits(message.local, message.output?.sound ?? true, message.output?.picture ?? true)) { rendered = message; play(message.command); }
+          else play({ type: "stop" });
         } else if (message.type === "sendspin") {
-          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
+          synced = message;
+          const sharing = localDeviceSharing(), local = message.local || hostSharing;
+          listen(message.listen && (local || sharing.audio), message.watch && (local || sharing.video), observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {
@@ -232,6 +262,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     void connect();
     return () => {
       disposed = true;
+      unsubscribeIdentity();
       document.removeEventListener("visibilitychange", wake);
       window.removeEventListener("pageshow", wake);
       window.removeEventListener("online", wake);
