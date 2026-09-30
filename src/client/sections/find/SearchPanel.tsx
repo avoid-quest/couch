@@ -186,11 +186,11 @@ export function CollectionHeader({ collection, back, onBack, canPlay }: { collec
         <h1 tabIndex={-1} className="max-w-3xl text-3xl font-semibold tracking-tight break-words sm:text-4xl">{collection.title}</h1>
         {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
         {collection.description && <p className="max-w-prose text-sm leading-relaxed break-words">{collection.description}</p>}
-        <div className="flex flex-wrap items-center gap-2 pt-2">
+        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex flex-wrap items-center gap-2 pt-2">
           <Button disabled={!canPlay || collection.disabled || !collection.playAll} onClick={collection.playAll}>{collection.single ? "Play" : "Play all"}</Button>
           <Button variant="ghost" disabled={collection.disabled || !collection.queueAll} onClick={collection.queueAll}>{collection.single ? "Queue" : "Queue all"}</Button>
           {collection.save && <Button variant="ghost" aria-pressed={collection.saved} disabled={collection.disabled || collection.saveDisabled} onClick={collection.save}>{collection.saved ? "Saved" : "Save"}</Button>}
-        </div>
+        </div>}
       </div>
     </div>
   </header>;

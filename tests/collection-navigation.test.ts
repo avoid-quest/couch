@@ -17,6 +17,13 @@ test("cursor trails round trip and malformed collection links are rejected", () 
   expect(readCollectionSearch({ ...route, provider: "raiplay", page: -1, cursors: [{}] })).toMatchObject({ provider: undefined, page: 1, cursors: [] });
 });
 
+test("a provider catalogue can open directly and item links retain their album context", () => {
+  expect(readCollectionSearch({ provider: "bandcamp" }).provider).toBe("bandcamp");
+  const context = { title: "Album", url: "https://artist.bandcamp.com/album/album", index: 28 };
+  expect(readCollectionSearch({ provider: "bandcamp", url: "https://artist.bandcamp.com/track/song", context }).context).toEqual(context);
+  expect(readCollectionSearch({ provider: "bandcamp", context: { ...context, url: "https://example.com/album" } }).context).toBeUndefined();
+});
+
 test("legacy StreamingCommunity metadata exposes both the series and the exact season", () => {
   const series = "https://streamingcommunityz.pictures/it/titles/42-the-show";
   expect(collectionLinks({ title: "The show - Season 2", url: `${series}/season-2` }).map(({ title, url }) => ({ title, url })))

@@ -11,7 +11,7 @@ export function ContentBreadcrumb({ title, collection, provider }: { title: stri
   return <Breadcrumb aria-label="Content path">
     <BreadcrumbList className="text-sm">
       <BreadcrumbItem><BreadcrumbLink asChild><Link to="/find" className="inline-flex min-h-11 items-center px-1">Find</Link></BreadcrumbLink></BreadcrumbItem>
-      {provider && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to="/find" search={{ source: providerNames[provider] }} className="inline-flex min-h-11 items-center px-1">{providerNames[provider]}</Link></BreadcrumbLink></BreadcrumbItem></>}
+      {provider && (title !== providerNames[provider] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={collectionLocation({ provider, url: "" })} className="inline-flex min-h-11 items-center px-1">{providerNames[provider]}</Link></BreadcrumbLink></BreadcrumbItem></>}
       {collectionLinks(collection).map(item => <Fragment key={item.url}>
         <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={collectionLocation(item)} className="inline-flex min-h-11 items-center px-1 break-words">{item.title}</Link></BreadcrumbLink></BreadcrumbItem>
       </Fragment>)}

@@ -20,11 +20,11 @@ export function ProviderPage() {
   const { search } = useLocation();
   const state = readCollectionSearch(search);
   const navigation = useDetailNavigation();
-  if (!state.url || !state.provider) return <section data-page="Collection">
+  if (!state.provider) return <section data-page="Collection">
     <PageHeader title="Collection unavailable" back={{ label: "Back", onClick: () => navigation.back("/find") }} />
     <p className="text-muted-foreground">This collection link is incomplete or unsupported.</p>
   </section>;
-  return <CollectionPage key={`${state.provider}:${state.url}`} provider={state.provider} url={state.url} search={state} />;
+  return <CollectionPage key={`${state.provider}:${state.url}`} provider={state.provider} url={state.url ?? ""} search={state} />;
 }
 
 function CollectionPage({ provider, url, search }: { provider: ProviderId; url: string; search: ReturnType<typeof readCollectionSearch> }) {
@@ -36,7 +36,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const [reported, setReported] = useState<{ cursor?: string; summary: SearchResultSummary } | null>(null);
   const report = useCallback((_: string, summary: SearchResultSummary) => setReported({ cursor, summary }), [cursor]);
   const summary = reported?.cursor === cursor ? reported?.summary : undefined;
-  const collection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider] };
+  const collection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
   const page = summary?.page;
   const source = current?.source.replace(/^web:/, "");
   const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(search.filter.toLocaleLowerCase()));
