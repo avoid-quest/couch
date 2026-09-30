@@ -181,7 +181,7 @@ export async function createHub(options: HubOptions) {
   // A window looks at the Playback its controlled Device serves. An idle one looks at the newest
   // Playback waiting for a Device (a saved Up next, or one whose last output was switched off).
   const lookedAt = (deviceId: string) => servedBy(controlled(deviceId)) ?? all().findLast(playback => !playback.outputs.length);
-  // Windows controlling a Device that Solo moved the Playback off follow it (devices UX).
+  // Windows controlling a Device that the Playback moved off follow it (Solo or mpv fallback).
   const follow = (left: string[], to: string) => {
     for (const deviceId of new Set([...[...sockets].map(deviceOf), ...controlling.keys()])) if (left.includes(controlled(deviceId))) control(deviceId, to);
   };
@@ -207,8 +207,10 @@ export async function createHub(options: HubOptions) {
     if (command.type === "load" && !!command.mpv !== (mpvPlayback === playback)) {
       if (command.mpv) {
         // Only the Device that runs Core has mpv, so its outputs move to this Playback.
+        const left = playback.outputs.map(output => output.deviceId);
         if (playback.renderer) send(playback.renderer, playerCommand({ type: "stop" }));
         assign(playback, [{ deviceId: hostId(), picture: true, sound: playback.outputs[0]?.sound ?? true }]);
+        follow(left, hostId());
         mpvPlayback = playback;
       } else { mpv.send({ type: "stop" }); mpvPlayback = null; }
     }
