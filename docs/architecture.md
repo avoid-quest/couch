@@ -14,6 +14,22 @@ Devices, in its **Couch** section:
   loads the other Couch's own UI, so both always run the same build. That page
   pairs like any browser.
 
+Main keeps this app's device identity in `device-identity.json`: one Sendspin key
+and one device name across Full and Client modes and every server it joins.
+The first load adopts the current origin's existing SDK key; authenticated
+connections migrate their old device ID with the existing pairing token.
+The SDK's `storage` interface gives Couch and Sendspin the same key, including
+when browser storage is unavailable. Device names belong to their device;
+administrators can name the server, while each client names itself in General.
+An existing paired name seeds the local identity once, and a server receives
+the saved name when that device reconnects. A live administrator rename of the
+host also updates its local identity.
+
+Browsers keep their keys private to each origin. Deliberate server switches
+carry only the public device name in a fragment, which replaces an older name
+at the destination and is removed after reading. Pairing credentials and keys
+remain in their original storage.
+
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
 on the same port serves only this machine (the app window's `localhost`); the LAN

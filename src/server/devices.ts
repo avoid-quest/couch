@@ -2,16 +2,15 @@ import { randomInt } from "node:crypto";
 import type { Device, DeviceIdentity } from "../shared/devices";
 import type { Store } from "./store";
 import { ADMIN_ONLY } from "./messages";
+import { normalizeDeviceName } from "../shared/device-identity";
 
 export class ControllerError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
 export function deviceName(value: unknown) {
-  if (typeof value !== "string" || /\p{Cc}/u.test(value)) throw new ControllerError("Use a name with 1 to 60 characters.");
-  const name = value.trim().normalize("NFC");
-  if (!name || [...name].length > 60) throw new ControllerError("Use a name with 1 to 60 characters.");
-  return name;
+  try { return normalizeDeviceName(value); }
+  catch (error) { throw new ControllerError((error as Error).message); }
 }
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -88,9 +87,10 @@ export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCo
         const target = /^\/api\/devices\/([\w-]{1,80})(?:\/(name|role))?$/.exec(path);
         if (target && !["claim", "claim-code"].includes(target[1]!)) {
           const id = target[1]!;
-          // A Device renames itself; an admin renames and manages any Device.
+          // Each device owns its name; administrators may also name the server.
           const authorize = () => {
             const current = requireIdentity();
+            if (target[2] === "name" && current.device?.id !== id && store.hostDevice()?.id !== id) throw new ControllerError("Change this name on that device.", 403);
             if (target[2] !== "name" || current.device?.id !== id) administrator();
           };
           authorize();

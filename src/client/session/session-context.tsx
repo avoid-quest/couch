@@ -13,7 +13,8 @@ import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
-import { announcePlay } from "./device-id";
+import { announcePlay, deviceId, saveLocalDeviceName, useLocalDeviceName } from "./device-id";
+import { apiSend } from "../api/client";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -104,6 +105,19 @@ export function SessionGate({ children }: PropsWithChildren) {
   }
 
   const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
+  const localName = useLocalDeviceName();
+  const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
+  const lastName = useRef<{ token: string; server: string; local: string | null } | null>(null);
+  useEffect(() => {
+    if (!connected || !credentials || !ownName) { lastName.current = null; return; }
+    if (localHost && !device?.localSetupComplete) return;
+    const previous = lastName.current;
+    const hostRenamed = localHost && previous?.token === credentials.token && previous.server !== ownName && previous.local === localName;
+    lastName.current = { token: credentials.token, server: ownName, local: localName };
+    // Migrate an existing name once; a live administrator rename also updates the host's identity.
+    if (!localName || hostRenamed && localName !== ownName) void saveLocalDeviceName(ownName).catch(reason => setError(errorText(reason)));
+    else if (localName !== ownName) void apiSend(credentials, `/api/devices/${deviceId()}/name`, { name: localName }).catch(reason => setError(errorText(reason)));
+  }, [connected, credentials, ownName, localName, localHost, device?.localSetupComplete]);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its

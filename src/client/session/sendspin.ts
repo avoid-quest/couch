@@ -1,5 +1,6 @@
 import type { SendspinPlayer } from "@sendspin/sendspin-js";
 import { waitForTap } from "./renderer";
+import { deviceStorage } from "./device-id";
 
 // Synced sound (#644 ticket 10): while Core asks, this tab plays its Device's sound with the
 // official Sendspin player. The SDK's stored key is the Device's ID, so Core knows the speaker.
@@ -24,7 +25,7 @@ export function listen(on: boolean, watch: boolean, name: string) {
   if (!on) waitForTap(null);
   const current: Promise<SendspinPlayer> = player ??= import("@sendspin/sendspin-js").then(({ SendspinPlayer }) => {
     // AES-GCM: Core runs on Electron's Node, whose BoringSSL has no ChaCha20-Poly1305.
-    const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", suite: "aesgcm",
+    const created = new SendspinPlayer({ baseUrl: location.origin, clientName: name, productName: "Couch", suite: "aesgcm", storage: deviceStorage(),
       onStateChange: state => { if (player === current) group = state.groupState.group_id; } });
     if (player !== current) return created;
     connected = created;

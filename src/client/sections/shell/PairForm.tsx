@@ -7,19 +7,21 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { deviceId } from "@/session/device-id";
+import { deviceId, localDeviceName, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
 import { defaultDeviceName } from "../../../shared/devices";
 
 export async function requestPairing(origin: string, code: string, name: string) {
   const id = deviceId();
+  const value = localDeviceName() ?? (name || defaultDeviceName(id));
   const response = await fetch(`${origin}/api/pair`, {
     method: "POST",
     signal: AbortSignal.timeout(8_000),
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, id, name: name || defaultDeviceName(id) }),
+    body: JSON.stringify({ code, id, name: value }),
   }).catch(() => { throw new Error("Couldn't reach Couch. Check you're on the same Wi-Fi."); });
   const result = await response.json() as { token?: string; installationId?: string; error?: string };
   if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "Code expired. Enter the code shown on Couch now." : result.error || "Couldn't pair.");
+  await saveLocalDeviceName(value);
   return { origin, token: result.token, installationId: result.installationId };
 }
 
@@ -29,7 +31,8 @@ const slot = "h-8 touch:h-11 min-w-0 w-auto flex-1 text-sm";
 export function PairForm() {
   const { pairingOrigin, linkedPairingCode, savePairing, setError } = useSessionGate();
   const [pairingCode, setPairingCode] = useState(linkedPairingCode);
-  // Asked once, here; skipping it keeps the random default shown.
+  const savedName = useLocalDeviceName();
+  // A device chooses its name once; every later pairing reuses it.
   const [name, setName] = useState("");
   const pairing = useMutation({ mutationFn: () => requestPairing(pairingOrigin, pairingCode.trim(), name.trim()) });
   const pair = (event: FormEvent) => {
@@ -40,9 +43,9 @@ export function PairForm() {
   return (
     <form onSubmit={pair} className="pair-form grid max-w-md gap-6">
       <FieldGroup>
-        <Field><FieldLabel htmlFor="device-name">Name this device</FieldLabel><Input id="device-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} /></Field>
+        {!savedName && <Field><FieldLabel htmlFor="device-name">Name this device</FieldLabel><Input id="device-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} /></Field>}
         <Field><FieldLabel htmlFor="pairing-code">Pairing code</FieldLabel>
-          <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode} pushPasswordManagerStrategy="none" containerClassName="w-full justify-start gap-2">
+          <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!!savedName || !pairingCode} value={pairingCode} onChange={setPairingCode} pushPasswordManagerStrategy="none" containerClassName="w-full justify-start gap-2">
             <InputOTPGroup className="min-w-0 flex-1">{[0, 1, 2].map(index => <InputOTPSlot key={index} index={index} className={slot} />)}</InputOTPGroup>
             <InputOTPSeparator />
             <InputOTPGroup className="min-w-0 flex-1">{[3, 4, 5].map(index => <InputOTPSlot key={index} index={index} className={slot} />)}</InputOTPGroup>

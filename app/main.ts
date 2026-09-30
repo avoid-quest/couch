@@ -11,6 +11,8 @@ import type { DisplayAction, DisplayState } from "../src/shared/display";
 import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
+import { createDeviceIdentity } from "./device-identity";
+import type { DeviceIdentityUpdate } from "../src/shared/device-identity";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -41,6 +43,7 @@ const macChrome = process.platform === "darwin" && !tv;
 const readJson = (path: string) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; } };
 const readText = (path: string) => { try { return readFileSync(path, "utf8").trim() || null; } catch { return null; } };
 const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, text); renameSync(`${path}.tmp`, path); };
+const deviceIdentity = createDeviceIdentity(join(dataDir, "device-identity.json"));
 
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
 // pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
@@ -318,6 +321,13 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
+handle("device-identity", (_event, update) => {
+  if (update !== undefined && (!update || typeof update !== "object" || Array.isArray(update)
+    || Object.keys(update).some(key => !["key", "name", "sharing"].includes(key)))) throw new Error("Invalid device identity.");
+  const value = update as DeviceIdentityUpdate | undefined;
+  if (value?.key !== undefined && (typeof value.key !== "string" || !/^[\w-]{43}$/.test(value.key))) throw new Error("Invalid device identity.");
+  return deviceIdentity(value);
+});
 handle("choose", async (event, mode, address, confirm) => {
   if (mode === "remote") {
     const origin = await lanOrigin(address);
