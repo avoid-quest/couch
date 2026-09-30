@@ -39,7 +39,8 @@ export type PlayerState = {
 };
 
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
-// volume. delay is the speaker's own Sendspin delay in milliseconds, present while it is connected (ticket 10).
+// volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds,
+// present while it is connected (ticket 10).
 export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; local?: boolean };
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
@@ -57,6 +58,8 @@ export type SessionState = {
   playedBy?: PlaybackActor;
   // The looked-at Playback, its outputs, and every Playback and Device (#644 ticket 9).
   playback?: string | null;
+  // All's attenuation of this Playback's selected sound: 100 preserves Device levels, 0 silences them.
+  mixTrim?: number;
   outputs?: Output[];
   playbacks?: PlaybackSummary[];
   devices?: DeviceSummary[];
@@ -107,8 +110,8 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
   // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
-  // sound. allSpeakers is the All fader: more than 0 sets every online Device to that volume with its
-  // sound in, 0 takes every Device's sound out.
+  // sound. allSpeakers trims the Playback's existing sound from 0 to 100, preserving its outputs and
+  // every Device's volume and mute.
   | { type: "solo"; deviceId: string }
   | { type: "allSpeakers"; level: number }
   // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the

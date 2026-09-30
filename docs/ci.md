@@ -34,6 +34,9 @@ Core's Node runtime: `bun build tests/remote-updates.integration.ts --target=nod
 The device-volume regression uses the same runtime: `bun build
 tests/device-volume.integration.ts --target=node --outfile=build/device-volume.integration.mjs`,
 then `node --test build/device-volume.integration.mjs`.
+The mixer trim regression uses `bun build tests/mixer-trim.integration.ts
+--target=node --outfile=build/mixer-trim.integration.mjs`, then
+`node --test build/mixer-trim.integration.mjs`.
 The shared native identity regression uses `bun build
 tests/device-identity.integration.ts --target=node --outfile=build/device-identity.integration.mjs`,
 then `node --test build/device-identity.integration.mjs`. Browser storage and old

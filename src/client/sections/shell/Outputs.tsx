@@ -49,21 +49,20 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   const here = deviceId();
   // The Playback's Devices first, then the other online ones; an offline Device only while it is an output.
   const devices = (state.devices ?? []).filter(device => output(device.id) || device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
-  // The All fader shows the loudest in-sound Device's volume, or 0 when none is.
-  const loudest = Math.max(0, ...devices.filter(device => output(device.id)?.sound).map(device => device.volume));
+  const trim = state.mixTrim ?? 100;
   return <Sheet>
     {/* A mixer, not a device icon: device icons stand for devices (the header's switch, the strips), and this opens them all. */}
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] gap-4 overflow-y-auto px-(--gutter) pb-6">
       <SheetHeader className="gap-0.5 px-0 pr-8 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="truncate">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
-      <p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a fader, then raise it to play the sound there too." : "Raise a fader to play the sound there too."} At 0 that device's sound is off.</p>
+      <p className="text-xs text-muted-foreground">{isTvPresentation() ? "Press OK on a device fader, then raise it to play the sound there too." : "Raise a device fader to play the sound there too."} At 0 that device's sound is off. All trims active sound together.</p>
       <div className="flex border-y">
-      {/* All, pinned first like a console's master: it sets every online Device to one level and stores nothing. */}
+      {/* All, pinned first like a console's master, attenuates only this Playback's selected sound. */}
       <div className="grid w-32 shrink-0 content-start justify-items-center gap-2 border-r px-2 py-3">
         <span aria-hidden="true" className="h-8 touch:h-11" />
-        <span className="text-xl font-medium tabular-nums">{loudest ? Math.round(loudest) : "–"}</span>
-        <div className="h-40"><RangeControl orientation="vertical" label="All volume" value={loudest} max={100} disabled={!state.playback} onCommit={level => run({ type: "allSpeakers", level })} /></div>
-        <span className="grid w-full justify-items-center gap-0.5 text-center"><span className="text-sm">All</span><span className="text-xs text-muted-foreground">Every device</span></span>
+        <span className="text-xl font-medium tabular-nums">{Math.round(trim)}</span>
+        <div className="h-40"><RangeControl orientation="vertical" label="All trim" value={trim} max={100} disabled={!state.playback} onCommit={level => run({ type: "allSpeakers", level })} /></div>
+        <span className="grid w-full justify-items-center gap-0.5 text-center"><span className="text-sm">All</span><span className="text-xs text-muted-foreground">Active sound</span></span>
       </div>
       <div className="flex min-w-0 flex-1 divide-x overflow-x-auto">
         {devices.map(device => {

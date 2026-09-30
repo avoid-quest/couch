@@ -160,7 +160,7 @@ export async function createHub(options: HubOptions) {
   // resolved: the last resolution, which a screen with the same engine reuses.
   // screens: while Synced, the tabs showing the picture and the item each loaded; heard and seen:
   // the group's last report and a screen's, whose subtitles join it.
-  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
+  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState };
   const playbacks = new Map<string, Playback>();
@@ -208,7 +208,6 @@ export async function createHub(options: HubOptions) {
     if (!allows(output, actor)) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !outputFor(output.deviceId, actor).picture ? "video" : "audio"}.`, 403);
   };
   // What a Device plays changes only with its consent: whatever it serves now must be shared with the actor.
-  const replaceable = (deviceId: string, actor: string) => { const output = servedBy(deviceId)?.outputs.find(output => output.deviceId === deviceId); return !output || allows(output, actor); };
   const requireReplacement = (deviceId: string, actor: string) => { const output = servedBy(deviceId)?.outputs.find(output => output.deviceId === deviceId); if (output) requireOutput(output, actor); };
   const requireControl = (id: string, actor: string) => { const output = outputFor(id, actor); if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(id)} is not sharing its outputs.`, 403); };
   const requirePlayback = (playback: Playback, actor: string) => {
@@ -219,11 +218,11 @@ export async function createHub(options: HubOptions) {
   // Every Device has one volume and mute; on the TV with system audio they are the system's.
   const soundOf = (deviceId: string) => systemAudio && deviceId === hostId() ? { volume: common.systemAudio?.volume ?? 0, muted: !!common.systemAudio?.muted } : store.deviceSound(deviceId);
   const heard = (deviceId: string) => { const { volume, muted } = soundOf(deviceId); return muted ? 0 : volume; };
-  // What an output's player plays at. On the TV the system volume does the rest; the stream stays at 100.
-  const rendered = (output: Output | undefined) => !output?.sound ? 0 : systemAudio && output.deviceId === hostId() ? 100 : heard(output.deviceId);
-  const levelOf = (playback: Playback) => rendered(playback.outputs[0]);
+  // The Playback's trim attenuates sound without changing Device levels. On the TV the system volume does the rest.
+  const rendered = (playback: Playback, output: Output | undefined) => !output?.sound ? 0 : Math.round((systemAudio && output.deviceId === hostId() ? 100 : heard(output.deviceId)) * playback.mixTrim / 100);
+  const levelOf = (playback: Playback) => rendered(playback, playback.outputs[0]);
   const spans = (playback: Playback) => new Set(playback.outputs.map(output => output.deviceId)).size > 1;
-  const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(output) }] : []);
+  const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(playback, output) }] : []);
   // The Devices a volume without a Device acts on: those in the Playback's sound, else the window's own.
   const sounding = (playback: Playback | undefined, deviceId: string) => { const ids = playback?.outputs.flatMap(output => output.sound ? [output.deviceId] : []) ?? []; return ids.length ? ids : [deviceId]; };
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
@@ -393,7 +392,7 @@ export async function createHub(options: HubOptions) {
     playback.session.wait(`${nameOf(deviceId)} is offline.`);
   };
   const createPlayback = (id: string = crypto.randomUUID()) => {
-    const playback = { id, outputs: [], renderer: null, screens: new Map() } as unknown as Playback;
+    const playback = { id, outputs: [], mixTrim: 100, renderer: null, screens: new Map() } as unknown as Playback;
     playback.session = createSession({ ...store, ...store.playback(id) }, command => sendPlayer(playback, command), (state, clock) => publish(playback, state, clock), {
       systemAudio,
       invalidate: (...domains) => invalidate(...domains),
@@ -571,7 +570,7 @@ export async function createHub(options: HubOptions) {
       const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket));
       // Volume keeps its saved level while muted, like each Device's mixer fader.
       const volume = Math.max(0, ...sounding(playback, device).map(id => soundOf(id).volume)), view = `${playback?.id}:${device}:${volume}`;
-      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, playback: playback?.id ?? null, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
+      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
@@ -1141,15 +1140,11 @@ export async function createHub(options: HubOptions) {
               follow(left, action.deviceId);
               broadcast();
             } else if (action.type === "allSpeakers") {
-              // The All fader: more than 0 sets every online Device to that volume and puts its sound in (a busy
-              // one leaves what it played); 0 takes every Device's sound out and keeps their volumes.
-              // A Device busy with what it hasn't shared keeps playing it, and its volume.
-              const ids = (action.level ? [...new Set([...sockets].map(deviceOf))] : target.outputs.flatMap(output => output.sound ? [output.deviceId] : []))
-                .filter(id => outputFor(id, deviceId).sound && (servedBy(id) === target || replaceable(id, deviceId)));
-              for (const id of ids) {
-                if (action.level) await setSound(id, { volume: action.level }, permitted, deviceId);
-                await setOutput(target, id, { sound: action.level > 0 }, permitted, deviceId);
-              }
+              // All trims this Playback's existing sound. At zero the outputs remain selected for recovery.
+              target.mixTrim = action.level;
+              if (target.synced) target.synced.members(members(target));
+              else deliver(target, { type: "volume", volume: levelOf(target) });
+              broadcast();
             } else {
               // The fader: 0 takes the Device's sound out and keeps its volume; more sets the volume and puts its sound in.
               if ((action.picture || action.level) && !target.outputs.some(output => output.deviceId === action.deviceId)) requireReplacement(action.deviceId, deviceId);
