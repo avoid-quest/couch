@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { readDeviceName, saveDeviceName } from "../app/device-name";
 import { createDevices } from "../src/server/devices";
 import { openStore } from "../src/server/store";
+import { UNNAMED_COUCH } from "../src/shared/devices";
 
 test("the app and the Couch it hosts share one installation name, with or without Core", () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-identity-"));
@@ -22,11 +23,11 @@ test("the app and the Couch it hosts share one installation name, with or withou
     assert.equal(store.hostDevice()?.name, "Laptop");
     saveDeviceName(path, "Living room");
     assert.equal(store.hostDevice()?.name, "Living room");
-    store.renameDevice("h".repeat(43), "Renamed by an administrator");
+    store.renameInstallation("Renamed by an administrator");
     assert.equal(readDeviceName(path), "Renamed by an administrator");
     assert.throws(() => saveDeviceName(path, "\n"));
     // "Couch", the name Core seeds, counts as unnamed so a pairing name is not replaced by it.
-    store.renameInstallation("Couch");
+    store.renameInstallation(UNNAMED_COUCH);
     assert.equal(readDeviceName(path), null);
   } finally { store?.close(); rmSync(directory, { recursive: true, force: true }); }
 });

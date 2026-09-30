@@ -5,12 +5,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deviceId, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
+import { useSessionGate } from "@/session/session-context";
 import { defaultDeviceName } from "../../../../shared/devices";
 
 export function DeviceNameSettings() {
   const savedName = useLocalDeviceName();
+  const { localHost, state } = useSessionGate();
   const [draft, setDraft] = useState<string | null>(null);
-  const name = draft ?? savedName ?? defaultDeviceName(deviceId());
+  // An unnamed host shows the name every other device sees rather than a random one.
+  const name = draft ?? savedName ?? (localHost ? "" : defaultDeviceName(deviceId()));
   const saving = useMutation({ mutationFn: saveLocalDeviceName, onSuccess: () => setDraft(null) });
   function save(event: FormEvent) {
     event.preventDefault();
@@ -19,7 +22,7 @@ export function DeviceNameSettings() {
   return <>
     <SettingsRow label="Device name" htmlFor="local-device-name" description="This device uses the same name with every server.">
       <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
-        <Input id="local-device-name" className="min-w-0 flex-1" value={name} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={saving.isPending} />
+        <Input id="local-device-name" className="min-w-0 flex-1" value={name} placeholder={localHost ? state?.installationName : undefined} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={saving.isPending} />
         <Button type="submit" variant="outline" disabled={saving.isPending || !name.trim() || name.trim() === savedName}>{saving.isPending ? "Saving…" : "Save"}</Button>
       </form>
     </SettingsRow>

@@ -7,18 +7,16 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { deviceId, localDeviceName, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
+import { deviceId, localDeviceName, useLocalDeviceName } from "@/session/device-id";
 import { defaultDeviceName } from "../../../shared/devices";
 
 export async function requestPairing(origin: string, code: string, name: string) {
   const id = deviceId();
-  // Saved before pairing, so a failed save never drops an issued token.
-  const value = localDeviceName() ?? await saveLocalDeviceName(name || defaultDeviceName(id));
   const response = await fetch(`${origin}/api/pair`, {
     method: "POST",
     signal: AbortSignal.timeout(8_000),
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, id, name: value }),
+    body: JSON.stringify({ code, id, name: localDeviceName() ?? (name || defaultDeviceName(id)) }),
   }).catch(() => { throw new Error("Couldn't reach Couch. Check you're on the same Wi-Fi."); });
   const result = await response.json() as { token?: string; installationId?: string; error?: string };
   if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "Code expired. Enter the code shown on Couch now." : result.error || "Couldn't pair.");
@@ -32,7 +30,7 @@ export function PairForm() {
   const { pairingOrigin, linkedPairingCode, savePairing, setError } = useSessionGate();
   const [pairingCode, setPairingCode] = useState(linkedPairingCode);
   const savedName = useLocalDeviceName();
-  // A device chooses its name once; every later pairing reuses it.
+  // Asked once: the first connection keeps the name, and every later pairing reuses it.
   const [name, setName] = useState("");
   const pairing = useMutation({ mutationFn: () => requestPairing(pairingOrigin, pairingCode.trim(), name.trim()) });
   const pair = (event: FormEvent) => {

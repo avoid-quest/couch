@@ -14,9 +14,9 @@ test("full storage keeps Couch and Sendspin on one key and accepts later cross-t
   globalThis.window = new EventTarget();
   globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: () => { throw new Error("QuotaExceededError"); } };
   const identity = await import("./src/client/session/device-id.ts");
-  assert.equal(identity.deviceId(), loadSendspinClientIdentity(identity.deviceStorage()).clientId);
+  assert.equal(identity.deviceId(), loadSendspinClientIdentity(identity.storage).clientId);
   await identity.saveLocalDeviceName("Laptop");
-  assert.equal(identity.deviceStorage().getItem("couch.device-name"), "Laptop");
+  assert.equal(identity.storage.getItem("couch.device-name"), "Laptop");
   const unsubscribe = identity.subscribeDeviceName(() => {});
   values.set("couch.device-name", "Office laptop");
   window.dispatchEvent(Object.assign(new Event("storage"), { key: "couch.device-name" }));

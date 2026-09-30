@@ -47,3 +47,6 @@ export function normalizeDeviceName(value: unknown): string {
   if (!name || [...name].length > 60) throw new Error("Use a name with 1 to 60 characters.");
   return name;
 }
+
+/** The name Core gives a Couch nobody named; it counts as unnamed. */
+export const UNNAMED_COUCH = "Couch";

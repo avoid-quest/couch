@@ -16,9 +16,8 @@ const write = (key: string, value: string) => { try { localStorage.setItem(key, 
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
 let name = couchApp?.deviceName ? null : validName(read(nameKey));
 
-const storage: SendspinStorage = { getItem: read, setItem: write };
 /** The SDK and Couch use the same storage, including when browser storage is unavailable. */
-export const deviceStorage = () => storage;
+export const storage: SendspinStorage = { getItem: read, setItem: write };
 
 const announce = (next: string | null) => { if (next !== name) { name = next; window.dispatchEvent(new Event(changed)); } };
 /** Reads the Couch app's name; older apps without the bridge keep browser storage. */

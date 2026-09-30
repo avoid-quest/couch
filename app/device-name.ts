@@ -1,16 +1,17 @@
+import { existsSync } from "node:fs";
 import { Database } from "../src/server/sqlite";
-import { normalizeDeviceName } from "../src/shared/devices";
+import { normalizeDeviceName, UNNAMED_COUCH } from "../src/shared/devices";
 
 // This computer's one name is couch.sqlite's installation name, so the device and the Couch it hosts
-// share it in both modes. "Couch", the name Core gives a Couch nobody named, counts as unnamed.
+// share it in both modes. The name Core gives a Couch nobody named counts as unnamed.
 export function readDeviceName(path: string) {
-  let db: Database | undefined;
+  if (!existsSync(path)) return null; // Neither Main nor Core has saved a name yet.
+  const db = new Database(path, { readOnly: true, timeout: 5_000 });
   try {
-    db = new Database(path, { readOnly: true });
+    if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'installation'").get()) return null;
     const name = db.query<{ name: string }, []>("SELECT name FROM installation WHERE id = 1").get()?.name;
-    return name && name !== "Couch" ? name : null;
-  } catch { return null; } // Neither Main nor Core has saved a name yet.
-  finally { db?.close(); }
+    return name && name !== UNNAMED_COUCH ? name : null;
+  } finally { db.close(); }
 }
 
 export function saveDeviceName(path: string, value: unknown) {

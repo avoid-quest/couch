@@ -43,7 +43,7 @@ An HTTPS page can't load `http://` media, so Pass-through relays those streams.
 
 Main and Core talk over the utilityProcess parent port (`ready`, `addresses`,
 `display`, `renamed` and `shutdown`). The window's preload (`app/preload.ts`) exposes
-`window.couchApp`: the mode choice, the host token for this computer's Core (Full
+`window.couchApp`: the mode choice, this computer's `deviceName`, the host token for this computer's Core (Full
 mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.
