@@ -113,7 +113,7 @@ export function applyTvNavigation(key: NavigationKey) {
     if (key === "back") {
       sendKey(target, "Escape");
     } else if (key === "select") {
-      if (target.closest('[role="combobox"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"]')) sendKey(target, "Enter");
+      if (target.closest('[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"]')) sendKey(target, "Enter");
       else target.click();
     } else {
       const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];
@@ -137,7 +137,7 @@ export function useNavigation(onBack: () => void) {
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
     // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
     // the keys past a radio group's first or last radio (Radix loops them), and on the TV Up/Down across a
-    // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select (OK opens it).
+    // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select or menu button (OK opens it).
     // A TV fader (a vertical slider, or a Volume, which shares its row with the player's tools)
     // moves on with every arrow too, until OK hands it the keys along it; OK, Back or leaving it hands
     // them back, as TV equalisers do.
@@ -155,7 +155,7 @@ export function useNavigation(onBack: () => void) {
       else if (event.key.startsWith("Arrow") && (radio && radios.at(event.key === "ArrowDown" || event.key === "ArrowRight" ? -1 : 0) === radio
         || fader && !(vertical === upright && adjusting === fader)
         || tv && vertical && (slider && !fader || target?.matches('input:not([role="combobox"])'))
-        || tv && target?.matches('button[role="combobox"][aria-expanded="false"]'))) moveFocus(event.key);
+        || tv && target?.matches('button[role="combobox"][aria-expanded="false"], button[aria-haspopup="menu"][aria-expanded="false"]'))) moveFocus(event.key);
       else return;
       event.preventDefault();
       event.stopPropagation();

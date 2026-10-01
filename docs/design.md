@@ -48,7 +48,8 @@ catalog provides interface icons, not brand identities.
 - **Every journey step works with a remote.** The TV has only arrows, Enter and
   Back, so no control may keep them all: the arrows past a radio group's first
   or last radio move on, and on the TV so do Up/Down across a horizontal slider,
-  Up/Down in a one-line field and every arrow on a closed select (OK opens it).
+  Up/Down in a one-line field and every arrow on a closed select or menu button
+  (OK opens it).
   A TV fader (the Mixer's vertical faders, and every Volume, which
   has the player's tools beside it) moves on with every arrow until
   OK hands it the keys along it; OK, Back or leaving it ends that, as TV
