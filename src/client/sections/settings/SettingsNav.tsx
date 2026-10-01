@@ -46,12 +46,12 @@ export function SettingsNav({ active }: Props) {
       </SelectContent>
     </Select>
     <nav aria-label="Settings pages" className="hidden min-w-0 flex-col gap-6 md:flex">
-      {groups.map((group, groupIndex) => (
+      {groups.map(group => (
         <div key={group.label} className="flex flex-col">
           <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{group.label}</p>
-          {group.pages.map((id, index) => (
+          {group.pages.map(id => (
             <Button key={id} data-settings-page={id} variant="ghost" asChild className="w-full justify-start font-normal">
-              <Link data-page-first={groupIndex === 0 && index === 0 || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path}>
+              <Link data-page-first={current === id || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path}>
                 <Check aria-hidden="true" className={cn(current !== id && "invisible")} />
                 {settingsPages[id].label}
               </Link>

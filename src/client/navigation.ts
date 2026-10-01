@@ -25,6 +25,8 @@ const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElemen
   && (!remoteNavigation || !element.closest(localOnly))
   && !element.matches('[role="tablist"], [role="tabpanel"]')
   && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
+// With nothing focused (after a page change), the first key starts in the page, not on the header.
+const entry = (controls: HTMLElement[]) => controls.find(element => element.matches("[data-page-first]")) ?? controls.find(element => element.closest("[data-page]")) ?? controls[0];
 
 // A slider is placed by its whole track, not by its thumb, which moves with the value.
 const box = (element: Element) => (element.closest('[data-slot="slider"]') ?? element).getBoundingClientRect();
@@ -41,7 +43,7 @@ function moveFocus(key: string) {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || !scope.contains(active) || !visible(active) || active === scope
     || remoteNavigation && active.closest(localOnly)) {
-    focus(controls[0]);
+    focus(entry(controls));
     return;
   }
   if (key === "ArrowDown" && active.closest(".app-header")) {
@@ -58,13 +60,16 @@ function moveFocus(key: string) {
   const destinations = row ? controls.filter(element => row.contains(element)) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
+  // The sticky header and mini player come after the page's controls, which scroll under them.
+  const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? "[data-mini-player]" : null;
+  const later = bar && !active.closest(bar) ? bar : null;
   const candidates = destinations.filter(element => element !== active).map(element => {
     const to = box(element);
     const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
     const forward = (horizontal ? dx : dy) * sign;
-    const across = Math.abs(horizontal ? dy : dx);
-    const overlap = horizontal ? to.bottom > from.top && to.top < from.bottom : to.right > from.left && to.left < from.right;
-    return { element, forward, score: forward + across * 2 + (overlap ? 0 : 1000) };
+    // The sideways gap between the edges, not the centres, so a wide row under a short title is in line with it.
+    const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
+    return { element, forward, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1).sort((a, b) => a.score - b.score);
   focus(candidates[0]?.element);
 }
@@ -105,7 +110,7 @@ export function applyTvNavigation(key: NavigationKey) {
       target = null;
     }
     if (!target || target === scope) {
-      target = controlsIn(scope)[0] ?? scope;
+      target = entry(controlsIn(scope)) ?? scope;
       focus(target);
       // The first directional press establishes focus rather than skipping over it.
       if (key !== "select" && key !== "back") return true;
@@ -113,7 +118,7 @@ export function applyTvNavigation(key: NavigationKey) {
     if (key === "back") {
       sendKey(target, "Escape");
     } else if (key === "select") {
-      if (target.closest('[role="combobox"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"]')) sendKey(target, "Enter");
+      if (target.closest('[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"]')) sendKey(target, "Enter");
       else target.click();
     } else {
       const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];
@@ -137,7 +142,7 @@ export function useNavigation(onBack: () => void) {
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
     // Controls that keep every arrow key trap a remote (#644 ticket 12), so these keys move on instead:
     // the keys past a radio group's first or last radio (Radix loops them), and on the TV Up/Down across a
-    // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select (OK opens it).
+    // horizontal slider, Up/Down in a one-line field, and every arrow on a closed select or menu button (OK opens it).
     // A TV fader (a vertical slider, or a Volume, which shares its row with the player's tools)
     // moves on with every arrow too, until OK hands it the keys along it; OK, Back or leaving it hands
     // them back, as TV equalisers do.
@@ -155,7 +160,7 @@ export function useNavigation(onBack: () => void) {
       else if (event.key.startsWith("Arrow") && (radio && radios.at(event.key === "ArrowDown" || event.key === "ArrowRight" ? -1 : 0) === radio
         || fader && !(vertical === upright && adjusting === fader)
         || tv && vertical && (slider && !fader || target?.matches('input:not([role="combobox"])'))
-        || tv && target?.matches('button[role="combobox"][aria-expanded="false"]'))) moveFocus(event.key);
+        || tv && target?.matches('button[role="combobox"][aria-expanded="false"], button[aria-haspopup="menu"][aria-expanded="false"]'))) moveFocus(event.key);
       else return;
       event.preventDefault();
       event.stopPropagation();

@@ -48,15 +48,19 @@ catalog provides interface icons, not brand identities.
 - **Every journey step works with a remote.** The TV has only arrows, Enter and
   Back, so no control may keep them all: the arrows past a radio group's first
   or last radio move on, and on the TV so do Up/Down across a horizontal slider,
-  Up/Down in a one-line field and every arrow on a closed select (OK opens it).
+  Up/Down in a one-line field and every arrow on a closed select or menu button
+  (OK opens it).
   A TV fader (the Mixer's vertical faders, and every Volume, which
   has the player's tools beside it) moves on with every arrow until
   OK hands it the keys along it; OK, Back or leaving it ends that, as TV
   equalisers do, and the Mixer's hint says so on the TV. Playback position
   keeps Left/Right for seeking, and a seek's brief stall keeps the transport
   enabled so focus stays where it was. Spatial navigation places a
-  slider by its whole track, not its moving thumb. Screens shown before the
-  shell (the first-run chooser) bring the same arrow navigation.
+  slider by its whole track, not its moving thumb, reaches the sticky header
+  and mini player only after the page's own controls, and keeps focus clear
+  of both. After a page change the first key starts at the page's first
+  control. Screens shown before the shell (the first-run chooser) bring the
+  same arrow navigation.
 - **First run names the computer.** The app asks "Where is your Couch?" (This
   computer hosts it; Another Couch joins one, and this computer still plays),
   then asks for its name once, with the random default shown, and whether to share
