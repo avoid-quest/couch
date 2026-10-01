@@ -33,8 +33,10 @@ export function GuideSources({ inline = false, request, sources, host, connected
     setBusy(true); setError(null);
     try {
       const response = await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
-      const { notice } = method === "POST" ? await response.json().catch(() => ({})) as { notice?: string } : {};
-      if (notice) toast(notice);
+      const { source, skipped } = method === "POST" ? await response.json().catch(() => ({})) as { source?: GuideSource; skipped?: { headers: number; duplicates: number } } : {};
+      if (source && skipped && skipped.headers + skipped.duplicates) toast(`${source.channelCount} channels added, ${skipped.headers + skipped.duplicates} skipped`, {
+        description: !skipped.duplicates ? "They need custom headers or DRM." : !skipped.headers ? "They repeat a tvg-id." : "Some need custom headers or DRM; some repeat a tvg-id.",
+      });
       return true;
     } catch (reason) { setError({ at, message: reason instanceof Error ? reason.message : "Couldn't update this source." }); return false; }
     finally { setBusy(false); }

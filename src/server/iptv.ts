@@ -89,15 +89,14 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     const controller = new AbortController();
     refreshes.set(source.id, controller);
     const combined = AbortSignal.any([controller.signal, shutdown.signal, signal, AbortSignal.timeout(20_000)]);
-    let changed: string[], notice: string | undefined;
+    let changed: string[], skipped: { headers: number; duplicates: number };
     try {
       const playlist = await guideFetch(source.playlistUrl, guideLimits.playlistBytes, request, combined);
-      const { channels, skipped } = parseGuideChannels(Buffer.from(playlist.bytes).toString("utf8"), source.id, playlist.url);
+      const parsed = parseGuideChannels(Buffer.from(playlist.bytes).toString("utf8"), source.id, playlist.url), channels = parsed.channels;
+      skipped = parsed.skipped;
       // The XMLTV guide is optional: without one, channels have no programmes.
       const guide = source.guideUrl ? await guideFetch(source.guideUrl, guideLimits.xmlBytes, request, combined) : null;
       const programs = guide ? parseGuidePrograms(Buffer.from(guide.bytes).toString("utf8"), channels) : [];
-      const skips = skipped.headers + skipped.duplicates;
-      if (skips) notice = `${channels.length} channels added, ${skips} skipped: ${!skipped.duplicates ? "they need custom headers or DRM" : !skipped.headers ? "they repeat a tvg-id" : "some need custom headers or DRM and some repeat a tvg-id"}.`;
       assertOpen();
       combined.throwIfAborted();
       guard();
@@ -129,7 +128,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     } finally { if (refreshes.get(source.id) === controller) refreshes.delete(source.id); }
     // Keep post-commit effects outside the refresh failure path.
     publishSourcesChanged(changed);
-    return { source: sources().find(item => item.id === source.id)!, ...(notice ? { notice } : {}) };
+    return { source: sources().find(item => item.id === source.id)!, skipped };
   }
 
   async function body(req: Request): Promise<Record<string, unknown>> {
