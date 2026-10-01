@@ -64,6 +64,14 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
   return metadata;
 }
 
+// yt-dlp drops the formats it sees are DRM, but Vimeo's FairPlay keys show only in its media playlists.
+async function rejectDrm(info: Metadata, signal?: AbortSignal) {
+  const stream = (Array.isArray(info.requested_formats) ? info.requested_formats : [info]).find(stream => object(stream) && String(stream.protocol).startsWith("m3u8"));
+  if (!stream) return;
+  const playlist = await fetch(mediaUrl(stream.url), { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).then(response => response.text()).catch(() => "");
+  if (/#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(playlist)) throw new Error("This item requires DRM playback, which is not supported.");
+}
+
 function parseMedia(info: Metadata): WebMediaSource {
   if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
@@ -109,6 +117,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
+    if (info._has_drm === true) await rejectDrm(info, signal);
     const media = parseMedia(info);
     try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
