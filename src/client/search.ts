@@ -1,7 +1,8 @@
 import type { SearchKind, SearchLength } from "./sections/find/SearchOnlineResults";
 
 export const searchSources = ["All", "YouTube", "RaiPlay", "StreamingCommunity", "avoid radio", "Radio playlists", "Radio directory", "Twitch", "Bandcamp"];
-export const searchKinds: SearchKind[] = ["Video", "Music", "Live", "Radio", "Channels"];
+// Find searches no music-only source (Bandcamp opens from links), so Music isn't a filter.
+export const searchKinds: SearchKind[] = ["Video", "Live", "Radio", "Channels"];
 export const searchLengths: SearchLength[] = ["Under 10 min", "10–60 min", "Over 1 hr"];
 export type SearchRouteState = { query: string; source: string; kind?: SearchKind; length?: SearchLength };
 export function readSearchState(search: string | Record<string, string | string[] | undefined>): SearchRouteState {
