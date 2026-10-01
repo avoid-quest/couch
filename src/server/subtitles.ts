@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
 import { ControllerError } from "./devices";
 import { STORAGE_ERROR } from "./messages";
+import { boundedBytes } from "./iptv-feeds";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
 const cues = /\d{2}:\d{2}[,.]\d{3}\s+-->/;
@@ -87,8 +88,12 @@ export function createSubtitles(player: (playbackId: string) => PlayerState | un
       const given = Buffer.from(address.pathname.slice("/api/subtitles/".length, -".vtt".length));
       const expected = Buffer.from(sign(url));
       if (!url || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response("Not found", { status: 404 });
-      const content = await fetch(url, { signal: AbortSignal.timeout(10_000) }).then(response => response.ok ? response.text() : "").catch(() => "");
-      if (content.length > subtitleSizeLimit || !cues.test(content)) return new Response("The source's subtitles couldn't be read.", { status: 502 });
+      const signal = AbortSignal.timeout(10_000);
+      const content = await fetch(url, { signal }).then(async response => {
+        if (!response.ok) { await response.body?.cancel(); return ""; }
+        return new TextDecoder().decode(await boundedBytes(response, subtitleSizeLimit, signal));
+      }).catch(() => "");
+      if (content.includes("\0") || !cues.test(content)) return new Response("The source's subtitles couldn't be read.", { status: 502 });
       return vtt(webVtt(content, !/^\uFEFF?WEBVTT/.test(content)));
     },
     close() { closed = true; files.clear(); },

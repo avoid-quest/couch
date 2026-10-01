@@ -47,7 +47,7 @@ function extractionError(stderr: string): Error {
   if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new Error("This website requires an account or browser session. Website sign-in is not supported yet.");
   if (/Requested format is not available/i.test(stderr)) return new Error("This website offers no format Couch can play yet.");
   if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new Error("This live stream is offline or has not started yet.");
-  if (/video (?:is )?unavailable|has been removed|does not exist/i.test(stderr)) return new Error("This video is unavailable or was removed.");
+  if (/\bvideo (?:is unavailable|unavailable|has been removed|does not exist)\b/i.test(stderr)) return new Error("This video is unavailable or was removed.");
   return new Error("Couldn't open this page. It may be unsupported.");
 }
 
