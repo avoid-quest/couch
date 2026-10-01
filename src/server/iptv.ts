@@ -93,8 +93,9 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     try {
       const playlist = await guideFetch(source.playlistUrl, guideLimits.playlistBytes, request, combined);
       const { channels, skipped } = parseGuideChannels(Buffer.from(playlist.bytes).toString("utf8"), source.id, playlist.url);
-      const guide = await guideFetch(source.guideUrl, guideLimits.xmlBytes, request, combined);
-      const programs = parseGuidePrograms(Buffer.from(guide.bytes).toString("utf8"), channels);
+      // The XMLTV guide is optional: without one, channels have no programmes.
+      const guide = source.guideUrl ? await guideFetch(source.guideUrl, guideLimits.xmlBytes, request, combined) : null;
+      const programs = guide ? parseGuidePrograms(Buffer.from(guide.bytes).toString("utf8"), channels) : [];
       const skips = skipped.headers + skipped.duplicates;
       if (skips) notice = `${channels.length} channels added, ${skips} skipped: ${!skipped.duplicates ? "they need custom headers or DRM" : !skipped.headers ? "they repeat a tvg-id" : "some need custom headers or DRM and some repeat a tvg-id"}.`;
       assertOpen();
@@ -195,7 +196,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
           const value = await body(req);
           administrator();
           if (sources().length >= guideLimits.sources) throw new GuideError("Keep at most eight guide sources.", 409);
-          const source = { id: crypto.randomUUID(), name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: guideUrl(value.guideUrl) };
+          const source = { id: crypto.randomUUID(), name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: value.guideUrl ? guideUrl(value.guideUrl) : "" };
           return json(await refresh(source, administrator, req.signal, true), 201);
         }
         const sourcePath = /^\/api\/iptv\/sources\/([\w-]{1,80})(\/refresh)?$/.exec(path);
@@ -220,7 +221,8 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
           const value = await body(req);
           administrator();
           definition(source.id);
-          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: guideUrl(value.guideUrl) }, administrator, req.signal, true));
+          // A blank URL keeps the saved one; Couch never sends saved URLs back to clients.
+          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: value.playlistUrl ? guideUrl(value.playlistUrl) : source.playlistUrl, guideUrl: value.guideUrl ? guideUrl(value.guideUrl) : source.guideUrl }, administrator, req.signal, true));
         }
         if (path === "/api/iptv/guide") {
           if (req.method !== "GET") return methods("GET");
