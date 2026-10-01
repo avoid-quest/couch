@@ -8,9 +8,10 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/comp
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { deviceId, localDeviceName, useLocalDeviceName } from "@/session/device-id";
+import { deviceName } from "@/copy";
 import { defaultDeviceName } from "../../../shared/devices";
 
-export async function requestPairing(origin: string, code: string, name: string) {
+export async function requestPairing(origin: string, code: string, name: string, hostName?: string) {
   const id = deviceId();
   const response = await fetch(`${origin}/api/pair`, {
     method: "POST",
@@ -19,7 +20,7 @@ export async function requestPairing(origin: string, code: string, name: string)
     body: JSON.stringify({ code, id, name: localDeviceName() ?? (name || defaultDeviceName(id)) }),
   }).catch(() => { throw new Error("Couldn't reach Couch. Check you're on the same Wi-Fi."); });
   const result = await response.json() as { token?: string; installationId?: string; error?: string };
-  if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "Code expired. Enter the code shown on Couch now." : result.error || "Couldn't pair.");
+  if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? `That code didn't work. Enter the code shown on ${deviceName(hostName)}.` : result.error || "Couldn't pair.");
   return { origin, token: result.token, installationId: result.installationId };
 }
 
@@ -27,12 +28,12 @@ const slot = "h-8 touch:h-11 min-w-0 w-auto flex-1 text-sm";
 
 // The shell remounts per connection, so a pairing that outlives its form never applies.
 export function PairForm() {
-  const { pairingOrigin, linkedPairingCode, savePairing, setError } = useSessionGate();
+  const { pairingOrigin, linkedPairingCode, savePairing, setError, details } = useSessionGate();
   const [pairingCode, setPairingCode] = useState(linkedPairingCode);
   const savedName = useLocalDeviceName();
   // Asked once: the first connection keeps the name, and every later pairing reuses it.
   const [name, setName] = useState("");
-  const pairing = useMutation({ mutationFn: () => requestPairing(pairingOrigin, pairingCode.trim(), name.trim()) });
+  const pairing = useMutation({ mutationFn: () => requestPairing(pairingOrigin, pairingCode.trim(), name.trim(), details?.name) });
   const pair = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
