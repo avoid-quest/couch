@@ -1,5 +1,6 @@
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Settings2 } from "lucide-react";
 import { useSessionGate } from "@/session/session-context";
 import type { GuideSource } from "../../shared/iptv";
@@ -24,27 +25,34 @@ export function GuideSources({ inline = false, request, sources, host, connected
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [guideUrl, setGuideUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Where the last error belongs: the form that submitted, or the source list.
+  const [error, setError] = useState<{ at: "form" | "list"; message: string } | null>(null);
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
 
-  async function mutate(path: string, method: string, value?: unknown) {
+  async function mutate(path: string, method: string, value?: unknown, at: "form" | "list" = "list") {
     setBusy(true); setError(null);
     try {
-      await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
+      const response = await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
+      const { source, skipped } = method === "POST" ? await response.json().catch(() => ({})) as { source?: GuideSource; skipped?: { headers: number; duplicates: number } } : {};
+      if (source && skipped && skipped.headers + skipped.duplicates) toast(`${source.channelCount} channels added, ${skipped.headers + skipped.duplicates} skipped`, {
+        description: !skipped.duplicates ? "They need custom headers or DRM." : !skipped.headers ? "They repeat a tvg-id." : "Some need custom headers or DRM; some repeat a tvg-id.",
+      });
       return true;
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Couldn't update this source."); return false; }
+    } catch (reason) { setError({ at, message: reason instanceof Error ? reason.message : "Couldn't update this source." }); return false; }
     finally { setBusy(false); }
   }
   const edit = (source: GuideSource | null) => { setEditing(source); setName(source?.name ?? ""); setPlaylistUrl(""); setGuideUrl(""); setError(null); };
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (await mutate(editing ? `sources/${editing.id}` : "sources", "POST", { name, playlistUrl, guideUrl })) edit(null);
+    if (await mutate(editing ? `sources/${editing.id}` : "sources", "POST", { name, playlistUrl, guideUrl }, "form")) edit(null);
   }
   if (!administrator) return <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>;
   const disabled = busy || !connected;
+  // Saved URLs never come back from Core, so Edit keeps them unless a new one is typed.
+  const placeholder = editing ? "Leave blank to keep it" : "https://…";
   const content = <>
     <SettingsSection aria-label="Live TV sources">
-      {!sources.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No sources yet. Add an M3U channel list and its XMLTV guide below.</EmptyDescription></EmptyHeader></Empty>}
+      {!sources.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No sources yet. Add an M3U channel list below, with its XMLTV guide if you have one.</EmptyDescription></EmptyHeader></Empty>}
       {sources.map(source => <SettingsRow key={source.id} label={<span className="break-words">{source.name}</span>} description={<>
         {source.channelCount} channels · {source.programCount} programs · {updated(source.updatedAt)}
         {source.error && <span className="block text-destructive">{source.error}</span>}
@@ -53,13 +61,14 @@ export function GuideSources({ inline = false, request, sources, host, connected
         <Button variant="ghost" disabled={disabled} onClick={() => edit(source)}>Edit</Button>
         <Button variant="ghost" aria-label={`Remove ${source.name}`} disabled={disabled} onClick={() => setRemoving(source)}>Remove</Button>
       </SettingsRow>)}
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error?.at === "list" && <Alert variant="destructive"><AlertDescription>{error.message}</AlertDescription></Alert>}
     </SettingsSection>
     <form onSubmit={event => void save(event)}>
-      <SettingsSection title={editing ? `Edit ${editing.name}` : "Add source"} description={`URLs stay on ${deviceName(state?.installationName ?? details?.name)}. Channel tvg-id must match the XMLTV id.`}>
+      <SettingsSection title={editing ? `Edit ${editing.name}` : "Add source"} description={`URLs stay on ${deviceName(state?.installationName ?? details?.name)}. The XMLTV guide is optional; channel tvg-id must match its id.`}>
         <SettingsRow label="Name" htmlFor="guide-source-name"><Input id="guide-source-name" className="w-full" value={name} maxLength={100} required disabled={disabled} onChange={event => setName(event.target.value)} /></SettingsRow>
-        <SettingsRow label="M3U URL" htmlFor="guide-playlist-url"><Input id="guide-playlist-url" className="w-full" type="password" autoComplete="off" inputMode="url" spellCheck={false} autoCapitalize="none" value={playlistUrl} maxLength={4096} required disabled={disabled} onChange={event => setPlaylistUrl(event.target.value)} placeholder="https://…" /></SettingsRow>
-        <SettingsRow label="XMLTV URL" htmlFor="guide-xmltv-url"><Input id="guide-xmltv-url" className="w-full" type="password" autoComplete="off" inputMode="url" spellCheck={false} autoCapitalize="none" value={guideUrl} maxLength={4096} required disabled={disabled} onChange={event => setGuideUrl(event.target.value)} placeholder="https://…" /></SettingsRow>
+        <SettingsRow label="M3U URL" htmlFor="guide-playlist-url"><Input id="guide-playlist-url" className="w-full" type="password" inputMode="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={playlistUrl} maxLength={4096} required={!editing} disabled={disabled} onChange={event => setPlaylistUrl(event.target.value)} placeholder={placeholder} /></SettingsRow>
+        <SettingsRow label="XMLTV URL" htmlFor="guide-xmltv-url"><Input id="guide-xmltv-url" className="w-full" type="password" inputMode="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={guideUrl} maxLength={4096} disabled={disabled} onChange={event => setGuideUrl(event.target.value)} placeholder={editing ? placeholder : "Optional"} /></SettingsRow>
+        {error?.at === "form" && <Alert variant="destructive"><AlertDescription>{error.message}</AlertDescription></Alert>}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={disabled}>{busy ? "Saving…" : editing ? "Save" : "Add"}</Button>
           {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => edit(null)}>Cancel</Button>}
@@ -83,7 +92,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
   return <Dialog open={open} onOpenChange={value => { setOpen(value); if (!value) edit(null); }}>
     <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Live TV sources</Button></DialogTrigger>
     <DialogContent className="guide-sources" data-tv-local-only={host || undefined}>
-      <DialogHeader><DialogTitle>Live TV</DialogTitle><DialogDescription>An M3U channel list plus its XMLTV guide.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Live TV</DialogTitle><DialogDescription>An M3U channel list and, optionally, its XMLTV guide.</DialogDescription></DialogHeader>
       {content}
     </DialogContent>
   </Dialog>;

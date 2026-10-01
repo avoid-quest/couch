@@ -89,12 +89,14 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     const controller = new AbortController();
     refreshes.set(source.id, controller);
     const combined = AbortSignal.any([controller.signal, shutdown.signal, signal, AbortSignal.timeout(20_000)]);
-    let changed: string[];
+    let changed: string[], skipped: { headers: number; duplicates: number };
     try {
       const playlist = await guideFetch(source.playlistUrl, guideLimits.playlistBytes, request, combined);
-      const channels = parseGuideChannels(Buffer.from(playlist.bytes).toString("utf8"), source.id, playlist.url);
-      const guide = await guideFetch(source.guideUrl, guideLimits.xmlBytes, request, combined);
-      const programs = parseGuidePrograms(Buffer.from(guide.bytes).toString("utf8"), channels);
+      const parsed = parseGuideChannels(Buffer.from(playlist.bytes).toString("utf8"), source.id, playlist.url), channels = parsed.channels;
+      skipped = parsed.skipped;
+      // The XMLTV guide is optional: without one, channels have no programmes.
+      const guide = source.guideUrl ? await guideFetch(source.guideUrl, guideLimits.xmlBytes, request, combined) : null;
+      const programs = guide ? parseGuidePrograms(Buffer.from(guide.bytes).toString("utf8"), channels) : [];
       assertOpen();
       combined.throwIfAborted();
       guard();
@@ -117,7 +119,8 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       assertOpen();
       guard();
       if (controller.signal.aborted || signal.aborted) throw new GuideError("This refresh was canceled by a newer request.", 409);
-      const message = `${error instanceof GuideError ? error.message : "Couldn't read the source."} Saved channels and guide data were kept.`;
+      const kept = db.query("SELECT 1 FROM iptv_channels WHERE source_id = ? LIMIT 1").get(source.id) ? " Saved channels and guide data were kept." : "";
+      const message = `${error instanceof GuideError ? error.message : "Couldn't read the source."}${kept}`;
       // Never copy parser, fetch, or upstream response text into public errors.
       if (!replacing) { db.query("UPDATE iptv_sources SET error = ? WHERE id = ?").run(message, source.id); onChange(); }
       if (error instanceof GuideError && error.status === 409) throw error;
@@ -125,7 +128,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     } finally { if (refreshes.get(source.id) === controller) refreshes.delete(source.id); }
     // Keep post-commit effects outside the refresh failure path.
     publishSourcesChanged(changed);
-    return sources().find(item => item.id === source.id)!;
+    return { source: sources().find(item => item.id === source.id)!, skipped };
   }
 
   async function body(req: Request): Promise<Record<string, unknown>> {
@@ -192,8 +195,8 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
           const value = await body(req);
           administrator();
           if (sources().length >= guideLimits.sources) throw new GuideError("Keep at most eight guide sources.", 409);
-          const source = { id: crypto.randomUUID(), name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: guideUrl(value.guideUrl) };
-          return json({ source: await refresh(source, administrator, req.signal, true) }, 201);
+          const source = { id: crypto.randomUUID(), name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: value.guideUrl === undefined || value.guideUrl === "" ? "" : guideUrl(value.guideUrl) };
+          return json(await refresh(source, administrator, req.signal, true), 201);
         }
         const sourcePath = /^\/api\/iptv\/sources\/([\w-]{1,80})(\/refresh)?$/.exec(path);
         if (sourcePath) {
@@ -213,11 +216,12 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
             publishSourcesChanged(removed);
             return new Response(null, { status: 204 });
           }
-          if (sourcePath[2]) return json({ source: await refresh(source, administrator, req.signal) });
+          if (sourcePath[2]) return json(await refresh(source, administrator, req.signal));
           const value = await body(req);
           administrator();
           definition(source.id);
-          return json({ source: await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: guideUrl(value.guideUrl) }, administrator, req.signal, true) });
+          // A blank URL keeps the saved one; Couch never sends saved URLs back to clients.
+          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: value.playlistUrl === undefined || value.playlistUrl === "" ? source.playlistUrl : guideUrl(value.playlistUrl), guideUrl: value.guideUrl === undefined || value.guideUrl === "" ? source.guideUrl : guideUrl(value.guideUrl) }, administrator, req.signal, true));
         }
         if (path === "/api/iptv/guide") {
           if (req.method !== "GET") return methods("GET");

@@ -49,6 +49,30 @@ are known; it never invents a last page. Full season and album lists can be page
 locally. Relationships come from provider catalogues, with a fallback for older
 StreamingCommunity episodes whose saved season URL already identifies the series.
 
+## Live TV
+
+Find > Browse lists Live TV only once a Live TV source has channels; there is
+no preset. Its page uses the same breadcrumb (Find / Live TV), title, toolbar
+and divided rows as a collection:
+
+```text
+Find / Live TV
+
+Live TV
+
+305 channels      All groups   Filter       ‹ 2 / 13 ›
+------------------------------------------------------
+Logo   Channel name                             ▷  …
+       Now title · 21:00 Next title · Group
+------------------------------------------------------
+```
+
+Rows are compact MediaRows with the channel logo as artwork. The meta line
+carries what's on now and next from the XMLTV guide, and the group while no
+group is picked. Play plays the channel; the menu offers Play on and Queue.
+The group Select, Filter and page live in the route (`/find?browse=live-tv`),
+so history restores them. A source without a guide still lists its channels.
+
 ## Stack
 
 1. Retain programme and series hierarchy in provider results and playback metadata.

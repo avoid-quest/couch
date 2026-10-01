@@ -15,8 +15,9 @@ and paired remotes. The rebuild is tracked in
   administrator sets its current origin in **Settings > Sources**.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites.
-- **Live TV**: M3U playlists with an XMLTV guide in **Settings > Sources > Live
-  TV**.
+- **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
+  Sources > Live TV**. Channels that need custom headers or DRM are skipped.
+  Browse them in **Find > Live TV**.
 
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.

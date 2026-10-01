@@ -14,7 +14,8 @@ import { PlayOnMenu, PlayOnSub, usePlayOn } from "@/components/PlayOn";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
-import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
+import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
+import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
 import { SearchOnlineResults, matchesFacet, providerNames, searchError, type SearchCollection, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
@@ -251,6 +252,8 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setPending(false); }
   }
+  const navigation = useDetailNavigation();
+  const provider = providerForUrl(url);
   const disabled = !props.connected || pending;
   return <section className="max-w-3xl space-y-4" aria-label="Pasted link">
     <SettingsSection>
@@ -258,6 +261,8 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
       {mode === "Webpage" && supportsWebVideoQuality(url) && <SettingsRow label="Quality"><ChoiceGroup label="Video quality" value={quality} onValueChange={onQualityChange} disabled={disabled} options={videoQualityOptions} /></SettingsRow>}
     </SettingsSection>
     <div className="flex flex-wrap gap-2">
+      {/* Keep playback available for provider links outside the catalog, such as Twitch VODs. */}
+      {provider && <Button variant="outline" onClick={() => navigation.open(collectionLocation({ provider, url }))}>Open page</Button>}
       <Button disabled={disabled || !props.canPlay || !props.onCommand} onClick={() => void send(true)}>{on("Play")}</Button>
       <PlayOnMenu title={hostname + pathname} disabled={disabled || !props.canPlay || !props.onCommand} onPlay={deviceId => void send(true, deviceId)} />
       <Button variant="ghost" disabled={disabled || !props.onCommand} onClick={() => void send(false)}>Queue</Button>
