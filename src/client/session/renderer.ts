@@ -2,6 +2,7 @@ import type Hls from "hls.js";
 import type Mpegts from "mpegts.js";
 import type { Follow, MediaTrack, PlaybackCommand, PlayerState } from "../../shared/protocol";
 import { soundClock } from "./sendspin";
+import { localDeviceName } from "./device-id";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
 // itself. URLs play in <video>; YouTube's separate audio in an <audio> that follows the
@@ -104,6 +105,10 @@ const fail = (message: string) => {
   failure = message;
   send();
 };
+// Every window shows the error, so it names this Device.
+const unsupported = () => fail(`${localDeviceName() ?? "This device"} can't play this format. Play it on another device.`);
+// Pass-through says whether a source is HLS; without it, the path does.
+const isPlaylist = (command: NonNullable<typeof loading>) => !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
 for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "waiting", "seeked", "ended", "ratechange", "resize"]) {
   video.addEventListener(event, () => {
     // Following the clock nudges the rate many times a second; Core doesn't need to hear each one.
@@ -116,22 +121,28 @@ for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "wa
 video.addEventListener("canplay", () => { ready = true; send(); });
 video.addEventListener("timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
 video.addEventListener("error", () => {
-  if (video.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED && loading && !hls && !mpegts) void playlist(loading);
-  else fail(video.error?.message || "This media couldn't play here.");
+  if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
+  else if (isPlaylist(loading)) void playlist(loading);
+  else unsupported();
 });
 audio.addEventListener("error", () => fail(audio.error?.message || "This media couldn't play here."));
 video.textTracks.addEventListener("change", send);
 
+// iOS ignores a media element's volume (it always reads 1), so there 0 mutes it.
+const fixedVolume = (() => { video.volume = 0.5; const fixed = video.volume !== 0.5; video.volume = 1; return fixed; })();
 const apply = () => {
-  video.muted = split() || blocked || !!following;
-  audio.muted = !!following;
+  const silent = fixedVolume && volume === 0;
+  video.muted = split() || blocked || !!following || silent;
+  audio.muted = !!following || silent;
   video.volume = audio.volume = volume;
 };
 // The sound's clock on this video's timeline: a live clock is the source's timestamps (#643's
-// RaiPlay stall), which hls.js maps to its own timeline.
+// RaiPlay stall), which hls.js maps to its own timeline. mpegts.js hides them, so a channel's
+// picture starts where the sound is and follows its speed from there, unanchored.
 const clock = () => {
   const sample = following && soundClock(following.group);
   if (!sample || !following!.pts) return sample;
+  if (ptsOffset === undefined && mpegts) ptsOffset = sample.position - video.currentTime;
   return ptsOffset === undefined ? null : { ...sample, position: sample.position - ptsOffset };
 };
 const setFollow = (follow: Follow | null) => {
@@ -154,7 +165,8 @@ const playlist = async (command: NonNullable<typeof loading>) => {
   const { default: Hls } = await import("hls.js");
   if (command !== loading || !Hls.isSupported()) return fail(video.error?.message || "This media couldn't play here.");
   hls = new Hls({ startPosition: begin(command) ?? -1 });
-  hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) fail(`The stream failed (${data.details}).`); });
+  const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
+  hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
   for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, send);
   // Tracks follow the profile's language preferences.
@@ -176,7 +188,7 @@ const transportStream = async (command: NonNullable<typeof loading>) => {
   if (command !== loading) return;
   if (!Mpegts.getFeatureList().mseLivePlayback) return fail("This browser can't play MPEG-TS channels.");
   mpegts = Mpegts.createPlayer({ type: "mpegts", isLive: true, url: command.source }, { enableStashBuffer: false, liveBufferLatencyChasing: true });
-  mpegts.on(Mpegts.Events.ERROR, (_type: string, detail: string) => fail(`The channel failed (${detail}).`));
+  mpegts.on(Mpegts.Events.ERROR, (type: string, detail: string) => { if (type === Mpegts.ErrorTypes.MEDIA_ERROR) unsupported(); else fail(`The channel failed (${detail}).`); });
   mpegts.attachMediaElement(video);
   mpegts.load();
   if (!command.paused && !following) void start(video);
@@ -231,8 +243,9 @@ export function play(command: PlaybackCommand) {
       if (command.follow) setFollow(command.follow);
       apply();
       if (command.mpegts) { void transportStream(command); break; }
-      if (mapsTimestamps(command)) { void playlist(command); break; }
-      for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
+      // hls.js attaches once it has loaded; the subtitles, delays and speed below apply to it too.
+      if (mapsTimestamps(command)) void playlist(command);
+      else for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
         if (!source) continue;
         // The app allows googlevideo in CORS mode (app/main.ts); browsers fetch it without CORS.
         element.crossOrigin = window.couchApp && new URL(source).hostname.endsWith(".googlevideo.com") ? "anonymous" : null;

@@ -63,18 +63,19 @@ export function createPassThrough(current: (playbackId: string) => boolean) {
   }
 
   return {
-    // Chooses Direct or Pass-through for each stream this Device will fetch.
+    // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
     async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal): Promise<T> {
       if (!target || media.mpv) return media;
       const relay: Relay = { target, headers };
       const route = async (url: string) => {
         const answer = await probe(url, relay, !!media.mpegts, signal);
-        return answer.direct ? url : link(playbackId, relay, answer.playlist ? "playlist" : "bytes", url);
+        return { url: answer.direct ? url : link(playbackId, relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
       };
-      const [source, audioSource] = await Promise.all([route(media.source), media.audioSource && route(media.audioSource)]);
+      const [main, audio] = await Promise.all([route(media.source), media.audioSource ? route(media.audioSource) : undefined]);
+      const source = main.url, audioSource = audio?.url;
       for (const id of relays.keys()) if (!current(id)) relays.delete(id);
       if (source !== media.source || audioSource !== media.audioSource) relays.set(playbackId, relay);
-      return { ...media, source, ...(audioSource ? { audioSource } : {}) };
+      return { ...media, source, ...(audioSource ? { audioSource } : {}), ...(main.playlist ? { hls: true } : {}) };
     },
     // GET /api/relay/<playbackId>/<kind>/<signature>?url=<source>
     async serve(request: Request) {

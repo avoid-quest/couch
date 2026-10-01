@@ -239,7 +239,7 @@ export async function createHub(options: HubOptions) {
     if (command.type === "load") playback.loaded = command;
     if (command.type === "load" && !!command.mpv !== (mpvPlayback === playback)) {
       if (command.mpv) {
-        // Only the Device that runs Core has mpv, so its outputs move to this Playback.
+        // The Playback's other Devices leave it: mpv plays only on the host.
         const left = playback.outputs.map(output => output.deviceId);
         if (playback.renderer) send(playback.renderer, playerCommand({ type: "stop" }));
         assign(playback, [{ deviceId: hostId(), picture: true, sound: playback.outputs[0]?.sound ?? true, local: playback.outputs.some(output => output.deviceId === hostId() && output.local) }]);
@@ -333,7 +333,7 @@ export async function createHub(options: HubOptions) {
     const { headers = {}, ...media } = await (reuse ?? resolveEntry(entry, loaded.playbackId, signal, tab, playback));
     const fresh = await passThrough.prepare(loaded.playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal);
     const { player } = stateOf(playback);
-    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
+    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
   };
   // The group reports the sound; a screen adds the subtitles it shows.
   const observeSynced = (playback: Playback) => {
@@ -405,6 +405,8 @@ export async function createHub(options: HubOptions) {
         const resolving = resolveEntry(entry, playbackId, signal, tab, playback);
         playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: resolving };
         const { headers = {}, ...media } = await resolving;
+        // Only the Device that runs Core has mpv; a Playback elsewhere doesn't move there unasked.
+        if (media.mpv && !playback.outputs.some(output => output.deviceId === hostId())) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
         // Core's own FFmpeg reads the sound as resolved, before Pass-through, with its headers.
         const live = !!(entry.live || media.metadata?.live);
         playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers, live, audioOnly: media.audioOnly };
@@ -569,7 +571,9 @@ export async function createHub(options: HubOptions) {
       playbacks: all().map((playback): PlaybackSummary => {
         const state = stateOf(playback);
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
-        return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs };
+        const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
+        return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
+          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
     };

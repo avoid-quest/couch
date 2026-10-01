@@ -10,7 +10,7 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
   observe?: (player: PlayerState) => void;

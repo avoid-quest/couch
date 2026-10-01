@@ -42,7 +42,8 @@ export type PlayerState = {
 // volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds,
 // present while it is connected (ticket 10).
 export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; local?: boolean };
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
+// hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 
@@ -141,8 +142,9 @@ export type PlaybackCommand =
   | { type: "audioPause" }
   // eventStart: an HLS EVENT playlist starts at its first segment instead of the live edge.
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
+  // hls: Pass-through found an HLS playlist, which hls.js plays where the engine can't.
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
   | { type: "follow"; playbackId: string; follow: Follow | null }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }

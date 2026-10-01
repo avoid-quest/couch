@@ -5,7 +5,8 @@ import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
-export type WebMediaSource = { source: string; audioSource?: string; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+// audioOnly: the one stream has no video (Bandcamp, SoundCloud).
+export type WebMediaSource = { source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -95,7 +96,7 @@ function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
     }
   }
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  return { source, ...(audioSource ? { audioSource } : {}), ...(selected.length === 1 && selected[0]!.vcodec === "none" ? { audioOnly: true } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
 }
 
 const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
