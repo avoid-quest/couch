@@ -71,12 +71,14 @@ export function pulseSound(): SoundBackend {
 }
 
 // The app's own processes: its main process (Core's parent) and that process's
-// children, among them Chromium's audio service (Linux /proc).
+// children, among them Chromium's audio service, and Core's mpv (Linux /proc).
 function appProcesses() {
   const pids = new Set([String(process.ppid)]);
   for (const entry of readdirSync("/proc").filter(name => /^\d+$/.test(name))) {
-    try { if (readFileSync(`/proc/${entry}/stat`, "utf8").replace(/^.*\) /s, "").split(" ")[1] === String(process.ppid)) pids.add(entry); }
-    catch { /* The process ended. */ }
+    try {
+      const [, name, parent] = /^\d+ \((.*)\) \S+ (\d+)/s.exec(readFileSync(`/proc/${entry}/stat`, "utf8")) ?? [];
+      if (parent === String(process.ppid) || parent === String(process.pid) && name === "mpv") pids.add(entry);
+    } catch { /* The process ended. */ }
   }
   return pids;
 }

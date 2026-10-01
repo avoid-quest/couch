@@ -8,6 +8,7 @@ import { helper } from "./helpers";
 
 // Channels Chromium can't decode (MPEG-2 video, AC-3/E-AC-3 or MP2 audio) play in a
 // downloaded mpv on the Device that runs Core, driven over its JSON IPC (#644 ticket 1).
+// Only Couch drives it, so mpv's own key bindings (arrows seek, q quits) are off.
 // https://mpv.io/manual/stable/#json-ipc
 export function createMpv(report: (state: PlayerState) => void) {
   const ipc = process.platform === "win32" ? `\\\\.\\pipe\\couch-mpv-${process.pid}` : join(tmpdir(), `couch-mpv-${process.pid}.sock`);
@@ -65,7 +66,7 @@ export function createMpv(report: (state: PlayerState) => void) {
           const { playbackId } = message;
           void helper("mpv").then(path => {
             if (state.playbackId !== playbackId) return;
-            const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-terminal", "--force-window=immediate", "--fullscreen", "--keep-open=no", "--title=Couch", `--volume=${volume}`,
+            const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-terminal", "--no-input-default-bindings", "--force-window=immediate", "--fullscreen", "--keep-open=no", "--title=Couch", `--volume=${volume}`,
               ...(message.paused ? ["--pause"] : []), ...(message.startPosition ? [`--start=${message.startPosition}`] : []), "--", message.source], { stdio: "ignore" });
             child = process;
             process.once("error", error => { if (child === process) publish({ status: "error", error: `mpv didn't start: ${error.message}` }); });
