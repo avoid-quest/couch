@@ -39,3 +39,14 @@ export function defaultDeviceName(id: string) {
   for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return `${adjectives[hash % adjectives.length]} ${animals[Math.floor(hash / adjectives.length) % animals.length]}`;
 }
+
+/** A device's one name, which every Couch it joins shows. */
+export function normalizeDeviceName(value: unknown): string {
+  if (typeof value !== "string" || /\p{Cc}/u.test(value)) throw new Error("Use a name with 1 to 60 characters.");
+  const name = value.trim().normalize("NFC");
+  if (!name || [...name].length > 60) throw new Error("Use a name with 1 to 60 characters.");
+  return name;
+}
+
+/** The name Core gives a Couch nobody named; it counts as unnamed. */
+export const UNNAMED_COUCH = "Couch";

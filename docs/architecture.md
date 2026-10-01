@@ -14,6 +14,23 @@ Devices, in its **Couch** section:
   loads the other Couch's own UI, so both always run the same build. That page
   pairs like any browser.
 
+Each device has one name, reused with every Couch it joins. The Couch app's name
+is the `installation` name in `couch.sqlite`, so the computer and the Couch it
+hosts share it in both modes: Main reads it, and saves it with a short-lived
+connection (`app/device-name.ts`) whether or not Core runs, then tells a running
+Core that it was `renamed`. "Couch", the name Core gives a Couch nobody named,
+counts as unnamed. A browser keeps its name in its own storage; older app
+bridges without `deviceName` do the same. General edits the name and pairing asks for
+it only while there is none. A connected device gives each Couch its name; an
+unnamed one adopts the name it paired with instead. An administrator
+renames another Couch's host in Devices (`/api/settings`); every other device
+names only itself.
+
+Every client's Sendspin key, which is its device ID, stays in the storage of the
+origin that made it. The SDK's `storage` interface gives Couch and Sendspin the
+same key, including when browser storage is unavailable. Sendspin admits the
+host's device only from this machine.
+
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
 on the same port serves only this machine (the app window's `localhost`); the LAN
@@ -25,8 +42,8 @@ reissues it for new addresses or before its 825 days run out, so pins survive.
 An HTTPS page can't load `http://` media, so Pass-through relays those streams.
 
 Main and Core talk over the utilityProcess parent port (`ready`, `addresses`,
-`display` and `shutdown`). The window's preload (`app/preload.ts`) exposes
-`window.couchApp`: the mode choice, the host token for this computer's Core (Full
+`display`, `renamed` and `shutdown`). The window's preload (`app/preload.ts`) exposes
+`window.couchApp`: the mode choice, this computer's `deviceName`, the host token for this computer's Core (Full
 mode, localhost page only), the desktop interface size and TV presentation. The
 window sets `autoplayPolicy: "no-user-gesture-required"` and
 `backgroundThrottling: false`.

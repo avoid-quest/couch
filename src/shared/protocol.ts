@@ -159,7 +159,7 @@ export type ConnectionInfo = {
 
 // Main and Core talk over the utilityProcess parent port (app/main.ts, src/main.ts).
 export type AppMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string }
-  | { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string } | { type: "shutdown" };
+  | { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string } | { type: "renamed" } | { type: "shutdown" };
 export type CoreMessage =
   | { type: "ready"; origin: string; urls: string[]; pairingCode: string }
   | { type: "addresses"; urls: string[] }

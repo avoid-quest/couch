@@ -13,7 +13,8 @@ import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
-import { announcePlay } from "./device-id";
+import { announcePlay, deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "./device-id";
+import { apiSend } from "../api/client";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -104,6 +105,16 @@ export function SessionGate({ children }: PropsWithChildren) {
   }
 
   const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
+  const localName = useLocalDeviceName();
+  const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
+  useEffect(() => {
+    if (!connected || !credentials || !ownName) return;
+    // The host's name is this app's installation name: reread it after an administrator renames it.
+    // Elsewhere an unnamed device adopts its pairing name; a named one gives the Couch its name.
+    if (localHost) void loadLocalDeviceName().catch(reason => setError(errorText(reason)));
+    else if (!localName) void saveLocalDeviceName(ownName).catch(reason => setError(errorText(reason)));
+    else if (localName !== ownName) void apiSend(credentials, `/api/devices/${deviceId()}/name`, { name: localName }).catch(reason => setError(errorText(reason)));
+  }, [connected, credentials, ownName, localName, localHost]);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its

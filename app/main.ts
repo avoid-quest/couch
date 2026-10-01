@@ -11,6 +11,7 @@ import type { DisplayAction, DisplayState } from "../src/shared/display";
 import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
+import { readDeviceName, saveDeviceName } from "./device-name";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -318,6 +319,13 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
+// Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.
+handle("device-name", (_event, name) => {
+  if (name === undefined) return readDeviceName(join(dataDir, "couch.sqlite"));
+  const saved = saveDeviceName(join(dataDir, "couch.sqlite"), name);
+  if (core && !core.stopping) core.child.postMessage({ type: "renamed" } satisfies AppMessage);
+  return saved;
+});
 handle("choose", async (event, mode, address, confirm) => {
   if (mode === "remote") {
     const origin = await lanOrigin(address);

@@ -4,6 +4,7 @@ import type { Readable } from "node:stream";
 import type { WebSocket } from "ws";
 import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, SendspinCore, serverNowUs, type SendspinSession } from "@sonn-audio/node-sendspin";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
+import { loopbackPeer } from "./lan-listener";
 
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
@@ -98,16 +99,15 @@ export async function liveHls(url: string, signal: AbortSignal) {
   return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }
 
-export function createSendspin(options: { identity: string; name: string; admit: (clientId: string) => boolean; changed: () => void; ffmpeg: () => Promise<string> }) {
+export function createSendspin(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg: () => Promise<string> }) {
   const core = new SendspinCore();
   core.configureServer({ name: options.name });
   const sockets = new Set<WebSocket>();
   const sessions = new Map<string, SendspinSession>();
   const delays = new Map<string, number>();
   const groups = new Set<{ joined: (clientId: string) => void }>();
-  // Only this Couch's Devices get in: the Noise handshake proves the client holds its key, its Device ID (#644 Model).
+  // Only this Couch's Devices get in: accept() admits the client_id, and the Noise handshake proves the client holds its key, its Device ID (#644 Model).
   core.enableEncryption(Identity.fromPrivateB64u(options.identity), clientId => {
-    if (!options.admit(clientId)) return null;
     core.registerHooks(clientId, {
       onIdentified: session => { sessions.set(clientId, session); for (const group of groups) group.joined(clientId); options.changed(); },
       onPlayerState: (_session, update) => {
@@ -359,9 +359,9 @@ export function createSendspin(options: { identity: string; name: string; admit:
       const timer = setTimeout(() => socket.terminate(), 10_000);
       socket.once("message", (data, binary) => {
         clearTimeout(timer);
-        let init: { type?: string } | undefined;
+        let init: { type?: string; payload?: { client_id?: unknown } } | undefined;
         try { init = JSON.parse(String(data)); } catch { /* Refused below. */ }
-        if (binary || init?.type !== "client/init") return void socket.terminate();
+        if (binary || init?.type !== "client/init" || !options.admit(String(init.payload?.client_id), loopbackPeer(request.socket.remoteAddress ?? ""))) return void socket.terminate();
         core.handleConnection(socket, request);
         core.getSessionBySocket(socket)!.handleText(String(data));
       });

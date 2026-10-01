@@ -1,10 +1,9 @@
 import { useShell } from "@/sections/shell/AppShell";
-import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { deviceName } from "@/copy";
+import { SettingsSection } from "@/components/SettingsRow";
 import { SettingsLayout } from "../SettingsLayout";
 import { StartupSettings } from "./StartupSettings";
-import { TvNameSettings } from "./TvNameSettings";
 import { useSessionGate } from "@/session/session-context";
+import { DeviceNameSettings } from "./DeviceNameSettings";
 
 export function GeneralPage() {
   const { credentials } = useShell();
@@ -13,8 +12,7 @@ export function GeneralPage() {
   return (
     <SettingsLayout section="general">
       <SettingsSection>
-        {credentials ? <TvNameSettings credentials={credentials} connected={connected} canWrite={manager} name={details?.name} />
-          : <SettingsRow label="Name" description="Pair this device to change it."><span className="text-sm">{deviceName(details?.name)}</span></SettingsRow>}
+        <DeviceNameSettings />
         {manager && credentials && details?.tvPresentation && <StartupSettings credentials={credentials} connected={connected} />}
       </SettingsSection>
     </SettingsLayout>

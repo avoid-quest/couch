@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
 import type { HistoryItem, WatchingProfile } from "../shared/viewing";
-import { defaultDeviceName, isDeviceId, type Device } from "../shared/devices";
+import { defaultDeviceName, isDeviceId, UNNAMED_COUCH, type Device } from "../shared/devices";
 import { ControllerError, deviceName } from "./devices";
 import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
@@ -26,7 +26,8 @@ function profileName(value: unknown) {
 
 export function openStore(path: string, remoteControlEnabled = false) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const db = new Database(path);
+  // Main may save the name at the same time (app/device-name.ts).
+  const db = new Database(path, { timeout: 5_000 });
   db.exec("PRAGMA journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS session (
@@ -87,7 +88,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     );
     CREATE TABLE IF NOT EXISTS streamingcommunity_origin (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
-    INSERT OR IGNORE INTO installation (id, name) VALUES (1, 'Couch');
+    INSERT OR IGNORE INTO installation (id, name) VALUES (1, '${UNNAMED_COUCH}');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
@@ -404,12 +405,9 @@ export function openStore(path: string, remoteControlEnabled = false) {
     },
     renameDevice(id: string, value: unknown) {
       const name = deviceName(value);
-      if (hostDevice()?.id === id) db.query("UPDATE installation SET name = ? WHERE id = 1").run(name);
-      else {
-        requireDevice(id);
-        db.query("UPDATE devices SET name = ? WHERE id = ?").run(name, id);
-      }
-      return device(id)!;
+      requireDevice(id);
+      db.query("UPDATE devices SET name = ? WHERE id = ?").run(name, id);
+      return pairedDevice(id)!;
     },
     setDeviceRole(id: string, role: unknown) {
       if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose a role.");

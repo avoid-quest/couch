@@ -9,7 +9,7 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { forgetConnection } from "@/session/connection";
-import { deviceId } from "@/session/device-id";
+import { deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "@/session/device-id";
 import { defaultDeviceName } from "../../../shared/devices";
 import { couchApp, type AppMode } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
@@ -35,6 +35,8 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!couchApp) return;
     let disposed = false;
+    // The name loads beside the mode; a couch.sqlite failure must not keep the app from starting.
+    void loadLocalDeviceName().catch(() => {});
     void couchApp.mode().then(value => { if (!disposed) setChoice(value); })
       .catch(reason => { if (!disposed) setError(message(reason)); })
       .finally(() => { if (!disposed) setPending(false); });
@@ -212,10 +214,11 @@ export function useLocalSetupPending(credentials: Credentials | null) {
 export function LocalSharingPrompt({ credentials }: { credentials: Credentials | null }) {
   const device = usePlaybackDevice();
   const pending = useLocalSetupPending(credentials);
+  const savedName = useLocalDeviceName();
   const [name, setName] = useState("");
   const sharing = useMutation({
     mutationFn: async (enabled: boolean) => {
-      await apiSend(credentials!, "/api/settings", { name: name.trim() || defaultDeviceName(deviceId()) }, "POST", 10_000);
+      if (!savedName) await saveLocalDeviceName(name.trim() || defaultDeviceName(deviceId()));
       await apiSend(credentials!, "/api/settings/sharing", { enabled }, "POST", 10_000);
       await device!.completeLocalSetup();
     },
@@ -223,9 +226,9 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   if (!pending) return null;
   const setSharing = (enabled: boolean) => { if (!sharing.isPending) sharing.mutate(enabled); };
   // Naming comes first: it is the one thing every other Device will show (#644 ticket 12).
-  return <Onboarding title="Name this computer" description="Every device on your network shows this name. Leave it empty to keep the one shown." data-tv-navigation-scope>
-    <Field><FieldLabel htmlFor="host-name">Name</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>
-    <div className="grid gap-0.5"><p className="text-base font-medium">Share it on your network?</p><p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it in Settings → Devices.</p></div>
+  return <Onboarding title={savedName ? "Share this computer?" : "Name this computer"} description={savedName ? `${savedName} uses the same name with every Couch.` : "Every device on your network shows this name. Leave it empty to keep the one shown."} data-tv-navigation-scope>
+    {!savedName && <Field><FieldLabel htmlFor="host-name">Name</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>}
+    <div className="grid gap-0.5">{!savedName && <p className="text-base font-medium">Share it on your network?</p>}<p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it in Settings → Devices.</p></div>
     {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}
     <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Share</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
   </Onboarding>;

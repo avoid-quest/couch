@@ -59,8 +59,11 @@ catalog provides interface icons, not brand identities.
   shell (the first-run chooser) bring the same arrow navigation.
 - **First run names the computer.** The app asks "Where is your Couch?" (This
   computer hosts it; Another Couch joins one, and this computer still plays),
-  then "Name this computer" with the random default shown, then whether to share
-  it on the network. Unpaired browsers see only the pairing page: no sections
+  then asks for its name once, with the random default shown, and whether to share
+  it on the network. Pairing and later servers reuse that name. General owns
+  this device's name, which is also the name of the server it hosts. An administrator
+  connected to another host can rename that host in Devices. The Devices list
+  manages pairings and roles. Unpaired browsers see only the pairing page: no sections
   that would lead back to it. The pairing dialog warns that browsers flag
   Couch's own certificate once.
 - **Keyboard control stays inside Couch.** TanStack Hotkeys shares shortcuts
@@ -163,7 +166,7 @@ Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12, plus `gap-0.5`, `py-1.5` an
 `px-(--gutter)` (3rem, 1rem on phones). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
 The shell's content wrapper sets the one top offset below the header (`pt-6`); pages add none, and Home's first row drops its rule.
 Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones.
-Settings runs from identity (the Couch's name, then Devices) through Preferences, Media and Hardware to Updates, and opens on the first page; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last.
+Settings runs from identity (this device's name in General, then Devices) through Preferences, Media and Hardware to Updates, and opens on the first page; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last.
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
