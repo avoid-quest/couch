@@ -14,7 +14,8 @@ import { PlayOnMenu, PlayOnSub, usePlayOn } from "@/components/PlayOn";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
-import type { ProviderId, ProviderItem, VideoQuality } from "../../../shared/providers";
+import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
+import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
 import { SearchOnlineResults, matchesFacet, providerNames, searchError, type SearchCollection, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
@@ -251,7 +252,13 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
     catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setPending(false); }
   }
+  const navigation = useDetailNavigation();
+  const provider = providerForUrl(url);
   const disabled = !props.connected || pending;
+  // Provider pages open channels, playlists and albums that webpage playback can't.
+  if (provider) return <section className="max-w-3xl" aria-label="Pasted link">
+    <Button onClick={() => navigation.open(collectionLocation({ provider, url }))}>Open</Button>
+  </section>;
   return <section className="max-w-3xl space-y-4" aria-label="Pasted link">
     <SettingsSection>
       <SettingsRow label="Open as"><ChoiceGroup label="Open link as" value={mode} onValueChange={setMode} disabled={disabled} options={[{ value: "Webpage", label: "Webpage" }, { value: "Direct media", label: "Direct media" }]} /></SettingsRow>
