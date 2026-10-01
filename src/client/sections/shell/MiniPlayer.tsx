@@ -10,7 +10,7 @@ import { PlayButton, PlaybackTimeline, VolumeButton, playbackCapabilities } from
 import { playsOn } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
-import { deviceName, offline } from "@/copy";
+import { deviceName } from "@/copy";
 import { sourceLabel } from "@/source-label";
 import { formatDuration } from "@/time-format";
 
@@ -48,8 +48,8 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const live = current.live || radio;
   const length = playbackClock.duration ?? current.duration ?? 0;
   const remaining = Math.max(0, length - playbackClock.position) / (player.speed || 1);
-  // The player's words, less the title shown right above them.
-  const status = !connected ? offline(state.installationName)
+  // The player's words, less the title shown right above them. The status line says where it reconnects.
+  const status = !connected ? "Offline"
     : player.status === "unavailable" ? player.error ?? `Nothing is playing on ${deviceName(state.installationName)}`
     : player.status === "error" ? "Can't play"
     : player.status === "loading" ? state.radioRetry?.retryAt != null ? "Reconnecting…" : player.buffering ? "Buffering…" : `Connecting to ${sourceLabel(current.source)}…`
