@@ -16,7 +16,7 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
       {collectionLinks(collection).map(item => <Fragment key={item.url}>
         <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={collectionLocation(item)} className="inline-flex min-h-11 items-center px-1 break-words">{item.title}</Link></BreadcrumbLink></BreadcrumbItem>
       </Fragment>)}
-      <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbPage className="break-words">{title}</BreadcrumbPage></BreadcrumbItem>
+      <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate">{title}</BreadcrumbPage></BreadcrumbItem>
     </BreadcrumbList>
   </Breadcrumb>;
 }
