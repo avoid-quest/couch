@@ -36,10 +36,11 @@ quality (Auto is up to 1080p).
 
 ## Administrator access
 
-On an unclaimed Couch, **Settings > Remotes** shows a separate one-use
-administrator code. Pair the phone first, then enter that code under **Claim
-administrator** on the phone. Administrators manage paired devices, sources and
-device settings; Controllers browse and play.
+The first device you pair becomes the admin. If no paired device is admin later,
+**Settings > Devices** on the host shows a one-use code under **Make a device the
+admin**. Enter it under **Admin code** on a paired device and choose **Become
+admin**. Administrators manage paired devices, sources and device settings;
+Controllers browse and play.
 
 ### Recover administrator access
 
