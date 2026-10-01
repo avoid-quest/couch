@@ -49,7 +49,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
   if (!administrator) return <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>;
   const disabled = busy || !connected;
   // Saved URLs never come back from Core, so Edit keeps them unless a new one is typed.
-  const placeholder = editing ? "Leave blank to keep the current URL" : "https://…";
+  const placeholder = editing ? "Leave blank to keep it" : "https://…";
   const content = <>
     <SettingsSection aria-label="Live TV sources">
       {!sources.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No sources yet. Add an M3U channel list below, with its XMLTV guide if you have one.</EmptyDescription></EmptyHeader></Empty>}
