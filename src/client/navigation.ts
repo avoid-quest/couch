@@ -60,13 +60,16 @@ function moveFocus(key: string) {
   const destinations = row ? controls.filter(element => row.contains(element)) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
+  // The sticky header and mini player come after the page's controls, which scroll under them.
+  const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? "[data-mini-player]" : null;
+  const later = bar && !active.closest(bar) ? bar : null;
   const candidates = destinations.filter(element => element !== active).map(element => {
     const to = box(element);
     const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
     const forward = (horizontal ? dx : dy) * sign;
-    const across = Math.abs(horizontal ? dy : dx);
-    const overlap = horizontal ? to.bottom > from.top && to.top < from.bottom : to.right > from.left && to.left < from.right;
-    return { element, forward, score: forward + across * 2 + (overlap ? 0 : 1000) };
+    // The sideways gap between the edges, not the centres, so a wide row under a short title is in line with it.
+    const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
+    return { element, forward, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1).sort((a, b) => a.score - b.score);
   focus(candidates[0]?.element);
 }
