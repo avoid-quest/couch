@@ -38,7 +38,7 @@ import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 
-import { createSoundRouting } from "./sound-routing";
+import { createSoundRouting, soundRaised } from "./sound-routing";
 import { createMpv } from "./mpv";
 import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
@@ -781,7 +781,11 @@ export async function createHub(options: HubOptions) {
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
     active: () => busy(),
     lost: error => servedBy(hostId())?.session.audioLost(error),
-    changed: value => { common.systemAudio = value; for (const playback of all()) playback.session.updateSystemAudio(value); invalidate("sound"); },
+    changed: value => {
+      const raised = soundRaised(common.systemAudio, value), playback = servedBy(hostId());
+      common.systemAudio = value; for (const playback of all()) playback.session.updateSystemAudio(value); invalidate("sound");
+      if (raised && playback?.outputs.some(output => output.deviceId === hostId() && output.sound)) unsilence(playback);
+    },
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
   if (systemAudio && reconnectBluetooth) void options.nativeBluetooth?.({ op: "reconnect", owner: "boot", device: reconnectBluetooth }).catch(() => {});
@@ -1163,10 +1167,19 @@ export async function createHub(options: HubOptions) {
             }
           } else if (action.type === "volume" || action.type === "mute") {
             // Without a Device, the group changes only the speakers this device may control.
-            const targets = action.deviceId ? [action.deviceId] : sounding(lookedAt(deviceId), selected(deviceId)).filter(id => outputFor(id, deviceId).sound);
-            if (action.type === "volume") await setVolume(targets, action.volume, authorize, deviceId);
-            else for (const id of targets) await setSound(id, { muted: action.muted }, authorize, deviceId);
-            if (action.type === "volume" ? action.volume > 0 : !action.muted) for (const playback of new Set(targets.map(servedBy))) unsilence(playback);
+            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : sounding(target, selected(deviceId)).filter(id => outputFor(id, deviceId).sound);
+            const inSound = (id: string) => !!target?.outputs.some(output => output.deviceId === id && output.sound);
+            if (action.type === "volume" && !action.deviceId && target?.mixTrim === 0) {
+              // The band shows 0 while All is 0: raising it only brings All back, and lowering it changes nothing.
+              if (action.volume > 0 && targets.length) { authorizePlayback(target, authorize, deviceId)(); setTrim(target, 100); }
+            } else if (action.type === "volume") {
+              await setVolume(targets, action.volume, authorize, deviceId);
+              if (action.volume > 0 && targets.some(inSound)) unsilence(target);
+            } else {
+              const unmuted = action.muted ? [] : targets.filter(id => soundOf(id).muted);
+              for (const id of targets) await setSound(id, { muted: action.muted }, authorize, deviceId);
+              if (unmuted.some(inSound)) unsilence(target);
+            }
           } else {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on the selected Device's.

@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import WebSocket from "ws";
 import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
+import { soundRaised } from "../src/server/sound-routing";
 import { parseCommand } from "../src/server/validation";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 
@@ -168,10 +170,10 @@ test("Raising sound while All is at 0 brings All back and leaves muted devices s
     await a!.command({ type: "output", deviceId: b!.id, level: 40 });
     const aLevels = await f.speaker(0), bLevels = await f.speaker(1);
     await a!.command({ type: "mute", deviceId: b!.id, muted: true });
-    for (const raise of [{ type: "volume", volume: 35 }, { type: "output", deviceId: a!.id, level: 50 }, { type: "mute", muted: false, deviceId: a!.id }] satisfies Action[]) {
+    for (const raise of [[{ type: "volume", volume: 35 }], [{ type: "output", deviceId: a!.id, level: 50 }], [{ type: "mute", muted: true, deviceId: a!.id }, { type: "mute", muted: false, deviceId: a!.id }]] satisfies Action[][]) {
       await a!.command({ type: "allSpeakers", level: 0 });
       await until(() => aLevels.at(-1) === 0 && bLevels.at(-1) === 0);
-      await a!.command(raise);
+      for (const action of raise) await a!.command(action);
       assert.equal(a!.state.mixTrim, 100);
       await until(() => aLevels.at(-1)! > 0);
       assert.equal(a!.state.player.volume, aLevels.at(-1));
@@ -179,6 +181,65 @@ test("Raising sound while All is at 0 brings All back and leaves muted devices s
       assert.equal(a!.state.devices?.find(device => device.id === b!.id)?.muted, true);
     }
   } finally { await f.close(); }
+});
+
+test("The band at All 0 lowers nothing and raising it only brings All back", { timeout: 15_000 }, async () => {
+  const f = await fixture(), [a, b] = f.devices;
+  try {
+    await a!.command(f.queue("mix"));
+    await a!.command({ type: "output", deviceId: b!.id, level: 40 });
+    const volumes = () => [a, b].map(device => a!.state.devices?.find(item => item.id === device!.id)?.volume);
+    await a!.command({ type: "allSpeakers", level: 0 });
+    await a!.command({ type: "volume", volume: 0 });
+    assert.deepEqual(volumes(), [70, 40]);
+    assert.equal(a!.state.mixTrim, 0);
+    await a!.command({ type: "volume", volume: 5 });
+    assert.deepEqual(volumes(), [70, 40]);
+    assert.equal(a!.state.mixTrim, 100);
+    assert.equal(a!.state.player.volume, 70);
+  } finally { await f.close(); }
+});
+
+test("Unmuting brings All back only for muted sound in the looked-at Playback", { timeout: 15_000 }, async () => {
+  const f = await fixture(), [a, , , d] = f.devices;
+  try {
+    await a!.command(f.queue("mix"));
+    await d!.command(f.queue("elsewhere"));
+    await a!.command({ type: "allSpeakers", level: 0 });
+    await d!.command({ type: "allSpeakers", level: 0 });
+    await d!.command({ type: "mute", muted: true });
+    await a!.command({ type: "mute", muted: false });
+    assert.equal(a!.state.mixTrim, 0);
+    await a!.command({ type: "mute", deviceId: d!.id, muted: false });
+    await until(() => d!.state.devices?.find(device => device.id === d!.id)?.muted === false);
+    assert.equal(a!.state.mixTrim, 0);
+    assert.equal(d!.state.mixTrim, 0);
+    await a!.command({ type: "mute", muted: true });
+    await a!.command({ type: "mute", muted: false });
+    assert.equal(a!.state.mixTrim, 100);
+  } finally { await f.close(); }
+});
+
+test("The TV's volume keys raising or unmuting system sound count as raising sound", () => {
+  const system = (volume: number | null, muted = false) => ({ selectedOutput: "tv", observedOutput: "tv", volume, muted, error: null });
+  assert.equal(soundRaised(system(30), system(35)), true);
+  assert.equal(soundRaised(system(30, true), system(30)), true);
+  assert.equal(soundRaised(system(30), system(25)), false);
+  assert.equal(soundRaised(system(30), system(35, true)), false);
+  assert.equal(soundRaised(system(null), system(30)), false);
+  assert.equal(soundRaised(undefined, system(30)), false);
+});
+
+test("A Playback saved before the All trim plays at 100", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-device-volume-")), path = join(directory, "couch.sqlite");
+  try {
+    const legacy = new DatabaseSync(path);
+    legacy.exec("CREATE TABLE playback (id TEXT PRIMARY KEY, queue TEXT NOT NULL, cursor TEXT, continuation TEXT); INSERT INTO playback VALUES ('old', '[]', NULL, NULL)");
+    legacy.close();
+    const store = openStore(path);
+    assert.equal(store.playback("old").mixTrim(), 100);
+    store.close();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test("A Playback keeps its All trim across a Core restart", { timeout: 15_000 }, async () => {

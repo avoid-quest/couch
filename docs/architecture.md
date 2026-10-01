@@ -80,8 +80,10 @@ serve one Playback at a time. A Device owns one volume and mute, persisted in th
 `sound && !muted ? round(volume * mixTrim / 100) : 0`. The Playback's `mixTrim`,
 saved with it in the `playback` table, starts at 100 and attenuates its selected
 sound; zero keeps those outputs selected so raising it restores their sound, and
-the band then shows 0. Raising a volume, a fader or unmuting while it is 0 sets it
-back to 100, which leaves muted and 0-level Devices silent. On the Linux TV with system audio its volume
+the band then shows 0. Raising a volume, a fader, the TV's system volume or
+unmuting a muted Device in its sound while it is 0 sets it back to 100, which
+leaves muted and 0-level Devices silent; raising the band then changes only the
+trim, and lowering it changes nothing. On the Linux TV with system audio its volume
 and mute are the system's, and Couch applies the trim to its stream instead.
 The band's volume shows the loudest in-sound Device's saved level and scales
 them all proportionally, and its mute mutes them all.

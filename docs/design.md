@@ -243,7 +243,8 @@ Messages:
   slider, shown while its sound is in, plays a late speaker sooner (Sendspin's
   static delay); "Delay" read as the opposite. The band and mini player volume
   shows the loudest in-sound Device's, or 0 while All is at 0, and moves them all
-  together (raising it from All's 0 brings All back to 100); their Mute
+  together (from All's 0, raising it only brings All back to 100 and lowering it
+  does nothing); their Mute
   mutes them all, and so does M.
 - **Play on** in item menus offers the other online Devices, hidden while this
   is the only one; the primary Play says "Play on {name}" while you control

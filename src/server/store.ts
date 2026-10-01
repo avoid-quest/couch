@@ -188,7 +188,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     playbackIds() { return db.query<{ id: string }, []>("SELECT id FROM playback ORDER BY rowid").all().map(row => row.id); },
     forgetPlayback(id: string) { db.query("DELETE FROM playback WHERE id = ?").run(id); },
     playback(id: string) {
-      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null }, [string]>("SELECT queue, cursor, continuation FROM playback WHERE id = ?").get(id);
+      const row = () => db.query<{ queue: string; cursor: string | null; continuation: string | null; mixTrim: number }, [string]>("SELECT queue, cursor, continuation, mixTrim FROM playback WHERE id = ?").get(id);
       const save = (column: "queue" | "cursor" | "continuation" | "mixTrim", value: string | number | null) => {
         db.query("INSERT OR IGNORE INTO playback (id, queue) VALUES (?, '[]')").run(id);
         db.query(`UPDATE playback SET ${column} = ? WHERE id = ?`).run(value, id);
@@ -197,7 +197,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
         queue: JSON.parse(row()?.queue ?? "[]") as QueueEntry[],
         queueCursorEntryId() { return row()?.cursor ?? null; },
         playbackContinuation(): PlaybackContinuation | null { const value = row()?.continuation; return value ? JSON.parse(value) : null; },
-        mixTrim() { return db.query<{ mixTrim: number }, [string]>("SELECT mixTrim FROM playback WHERE id = ?").get(id)?.mixTrim ?? 100; },
+        mixTrim() { return row()?.mixTrim ?? 100; },
         saveMixTrim(level: number) { save("mixTrim", level); },
         savePlaybackContinuation(context: PlaybackContinuation | null) { save("continuation", context ? JSON.stringify(context) : null); },
         saveQueueCursor(entryId: string, beforeCommit?: () => void) { db.transaction(() => { save("cursor", entryId); beforeCommit?.(); })(); },

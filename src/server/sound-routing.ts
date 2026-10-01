@@ -27,6 +27,9 @@ function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => 
   return { stop: () => child.kill() };
 }
 
+// The TV's own volume keys raise sound when they turn it up or unmute it.
+export const soundRaised = (before: SoundRouteState | undefined, after: SoundRouteState) => !after.muted && after.volume !== null && before?.volume != null && (after.volume > before.volume || before.muted);
+
 export function createSoundRouting(options: Options) {
   const backend = pulseRouting();
   let selected = options.saved();
