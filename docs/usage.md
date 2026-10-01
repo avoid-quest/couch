@@ -37,7 +37,7 @@ a Mac.
 | StreamingCommunity | Yes | Not tested | Yes | Not tested | Not tested | Not tested |
 | Radio | Yes | Yes | Yes | Yes | Not tested | Yes |
 | Other yt-dlp sites (Dailymotion, SoundCloud) | Yes | Yes | Yes | Yes | Not tested | Yes |
-| Vimeo | No: DRM or sign-in | No: DRM or sign-in | No: DRM or sign-in | No: DRM or sign-in | No: DRM or sign-in | No: DRM or sign-in |
+| Vimeo | Depends on item | Not tested | Depends on item | Not tested | Not tested | Not tested |
 | Live TV, H.264 (HLS or MPEG-TS) | Yes | Not tested | Yes | Not tested | Not tested | Yes |
 | Live TV, MPEG-2, AC-3, E-AC-3 or MP2 | Yes, in its own window | Host only | Host only | Host only | Not tested | Host only |
 
@@ -45,7 +45,8 @@ a Mac.
   computer that hosts Couch. Asked for elsewhere, the player says "This channel
   plays only on" the host. HEVC channels play where the device decodes HEVC; on
   a Linux host they go to mpv too.
-- Sites that need DRM (such as Vimeo's player) or a sign-in don't play. Live TV
+- Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
+  or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV
   channels that need custom headers or DRM are skipped when the list is added.
 - Safari, Firefox and iPhone or iPad aren't verified. iOS ignores a page's
   volume, so on an iPhone only Mute or a volume of 0 changes what you hear.
