@@ -288,6 +288,16 @@ export function ShellChrome({ children }: PropsWithChildren) {
       toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
     }
   }, [state?.activity?.id, identity?.device?.id]);
+  // An idle Playback has no player or mini player, so whatever is queued into it offers Play here.
+  const idleUpNext = state && !state.currentEntryId ? state.queue.slice(state.queue.findIndex(entry => entry.id === state.queueCursorEntryId) + 1) : null;
+  const idleQueued = useRef(idleUpNext?.length);
+  useEffect(() => {
+    const before = idleQueued.current;
+    idleQueued.current = idleUpNext?.length;
+    const first = idleUpNext?.[0];
+    if (connected && first && before !== undefined && idleUpNext.length > before) toast("Queued", { id: "queued", action: { label: "Play", onClick: () => void run({ type: "play", entryId: first.id }) } });
+    return () => { toast.dismiss("queued"); };
+  }, [idleUpNext?.length, idleUpNext?.[0]?.id, connected]);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
   const onPlayer = paired && section === "Now";

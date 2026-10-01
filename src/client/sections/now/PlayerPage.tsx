@@ -155,9 +155,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     {/* Same height and gutter as the app header, with its Couch switch. */}
     <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
-      <div className="min-w-0 bg-background"><ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} /></div>
+      <div className="min-w-0 bg-background [&_ol]:flex-nowrap"><ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} /></div>
       {buffering && <p role="status" className="flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
-      <div className="ml-auto flex min-w-0 bg-background"><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
+      <div className="ml-auto flex shrink-0 bg-background"><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
     </div>
     <div className="player-workspace">
       <div className="player-main">

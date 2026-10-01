@@ -105,7 +105,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             const meta = [item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ");
             const inspect = () => details.open(itemLocation("saved", item.id));
             return <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaRow data-saved-details={item.id} ref={drag.setNodeRef} style={drag.style}
-              art={<Button variant="ghost" className="h-auto p-0 touch:h-auto" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
+              art={<Button variant="ghost" className="h-auto p-0" aria-label={`Artwork details for ${item.title}`} onClick={inspect}>{art}</Button>}
               artFit="contain"
               title={item.title}
               meta={meta}

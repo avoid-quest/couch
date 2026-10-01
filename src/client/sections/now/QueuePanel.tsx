@@ -143,7 +143,7 @@ function QueueRow({ entry, meta, onPlay, disabled, actions }: { entry: QueueEntr
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 gap-1"><span className="truncate text-sm font-medium">{entry.title}</span>{meta && <span className="truncate text-xs text-muted-foreground">{meta}</span>}</span></>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} className="flex min-w-0 items-center gap-2 py-2">
-    {onPlay ? <Button data-play variant="ghost" aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="h-auto touch:h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
+    {onPlay ? <Button data-play variant="ghost" aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
     {actions}
   </li>;
 }
