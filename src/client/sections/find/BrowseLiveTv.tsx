@@ -89,7 +89,7 @@ export function BrowseLiveTv() {
     </div>
     {guide.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {!!channels.length && <MediaList aria-label="Live TV channels">{channels.map(row)}</MediaList>}
-    {guide.data && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || group ? "No channels match. Try another name or group, or clear the filter." : "No channels yet. An admin can add one in Settings → Sources → Live TV."}</EmptyDescription></EmptyHeader></Empty>}
+    {guide.data && !guide.isPlaceholderData && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || group ? "No channels match. Try another name or group, or clear the filter." : "No channels yet. An admin can add one in Settings → Sources → Live TV."}</EmptyDescription></EmptyHeader></Empty>}
   </section>;
 }
 
