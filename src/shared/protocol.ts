@@ -106,10 +106,9 @@ export type Action =
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
-  // Control a Device, idle ones too. Solo: only that Device keeps the controlled Playback, with its
-  // picture (when it shows one) and sound. allSpeakers is the All fader: more than 0 sets every online
-  // Device to that volume with its sound in, 0 takes every Device's sound out.
-  | { type: "control"; deviceId: string }
+  // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
+  // sound. allSpeakers is the All fader: more than 0 sets every online Device to that volume with its
+  // sound in, 0 takes every Device's sound out.
   | { type: "solo"; deviceId: string }
   | { type: "allSpeakers"; level: number }
   // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { SessionState } from "../../shared/protocol";
 import { normalizeDeviceName } from "../../shared/devices";
 import { couchApp } from "./native-context";
+import { fromSavedCouch } from "./connection";
 import { defaultDeviceSharing, isDeviceSharing, type DeviceSharing } from "../../shared/device-sharing";
 
 let id: string | undefined;
@@ -16,10 +17,10 @@ const read = (key: string) => { if (memory.has(key)) return memory.get(key)!; tr
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); memory.delete(key); } catch { memory.set(key, value); } };
 const validName = (value: unknown) => { try { return normalizeDeviceName(value); } catch { return null; } };
 let name = couchApp?.deviceName ? null : validName(read(nameKey));
-// A deliberate browser switch carries only the public name, never the Sendspin key.
+// A deliberate browser switch carries only the public name, never the Sendspin key, and only a saved Couch may rename this browser.
 if (!couchApp && typeof location !== "undefined" && new URLSearchParams(location.hash.slice(1)).has("device-name")) {
   const fragment = new URLSearchParams(location.hash.slice(1));
-  const carried = validName(fragment.get("device-name"));
+  const carried = fromSavedCouch && validName(fragment.get("device-name"));
   if (carried) { name = carried; write(nameKey, carried); }
   fragment.delete("device-name");
   history.replaceState(history.state, "", location.pathname + location.search + (fragment.size ? `#${fragment}` : ""));
@@ -114,7 +115,7 @@ export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output =>
 
 /**
  * One "Playing on {name}" toast when a play this window started lands on another Device: its
- * picture and sound are elsewhere. A fixed id keeps a play announced twice (control, then play) one toast.
+ * picture and sound are elsewhere. A fixed id keeps it one toast when both the command and Play on announce it.
  */
 export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
   const name = target && target !== deviceId() && state?.devices?.find(device => device.id === target)?.name;

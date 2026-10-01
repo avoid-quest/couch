@@ -169,7 +169,8 @@ function useShellValue() {
       try { await playProgress.mutateAsync({ mediaId: item.mediaId, on: options.on, fromStart: options.fromStart === true, profileId: state.activeProfile.id }); return true; }
       catch (reason) { setError(errorText(reason)); return false; }
     }
-    if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });
+    // Only REST history plays carry Play on, so items that are only in the queue offer plain Play.
+    if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, fromStart: options.fromStart });
     setError("Couldn't play. It's no longer available.");
     return Promise.resolve(false);
   };

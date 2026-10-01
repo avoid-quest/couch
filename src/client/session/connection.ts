@@ -19,27 +19,30 @@ const unique = (entries: KnownCouch[]) => [...new Map(entries.map(item => [item.
 const save = (storageKey: string, value: unknown) => { const text = JSON.stringify(value); if (localStorage.getItem(storageKey) !== text) localStorage.setItem(storageKey, text); };
 const referrer = () => { try { return new URL(document.referrer).origin; } catch { return ""; } };
 
-// A deliberate browser switch carries public labels, while pairing stays in each origin's storage.
-// Only a Couch that sent this browser here may add them, so a link elsewhere cannot plant one.
-function receiveCouches() {
-  if (typeof location === "undefined") return;
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  if (!fragment.has("couches")) return;
-  const carried = couches(fragment.get("couches"));
-  try { if (carried.some(item => item.origin === referrer())) save(couchesKey, unique([...couches(localStorage.getItem(couchesKey)), ...carried])); }
-  catch { /* The current address still works without a saved list. */ }
-  fragment.delete("couches");
-  history.replaceState(history.state, "", location.pathname + location.search + (fragment.size ? `#${fragment}` : ""));
-}
-
 export function knownConnection(): KnownConnection | null {
-  receiveCouches();
   try {
     const value = JSON.parse(localStorage.getItem(key) ?? "null") as KnownConnection | null;
     if (!value || typeof value.details?.name !== "string" || !Array.isArray(value.details.urls)) return null;
     if (![value.origin, ...value.details.urls].every(originOnly)) return null;
     return value;
   } catch { return null; }
+}
+
+/** Whether the page that sent this browser here is a Couch it already saved at this origin, read before any hint is taken. */
+export const fromSavedCouch = typeof location !== "undefined" && knownConnections().some(item => item.origin === referrer());
+
+// A deliberate browser switch carries public labels, while pairing stays in each origin's storage. A
+// saved Couch may share its whole list; any other page adds at most itself, so a link cannot plant others.
+if (typeof location !== "undefined") {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  if (fragment.has("couches")) {
+    const carried = couches(fragment.get("couches"));
+    const accepted = fromSavedCouch ? carried : carried.filter(item => item.origin === referrer()).slice(0, 1);
+    try { if (accepted.length) save(couchesKey, unique([...couches(localStorage.getItem(couchesKey)), ...accepted])); }
+    catch { /* The current address still works without a saved list. */ }
+    fragment.delete("couches");
+    history.replaceState(history.state, "", location.pathname + location.search + (fragment.size ? `#${fragment}` : ""));
+  }
 }
 
 export function knownConnections(): KnownCouch[] {

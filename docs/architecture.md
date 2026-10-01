@@ -82,20 +82,21 @@ Nothing else stores a volume: the band's volume shows the loudest in-sound
 Device's and scales them all proportionally, and its mute mutes them all.
 
 The header selects a server. Within that server, each controller looks at the
-Playback its selected output Device serves; `device_targets` remembers that
-Device for each controller. A connection restores it while it still serves a
-permitted live Playback, otherwise it selects the server's own Device; when
-those outputs are offline, Play selects the controller's own Device. Outputs
-stay with the live Playback; a server restart restores queues without outputs.
-`control` can select an idle Device without moving outputs. Ordinary Play keeps
-the current mix. Explicit Play on a Device (`deviceId` on WebSocket Play now,
-`?on=` on REST play requests; the item menus' "Play on" and "Play on {name}")
-isolates that Device and selects it when the play is reserved, after
-validation, with a "Playing on {name}" toast. A selected output that stops
-serving (fader to 0, sharing withdrawn, unpaired) moves its controllers to
-another output in its mix, including controllers away on another server; one
-that moves to another Playback keeps them, and a Playback that ends moves
-no one.
+Playback its selected output Device serves. Core keeps that choice in memory
+while it runs: a connection restores it while it still serves a Playback,
+otherwise the controller selects the server's own Device. A choice no longer
+shared also falls back to the server's own Device, and while that Device is
+offline and idle Play and the view use the controller's own Device without
+changing the choice. Outputs stay with the live Playback; a server restart restores queues
+without outputs. Ordinary Play keeps the current mix, and playing a waiting
+Playback moves that whole mix to it. Explicit Play on a Device (`deviceId` on
+WebSocket Play now, `?on=` on REST play requests; the item menus' "Play on" and
+"Play on {name}") isolates that Device and selects it once the item checks out
+(a list loaded, a source or history item still there), with a "Playing on
+{name}" toast. A selected output that stops serving (fader to 0, sharing
+withdrawn, unpaired) moves its controllers to another output in its mix,
+including controllers away on another server; one that moves to another
+Playback keeps them, and a Playback that ends moves no one.
 `solo` leaves one Device
 with the Playback's picture and sound, and `allSpeakers` is the Mixer's All
 fader: a level above 0 sets every online Device to it with its sound in, 0 takes

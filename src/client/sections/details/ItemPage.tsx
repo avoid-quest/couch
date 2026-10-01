@@ -135,7 +135,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
   return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} position={item.position} meta={[item.subtitle, item.sourceLabel].filter(Boolean).join(" · ")} description={item.description}
     primary={<Button size="sm" disabled={blocked || !playable} onClick={() => action.mutate(() => play(() => shell.playHistory(item, { fromStart: item.position === 0 })))}>{on(item.position > 0 ? "Resume" : "Play")}</Button>}
     actions={[
-      { label: "Play on", disabled: blocked || !playable, playOn: deviceId => action.mutate(() => play(on => shell.playHistory(item, { fromStart: item.position === 0, on }), deviceId)) },
+      { label: "Play on", disabled: blocked || !playable || !item.playable, playOn: deviceId => action.mutate(() => play(on => shell.playHistory(item, { fromStart: item.position === 0, on }), deviceId)) },
       ...(item.position ? [{ label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => play(() => shell.playHistory(item, { fromStart: true }))) }] : []),
       { label: "Queue", disabled: blocked, run: () => action.mutate(() => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id })) },
       ...(item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []),

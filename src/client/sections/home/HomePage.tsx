@@ -251,7 +251,7 @@ function RecentRail({ items, disabled, onPlay, onQueue }: { items: HistoryItem[]
           <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
         </Button><div className="flex"><BrowseActions title={item.title} actions={[
           { label: "Play", disabled: unplayable, run: () => onPlay(item) },
-          { label: "Play on", disabled: unplayable, playOn: deviceId => onPlay(item, deviceId) },
+          { label: "Play on", disabled: unplayable || !item.playable, playOn: deviceId => onPlay(item, deviceId) },
           { label: "Queue", disabled: !item.playable, run: () => onQueue(item) },
         ]} /></div></li>;
     })}
@@ -341,7 +341,7 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
     finally { setPending(false); }
   }
   const secondary = (item: HistoryItem) => [
-    { label: "Play on", disabled: !playable(item), playOn: (deviceId: string) => void act(item, "resume", deviceId) },
+    { label: "Play on", disabled: !playable(item) || !item.playable, playOn: (deviceId: string) => void act(item, "resume", deviceId) },
     { label: "From start", disabled: !playable(item), run: () => void act(item, "start") },
     { label: "Queue", disabled: !connected || pending, run: () => void act(item, "queue") },
     { label: "Remove", disabled: !connected || pending, run: () => void act(item, "remove") },
