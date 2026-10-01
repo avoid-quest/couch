@@ -695,7 +695,7 @@ export async function createHub(options: HubOptions) {
   const mpv = createMpv(player => mpvPlayback?.session.observe(player));
   const passThrough = createPassThrough(playbackId => !!playing(playbackId));
   async function resolveEntry(entry: QueueEntry, playbackId: string, signal: AbortSignal, tab: Socket<SocketData> | null | undefined, playback: Playback): Promise<MediaSource & { headers?: Record<string, string> }> {
-    if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true);
+    if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage);
     if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal);
     if (entry.source.startsWith("radio:")) {
       const station = radio.getPlayable(entry.source.slice(6));
@@ -1052,7 +1052,7 @@ export async function createHub(options: HubOptions) {
       if (route) return route(request);
       // Sendspin (#644 ticket 10): the Noise handshake admits only this Couch's Devices.
       if (pathname === "/sendspin") return !allowed(request, false) ? json({ error: "Unrecognized host or origin." }, 403) : upgrade(sendspin.accept) ? undefined : json({ error: "WebSocket upgrade required." }, 426);
-      if (request.method === "GET" && /^\/api\/subtitles\/[\w-]+\.vtt$/.test(pathname)) return subtitles.serve(pathname);
+      if (request.method === "GET" && /^\/api\/subtitles\/[\w-]+\.vtt$/.test(pathname)) return subtitles.serve(new URL(request.url));
       if (request.method === "GET" && pathname.startsWith("/api/relay/")) return allowed(request, false) ? passThrough.serve(request) : new Response(null, { status: 403 });
       const page = ["GET", "HEAD"].includes(request.method) && !pathname.startsWith("/api/") ? await frontend(pathname) : null;
       return page ?? api(request, upgrade);

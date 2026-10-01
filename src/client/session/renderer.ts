@@ -41,6 +41,9 @@ export const playsVp9 = /Chrome\//.test(navigator.userAgent) && video.canPlayTyp
 const split = () => audio.hasAttribute("src");
 const waiting = () => stalled && !video.paused;
 const external = () => Array.from(video.textTracks).filter(track => track.kind === "subtitles" && !hls?.subtitleTracks.some(item => item.name === track.label && item.lang === track.language));
+const matchesLanguage = (language = "", wanted = "") => !!wanted && language.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2));
+const preferredSubtitle = (command: NonNullable<typeof loading>) => command.subtitleTrack ?? (command.preferences?.subtitles === "off" ? -1
+  : [...(hls?.subtitleTracks.map(track => track.lang) ?? []), ...external().map(track => track.language)].findIndex(language => matchesLanguage(language, command.preferences?.subtitleLanguage)));
 const tracks = (): MediaTrack[] => {
   if (!playbackId || !ready) return [];
   const picture: MediaTrack[] = video.videoWidth ? [{ id: "video", index: 0, kind: "video", label: "Video", language: "", selected: true }] : [];
@@ -155,14 +158,13 @@ const playlist = async (command: NonNullable<typeof loading>) => {
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
   for (const event of [Hls.Events.AUDIO_TRACKS_UPDATED, Hls.Events.AUDIO_TRACK_SWITCHED, Hls.Events.SUBTITLE_TRACKS_UPDATED, Hls.Events.SUBTITLE_TRACK_SWITCH]) hls.on(event, send);
   // Tracks follow the profile's language preferences.
-  const { audioLanguage = "", subtitleLanguage = "", subtitles = "auto" } = command.preferences ?? {};
-  const matches = (lang = "", wanted: string) => !!wanted && lang.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2));
+  const { audioLanguage = "" } = command.preferences ?? {};
   // Tracks chosen on another Device come with the item (#644 ticket 9). hls.js lists a
   // level's audio and subtitle tracks only once it starts loading that level.
   hls.once(Hls.Events.LEVEL_LOADED, () => {
-    const audioTrack = command.audioTrack ?? hls!.audioTracks.findIndex(track => matches(track.lang, audioLanguage));
+    const audioTrack = command.audioTrack ?? hls!.audioTracks.findIndex(track => matchesLanguage(track.lang, audioLanguage));
     if (audioTrack >= 0 && audioTrack < hls!.audioTracks.length) hls!.audioTrack = audioTrack;
-    selectSubtitle(command.subtitleTrack ?? (subtitles === "auto" ? hls!.subtitleTracks.findIndex(track => matches(track.lang, subtitleLanguage)) : -1));
+    selectSubtitle(preferredSubtitle(command));
   });
   hls.subtitleTrack = -1;
   hls.loadSource(command.source);
@@ -215,6 +217,8 @@ const selectSubtitle = (index: number) => {
   if (hls) hls.subtitleTrack = index < embedded ? index : -1;
   // Chromium's automatic selection would still show a track whose mode never changed, so each one changes.
   external().forEach((track, position) => { track.mode = "hidden"; track.mode = embedded + position === index ? "showing" : "disabled"; });
+  // A file loads once it's chosen: a source can list many, and YouTube refuses a burst of them (429).
+  for (const element of video.querySelectorAll("track")) if (element.track.mode === "showing" && !element.src) element.src = element.dataset.src!;
 };
 
 export function play(command: PlaybackCommand) {
@@ -236,7 +240,7 @@ export function play(command: PlaybackCommand) {
       }
       apply();
       for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
-      if (command.subtitleTrack !== undefined) selectSubtitle(command.subtitleTrack);
+      selectSubtitle(preferredSubtitle(command));
       subtitleDelay = command.subtitleDelay ?? 0;
       const at = begin(command);
       if (at !== undefined) video.currentTime = at;
@@ -273,7 +277,8 @@ export function play(command: PlaybackCommand) {
 
 function addTrack(source: string, label: string, language = "", show = false) {
   const track = document.createElement("track");
-  Object.assign(track, { kind: "subtitles", src: source, label, srclang: language });
+  Object.assign(track, { kind: "subtitles", label, srclang: language });
+  track.dataset.src = source;
   video.append(track);
   if (show) selectSubtitle((hls?.subtitleTracks.length ?? 0) + external().length - 1);
 }
