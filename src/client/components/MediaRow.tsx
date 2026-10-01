@@ -51,7 +51,7 @@ export function MediaRow({ art, artFit = "cover", title, meta, children, descrip
           if (primary.href) event.preventDefault();
           primary.onClick();
         }}
-          className="group/main h-auto min-w-0 touch:h-auto flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal disabled:opacity-100">
+          className="group/main h-auto min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal disabled:opacity-100">
           {primary.href ? <a href={primary.href}>{body}</a> : body}
         </Button> : <div className="flex min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-1.5">{body}</div>}
         {actions && <ItemActions className={compact ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center" : cn("flex-wrap gap-0.5 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 @3xl:col-start-auto")}>{actions}</ItemActions>}

@@ -162,7 +162,7 @@ export function HomePage() {
         {stations.filter(station => station !== lead).slice(0, shown.radio).map(station => {
           const onNow = onAir(station.id);
           return <li key={station.id} className="border-b"><div className="flex items-center gap-2"><Button variant="ghost" aria-label={`Details ${station.name}`} onClick={() => details.open(itemLocation("radio", station.id))}
-              className="group h-auto touch:h-auto min-w-0 flex-1 shrink justify-start gap-3 rounded-none px-0 py-2 text-left font-normal whitespace-normal disabled:opacity-100">
+              className="group h-auto min-w-0 flex-1 shrink justify-start gap-3 rounded-none px-0 py-2 text-left font-normal whitespace-normal disabled:opacity-100">
               <span className="size-12 shrink-0 overflow-hidden bg-muted"><MediaArtwork thumbnail={onNow?.artworkUrl ?? station.logoUrl} title={station.name} className="aspect-square size-full text-sm" /></span>
               <span className="grid min-w-0">
                 <span className="truncate text-base font-medium">{station.name}</span>
@@ -224,7 +224,7 @@ function UpNextStrip({ plan, more, now, disabled, pageFirst, art, onPlay, onMore
       {plan.map(({ entry, starts, seconds }, index) => <li key={entry.id} className="min-w-0">
         <Button variant="ghost" data-page-first={pageFirst && index === 0 ? true : undefined} aria-label={`Play ${entry.title}`} disabled={disabled}
           onClick={() => onPlay(entry)} onMouseEnter={() => setLit(entry.id)} onFocus={() => setLit(entry.id)}
-          className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal disabled:opacity-100">
+          className="group h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal disabled:opacity-100">
           <span className="flex items-baseline justify-between gap-2 text-sm tabular-nums">
             <span>{starts == null ? "Later" : formatEndTime(starts, now)}</span>
             <span className="text-muted-foreground">{entry.live ? "Live" : seconds == null ? "" : formatDuration(seconds)}</span>
@@ -245,7 +245,7 @@ function RecentRail({ items, disabled, onPlay, onQueue }: { items: HistoryItem[]
     {items.map(item => {
       const unplayable = disabled || !(item.playable || item.queueEntryId);
       return <li key={item.mediaId} data-history-details={item.mediaId} className="min-w-0"><Button variant="ghost" aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))}
-          className="group h-auto touch:h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
+          className="group h-auto w-full flex-col items-stretch gap-2 rounded-none p-2 text-left font-normal whitespace-normal">
           <span className="block aspect-video overflow-hidden bg-muted [&_img]:size-full [&_img]:object-contain"><Artwork item={item} /></span>
           <span className="line-clamp-2 text-base font-medium">{item.title}</span>
           <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
@@ -273,9 +273,9 @@ function HomeRow({ title, time, action, children }: { title: string; time?: stri
 /** The one large item on a row: artwork beside a display title and its verbs. */
 function Feature({ art, artFit = "cover", title, meta, detail, children, onInspect }: { art: ReactNode; artFit?: "cover" | "contain"; title: string; meta?: string; detail?: ReactNode; children: ReactNode; onInspect?: (event?: MouseEvent<HTMLElement>) => void }) {
   return <div className={cn("grid items-center gap-x-8 gap-y-4", artFit === "contain" ? "md:grid-cols-[fit-content(24rem)_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]")}>
-    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`Artwork details for ${title}`} onClick={onInspect} className="h-auto touch:h-auto w-full rounded-none p-0 hover:opacity-80">{art}</Button> : art}</div>
+    <div aria-hidden={!onInspect || undefined} className={artFit === "contain" ? "grid min-h-32 min-w-32 max-w-full place-items-center overflow-hidden bg-muted" : "aspect-video w-full max-w-md overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:h-full"}>{onInspect ? <Button variant="ghost" aria-label={`Artwork details for ${title}`} onClick={onInspect} className="h-auto w-full rounded-none p-0 hover:opacity-80">{art}</Button> : art}</div>
     <div className="grid min-w-0 gap-2">
-      <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto touch:h-auto min-h-11 justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
+      <h3 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{onInspect ? <Button variant="ghost" aria-label={`Details ${title}`} onClick={onInspect} className="h-auto min-h-11 justify-start p-0 text-left text-3xl font-semibold tracking-tight whitespace-normal">{title}</Button> : title}</h3>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
       {detail}
       <div className="mt-2 flex flex-wrap items-center gap-1">{children}</div>

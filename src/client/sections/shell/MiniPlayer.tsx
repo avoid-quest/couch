@@ -68,7 +68,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
     <div className="col-span-full flex min-w-0 items-center gap-3 sm:col-span-1">
       <span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full">{artwork}</span>
       <div className="min-w-0">
-        <Button variant="ghost" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium touch:h-auto" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
+        <Button variant="ghost" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
         {/* The context gives way first, so the status and the device stay readable. */}
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}</span>
