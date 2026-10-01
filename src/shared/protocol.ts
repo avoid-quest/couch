@@ -3,7 +3,7 @@ import type { MediaCollection, MediaShape } from "./media";
 import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
-import type { DeviceSharing } from "./device-identity";
+import type { DeviceSharing } from "./device-sharing";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
@@ -126,10 +126,10 @@ export type ServerMessage =
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
-  | { type: "player"; command: PlaybackCommand; local: boolean; output: Pick<Output, "picture" | "sound"> }
+  | { type: "player"; command: PlaybackCommand }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
-  | { type: "sendspin"; listen: boolean; watch: boolean; local: boolean }
+  | { type: "sendspin"; listen: boolean; watch: boolean }
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 // A muted picture follows the Sendspin clock of its Playback's group (#644 ticket 11). pts: the

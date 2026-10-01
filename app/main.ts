@@ -12,7 +12,7 @@ import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridg
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
 import { readDeviceName, saveDeviceName } from "./device-name";
-import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-identity";
+import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.

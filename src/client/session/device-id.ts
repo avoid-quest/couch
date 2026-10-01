@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import type { SessionState } from "../../shared/protocol";
 import { normalizeDeviceName } from "../../shared/devices";
 import { couchApp } from "./native-context";
-import { defaultDeviceSharing, isDeviceSharing, type DeviceSharing } from "../../shared/device-identity";
+import { defaultDeviceSharing, isDeviceSharing, type DeviceSharing } from "../../shared/device-sharing";
 
 let id: string | undefined;
 // This device's one name, reused with every Couch: the Couch app's installation name, or this browser's storage.

@@ -39,15 +39,15 @@ changes only from that device's own connection, keeps the last choice while the
 device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
-self-join. Joining a shared Playback accepts its group transport and queue
-controls; direct output changes still require that device's sharing consent. A
-fully private Playback can only be controlled by its output devices. Revoking
-sharing removes remote output channels and stops their renderer or Sendspin
-membership at once. The receiving client also enforces its saved consent. Sharing
-speakers or a screen never grants permission to update or restart the app; that
-stays with administrators. Full-mode host outputs retain the existing server
-network-sharing policy; Devices manages server sharing, while the client switches
-appear only when joining one.
+self-join, which Solo keeps. Joining a shared Playback accepts its group transport
+and queue controls; direct output changes still require that device's sharing
+consent. A fully private Playback can only be controlled by its output devices.
+Revoking sharing removes remote output channels and stops their renderer or
+Sendspin membership at once. Sharing speakers or a screen never grants permission
+to update or restart the app; that stays with administrators. Full-mode host
+outputs retain the existing server network-sharing policy, and turning it off
+keeps what the host plays; Devices manages server sharing, while the client
+switches appear only when joining one.
 
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP

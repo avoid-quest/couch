@@ -1,6 +1,6 @@
 import type { InterfaceSize } from "./appearance";
 import type { ConnectionInfo } from "./protocol";
-import type { DeviceSharing } from "./device-identity";
+import type { DeviceSharing } from "./device-sharing";
 
 // The Couch app's preload (app/preload.ts) gives its window this bridge to Main (app/main.ts).
 // Full mode ("local") hosts Couch on this computer; Client mode ("remote") shows another Couch.

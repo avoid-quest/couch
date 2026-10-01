@@ -7,7 +7,7 @@ import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
 import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
-import type { DeviceSharing } from "../../shared/device-identity";
+import type { DeviceSharing } from "../../shared/device-sharing";
 import { couchApp } from "./native-context";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -60,14 +60,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let stopRendering: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
-    let hostSharing = false;
-    let hostIdentity = false;
-    let rendered: Extract<ServerMessage, { type: "player" }> | undefined;
-    let synced: Extract<ServerMessage, { type: "sendspin" }> | undefined;
-    const permits = (local: boolean, audio: boolean, video: boolean) => {
-      const sharing = localDeviceSharing();
-      return local || hostSharing || (!audio || sharing.audio) && (!video || sharing.video);
-    };
     // The socket's URL carries the sharing it opened with; only a later change is sent.
     let advertised: DeviceSharing | undefined;
     const advertiseSharing = () => {
@@ -76,8 +68,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         advertised = sharing;
         connection.send(JSON.stringify({ type: "command", requestId: createId(), action: { type: "sharing", sharing } } satisfies ClientMessage));
       }
-      if (rendered && !permits(rendered.local, rendered.output?.sound ?? true, rendered.output?.picture ?? true)) play({ type: "stop" });
-      if (synced && !permits(synced.local, synced.listen, synced.watch)) listen(false, false, "Couch");
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
@@ -140,8 +130,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const caller = await response.json() as DeviceIdentity;
           if (disposed) return;
           setIdentity(caller);
-          hostIdentity = caller.authority === "host";
-          hostSharing = hostIdentity && next.remoteControlEnabled === true;
           setCredentialRejected(false);
         }
       } catch {
@@ -187,8 +175,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           return;
         }
         if (message.type === "state") {
-          const ownSharing = message.state.devices?.find(device => device.id === deviceId())?.sharing;
-          hostSharing = hostIdentity && !!(ownSharing?.audio || ownSharing?.video);
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;
@@ -216,13 +202,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
           void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
-          if (message.command.type === "stop") { rendered = undefined; play(message.command); }
-          else if (permits(message.local, message.output?.sound ?? true, message.output?.picture ?? true)) { rendered = message; play(message.command); }
-          else play({ type: "stop" });
+          play(message.command);
         } else if (message.type === "sendspin") {
-          synced = message;
-          const sharing = localDeviceSharing(), local = message.local || hostSharing;
-          listen(message.listen && (local || sharing.audio), message.watch && (local || sharing.video), observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
+          listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {

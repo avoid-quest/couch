@@ -3,7 +3,7 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { localDeviceSharing, saveLocalDeviceSharing, useLocalDeviceSharing } from "@/session/device-id";
-import type { DeviceSharing } from "../../../../shared/device-identity";
+import type { DeviceSharing } from "../../../../shared/device-sharing";
 
 export function DeviceSharingSettings() {
   const sharing = useLocalDeviceSharing();

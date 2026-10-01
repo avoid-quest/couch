@@ -1,6 +1,6 @@
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
-import { isDeviceSharing } from "../shared/device-identity";
+import { isDeviceSharing } from "../shared/device-sharing";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
