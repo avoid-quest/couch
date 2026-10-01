@@ -77,6 +77,11 @@ function parseMedia(info: Metadata): WebMediaSource {
     if (!video || !audio) throw new Error("The website returned an unsupported combination of media streams.");
     source = selectedSource(video);
     audioSource = selectedSource(audio);
+    // hls.js plays an HLS master's picture and sound together; an <audio> can't play its sound rendition (StreamingCommunity).
+    if ([video, audio].every(stream => String(stream.protocol).startsWith("m3u8")) && typeof video.manifest_url === "string" && video.manifest_url === audio.manifest_url) {
+      source = mediaUrl(video.manifest_url);
+      audioSource = undefined;
+    }
   }
   const metadata = publicMetadata(info);
   return { source, ...(audioSource ? { audioSource } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
