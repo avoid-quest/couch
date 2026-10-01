@@ -26,8 +26,8 @@ async function transport(url: string, signal: AbortSignal): Promise<{ mpegts?: t
 // Chromium decodes, so it plays in mpv only when every variant needs MPEG-2 video, AC-3 or
 // E-AC-3 without AAC beside it, or HEVC on Linux.
 export function mpvPlaylist(text: string, hevc = linux) {
-  const variants = [...text.matchAll(/^#EXT-X-STREAM-INF:(?:.*,)?CODECS="([^"]*)"/gm)].map(match => match[1]!.toLowerCase());
-  return variants.length > 0 && variants.every(codecs => /\bmp4v\.6[0-5a]\b/.test(codecs) || /\b[ae]c-3\b/.test(codecs) && !/\bmp4a\./.test(codecs) || hevc && /\b(?:hvc1|hev1)\./.test(codecs));
+  const variants = [...text.matchAll(/^#EXT-X-STREAM-INF:(.*)$/gm)].map(match => /(?:^|,)CODECS="([^"]*)"/.exec(match[1]!)?.[1]?.toLowerCase());
+  return variants.length > 0 && variants.every(codecs => codecs !== undefined && (/\bmp4v\.6[0-5a]\b/.test(codecs) || /\b[ae]c-3\b/.test(codecs) && !/\bmp4a\./.test(codecs) || hevc && /\b(?:hvc1|hev1)\./.test(codecs)));
 }
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };

@@ -66,7 +66,7 @@ export function createMpv(report: (state: PlayerState) => void) {
           const { playbackId } = message;
           void helper("mpv").then(path => {
             if (state.playbackId !== playbackId) return;
-            const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-terminal", "--no-input-default-bindings", "--force-window=immediate", "--fullscreen", "--keep-open=no", "--title=Couch", `--volume=${volume}`,
+            const process = spawn(path, [`--input-ipc-server=${ipc}`, "--no-config", "--no-terminal", "--no-input-default-bindings", "--force-window=immediate", "--fullscreen", "--keep-open=no", "--title=Couch", `--volume=${volume}`,
               ...(message.paused ? ["--pause"] : []), ...(message.startPosition ? [`--start=${message.startPosition}`] : []), "--", message.source], { stdio: "ignore" });
             child = process;
             process.once("error", error => { if (child === process) publish({ status: "error", error: `mpv didn't start: ${error.message}` }); });
