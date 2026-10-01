@@ -295,8 +295,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
     const before = idleQueued.current;
     idleQueued.current = idleUpNext?.length;
     const first = idleUpNext?.[0];
-    if (first && before !== undefined && idleUpNext.length > before) toast("Queued", { id: "queued", action: { label: "Play", onClick: () => void run({ type: "play", entryId: first.id }) } });
-  }, [idleUpNext?.length]);
+    if (connected && first && before !== undefined && idleUpNext.length > before) toast("Queued", { id: "queued", action: { label: "Play", onClick: () => void run({ type: "play", entryId: first.id }) } });
+    return () => { toast.dismiss("queued"); };
+  }, [idleUpNext?.length, idleUpNext?.[0]?.id, connected]);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
   const onPlayer = paired && section === "Now";
