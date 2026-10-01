@@ -7,7 +7,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { RangeControl } from "@/components/RangeControl";
 import { cn } from "@/lib/utils";
-import type { playsOn } from "@/session/device-id";
+import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/native-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action } from "../../../shared/protocol";
@@ -26,8 +26,9 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   const outputs = state.outputs ?? [];
   const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
   const output = (id: string) => outputs.find(item => item.deviceId === id);
+  const here = deviceId();
   // The Playback's Devices first, then the other online ones; an offline Device only while it is an output.
-  const devices = (state.devices ?? []).filter(device => device.online || output(device.id)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
+  const devices = (state.devices ?? []).filter(device => output(device.id) || device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
   // The All fader shows the loudest in-sound Device's volume, or 0 when none is.
   const loudest = Math.max(0, ...devices.filter(device => output(device.id)?.sound).map(device => device.volume));
   return <Sheet>
@@ -47,23 +48,24 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
       <div className="flex min-w-0 flex-1 divide-x overflow-x-auto">
         {devices.map(device => {
           const current = output(device.id);
+          const audio = device.id === here || device.sharing?.audio === true, video = device.id === here || device.sharing?.video === true;
           const sound = !!current?.sound;
           const only = outputs.length > 0 && outputs.every(item => item.deviceId === device.id);
           const status = doing(state, device, state.playback);
           // Devices outside the Playback are dimmed, and still fully operable.
           return <div key={device.id} className={cn("grid w-32 shrink-0 content-start justify-items-center gap-2 px-2 py-3", !current && "text-muted-foreground")}>
-            <Toggle variant="outline" pressed={!!current?.picture} aria-label={`${device.name} picture`} onPressedChange={picture => void run({ type: "output", deviceId: device.id, picture })} className={cn("w-full", inverts)}><Monitor aria-hidden="true" />Picture</Toggle>
+            <Toggle variant="outline" pressed={!!current?.picture} disabled={!video} aria-label={`${device.name} picture`} onPressedChange={picture => void run({ type: "output", deviceId: device.id, picture })} className={cn("w-full", inverts)}><Monitor aria-hidden="true" />Picture</Toggle>
             <span className="text-xl font-medium tabular-nums">{sound ? Math.round(device.volume) : "–"}</span>
-            <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} volume`} value={sound ? device.volume : 0} max={100} disabled={false} onCommit={level => run({ type: "output", deviceId: device.id, level })} /></div>
+            <div className="h-40"><RangeControl orientation="vertical" label={`${device.name} volume`} value={sound ? device.volume : 0} max={100} disabled={!audio} onCommit={level => run({ type: "output", deviceId: device.id, level })} /></div>
             <span className="grid w-full justify-items-center gap-0.5 text-center">
               <span className="flex max-w-full items-center gap-1.5"><DeviceIcon {...signalOf(state, device.id)} /><span className="truncate text-sm" title={device.name}>{device.name}</span></span>
               <span className="w-full truncate text-xs text-muted-foreground" title={status}>{status}</span>
             </span>
             <div className="grid w-full grid-cols-2 gap-1">
-              <Toggle variant="outline" pressed={only} disabled={!device.online} aria-label={`Solo ${device.name}`} onPressedChange={() => { if (!only) void run({ type: "solo", deviceId: device.id }); }} className={inverts}>Solo</Toggle>
-              <Toggle variant="outline" pressed={device.muted} aria-label={`Mute ${device.name}`} onPressedChange={muted => void run({ type: "mute", deviceId: device.id, muted })} className={inverts}>Mute</Toggle>
+              <Toggle variant="outline" pressed={only} disabled={!device.online || !audio && !video} aria-label={`Solo ${device.name}`} onPressedChange={() => { if (!only) void run({ type: "solo", deviceId: device.id }); }} className={inverts}>Solo</Toggle>
+              <Toggle variant="outline" pressed={device.muted} disabled={!audio} aria-label={`Mute ${device.name}`} onPressedChange={muted => void run({ type: "mute", deviceId: device.id, muted })} className={inverts}>Mute</Toggle>
             </div>
-            {sound && current?.delay !== undefined && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+            {audio && sound && current?.delay !== undefined && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
           </div>;
         })}
       </div>

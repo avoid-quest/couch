@@ -17,7 +17,7 @@ test("full storage keeps Couch and Sendspin on one key and accepts later cross-t
   assert.equal(identity.deviceId(), loadSendspinClientIdentity(identity.storage).clientId);
   await identity.saveLocalDeviceName("Laptop");
   assert.equal(identity.storage.getItem("couch.device-name"), "Laptop");
-  const unsubscribe = identity.subscribeDeviceName(() => {});
+  const unsubscribe = identity.subscribeDeviceIdentity(() => {});
   values.set("couch.device-name", "Office laptop");
   window.dispatchEvent(Object.assign(new Event("storage"), { key: "couch.device-name" }));
   assert.equal(identity.localDeviceName(), "Office laptop");
@@ -49,7 +49,7 @@ test("the Couch app's name comes from Main, not the origin's storage", () => che
   const identity = await import("./src/client/session/device-id.ts");
   assert.equal(identity.localDeviceName(), null);
   let notifications = 0;
-  const unsubscribe = identity.subscribeDeviceName(() => notifications++);
+  const unsubscribe = identity.subscribeDeviceIdentity(() => notifications++);
   await identity.loadLocalDeviceName();
   assert.equal(identity.localDeviceName(), "Canonical laptop");
   await identity.saveLocalDeviceName("Laptop");
@@ -62,4 +62,20 @@ test("the Couch app's name comes from Main, not the origin's storage", () => che
   assert.equal(identity.localDeviceName(), saved);
   assert.equal(notifications, 3);
   unsubscribe();
+`));
+
+test("the Couch app shares one choice from Main with every Couch it joins", () => check(`
+  import assert from "node:assert/strict";
+  const values = new Map([["couch.device-sharing", JSON.stringify({ audio: true, video: true })]]);
+  let saved = { audio: true, video: false };
+  globalThis.window = Object.assign(new EventTarget(), { couchApp: { deviceSharing: async sharing => saved = sharing ?? saved } });
+  globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  const identity = await import("./src/client/session/device-id.ts");
+  assert.deepEqual(identity.localDeviceSharing(), { audio: false, video: false });
+  await identity.loadLocalDeviceSharing();
+  assert.deepEqual(identity.localDeviceSharing(), { audio: true, video: false });
+  await identity.saveLocalDeviceSharing({ audio: false, video: true });
+  assert.deepEqual(saved, { audio: false, video: true });
+  assert.equal(values.get("couch.device-sharing"), JSON.stringify({ audio: true, video: true }));
+  await assert.rejects(identity.saveLocalDeviceSharing({ audio: true, video: true, extra: true }));
 `));

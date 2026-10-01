@@ -1,5 +1,6 @@
 import type { InterfaceSize } from "./appearance";
 import type { ConnectionInfo } from "./protocol";
+import type { DeviceSharing } from "./device-sharing";
 
 // The Couch app's preload (app/preload.ts) gives its window this bridge to Main (app/main.ts).
 // Full mode ("local") hosts Couch on this computer; Client mode ("remote") shows another Couch.
@@ -33,6 +34,8 @@ export type CouchApp = {
   tvPresentation: boolean;
   /** Reads, or saves, this computer's name; null until it has one. Older apps lack it. */
   deviceName?(name?: string): Promise<string | null>;
+  /** Reads, or saves, what this computer shares with every Couch it joins. Older apps lack it. */
+  deviceSharing?(sharing?: DeviceSharing): Promise<DeviceSharing>;
   mode(): Promise<AppMode>;
   // null: the window is loading the chosen Couch.
   choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;

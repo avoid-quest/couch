@@ -8,7 +8,7 @@ export function usePlayOn() {
   const session = useOptionalSessionGate();
   const state = session?.state;
   const here = deviceId();
-  const online = (state?.devices ?? []).filter(device => device.online).sort((a, b) => Number(b.id === here) - Number(a.id === here));
+  const online = (state?.devices ?? []).filter(device => device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(b.id === here) - Number(a.id === here));
   const target = state?.controlling && state.controlling !== here ? state.devices?.find(device => device.id === state.controlling) : undefined;
   return {
     // With only this Device online, Play on would repeat Play.

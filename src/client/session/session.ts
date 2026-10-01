@@ -6,7 +6,8 @@ import { emptyPlaybackClock, type PlaybackClock } from "./playback-clock";
 import { knownConnection, rememberConnection } from "./connection";
 import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
-import { deviceId } from "./device-id";
+import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
+import type { DeviceSharing } from "../../shared/device-sharing";
 import { couchApp } from "./native-context";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -59,6 +60,16 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let stopRendering: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
+    // The socket's URL carries the sharing it opened with; only a later change is sent.
+    let advertised: DeviceSharing | undefined;
+    const advertiseSharing = () => {
+      const connection = socket.current, sharing = localDeviceSharing();
+      if (connection?.readyState === WebSocket.OPEN && sameCredentials(credentials, socketCredentials.current) && (sharing.audio !== advertised?.audio || sharing.video !== advertised?.video)) {
+        advertised = sharing;
+        connection.send(JSON.stringify({ type: "command", requestId: createId(), action: { type: "sharing", sharing } } satisfies ClientMessage));
+      }
+    };
+    const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
     const stopPlayback = () => { stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
@@ -126,10 +137,14 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         return;
       }
       if (!authenticate || !credentials) { setStatus("pairing-required"); attempt = 0; retry = setTimeout(() => void connect(), 5_000); return; }
+      await loadLocalDeviceSharing().catch(() => {});
+      if (disposed) return;
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       url.searchParams.set("device", deviceId());
+      advertised = localDeviceSharing();
+      for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
       if (couchApp?.update) { url.searchParams.set("updates", "1"); if (couchApp.tvPresentation) url.searchParams.set("tv", "1"); }
       const asset = buildKey(loadedBuild);
@@ -144,6 +159,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       connection.onopen = () => {
         if (!isCurrent()) return;
         setStatus("syncing");
+        advertiseSharing();
         stopRendering = connectRenderer(state => {
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
@@ -232,6 +248,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     void connect();
     return () => {
       disposed = true;
+      unsubscribeIdentity();
       document.removeEventListener("visibilitychange", wake);
       window.removeEventListener("pageshow", wake);
       window.removeEventListener("online", wake);
