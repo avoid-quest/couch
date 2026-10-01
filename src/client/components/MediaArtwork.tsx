@@ -8,7 +8,7 @@ export function MediaArtwork({ thumbnail, title, collection = false, className =
   let src = "";
   try {
     const url = new URL(thumbnail ?? "");
-    if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) src = url.href;
+    if (["https:", "http:", "blob:"].includes(url.protocol) && !url.username && !url.password) src = url.href;
   } catch { /* Missing artwork uses the title initials. */ }
   return src && src !== failedSrc
     ? <img className={cn("media-artwork block w-full aspect-video object-cover bg-muted", className)} src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} />
