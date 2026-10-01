@@ -40,10 +40,14 @@ export function BrowseLiveTv() {
   const group = typeof search.group === "string" ? search.group.slice(0, 200) : "";
   const requested = typeof search.page === "number" && Number.isSafeInteger(search.page) && search.page > 0 ? search.page : 1;
   // Now and next move on while the page is open.
-  const guide = useQuery({ ...iptvGuideQuery(credentials, { offset: (requested - 1) * collectionPageSize, group, q: filter }), enabled: connected, placeholderData: keepPreviousData, refetchInterval: 60_000 });
+  // Core accepts at most eight sources of 5,000 channels each.
+  const guide = useQuery({ ...iptvGuideQuery(credentials, { offset: Math.min((requested - 1) * collectionPageSize, 40_000), group, q: filter }), enabled: connected, placeholderData: keepPreviousData, refetchInterval: 60_000 });
   const channels = guide.data?.channels.slice(0, collectionPageSize) ?? [];
   const total = guide.data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / collectionPageSize));
+  useEffect(() => {
+    if (guide.data && !guide.isPlaceholderData && requested > pages) void navigate({ href: liveTvLocation({ page: pages, filter, group }), replace: true, resetScroll: false });
+  }, [guide.data, guide.isPlaceholderData, requested, pages, filter, group, navigate]);
   const { play } = usePlayOn();
   const action = useMutation({
     mutationFn: ({ channel, playNow, deviceId }: { channel: GuideChannel; playNow: boolean; deviceId?: string }) => playNow
@@ -65,7 +69,7 @@ export function BrowseLiveTv() {
       actions={<BrowseActions title={channel.name} actions={[
         { label: "Play", disabled, run: () => run(true) },
         { label: "Play on", disabled, playOn: deviceId => run(true, deviceId) },
-        { label: "Queue", disabled: action.isPending, run: () => run(false) },
+        { label: "Queue", disabled: !connected || action.isPending, run: () => run(false) },
       ]} />} />;
   };
   return <section className="min-w-0 space-y-6" aria-label="Browse Live TV">
@@ -85,7 +89,7 @@ export function BrowseLiveTv() {
     </div>
     {guide.error && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV. {searchError(guide.error)}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void guide.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {!!channels.length && <MediaList aria-label="Live TV channels">{channels.map(row)}</MediaList>}
-    {guide.data && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || group ? "No channels match. Try another name or group, or clear the filter." : "No channels yet. An admin can add one in Settings → Sources → Live TV."}</EmptyDescription></EmptyHeader></Empty>}
+    {guide.data && requested <= pages && !guide.error && !channels.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>{filter || group ? "No channels match. Try another name or group, or clear the filter." : "No channels yet. An admin can add one in Settings → Sources → Live TV."}</EmptyDescription></EmptyHeader></Empty>}
   </section>;
 }
 

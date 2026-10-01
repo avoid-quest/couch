@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { GuidePage, GuideSource } from "../../shared/iptv";
-import { apiFetch, apiJson, type ApiCredentials } from "./client";
+import { ApiError, apiFetch, apiJson, type ApiCredentials } from "./client";
 
 export const iptvSourcesQuery = (credentials: ApiCredentials) =>
   queryOptions({
@@ -23,5 +23,5 @@ export const iptvLogoQuery = (credentials: ApiCredentials, channelId: string) =>
     queryKey: ["iptv-logo", channelId],
     queryFn: ({ signal }) => apiFetch(credentials, `/api/iptv/channels/${channelId}/logo`, { signal }).then(response => response.blob()),
     staleTime: 5 * 60_000,
-    retry: 3,
+    retry: (attempt, error) => attempt < 3 && (!(error instanceof ApiError) || error.status >= 500),
   });

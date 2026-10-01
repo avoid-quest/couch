@@ -195,7 +195,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
           const value = await body(req);
           administrator();
           if (sources().length >= guideLimits.sources) throw new GuideError("Keep at most eight guide sources.", 409);
-          const source = { id: crypto.randomUUID(), name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: value.guideUrl ? guideUrl(value.guideUrl) : "" };
+          const source = { id: crypto.randomUUID(), name: guideText(value.name, 100), playlistUrl: guideUrl(value.playlistUrl), guideUrl: value.guideUrl === undefined || value.guideUrl === "" ? "" : guideUrl(value.guideUrl) };
           return json(await refresh(source, administrator, req.signal, true), 201);
         }
         const sourcePath = /^\/api\/iptv\/sources\/([\w-]{1,80})(\/refresh)?$/.exec(path);
@@ -221,7 +221,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
           administrator();
           definition(source.id);
           // A blank URL keeps the saved one; Couch never sends saved URLs back to clients.
-          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: value.playlistUrl ? guideUrl(value.playlistUrl) : source.playlistUrl, guideUrl: value.guideUrl ? guideUrl(value.guideUrl) : source.guideUrl }, administrator, req.signal, true));
+          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: value.playlistUrl === undefined || value.playlistUrl === "" ? source.playlistUrl : guideUrl(value.playlistUrl), guideUrl: value.guideUrl === undefined || value.guideUrl === "" ? source.guideUrl : guideUrl(value.guideUrl) }, administrator, req.signal, true));
         }
         if (path === "/api/iptv/guide") {
           if (req.method !== "GET") return methods("GET");

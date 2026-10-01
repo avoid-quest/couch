@@ -255,16 +255,14 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
   const navigation = useDetailNavigation();
   const provider = providerForUrl(url);
   const disabled = !props.connected || pending;
-  // Provider pages open channels, playlists and albums that webpage playback can't.
-  if (provider) return <section className="max-w-3xl" aria-label="Pasted link">
-    <Button onClick={() => navigation.open(collectionLocation({ provider, url }))}>Open</Button>
-  </section>;
   return <section className="max-w-3xl space-y-4" aria-label="Pasted link">
     <SettingsSection>
       <SettingsRow label="Open as"><ChoiceGroup label="Open link as" value={mode} onValueChange={setMode} disabled={disabled} options={[{ value: "Webpage", label: "Webpage" }, { value: "Direct media", label: "Direct media" }]} /></SettingsRow>
       {mode === "Webpage" && supportsWebVideoQuality(url) && <SettingsRow label="Quality"><ChoiceGroup label="Video quality" value={quality} onValueChange={onQualityChange} disabled={disabled} options={videoQualityOptions} /></SettingsRow>}
     </SettingsSection>
     <div className="flex flex-wrap gap-2">
+      {/* Keep playback available for provider links outside the catalog, such as Twitch VODs. */}
+      {provider && <Button variant="outline" onClick={() => navigation.open(collectionLocation({ provider, url }))}>Open page</Button>}
       <Button disabled={disabled || !props.canPlay || !props.onCommand} onClick={() => void send(true)}>{on("Play")}</Button>
       <PlayOnMenu title={hostname + pathname} disabled={disabled || !props.canPlay || !props.onCommand} onPlay={deviceId => void send(true, deviceId)} />
       <Button variant="ghost" disabled={disabled || !props.onCommand} onClick={() => void send(false)}>Queue</Button>
