@@ -30,7 +30,9 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const host = identity.authority === "host";
   const manager = identity.authority === "administrator" || host;
   const devices = useQuery({ ...devicesQuery(credentials), enabled: connected });
-  const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed });
+  // The first device paired becomes the admin, so the admin code is useful only once devices are paired.
+  const paired = devices.data?.some(device => device.role !== "host");
+  const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed && !!paired });
   const originDomain = useQuery({ ...originDomainQuery(credentials), enabled: connected && manager && managedLan });
   const [domainDraft, setDomainDraft] = useState<string | null>(null);
   const domain = domainDraft ?? originDomain.data?.domain ?? "";
@@ -41,6 +43,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const [nameDraft, setNameDraft] = useState("");
   const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
+  const port = pairUrl && new URL(pairUrl).port;
   const refreshDevices = () => queryClient.invalidateQueries({ queryKey: devicesQuery(credentials).queryKey });
   const claiming = useMutation({ mutationFn: (value: string) => apiSend(credentials, "/api/devices/claim", { code: value }), onSuccess: refreshDevices });
   const deviceChange = useMutation({
@@ -78,23 +81,24 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
 
   // Sharing and pairing, then the paired Devices (like Bluetooth), then the rare admin handover; the Couch choice with Forget follows on the page.
   return <>
-    {manager && <SettingsSection>
+    <SettingsSection>
       {host && <SettingsRow label="Share on network" description="Phones, browsers and other computers on your network can pair and play.">
         <Switch aria-label="Share on network" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
       </SettingsRow>}
-      <SettingsRow label="New device" description={remoteControlEnabled ? "Show a code to scan or type on the new device." : host ? "Turn on Share on network first." : `Turn on Share on network on ${hostName} first.`}>
-        <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>
+      <SettingsRow label="New device" description={!manager ? "Only an admin can pair devices." : !remoteControlEnabled ? host ? "Turn on Share on network first." : `Turn on Share on network on ${hostName} first.`
+        : `Show a code to scan or type on the new device.${host && !administratorClaimed && paired === false ? " The first device you pair becomes the admin." : ""}`}>
+        {manager && <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
       </SettingsRow>
-      {managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A name that points to ${hostName}. Add a port if 80 is taken.`}>
+      {manager && managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A DNS name for ${hostName}, like couch.home.${port ? ` If port 80 is taken, add :${port}.` : ""}`}>
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={submitDomain}>
-          <Input id="origin-domain" className="min-w-0 flex-1" placeholder="http://couch.local" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomainDraft(event.target.value)} disabled={!connected || saveDomain.isPending || originDomain.isPending} />
+          <Input id="origin-domain" className="min-w-0 flex-1" placeholder="couch.home" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomainDraft(event.target.value)} disabled={!connected || saveDomain.isPending || originDomain.isPending} />
           <Button type="submit" variant="outline" disabled={!connected || saveDomain.isPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{saveDomain.isPending ? "Saving…" : "Save"}</Button>
         </form>
       </SettingsRow>}
       {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Share on network.")}</AlertDescription></Alert>}
       {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
-      <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />
-    </SettingsSection>}
+      {manager && <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />}
+    </SettingsSection>
     <SettingsSection data-devices>
       {devices.isSuccess && !host && manager && !devices.data.some(device => device.role === "host") && <SettingsRow label={hostName} description="Runs this Couch">
         <Button variant="outline" disabled={!connected || rename.isPending} onClick={() => startRename(hostName)}>Rename</Button>
@@ -114,8 +118,8 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
           ))}
       {deviceChange.error && <Alert variant="destructive"><AlertDescription>{message(deviceChange.error, "Couldn't update the device. Try again.")}</AlertDescription></Alert>}
     </SettingsSection>
-    {host && remoteControlEnabled && !administratorClaimed && (
-      <SettingsSection title="Make a device the admin" description="Pair a device, then enter this one-time code on it." data-administrator-setup>
+    {host && remoteControlEnabled && !administratorClaimed && paired && (
+      <SettingsSection title="Make a device the admin" description="Enter this one-time code on a paired device." data-administrator-setup>
         <div className="flex min-w-0 flex-col gap-1">
           {setupCode.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Loading…</p>
             : setupCode.isError || !setupCode.data || !pairUrl ? <Alert variant="destructive"><AlertDescription>Couldn't load the admin code.</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected || setupCode.isFetching} onClick={() => void setupCode.refetch()}>Try again</Button></AlertAction></Alert>
