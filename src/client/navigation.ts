@@ -25,6 +25,8 @@ const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElemen
   && (!remoteNavigation || !element.closest(localOnly))
   && !element.matches('[role="tablist"], [role="tabpanel"]')
   && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
+// With nothing focused (after a page change), the first key starts in the page, not on the header.
+const entry = (controls: HTMLElement[]) => controls.find(element => element.matches("[data-page-first]")) ?? controls[0];
 
 // A slider is placed by its whole track, not by its thumb, which moves with the value.
 const box = (element: Element) => (element.closest('[data-slot="slider"]') ?? element).getBoundingClientRect();
@@ -41,7 +43,7 @@ function moveFocus(key: string) {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement) || !scope.contains(active) || !visible(active) || active === scope
     || remoteNavigation && active.closest(localOnly)) {
-    focus(controls[0]);
+    focus(entry(controls));
     return;
   }
   if (key === "ArrowDown" && active.closest(".app-header")) {
@@ -105,7 +107,7 @@ export function applyTvNavigation(key: NavigationKey) {
       target = null;
     }
     if (!target || target === scope) {
-      target = controlsIn(scope)[0] ?? scope;
+      target = entry(controlsIn(scope)) ?? scope;
       focus(target);
       // The first directional press establishes focus rather than skipping over it.
       if (key !== "select" && key !== "back") return true;
