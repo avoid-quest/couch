@@ -42,7 +42,8 @@ export type PlayerState = {
 // volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds,
 // present while it is connected (ticket 10).
 export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; local?: boolean };
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[] };
+// hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 

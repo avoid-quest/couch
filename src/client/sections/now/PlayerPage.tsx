@@ -63,7 +63,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
   const at = playsOn(state);
   const elsewhere = !!at?.elsewhere;
-  const picture = showsPicture(state);
+  // An mpv channel shows its picture in mpv's own window, so this one shows the artwork.
+  const separate = !!state?.playbacks?.find(playback => playback.id === state.playback)?.hostOnly && showsPicture(state);
+  const picture = showsPicture(state) && !separate;
   const artworkStage = audioOnly || !picture;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   const autoHide = playing && !artworkStage;
@@ -168,7 +170,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           </div>
           {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
           {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && player?.status === "paused" && <span>Paused</span>}{!ended && (elsewhere && at ? <PlaysOn at={at} /> : currentProgramme && <span>{current.title}</span>)}</p>
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && player?.status === "paused" && <span>Paused</span>}{!ended && (elsewhere && at ? <PlaysOn at={at} /> : separate ? <span>{player?.status === "paused" ? "in a separate window" : "Playing in a separate window"}</span> : currentProgramme && <span>{current.title}</span>)}</p>
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
           {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
