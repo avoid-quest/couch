@@ -22,14 +22,52 @@ and paired remotes. The rebuild is tracked in
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.
 
+## What plays where
+
+A Couch app hosts with **This computer** chosen and joins with **Another
+Couch**. The Linux TV column waits for a real TV: the TV layout was only run on
+a Mac.
+
+| Source | Couch app hosting | Couch app joining | Desktop browser | Phone browser | Linux TV | Synced sound on several devices |
+|---|---|---|---|---|---|---|
+| YouTube videos, channels, playlists | Yes | Yes | Yes | Yes | Not tested | Yes |
+| Twitch live and videos | Yes | Yes | Yes | Yes | Not tested | Yes |
+| RaiPlay live and replays | Yes | Yes | Yes | Yes | Not tested | Yes |
+| Bandcamp | Yes | Yes | Yes | Yes | Not tested | Not tested |
+| StreamingCommunity | Yes | Not tested | Yes | Not tested | Not tested | Not tested |
+| Radio | Yes | Yes | Yes | Yes | Not tested | Yes |
+| Other yt-dlp sites (Dailymotion, SoundCloud) | Yes | Yes | Yes | Yes | Not tested | Yes |
+| Vimeo | Depends on item | Not tested | Depends on item | Not tested | Not tested | Not tested |
+| Live TV, H.264 (HLS or MPEG-TS) | Yes | Not tested | Yes | Not tested | Not tested | Yes |
+| Live TV, MPEG-2, AC-3, E-AC-3 or MP2 | Yes, in its own window | Host only | Host only | Host only | Not tested | Host only |
+
+- Live TV channels in MPEG-2, AC-3, E-AC-3 or MP2 play only in mpv on the
+  computer that hosts Couch. Asked for elsewhere, the player says "This channel
+  plays only on" the host. HEVC channels play where the device decodes HEVC; on
+  a Linux host they go to mpv too.
+- Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
+  or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV
+  channels that need custom headers or DRM are skipped when the list is added.
+- Safari, Firefox and iPhone or iPad aren't verified. iOS ignores a page's
+  volume, so on an iPhone only Mute or a volume of 0 changes what you hear.
+- The browser can't install Couch as an app over the network's self-signed
+  certificate. Use the browser's **Add to Home screen** shortcut instead.
+- YouTube in a plain browser depends on no-cors fetches from googlevideo, which
+  browsers may block. It hasn't failed in Chrome so far.
+- StreamingCommunity's picture quality follows the connection; the quality you
+  choose doesn't cap it.
+
 ## Connect a phone
 
-1. On the playback computer choose **This computer** and turn on **Allow
-   remotes** in **Settings > Remotes**, then open **Pair a remote**.
-2. On the phone, open the address shown there, name the browser and enter the
-   six-digit code.
-3. Search in **Find**, or paste a link. **Play** starts an item now; **Up next**
-   appends it.
+1. On the playback computer choose **This computer**, open **Settings >
+   Devices**, turn on **Share on network** and choose **Pair a device**.
+2. On the phone, scan the code or open the address shown there. The first time,
+   the browser warns that the connection isn't private: continue to the page.
+   Fill in **Name this device** and the six-digit **Pairing code**. The first
+   device you pair becomes the admin.
+3. Search in **Find**, or paste a link. **Play** starts an item now; **Queue** in
+   its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp or
+   StreamingCommunity link opens its page.
 
 **Settings > Playback > Video quality** saves this browser's default online video
 quality (Auto is up to 1080p).
@@ -57,12 +95,13 @@ bun run app
 unset COUCH_ADMIN_RECOVERY_CODE
 ```
 
-Pair the replacement browser, open **Settings > Connections > Claim administrator**, and enter that secret
-in **Administrator code**. Its ten-minute deadline starts when the server first
-accepts the configured secret. Restarting with the same value neither extends
-that deadline nor makes a consumed secret reusable. An expired or consumed secret
-requires a fresh value and another local restart. Recovery grants administration
-to the replacement browser; it does not revoke the old administrator.
+Pair the replacement browser, open **Settings > Devices**, enter that secret
+under **Admin code** and choose **Become admin**. Its ten-minute deadline starts
+when the server first accepts the configured secret. Restarting with the same
+value neither extends that deadline nor makes a consumed secret reusable. An
+expired or consumed secret requires a fresh value and another local restart.
+Recovery grants administration to the replacement browser; it does not revoke
+the old administrator.
 
 Core removes the recovery variable from its environment before starting media
 helpers. The server stores a hash, and never sends the secret in a snapshot or
