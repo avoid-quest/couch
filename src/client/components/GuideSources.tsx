@@ -1,5 +1,6 @@
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Settings2 } from "lucide-react";
 import { useSessionGate } from "@/session/session-context";
 import type { GuideSource } from "../../shared/iptv";
@@ -30,7 +31,9 @@ export function GuideSources({ inline = false, request, sources, host, connected
   async function mutate(path: string, method: string, value?: unknown) {
     setBusy(true); setError(null);
     try {
-      await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
+      const response = await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
+      const { notice } = method === "POST" ? await response.json().catch(() => ({})) as { notice?: string } : {};
+      if (notice) toast(notice);
       return true;
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Couldn't update this source."); return false; }
     finally { setBusy(false); }

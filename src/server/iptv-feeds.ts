@@ -104,38 +104,42 @@ export function liveHlsPlaylist(text: string, base: string): boolean {
   return target !== null && segments > 0 && duration === null && longest <= target;
 }
 
-export function parseGuideChannels(text: string, sourceId: string, base: string): PrivateChannel[] {
+// Channels that need playback headers or DRM can't play here, and a repeated tvg-id
+// can't map to the guide: both are skipped and counted rather than refusing the list.
+export function parseGuideChannels(text: string, sourceId: string, base: string): { channels: PrivateChannel[]; skipped: { headers: number; duplicates: number } } {
   if (Buffer.byteLength(text) > guideLimits.playlistBytes) fail("The channel list exceeds 2 MiB.");
   const lines = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n").map(line => line.trim());
   if (!/^#EXTM3U(?:\s|$)/.test(lines[0] ?? "")) fail("Use an extended M3U channel list.");
-  let awaitingUrl = false;
-  let count = 0;
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index]!;
+  const kept = [lines[0]!];
+  let entry: string[] = [], awaitingUrl = false, needsHeaders = false, count = 0, headers = 0;
+  for (const line of lines.slice(1)) {
     if (!line) continue;
     if (/^#EXT-X-/i.test(line)) fail("Import a channel list, not an HLS stream manifest.");
-    if (/^#(?:EXTVLCOPT|KODIPROP|EXTHTTP|WEBPROP)(?::|\s)/i.test(line) || /(?:^|\s)(?:http-)?(?:user-agent|referer|referrer|cookie|authorization)\s*=/i.test(line)) fail("Custom playback headers and DRM properties are unsupported.");
+    if (/^#(?:EXTVLCOPT|KODIPROP|EXTHTTP|WEBPROP)(?::|\s)/i.test(line) || /(?:^|\s)(?:http-)?(?:user-agent|referer|referrer|cookie|authorization)\s*=/i.test(line) || !line.startsWith("#") && line.includes("|")) needsHeaders = true;
     if (line.startsWith("#EXTINF:")) {
       if (awaitingUrl || ++count > guideLimits.channels) fail("Use at most 5000 channels, each with one EXTINF and URL.");
       awaitingUrl = true;
-    } else if (!line.startsWith("#")) {
-      if (!awaitingUrl) fail("Each channel needs an EXTINF and URL.");
-      lines[index] = guideUrl(line, base);
-      awaitingUrl = false;
     }
+    if (line.startsWith("#")) { entry.push(line); continue; }
+    if (!awaitingUrl) fail("Each channel needs an EXTINF and URL.");
+    if (needsHeaders) headers++;
+    else kept.push(...entry, guideUrl(line, base));
+    entry = []; awaitingUrl = false; needsHeaders = false;
   }
   if (awaitingUrl || !count) fail("The channel list is empty or incomplete.");
-  const parsed = parseM3U(lines.join("\n")).channels;
-  if (parsed.length !== count) fail("Some M3U attributes are invalid.");
+  if (headers === count) fail("Every channel in this list needs custom headers or DRM, which Couch doesn't support. Try another list.");
+  const parsed = parseM3U(kept.join("\n")).channels;
+  if (parsed.length !== count - headers) fail("Some M3U attributes are invalid.");
   const ids = new Set<string>();
-  return parsed.map(channel => {
+  const channels = parsed.flatMap(channel => {
     const tvgId = guideIdentifier(channel.tvgId);
-    if (ids.has(tvgId)) fail("Each channel needs a unique tvg-id for exact XMLTV mapping.");
+    if (ids.has(tvgId)) return [];
     ids.add(tvgId);
     if (["true", "1"].includes(channel.extras?.radio?.toLowerCase() ?? "")) fail("Import television channels here. Use Radio for radio playlists.");
     const logoUrl = channel.tvgLogo ? guideUrl(channel.tvgLogo, base) : null;
-    return { id: guideId(sourceId, tvgId), sourceId, tvgId, name: guideText(channel.name || channel.tvgName, 200), group: guideText(channel.groupTitle, 200, true), hasLogo: !!logoUrl, logoUrl, streamUrl: guideUrl(channel.url, base) };
+    return [{ id: guideId(sourceId, tvgId), sourceId, tvgId, name: guideText(channel.name || channel.tvgName, 200), group: guideText(channel.groupTitle, 200, true), hasLogo: !!logoUrl, logoUrl, streamUrl: guideUrl(channel.url, base) }];
   });
+  return { channels, skipped: { headers, duplicates: parsed.length - channels.length } };
 }
 
 // XMLTV permits reduced precision and named zones. This supported subset requires
