@@ -229,7 +229,8 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       q = q.trim();
       countrycode = countrycode.trim().toUpperCase();
       if (q.length > 100 || !/^(?:[A-Z]{2})?$/.test(countrycode)) throw new RadioError("Use a station name of up to 100 characters and a two-letter country code.");
-      const query = new URLSearchParams({ name: q, countrycode, limit: "50", hidebroken: "true", order: "clickcount", reverse: "true" });
+      // An empty countrycode matches only stations without a country.
+      const query = new URLSearchParams({ name: q, ...(countrycode ? { countrycode } : {}), limit: "50", hidebroken: "true", order: "clickcount", reverse: "true" });
       const key = query.toString();
       const cached = cache.get(key);
       if (cached && cached.expires > Date.now()) return cached.stations;
