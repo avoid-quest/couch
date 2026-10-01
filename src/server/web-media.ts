@@ -101,7 +101,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
-    const sort = youtube && !vp9 ? ["--format-sort", "res,fps,vcodec:h264,acodec:aac"] : youtube && quality === "auto" ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
+    const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     const media = parseMedia(info);
