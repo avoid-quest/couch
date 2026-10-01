@@ -119,11 +119,11 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           authorize();
           if (mode !== "play" && mode !== "append") throw new ControllerError("Choose Play or Add to Up next.");
           const entry = get(id);
-          const intent = mode === "play" ? reservePlay(playedBy) : undefined;
           await prepare(entry);
           authorize();
           get(id); // Another controller may have removed it while the source was checked.
-          enqueue({ ...entry, id: crypto.randomUUID() }, intent, authorize, playedBy);
+          // Reserved only now, so a source that fails moves no output.
+          enqueue({ ...entry, id: crypto.randomUUID() }, mode === "play" ? reservePlay(playedBy) : undefined, authorize, playedBy);
           return Response.json({ ok: true });
         }
         if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { Allow: "DELETE" } });

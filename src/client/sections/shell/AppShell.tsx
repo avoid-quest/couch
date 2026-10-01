@@ -7,8 +7,9 @@ import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { RemotePad } from "@/components/RemotePad";
+import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
-import { DeviceSwitch } from "@/sections/shell/DeviceSwitch";
+import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { MiniPlayer } from "./MiniPlayer";
@@ -139,13 +140,13 @@ function useShellValue() {
     else if (state?.currentEntryId) changeSection("Now");
   });
 
-  const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
-    run({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
-  const enqueueRadio = (station: RadioStation, playNow: boolean) => {
+  const enqueueProvider = (item: ProviderItem, playNow: boolean, deviceId?: string, quality = videoQualityPreference.quality) =>
+    run({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(item.provider === "bandcamp" ? {} : { quality }), playNow, deviceId });
+  const enqueueRadio = (station: RadioStation, playNow: boolean, deviceId?: string) => {
     const owner = installationId;
     const result = run(station.sourceId
-      ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow }
-      : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow });
+      ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, deviceId }
+      : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow, deviceId });
     // Recents record what actually played, not what was queued or attempted.
     if (playNow) void result.then(ok => {
       if (!ok || !owner) return;
@@ -160,15 +161,16 @@ function useShellValue() {
   const openProvider = (item: ProviderItem, focusSelector?: string) => detailNavigation.open(collectionLocation(item), focusSelector);
 
   const playProgress = useMutation({
-    mutationFn: ({ mediaId, ...body }: { mediaId: string; fromStart: boolean; profileId: string }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play`, body, "POST", 35_000),
+    mutationFn: ({ mediaId, on, ...body }: { mediaId: string; on?: string; fromStart: boolean; profileId: string }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play${playOnQuery(on)}`, body, "POST", 35_000),
   });
   const playHistory: HistoryPlayback = async (item, options) => {
     if (item.playable && credentials && state) {
       setError(null);
-      try { await playProgress.mutateAsync({ mediaId: item.mediaId, fromStart: options.fromStart === true, profileId: state.activeProfile.id }); return true; }
+      try { await playProgress.mutateAsync({ mediaId: item.mediaId, on: options.on, fromStart: options.fromStart === true, profileId: state.activeProfile.id }); return true; }
       catch (reason) { setError(errorText(reason)); return false; }
     }
-    if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });
+    // Only REST history plays carry Play on, so items that are only in the queue offer plain Play.
+    if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, fromStart: options.fromStart });
     setError("Couldn't play. It's no longer available.");
     return Promise.resolve(false);
   };
@@ -178,7 +180,7 @@ function useShellValue() {
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
-  // Terse, stable labels for the header's screen-reader status and the Device switch.
+  // Terse, stable labels for the header's screen-reader status and the Couch switch.
   const statusLabel = booting ? "Starting" : {
     connecting: "Connecting", syncing: "Syncing", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Access refused", "build-mismatch": "Couch updated",
   }[status];
@@ -309,7 +311,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              <DeviceSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} paired={paired} state={state} run={run} />
+              <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />
               {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>
               {paired && !tvPresentation && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}

@@ -41,6 +41,10 @@ native bridge coverage runs with `bun test tests/browser-device-identity.test.ts
 The device-sharing regression uses the same runtime: `bun build
 tests/device-sharing.integration.ts --target=node --outfile=build/device-sharing.integration.mjs`,
 then `node --test build/device-sharing.integration.mjs`.
+Server-selection regressions use `bun build tests/server-selection.integration.ts
+--target=node --outfile=build/server-selection.integration.mjs`, then
+`node --test build/server-selection.integration.mjs`. Browser server switching
+runs with `bun test tests/browser-connections.test.ts`.
 The TV health regression needs native Linux `/proc` (CPU emulation changes the
 reported executable): `bun build tests/tv-health.integration.ts --target=node
 --outfile=build/tv-health.integration.mjs`, then

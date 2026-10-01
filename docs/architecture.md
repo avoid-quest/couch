@@ -4,8 +4,8 @@ Couch is one Electron app. Core, the Node coordinator, owns the Playbacks,
 playback intent, authorization and persistent state. A remote never resolves
 private playback URLs or becomes another playback authority.
 
-The app runs in one of two modes, chosen on first run and in Settings →
-Devices, in its **Couch** section:
+The app runs in one of two modes, chosen on first run, in the header's Couch
+switch, or in Settings → Devices' **Couch** section:
 
 - **Full** (`operating-mode.json` `"local"`): Main starts Core in an Electron
   [`utilityProcess`](https://www.electronjs.org/docs/latest/api/utility-process)
@@ -30,6 +30,12 @@ Every client's Sendspin key, which is its device ID, stays in the storage of the
 origin that made it. The SDK's `storage` interface gives Couch and Sendspin the
 same key, including when browser storage is unavailable. Sendspin admits the
 host's device only from this machine.
+Deliberate server switches carry the public device name and saved server
+labels/addresses in the URL fragment: the whole saved list to a server already on
+it, only the current server to a newly typed address. The destination keeps the
+labels only when the page that sent it there is one of them, then removes the
+hints from the URL. Pairing credentials and keys remain in their original
+storage.
 
 Client devices opt into sharing audio and video independently in General; both
 start off. Like the name, the choice belongs to the device: the Couch app keeps one
@@ -75,11 +81,23 @@ and on the Linux TV with system audio its volume and mute are the system's.
 Nothing else stores a volume: the band's volume shows the loudest in-sound
 Device's and scales them all proportionally, and its mute mutes them all.
 
-Every window controls one Device (`control`, idle ones too; by default its own)
-and looks at the Playback that Device serves; controlling never moves outputs.
-Play, Queue, transport and volume act on it, and Play on a Device (`deviceId` on
-Play now, the item menus' "Play on" and "Play on {name}") starts it there and
-controls that Device, with a "Playing on {name}" toast. `solo` leaves one Device
+The header selects a server. Within that server, each controller looks at the
+Playback its selected output Device serves. Core keeps that choice in memory
+while it runs: a connection restores it while it still serves a Playback,
+otherwise the controller selects the server's own Device. A choice no longer
+shared also falls back to the server's own Device, and while that Device is
+offline and idle Play and the view use the controller's own Device without
+changing the choice. Outputs stay with the live Playback; a server restart restores queues
+without outputs. Ordinary Play keeps the current mix, and playing a waiting
+Playback moves that whole mix to it. Explicit Play on a Device (`deviceId` on
+WebSocket Play now, `?on=` on REST play requests; the item menus' "Play on" and
+"Play on {name}") isolates that Device and selects it once the item checks out
+(a list loaded, a source or history item still there), with a "Playing on
+{name}" toast. A selected output that stops serving (fader to 0, sharing
+withdrawn, unpaired) moves its controllers to another output in its mix,
+including controllers away on another server; one that moves to another
+Playback keeps them, and a Playback that ends moves no one.
+`solo` leaves one Device
 with the Playback's picture and sound, and `allSpeakers` is the Mixer's All
 fader: a level above 0 sets every online Device to it with its sound in, 0 takes
 every Device's sound out, and it stores nothing; a Device that joins reloads the item where it was with its pause

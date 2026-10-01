@@ -35,7 +35,7 @@ import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
 import { useHomeRows, type HomeRowId } from "./home-rows";
 
-export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
+export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
 
 const shown = { continue: 4, upNext: 8, radio: 6, later: 4, recent: 12 };
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
@@ -75,7 +75,7 @@ export function HomePage() {
     onError: (error: Error) => toast.error(error.message || "Couldn't save this station."),
   });
   const stationActions = (station: RadioStation) => [
-    { label: "Play on", disabled: !available, playOn: (deviceId: string) => void playOn(() => shell.enqueueRadio(station, true), deviceId) },
+    { label: "Play on", disabled: !available, playOn: (deviceId: string) => void playOn(on => shell.enqueueRadio(station, true, on), deviceId) },
     { label: "Queue", disabled: !connected, run: () => void shell.enqueueRadio(station, false) },
     { label: savedStation(station.id) ? "Saved" : "Save", pressed: savedStation(station.id), disabled: !connected || !favorites.data || saveStation.isPending, run: () => saveStation.mutate(station) },
   ];
@@ -179,7 +179,7 @@ export function HomePage() {
 
     recent: !!recent.length && <HomeRow title="Played recently" time={plural(recent.length, "title")}>
       <RecentRail items={recent} disabled={!available} onQueue={item => void queueHistory(item).then(ok => { if (!ok) toast.error(`Couldn't queue ${item.title}.`); }, () => toast.error(`Couldn't queue ${item.title}.`))}
-        onPlay={(item, deviceId) => void playOn(() => shell.playHistory(item, { fromStart: true }), deviceId).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
+        onPlay={(item, deviceId) => void playOn(on => shell.playHistory(item, { fromStart: true, on }), deviceId).catch(reason => toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`))} />
     </HomeRow>,
   };
 
@@ -251,7 +251,7 @@ function RecentRail({ items, disabled, onPlay, onQueue }: { items: HistoryItem[]
           <span className="truncate text-sm text-muted-foreground tabular-nums">{[historyMeta(item), item.duration ? formatDuration(item.duration) : null].filter(Boolean).join(", ")}</span>
         </Button><div className="flex"><BrowseActions title={item.title} actions={[
           { label: "Play", disabled: unplayable, run: () => onPlay(item) },
-          { label: "Play on", disabled: unplayable, playOn: deviceId => onPlay(item, deviceId) },
+          { label: "Play on", disabled: unplayable || !item.playable, playOn: deviceId => onPlay(item, deviceId) },
           { label: "Queue", disabled: !item.playable, run: () => onQueue(item) },
         ]} /></div></li>;
     })}
@@ -334,14 +334,14 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
         return;
       }
       if (action !== "queue") removed.current = { id: item.mediaId, index: unfinished.findIndex(entry => entry.mediaId === item.mediaId) };
-      const ok = action === "queue" ? await onAdd(item) : await play(() => onPlay(item, { fromStart: action === "start" }), deviceId);
+      const ok = action === "queue" ? await onAdd(item) : await play(on => onPlay(item, { fromStart: action === "start", on }), deviceId);
       if (!ok) removed.current = null;
       if (action === "queue" && !ok) toast.error(`Couldn't queue ${item.title}.`);
     } catch (reason) { removed.current = null; toast.error(reason instanceof Error ? reason.message : `Couldn't play ${item.title}.`); }
     finally { setPending(false); }
   }
   const secondary = (item: HistoryItem) => [
-    { label: "Play on", disabled: !playable(item), playOn: (deviceId: string) => void act(item, "resume", deviceId) },
+    { label: "Play on", disabled: !playable(item) || !item.playable, playOn: (deviceId: string) => void act(item, "resume", deviceId) },
     { label: "From start", disabled: !playable(item), run: () => void act(item, "start") },
     { label: "Queue", disabled: !connected || pending, run: () => void act(item, "queue") },
     { label: "Remove", disabled: !connected || pending, run: () => void act(item, "remove") },
