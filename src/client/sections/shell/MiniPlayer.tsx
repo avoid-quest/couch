@@ -71,7 +71,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
         <Button variant="ghost" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
         {/* The context gives way first, so the status and the device stay readable. */}
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}</span>
+          <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio && !programme ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}</span>
           <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
           {!status && time && <span className="shrink-0 tabular-nums lg:hidden">{time}</span>}
           {at?.elsewhere && <PlaysOn at={at} />}
