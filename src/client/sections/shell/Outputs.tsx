@@ -19,18 +19,19 @@ const statusText: Partial<Record<PlaybackSummary["status"], string>> = { loading
 
 /**
  * What a Device is doing: its Playback's title, "with {name}" when it joins another Device's Playback,
- * Idle or Offline. Beside `current` (the Playback in view), another Playback reads "Playing {title}"
- * and the one in view its status, as its title is already on screen.
+ * Idle or Offline. Beside `current` (the Playback in view), another Playback reads its status and
+ * title ("Paused {title}") and the one in view only its status, as its title is already on screen.
  */
 function doing(state: State, device: DeviceSummary, current?: string | null) {
   if (!device.online) return "Offline";
   const playback = served(state, device.id);
   if (!playback) return "Idle";
-  if (current && playback.id !== current) return `Playing ${playback.title ?? "something else"}`;
+  const verb = statusText[playback.status];
+  if (current && playback.id !== current) return verb ? `${verb} ${playback.title ?? "something else"}` : "Idle";
   // A Playback belongs to the Device showing its picture, else to its first Device.
   const lead = (playback.outputs.find(output => output.picture) ?? playback.outputs[0])!.deviceId;
   const leader = lead !== device.id && state?.devices?.find(item => item.id === lead);
-  return leader ? `with ${leader.name}` : current ? statusText[playback.status] ?? "Playing" : playback.title ?? "Playing";
+  return leader ? `with ${leader.name}` : current ? verb ?? "Idle" : playback.title ?? "Playing";
 }
 
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
