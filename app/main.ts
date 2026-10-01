@@ -183,9 +183,11 @@ async function load() {
         }
       })();
       show();
-      const { response } = await dialog.showMessageBox(window, { type: "warning", message: `Can't reach ${new URL(address).host}`, detail: `${(error as Error).message}\nCouch keeps trying.`, buttons: ["Try again", "Use this computer"], defaultId: 0, cancelId: 0, signal: reachable.signal });
+      const { response } = await dialog.showMessageBox(window, { type: "warning", message: `Can't reach ${new URL(address).host}`, detail: `${(error as Error).message}\nCouch keeps trying.`, buttons: ["Try again", "Change address", "Use this computer"], defaultId: 0, cancelId: 0, signal: reachable.signal });
       answered = true;
-      if (response === 1) { save({ ...choice, mode: "local" }); return load(); }
+      // Change address returns to the chooser, which keeps the address to correct or forget.
+      if (response === 1) { save({ ...choice, mode: null }); return load(); }
+      if (response === 2) { save({ ...choice, mode: "local" }); return load(); }
     }
   }
 }
