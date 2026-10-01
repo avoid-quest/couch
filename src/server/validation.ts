@@ -69,7 +69,7 @@ function validAction(value: unknown): value is Action {
     case "stop": return value.playbackId === undefined || id(value.playbackId);
     case "sharing": return isDeviceSharing(value.sharing);
     case "solo": return id(value.deviceId);
-    case "allSpeakers": return number(value.level, 100);
+    case "allSpeakers": return number(value.level, 100) && Number.isInteger(value.level);
     case "output": return id(value.deviceId) && (value.picture === undefined || typeof value.picture === "boolean")
       && (value.level === undefined || number(value.level, 100)) &&(value.delay === undefined || number(value.delay, 5000))
       && (value.picture !== undefined || value.level !== undefined || value.delay !== undefined);

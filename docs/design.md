@@ -227,19 +227,24 @@ Messages:
 - **Where it plays** is one icon button in the band and the mini player, a
   mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
   mistaken for the header's Couch switch. It opens a bottom Sheet, the Mixer. Its first strip, pinned and set off by a rule like
-  a console's master fader, is All: its fader sets every online Device to one
-  level (0 turns every Device's sound off), stores nothing and shows the
-  loudest in-sound Device's volume; it has no Picture, Solo or Mute. Then each
+  a console's master fader, is All: its fader trims the Playback's selected sound
+  from 100 (the Device levels) to 0 (silent), and the Playback keeps it across
+  restarts. It shows its own trim, preserves
+  Device levels and mute, and keeps outputs selected at zero so raising it
+  restores their sound; it has no Picture, Solo or Mute. Then each
   Device is a channel strip: the Playback's Devices first, then the other
   online ones dimmed but fully operable. A strip reads top to bottom as a
   Picture tile (pressed tiles invert, because Toggle's muted pressed state
   barely shows on black), the fader's number, the fader, the Device's icon,
   name and what it is doing, then Solo and Mute (pressed, they invert too).
   The fader is the Device's one volume while its sound is in, else 0: 0 turns its sound off and
-  raising it turns it on. No other volume is ever shown. A strip's "Earlier"
+  raising it turns it on. Device strips show saved levels independently of All's
+  trim. A strip's "Earlier"
   slider, shown while its sound is in, plays a late speaker sooner (Sendspin's
   static delay); "Delay" read as the opposite. The band and mini player volume
-  shows the loudest in-sound Device's and moves them all together; their Mute
+  shows the loudest in-sound Device's, or 0 while All is at 0, and moves them all
+  together (from All's 0, raising it only brings All back to 100 and lowering it
+  does nothing); their Mute
   mutes them all, and so does M.
 - **Play on** in item menus offers the other online Devices, hidden while this
   is the only one; the primary Play says "Play on {name}" while you control

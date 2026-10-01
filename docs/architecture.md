@@ -76,10 +76,17 @@ Many Playbacks run at once (`src/server/session.ts`, one session each). A Playba
 is a queue, current item, position, pause state, speed and tracks, with its own
 outputs: each Device's `Output` `{ picture, sound }` in it. A Device's outputs
 serve one Playback at a time. A Device owns one volume and mute, persisted in the
-`devices` table; it renders a Playback's sound at `sound && !muted ? volume : 0`,
-and on the Linux TV with system audio its volume and mute are the system's.
-Nothing else stores a volume: the band's volume shows the loudest in-sound
-Device's and scales them all proportionally, and its mute mutes them all.
+`devices` table; it renders a Playback's sound at
+`sound && !muted ? round(volume * mixTrim / 100) : 0`. The Playback's `mixTrim`,
+saved with it in the `playback` table, starts at 100 and attenuates its selected
+sound; zero keeps those outputs selected so raising it restores their sound, and
+the band then shows 0. Raising a volume, a fader, the TV's system volume or
+unmuting a muted Device in its sound while it is 0 sets it back to 100, which
+leaves muted and 0-level Devices silent; raising the band then changes only the
+trim, and lowering it changes nothing. On the Linux TV with system audio its volume
+and mute are the system's, and Couch applies the trim to its stream instead.
+The band's volume shows the loudest in-sound Device's saved level and scales
+them all proportionally, and its mute mutes them all.
 
 The header selects a server. Within that server, each controller looks at the
 Playback its selected output Device serves. Core keeps that choice in memory
@@ -99,8 +106,8 @@ including controllers away on another server; one that moves to another
 Playback keeps them, and a Playback that ends moves no one.
 `solo` leaves one Device
 with the Playback's picture and sound, and `allSpeakers` is the Mixer's All
-fader: a level above 0 sets every online Device to it with its sound in, 0 takes
-every Device's sound out, and it stores nothing; a Device that joins reloads the item where it was with its pause
+fader: it changes only the Playback's trim, preserving output selection and Device
+levels and mute. A Device that joins reloads the item where it was with its pause
 state, speed, tracks and subtitle delay, and windows controlling a Device the
 Playback left follow it. An output that goes offline
 pauses its Playback until it returns, and a Playback ends when its queue does.
