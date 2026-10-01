@@ -26,7 +26,7 @@ const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElemen
   && !element.matches('[role="tablist"], [role="tabpanel"]')
   && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
 // With nothing focused (after a page change), the first key starts in the page, not on the header.
-const entry = (controls: HTMLElement[]) => controls.find(element => element.matches("[data-page-first]")) ?? controls[0];
+const entry = (controls: HTMLElement[]) => controls.find(element => element.matches("[data-page-first]")) ?? controls.find(element => element.closest("[data-page]")) ?? controls[0];
 
 // A slider is placed by its whole track, not by its thumb, which moves with the value.
 const box = (element: Element) => (element.closest('[data-slot="slider"]') ?? element).getBoundingClientRect();
