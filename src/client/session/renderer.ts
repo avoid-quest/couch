@@ -215,6 +215,8 @@ const selectSubtitle = (index: number) => {
   if (hls) hls.subtitleTrack = index < embedded ? index : -1;
   // Chromium's automatic selection would still show a track whose mode never changed, so each one changes.
   external().forEach((track, position) => { track.mode = "hidden"; track.mode = embedded + position === index ? "showing" : "disabled"; });
+  // A file loads once it's chosen: a source can list many, and YouTube refuses a burst of them (429).
+  for (const element of video.querySelectorAll("track")) if (element.track.mode === "showing" && !element.src) element.src = element.dataset.src!;
 };
 
 export function play(command: PlaybackCommand) {
@@ -273,7 +275,8 @@ export function play(command: PlaybackCommand) {
 
 function addTrack(source: string, label: string, language = "", show = false) {
   const track = document.createElement("track");
-  Object.assign(track, { kind: "subtitles", src: source, label, srclang: language });
+  Object.assign(track, { kind: "subtitles", label, srclang: language });
+  track.dataset.src = source;
   video.append(track);
   if (show) selectSubtitle((hls?.subtitleTracks.length ?? 0) + external().length - 1);
 }

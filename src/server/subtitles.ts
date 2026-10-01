@@ -1,9 +1,17 @@
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { extname } from "node:path";
 import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
 import { ControllerError } from "./devices";
 import { STORAGE_ERROR } from "./messages";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
+const cues = /\d{2}:\d{2}[,.]\d{3}\s+-->/;
+const webVtt = (content: string, srt: boolean) => srt ? `WEBVTT\n\n${content.replace(/^\uFEFF/, "").replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2")}` : content;
+
+const key = randomBytes(32);
+const sign = (url: string) => createHmac("sha256", key).update(url).digest("base64url");
+// A source's own subtitles (yt-dlp's) come through Core, which signs their address: a <track> reads only its page's origin.
+export const sourceSubtitle = (url: string) => `/api/subtitles/${sign(url)}.vtt?${new URLSearchParams({ url })}`;
 
 /**
  * Uploads contain bytes from that Device, never a path on the TV. Every Device plays
@@ -52,12 +60,11 @@ export function createSubtitles(player: (playbackId: string) => PlayerState | un
         authorize();
         if (!bytes.length) return json({ error: "Choose a subtitle file up to 2 MiB." }, 413);
         const content = new TextDecoder().decode(bytes);
-        if (content.includes("\0") || !/\d{2}:\d{2}[,.]\d{3}\s+-->/.test(content)) return json({ error: "This file does not contain supported text subtitles." }, 400);
+        if (content.includes("\0") || !cues.test(content)) return json({ error: "This file does not contain supported text subtitles." }, 400);
         // Reading the upload yields. Stop or a newer source must win that race.
         if (!current(playbackId)) return json({ error: "The playing item changed. Choose a subtitle for the current item." }, 409);
         const path = `/api/subtitles/${crypto.randomUUID()}.vtt`;
-        const text = extension === ".vtt" ? content : `WEBVTT\n\n${content.replace(/^\uFEFF/, "").replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2")}`;
-        files.set(path, { playbackId, text });
+        files.set(path, { playbackId, text: webVtt(content, extension !== ".vtt") });
         attach(playbackId, { source: path, title: name });
         return json({ ok: true });
       } catch (error) {
@@ -72,9 +79,17 @@ export function createSubtitles(player: (playbackId: string) => PlayerState | un
     stopped: retain,
     // The item moved to a new transport (another quality or Device); its files move with it.
     moved(from: string | null, to: string) { for (const file of files.values()) if (file.playbackId === from) file.playbackId = to; },
-    serve(path: string) {
-      const file = files.get(path);
-      return file ? new Response(file.text, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" } }) : new Response("Not found", { status: 404 });
+    async serve(address: URL) {
+      const vtt = (text: string) => new Response(text, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "no-store" } });
+      const file = files.get(address.pathname);
+      if (file) return vtt(file.text);
+      const url = address.searchParams.get("url") ?? "";
+      const given = Buffer.from(address.pathname.slice("/api/subtitles/".length, -".vtt".length));
+      const expected = Buffer.from(sign(url));
+      if (!url || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response("Not found", { status: 404 });
+      const content = await fetch(url, { signal: AbortSignal.timeout(10_000) }).then(response => response.ok ? response.text() : "").catch(() => "");
+      if (content.length > subtitleSizeLimit || !cues.test(content)) return new Response("The source's subtitles couldn't be read.", { status: 502 });
+      return vtt(webVtt(content, !/^\uFEFF?WEBVTT/.test(content)));
     },
     close() { closed = true; files.clear(); },
   };

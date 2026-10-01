@@ -1,10 +1,11 @@
 import { streamingCommunityLink } from "./streamingcommunity";
-import type { VideoQuality } from "../shared/protocol";
+import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
+import { sourceSubtitle } from "./subtitles";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
-export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { source: string; audioSource?: string; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -72,12 +73,13 @@ async function rejectDrm(info: Metadata, signal?: AbortSignal) {
   if (/#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(playlist)) throw new Error("This item requires DRM playback, which is not supported.");
 }
 
-function parseMedia(info: Metadata): WebMediaSource {
+function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
   if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
   if (!Array.isArray(selected) || !selected.length || selected.length > 2 || !selected.every(object)) throw new Error("The website returned an unsupported combination of media streams.");
   let source: string;
   let audioSource: string | undefined;
+  let subtitles = sourceSubtitles(info, subtitleLanguage);
   if (selected.length === 1) source = selectedSource(selected[0]!);
   else {
     const video = selected.find(stream => stream.vcodec !== "none");
@@ -85,14 +87,32 @@ function parseMedia(info: Metadata): WebMediaSource {
     if (!video || !audio) throw new Error("The website returned an unsupported combination of media streams.");
     source = selectedSource(video);
     audioSource = selectedSource(audio);
-    // hls.js plays an HLS master's picture and sound together; an <audio> can't play its sound rendition (StreamingCommunity).
+    // hls.js plays an HLS master's picture, sound and subtitles together; an <audio> can't play its sound rendition (StreamingCommunity).
     if ([video, audio].every(stream => String(stream.protocol).startsWith("m3u8")) && typeof video.manifest_url === "string" && video.manifest_url === audio.manifest_url) {
       source = mediaUrl(video.manifest_url);
       audioSource = undefined;
+      subtitles = [];
     }
   }
   const metadata = publicMetadata(info);
-  return { source, ...(audioSource ? { audioSource } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+  return { source, ...(audioSource ? { audioSource } : {}), ...(subtitles.length ? { subtitles } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
+}
+
+const languageName = (code: string) => { try { return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code; } catch { return code; } };
+
+// One file per language, as yt-dlp chose it (--sub-format). Subtitles inside an HLS playlist play in hls.js instead.
+// The profile's language and the video's own come first. At most 16: Chromium reports two track
+// changes for each one when a subtitle is chosen, and Core takes 60 reports a second.
+function sourceSubtitles(info: Metadata, preferred: string): ExternalSubtitle[] {
+  if (!object(info.requested_subtitles)) return [];
+  const rank = (language = "") => {
+    const at = [preferred, info.language].findIndex(wanted => typeof wanted === "string" && !!wanted && language.toLowerCase().startsWith(wanted.toLowerCase().slice(0, 2)));
+    return at < 0 ? 2 : at;
+  };
+  return Object.entries(info.requested_subtitles).flatMap(([language, subtitle]) => {
+    if (!object(subtitle) || !["vtt", "srt"].includes(String(subtitle.ext)) || String(subtitle.protocol).startsWith("m3u8")) return [];
+    try { return [{ source: sourceSubtitle(mediaUrl(subtitle.url)), title: typeof subtitle.name === "string" ? subtitle.name.slice(0, 100) : languageName(language), language: language.slice(0, 35) }]; } catch { return []; }
+  }).sort((a, b) => rank(a.language) - rank(b.language)).slice(0, 16);
 }
 
 // Devices play progressive files and HLS; none plays DASH (#644 ticket 6: Shaka only if a source needs it).
@@ -107,7 +127,7 @@ function formatSelector(quality: VideoQuality): string {
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
   // vp9: the Device plays VP9 (Chromium; #644 ticket 1). Other engines get H.264 and AAC, which every browser plays.
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string, vp9 = true, subtitleLanguage = ""): Promise<WebMediaSource> {
     const source = mediaUrl(url);
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
@@ -115,10 +135,10 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const host = new URL(source).hostname;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", streamingCommunity ?? source], { ...options, signal, plugin });
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     if (info._has_drm === true) await rejectDrm(info, signal);
-    const media = parseMedia(info);
+    const media = parseMedia(info, subtitleLanguage);
     try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
     // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
@@ -141,7 +161,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;
-        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9);
+        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage);
         const replacement = new URL(fresh.source);
         if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
         return fresh;
