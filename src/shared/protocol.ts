@@ -141,8 +141,9 @@ export type PlaybackCommand =
   | { type: "audioPause" }
   // eventStart: an HLS EVENT playlist starts at its first segment instead of the live edge.
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
+  // hls: Pass-through found an HLS playlist, which hls.js plays where the engine can't.
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
   | { type: "follow"; playbackId: string; follow: Follow | null }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
