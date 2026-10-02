@@ -106,10 +106,11 @@ catalog provides interface icons, not brand identities.
   computer hosts it; Another Couch joins one, and this computer still plays),
   then asks for its name once, with the random default shown, and whether to
   share it on the network; Back returns to the choice. Pairing and later
-  servers reuse that name, in browsers too. General owns this device's name,
-  which is also the name of the server it hosts. An administrator connected to
-  another host can rename that host in Devices. The Devices list manages
-  pairings and roles. Unpaired browsers see only the pairing page: no sections
+  servers reuse that name, in browsers too; a browser that switches to a new
+  Couch finds it filled in on the pairing form. General owns this device's
+  name, which is also the name of the server it hosts. An administrator
+  connected to another host can rename that host in Devices. The Devices list
+  manages pairings and roles. Unpaired browsers see only the pairing page: no sections
   that would lead back to it. The pairing dialog warns that browsers flag
   Couch's own certificate once, and closes itself when a device pairs, with a
   toast that names it ("Phone paired · admin").

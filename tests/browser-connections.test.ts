@@ -79,6 +79,25 @@ test("an unsaved page adds only itself and cannot rename this browser", () => ch
   assert.equal(location.hash, "");
 `));
 
+test("a switch to a new Couch suggests this browser's name for pairing without saving it", () => check(`
+  location.hash = new URLSearchParams({ couches: JSON.stringify([{ origin: "http://two.local:4100", name: "Kitchen" }]), "device-name": "Laptop" }).toString();
+  await import("sonner");
+  globalThis.document = { referrer: "http://two.local:4100/" };
+  const identity = await import("./src/client/session/device-id.ts");
+  const connections = await import("./src/client/session/connection.ts");
+  assert.equal(identity.localDeviceName(), null);
+  assert.equal(values.get("couch.device-name"), undefined);
+  assert.equal(connections.suggestedDeviceName, "Laptop");
+  assert.equal(location.hash, "");
+`));
+
+test("a carried name that isn't a device name suggests nothing", () => check(`
+  location.hash = new URLSearchParams({ "device-name": " ".repeat(3) }).toString();
+  globalThis.document = { referrer: "" };
+  const connections = await import("./src/client/session/connection.ts");
+  assert.equal(connections.suggestedDeviceName, null);
+`));
+
 test("a link from anywhere but a listed Couch cannot plant saved servers", () => check(`
   globalThis.document = { referrer: "http://elsewhere.example/" };
   location.hash = new URLSearchParams({ couches: JSON.stringify([{ origin: "http://evil.local:4100", name: "Living room" }]) }).toString();

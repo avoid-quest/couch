@@ -1,4 +1,4 @@
-import type { ConnectionDetails } from "../../shared/devices";
+import { normalizeDeviceName, type ConnectionDetails } from "../../shared/devices";
 
 type KnownConnection = { origin: string; details: ConnectionDetails };
 type KnownCouch = { origin: string; name: string };
@@ -30,6 +30,15 @@ export function knownConnection(): KnownConnection | null {
 
 /** Whether the page that sent this browser here is a Couch it already saved at this origin, read before any hint is taken. */
 export const fromSavedCouch = typeof location !== "undefined" && knownConnections().some(item => item.origin === referrer());
+
+/**
+ * The name a browser switching from another Couch carried here, read before device-id.ts takes it.
+ * Any page may suggest it for pairing, where it shows in the name field; only a saved Couch may save it.
+ */
+export const suggestedDeviceName = (() => {
+  try { return typeof location === "undefined" ? null : normalizeDeviceName(new URLSearchParams(location.hash.slice(1)).get("device-name")); }
+  catch { return null; }
+})();
 
 // A deliberate browser switch carries public labels, while pairing stays in each origin's storage. A
 // saved Couch may share its whole list; any other page adds at most itself, so a link cannot plant others.

@@ -34,8 +34,8 @@ Deliberate server switches carry the public device name and saved server
 labels/addresses in the URL fragment: the whole saved list to a server already on
 it, only the current server to a newly typed address. The destination keeps the
 labels only when the page that sent it there is one of them, then removes the
-hints from the URL. Pairing credentials and keys remain in their original
-storage.
+hints from the URL. A name from any other page only fills in the pairing form's
+name field. Pairing credentials and keys remain in their original storage.
 
 Client devices opt into sharing audio and video independently in General; both
 start off. Like the name, the choice belongs to the device: the Couch app keeps one
