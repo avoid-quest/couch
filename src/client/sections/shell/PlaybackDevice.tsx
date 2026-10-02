@@ -1,7 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -16,11 +15,12 @@ import type { Credentials } from "@/session/session";
 import { ChevronRight } from "lucide-react";
 import { TRY_AGAIN } from "@/copy";
 import { Onboarding } from "./Onboarding";
+import { AnotherCouchForm, ForgetCouchDialog } from "./CouchForms";
 import { StatusLine } from "./StatusLine";
 import { useNavigation } from "@/navigation";
 
 export type Choice = AppMode;
-type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void> };
+type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; forget: (address: string) => Promise<boolean>; completeLocalSetup: () => Promise<void>; chooseAgain: () => void };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
@@ -77,6 +77,8 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       finally { busy.current = false; setPending(false); }
     },
     completeLocalSetup: async () => setChoice(await app.completeLocalSetup()),
+    // Back from first run's name step shows the chooser again; Main keeps This computer until another choice.
+    chooseAgain: () => setChoice({ ...choice, mode: null }),
   };
   return <Context.Provider value={device}>
     {choice.mode ? children : <main className="drag-region flex min-h-dvh flex-col bg-background" data-tv-navigation-scope>
@@ -103,7 +105,6 @@ function DeviceForm() {
     try { await device.choose("remote", address, confirmed); }
     catch (reason) { if (message(reason).startsWith("confirmation-required:")) setConfirm(message(reason).split(":")[1]!); }
   };
-  const submit = (event: FormEvent) => { event.preventDefault(); void selectRemote(); };
   return <div className="grid gap-6">
     <div className="-mx-3 border-t">
       <Button autoFocus variant="ghost" aria-label="This computer" className="h-auto w-full justify-between gap-4 rounded-none border-0 border-b px-3 py-4 text-left font-normal whitespace-normal" disabled={device.pending} onClick={() => void device.choose("local")}>
@@ -114,21 +115,12 @@ function DeviceForm() {
         <span className="grid gap-0.5"><span className="text-base font-medium">{names[target] || hostOf(target)}</span>{names[target] && <span className="text-sm text-muted-foreground">{hostOf(target)}</span>}</span>
         <ChevronRight aria-hidden="true" />
       </Button><Button variant="ghost" size="sm" disabled={device.pending} aria-label={`Forget ${names[target] || hostOf(target)}`} onClick={() => setForgetting(target)}>Forget</Button></div>)}
-      <form className="grid gap-3 border-b px-3 py-4" onSubmit={submit}>
-        <div className="grid gap-0.5"><Label htmlFor="playback-address" className="text-base font-medium">Another Couch</Label><p className="text-sm text-muted-foreground">Join a Couch that runs on another computer. This computer still plays.</p></div>
-        <div className="flex gap-2"><Input id="playback-address" aria-label="Couch address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
-          {!confirm && <Button type="submit" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>}
-        </div>
-        {confirm && <div className="grid gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
-      </form>
+      <AnotherCouchForm className="px-3 py-4 md:grid-cols-1 [&_[data-slot=field-label]]:font-medium" description="Join a Couch that runs on another computer. This computer still plays." address={address} onAddressChange={value => { setAddress(value); setConfirm(null); }} onConnect={() => void selectRemote()} pending={device.pending}>
+        {confirm && <div className="grid w-full gap-3"><p className="text-sm text-muted-foreground">{confirmationText(confirm)}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button></div></div>}
+      </AnotherCouchForm>
     </div>
-    <AlertDialog open={forgetting !== null} onOpenChange={open => { if (!open && !device.pending) setForgetting(null); }}>
-      <AlertDialogContent data-tv-local-only onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.focus(); }}>
-        <AlertDialogHeader><AlertDialogTitle>Forget {forgetting && hostOf(forgetting)}?</AlertDialogTitle><AlertDialogDescription>That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
-        {device.error && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
-        <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction disabled={device.pending} onClick={event => { event.preventDefault(); if (forgetting) void device.forget(forgetting).then(done => { if (done) setForgetting(null); }); }}>Forget</AlertDialogAction></AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ForgetCouchDialog name={forgetting && (names[forgetting] || hostOf(forgetting))} pending={device.pending} error={device.error} onClose={() => setForgetting(null)} onForget={() => !!forgetting && device.forget(forgetting)}
+      onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>('[aria-label="This computer"]')?.focus(); }} />
     {device.error && !device.error.startsWith("confirmation-required:") && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
   </div>;
 }
@@ -179,12 +171,7 @@ export function AppCouchChoice({ installationName }: { installationName?: string
           <Button variant="ghost" aria-label={`Forget ${named || hostOf(target)}`} disabled={device.pending} onClick={() => { setAddress(target); setDialog("forget"); }}>Forget</Button>
         </SettingsRow>;
       })}
-      <SettingsRow label="Another Couch" htmlFor="another-couch-address" description="Join a Couch that runs on another computer. This computer still plays.">
-        <form className="flex w-full flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
-          <Input id="another-couch-address" className="min-w-0 flex-1" value={address} onChange={event => setAddress(event.target.value)} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} />
-          <Button type="submit" variant="outline" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>
-        </form>
-      </SettingsRow>
+      <AnotherCouchForm description="Join a Couch that runs on another computer. This computer still plays." address={address} onAddressChange={setAddress} onConnect={() => void select("remote", address)} pending={device.pending} />
       {failure && dialog !== "forget" && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
     </SettingsSection>
     <AlertDialog open={dialog === "confirmation"} onOpenChange={value => { if (!value) close(); }}>
@@ -193,13 +180,11 @@ export function AppCouchChoice({ installationName }: { installationName?: string
         <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction onClick={event => { event.preventDefault(); void select("remote", address, true); }} disabled={device.pending}>Stop and switch</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    <AlertDialog open={dialog === "forget"} onOpenChange={value => { if (!value) close(); }}>
-      <AlertDialogContent data-tv-local-only onEscapeKeyDown={pendingGuard}>
-        <AlertDialogHeader><AlertDialogTitle>Forget {nameOf(address) || hostOf(address)}?</AlertDialogTitle><AlertDialogDescription>This computer will forget its address and pairing. That Couch keeps playing. You'll need to pair again to reconnect.</AlertDialogDescription></AlertDialogHeader>
-        {failure && <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert>}
-        <AlertDialogFooter><AlertDialogCancel disabled={device.pending}>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={async event => { event.preventDefault(); if (await device.forget(address)) { setNames(targetNames()); setAddress(""); close(); } }} disabled={device.pending}>{device.pending ? "Forgetting…" : "Forget"}</AlertDialogAction></AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ForgetCouchDialog name={dialog === "forget" ? nameOf(address) || hostOf(address) : null} pending={device.pending} error={failure} onClose={close} onForget={async () => {
+      const done = await device.forget(address);
+      if (done) { setNames(targetNames()); setAddress(""); }
+      return done;
+    }} />
   </>;
 }
 
@@ -226,7 +211,7 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   if (!pending) return null;
   const setSharing = (enabled: boolean) => { if (!sharing.isPending) sharing.mutate(enabled); };
   // Naming comes first: it is the one thing every other Device will show (#644 ticket 12).
-  return <Onboarding title={savedName ? "Share this computer?" : "Name this computer"} description={savedName ? `${savedName} uses the same name with every Couch.` : "Every device on your network shows this name. Leave it empty to keep the one shown."} data-tv-navigation-scope>
+  return <Onboarding back={{ label: "Back", onClick: device!.chooseAgain }} title={savedName ? "Share this computer?" : "Name this computer"} description={savedName ? `${savedName} uses the same name with every Couch.` : "Every device on your network shows this name. Leave it empty to keep the one shown."} data-tv-navigation-scope>
     {!savedName && <Field><FieldLabel htmlFor="host-name">Name</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>}
     <div className="grid gap-0.5">{!savedName && <p className="text-base font-medium">Share it on your network?</p>}<p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it in Settings → Devices.</p></div>
     {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}

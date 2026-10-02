@@ -8,6 +8,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/comp
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { deviceId, localDeviceName, useLocalDeviceName } from "@/session/device-id";
+import { suggestedDeviceName } from "@/session/connection";
 import { deviceName } from "@/copy";
 import { defaultDeviceName } from "../../../shared/devices";
 
@@ -31,8 +32,9 @@ export function PairForm() {
   const { pairingOrigin, linkedPairingCode, savePairing, setError, details } = useSessionGate();
   const [pairingCode, setPairingCode] = useState(linkedPairingCode);
   const savedName = useLocalDeviceName();
-  // Asked once: the first connection keeps the name, and every later pairing reuses it.
-  const [name, setName] = useState("");
+  // Asked once: the first connection keeps the name, and every later pairing reuses it. A browser
+  // that switched here from another Couch brings its name there, shown to keep or change.
+  const [name, setName] = useState(suggestedDeviceName ?? "");
   const pairing = useMutation({ mutationFn: () => requestPairing(pairingOrigin, pairingCode.trim(), name.trim(), details?.name) });
   const pair = (event: FormEvent) => {
     event.preventDefault();

@@ -68,7 +68,8 @@ a Mac.
 2. On the phone, scan the code or open the address shown there. The first time,
    the browser warns that the connection isn't private: continue to the page.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
-   device you pair becomes the admin.
+   device you pair becomes the admin. The dialog closes when the phone pairs,
+   and a message names it, ending in "· admin" for the first.
 3. Search in **Find**, or paste a link. **Play** starts an item now; **Queue** in
    its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp or
    StreamingCommunity link opens its page.
