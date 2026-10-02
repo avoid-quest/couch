@@ -105,7 +105,7 @@ withdrawn, unpaired) moves its controllers to another output in its mix,
 including controllers away on another server; one that moves to another
 Playback keeps them, and a Playback that ends moves no one.
 `solo` leaves one Device
-with the Playback's picture and sound, and `allSpeakers` is the Mixer's All
+with the Playback's picture and sound, and `allSpeakers` is Where it plays' All
 fader: it changes only the Playback's trim, preserving output selection and Device
 levels and mute. A Device that joins reloads the item where it was with its pause
 state, speed, tracks and subtitle delay, and windows controlling a Device the
