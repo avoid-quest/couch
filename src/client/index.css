@@ -27,6 +27,10 @@ body { min-width: 0; }
 @custom-variant dark (&:is(.dark *));
 /* Phones and narrow windows get 44px targets; Mira stays compact elsewhere. */
 @custom-variant touch { @media (max-width: 959px) { @slot; } @media (pointer: coarse) { @slot; } }
+/* The TV presentation (session-context.tsx sets body.tv-presentation). */
+@custom-variant tv (&:is(.tv-presentation *));
+/* Tailwind's hover, minus the TV: a stray pointer there must never compete with focus. :where keeps hover's specificity. */
+@custom-variant hover { @media (hover: hover) { &:where(:not(.tv-presentation *)):hover { @slot; } } }
 
 @theme inline {
     --font-heading: var(--font-sans);
