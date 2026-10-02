@@ -28,3 +28,13 @@ test("live media that can't pause keeps Pause, disabled, beside an enabled Stop"
   expect(slots(channel, {}, [channel, film])).toEqual(["Pause (disabled)", "Stop", "Next"]);
   expect(slots(channel, { status: "paused" })).toEqual(["Play", "Stop", "Next (disabled)"]);
 });
+
+test("a page change's first key lands on the first enabled slot", () => {
+  const first = (entry: QueueEntry, player: Partial<PlayerState>) => {
+    const state = { queue: [entry], currentEntryId: entry.id, player: { playbackId: "p1", status: "playing", position: 60, duration: null, volume: 50, seekable: false, error: null, ...player } } as unknown as ClientSessionState;
+    const markup = renderToStaticMarkup(createElement(PlaybackTransport, { state, connected: true, run: async () => true, pageFirst: true }));
+    return [...markup.matchAll(/<button([^>]*)>/g)].filter(([, attributes]) => attributes!.includes("data-page-first")).map(([, attributes]) => /aria-label="([^"]+)"/.exec(attributes!)![1]);
+  };
+  expect(first(film, { seekable: true, duration: 6000 })).toEqual(["Pause"]);
+  expect(first(radio, {})).toEqual(["Stop"]);
+});

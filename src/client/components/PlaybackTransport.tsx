@@ -62,30 +62,29 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   </div>;
 }
 
-/** The transport's first slot: Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause). */
-function PlayButton({ state, connected, run, pageFirst, className }: Props & { pageFirst: boolean; className?: string }) {
+/**
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band (`prominent`, larger), the mini player and the remote pad.
+ * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
+ * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
+ */
+export function PlaybackTransport({ state, connected, run, pageFirst = false, prominent = false }: Props & { pageFirst?: boolean; prominent?: boolean }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
-  const { available, transportReady, pausable } = playbackCapabilities(state, connected);
+  const { available, transportReady, pausable, stoppable, nextReady, hasNext } = playbackCapabilities(state, connected);
   const playing = player.status === "playing";
   const ended = player.status === "ended" && !!current, failed = player.status === "error" && !!current;
   const pause = playing || !pausable;
   const label = ended ? "Replay" : failed ? "Try again" : pause ? "Pause" : "Play";
-  return <Button data-page-first={pageFirst || undefined} data-play-button variant="ghost" size="icon-lg" className={className} aria-label={label} title={label} disabled={ended || failed ? !available : !transportReady || !pausable}
-    onClick={() => { if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
-    {ended ? <RotateCcw aria-hidden="true" /> : pause ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}
-  </Button>;
-}
-
-/** Play/Pause, Stop and Next, each in its slot for every kind of media: the band (`prominent`, larger), the mini player and the remote pad. Keys and the timeline seek. */
-export function PlaybackTransport({ state, connected, run, pageFirst = false, prominent = false }: Props & { pageFirst?: boolean; prominent?: boolean }) {
-  const player = state.player;
-  const { stoppable, nextReady, hasNext } = playbackCapabilities(state, connected);
+  const enabled = [ended || failed ? available : transportReady && pausable, stoppable, nextReady && hasNext];
+  const first = (slot: number) => pageFirst && enabled.indexOf(true) === slot || undefined;
   const size = prominent ? "size-11 [&_svg]:size-5" : undefined;
   return <div className={cn("flex shrink-0 items-center gap-0.5", prominent && "player-transport")} role="group" aria-label="Playback controls">
-    <PlayButton state={state} connected={connected} run={run} pageFirst={pageFirst} className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} />
-    <Button variant="ghost" size="icon-lg" className={size} aria-label="Stop" title="Stop" disabled={!stoppable} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
-    <Button variant="ghost" size="icon-lg" className={size} aria-label="Next" title="Next" disabled={!nextReady || !hasNext}
+    <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={label} title={label} disabled={!enabled[0]}
+      onClick={() => { if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
+      {ended ? <RotateCcw aria-hidden="true" /> : pause ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}
+    </Button>
+    <Button data-page-first={first(1)} variant="ghost" size="icon-lg" className={size} aria-label="Stop" title="Stop" disabled={!enabled[1]} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
+    <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={size} aria-label="Next" title="Next" disabled={!enabled[2]}
       onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>
   </div>;
 }
