@@ -1,6 +1,6 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Settings, Square, X } from "lucide-react";
+import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Settings, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { providerForUrl } from "../../../shared/providers";
+import { isRadio } from "../../../shared/radio";
 import { queueItemLocation } from "@/detail-navigation";
 
 type Panel = "tracks" | "settings";
@@ -59,7 +60,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const playing = player?.status === "playing";
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
-  const audioOnly = current?.kind === "radio" || !!current?.source.startsWith("radio:") || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const audioOnly = isRadio(current) || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
   const at = playsOn(state);
   const elsewhere = !!at?.elsewhere;
@@ -116,7 +117,12 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       const inPlayer = root.current?.contains(document.activeElement) || document.activeElement === document.body;
       if (!panel && !shown && inPlayer && (tvPresentation ? ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "] : ["Enter"]).includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation(); wake();
-        requestAnimationFrame(() => (root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])') ?? root.current?.querySelector<HTMLElement>('[data-play-button]:not(:disabled), [data-primary]:not(:disabled)'))?.focus());
+        // OK lands on the transport (Play/Pause, else Stop), so OK, Right, OK stops; the arrows land on the timeline.
+        requestAnimationFrame(() => {
+          const transport = root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
+          const timeline = root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])');
+          (["Enter", " "].includes(event.key) ? transport ?? timeline : timeline ?? transport)?.focus();
+        });
         return;
       }
       if (tvPresentation && !panel && event.key === " " && inPlayer && !(event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea, [role="slider"]')) && transportReady && pausable && player?.playbackId) {
@@ -133,7 +139,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const buffering = player?.status === "loading" && player.buffering;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
-  const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
+  const radio = isRadio(current);
   const detailHref = current ? queueItemLocation(current) : undefined;
   const details = detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref}><Info aria-hidden="true" /></Link></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
@@ -141,7 +147,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const source = current ? sourceLabel(current.source) : "";
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const unavailable = connected && player?.status === "unavailable";
-  const errorDetail = current?.kind === "radio" || current?.source.startsWith("radio:") ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
+  const errorDetail = radio ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
   const skip = () => void run(player?.playbackId ? { type: "next", playbackId: player.playbackId } : following ? { type: "play", entryId: following.id } : { type: "stop" });
   const status = !current ? null : unavailable ? { title: player?.error ?? `Nothing is playing on ${name}`, detail: "Press Play to start it again here." }
     : player?.status === "error" ? { title: `Can't play ${current.title}`, detail: player.error || errorDetail }
@@ -201,7 +207,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
         <div className="player-control-row">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
-          {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} pageFirst prominent />}
+          {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}
           <div data-player-tools className="flex shrink-0 items-center">
             {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
             {state && <WhereItPlays state={state} run={run} className="size-11" />}
@@ -220,7 +226,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {panel === "settings" && <div className="grid divide-y border-b">
             {!audioOnly && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "tracks" }); }}><Captions aria-hidden="true" />Audio & subtitles<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
             {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
-            <Button variant="ghost" className="h-14 justify-start rounded-none px-0" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" />Stop</Button>
           </div>}
           {panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>

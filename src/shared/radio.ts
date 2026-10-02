@@ -23,6 +23,9 @@ export interface RadioPlaylist {
 
 export type RadioPlaylistSummary = Omit<RadioPlaylist, "url">;
 
+/** A radio station: Couch's own catalog entries say so by kind, a radio playlist's by their `radio:` source. */
+export const isRadio = (entry: { kind?: string; source: string } | null | undefined) => entry?.kind === "radio" || !!entry?.source.startsWith("radio:");
+
 export const avoidRadioPlaylistId = "544da8af-6077-80f3-a15b-884c42740444";
 export const avoidRadioPlaylistUrl = "https://radio.avoid.quest/playlist.m3u";
 

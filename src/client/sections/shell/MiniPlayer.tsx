@@ -1,18 +1,21 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
 import { useLayoutEffect, useRef, type RefObject } from "react";
-import { ChevronUp, ListMusic, SkipForward } from "lucide-react";
+import { ChevronUp, ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { CollectionLinks } from "@/components/CollectionLinks";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList } from "@/components/ui/breadcrumb";
+import { collectionTarget } from "@/collection-target";
+import { collectionLocation } from "@/detail-navigation";
 import { Link } from "@tanstack/react-router";
-import { PlayButton, PlaybackTimeline, VolumeButton, playbackCapabilities } from "@/components/PlaybackTransport";
+import { PlaybackTimeline, PlaybackTransport, VolumeButton } from "@/components/PlaybackTransport";
 import { playsOn } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "./Outputs";
 import type { Action } from "../../../shared/protocol";
 import { deviceName } from "@/copy";
 import { sourceLabel } from "@/source-label";
 import { formatDuration } from "@/time-format";
+import { isRadio } from "../../../shared/radio";
 
 // Bars at the bottom of the viewport (mini player, player band) can overlap
 // for a commit during navigation, so the tallest registered one wins.
@@ -43,8 +46,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   if (!current) return null;
-  const { nextReady, hasNext } = playbackCapabilities(state, connected);
-  const radio = current.kind === "radio" || current.source.startsWith("radio:");
+  const radio = isRadio(current);
   const live = current.live || radio;
   const length = playbackClock.duration ?? current.duration ?? 0;
   const remaining = Math.max(0, length - playbackClock.position) / (player.speed || 1);
@@ -61,8 +63,9 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const programme = connected &&state.radioProgramme?.playbackId === player.playbackId ? state.radioProgramme : null;
   const title = programme?.title || current.title;
   const context = programme ? current.title : current.subtitle;
+  const collection = collectionTarget(current.collection);
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
-  // Fixed slots, in the band's order: Play/Pause, Next, timeline · volume, Where it plays, Up next, Expand.
+  // Fixed slots, in the band's order: Play/Pause, Stop, Next, timeline · volume, Where it plays, Up next, Expand.
   // A phone puts the title on its own row above them; unavailable controls stay in place, disabled.
   return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
     <div className="col-span-full flex min-w-0 items-center gap-3 sm:col-span-1">
@@ -71,7 +74,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
         <Button variant="ghost" className="h-auto min-w-0 max-w-full justify-start p-0 text-left text-sm font-medium" aria-label={`Open player: ${title}`} onClick={() => onOpen()}><span className="truncate" title={title}>{title}</span></Button>
         {/* The context gives way first, so the status and the device stay readable. */}
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio && !programme ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : current.collection ? <CollectionLinks collection={current.collection} compact /> : context && <span className="truncate">{context}</span>}</span>
+          <span className="flex min-w-0 shrink-[100] overflow-hidden">{radio && !programme ? <Link to="/find" search={{ browse: "radio" }} className="inline-flex min-h-6 items-center hover:text-foreground hover:underline">Radio</Link> : collection ? <Breadcrumb aria-label="Browse related content" className="min-w-0"><BreadcrumbList className="flex-nowrap text-xs"><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={collectionLocation(collection)} className="block truncate leading-6 hover:underline">{collection.title}</Link></BreadcrumbLink></BreadcrumbItem></BreadcrumbList></Breadcrumb> : context && <span className="truncate">{context}</span>}</span>
           <span role="status" className="max-w-full shrink-0 truncate empty:hidden" title={status}>{status}</span>
           {!status && time && <span className="shrink-0 tabular-nums lg:hidden">{time}</span>}
           {at?.elsewhere && <PlaysOn at={at} />}
@@ -79,10 +82,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
       </div>
     </div>
     <div className="flex min-w-0 items-center gap-3 sm:justify-center lg:justify-start">
-      <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Playback controls">
-        <PlayButton state={state} connected={connected} run={run} />
-        <Button variant="ghost" size="icon-lg" aria-label="Next" title="Next" disabled={!nextReady || !hasNext} onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>
-      </div>
+      <PlaybackTransport state={state} connected={connected} run={run} />
       <PlaybackTimeline state={state} connected={connected} run={run} compact className="min-w-0 flex-1 max-lg:hidden [&_[data-current-chapter]]:hidden max-[1100px]:[&_[data-end-time]]:hidden [&_[data-slot=slider]]:min-h-4" />
     </div>
     <div className="flex min-w-0 items-center justify-end gap-0.5">

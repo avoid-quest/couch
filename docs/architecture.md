@@ -113,6 +113,8 @@ levels and mute. A Device that joins reloads the item where it was with its paus
 state, speed, tracks and subtitle delay, and windows controlling a Device the
 Playback left follow it. An output that goes offline
 pauses its Playback until it returns, and a Playback ends when its queue does.
+After Stop it keeps its queue for 10 s, so the controller's Undo can play the
+stopped item again.
 Each Playback keeps its Up next in the `playback` table.
 
 Every Device renders playback the same way (`src/client/session/renderer.ts`),
