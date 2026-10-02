@@ -38,7 +38,7 @@ admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
 phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
 **Home** shows what plays now and Up next, **Find** holds search and sources,
-**Saved** holds lists and favorites, and **Settings** the rest. TV **Settings > Appearance** offers Default,
+**Saved** holds lists and favorites, and **Settings** the rest. TV **Settings > Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
