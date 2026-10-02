@@ -42,9 +42,10 @@ export function GuideSources({ inline = false, request, sources, host, connected
     finally { setBusy(false); }
   }
   const edit = (source: GuideSource | null) => { setEditing(source); setName(source?.name ?? ""); setPlaylistUrl(""); setGuideUrl(""); setError(null); };
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (await mutate(editing ? `sources/${editing.id}` : "sources", "POST", { name, playlistUrl, guideUrl }, "form")) edit(null);
+  async function save(event?: FormEvent, removeGuide = false) {
+    event?.preventDefault();
+    // null tells Core to remove the saved guide; a blank URL keeps it.
+    if (await mutate(editing ? `sources/${editing.id}` : "sources", "POST", { name, playlistUrl, guideUrl: removeGuide ? null : guideUrl }, "form")) edit(null);
   }
   if (!administrator) return <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>;
   const disabled = busy || !connected;
@@ -71,6 +72,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
         {error?.at === "form" && <Alert variant="destructive"><AlertDescription>{error.message}</AlertDescription></Alert>}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={disabled}>{busy ? "Saving…" : editing ? "Save" : "Add"}</Button>
+          {editing?.hasGuide && <Button type="button" variant="outline" disabled={disabled} onClick={() => void save(undefined, true)}>Remove guide</Button>}
           {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => edit(null)}>Cancel</Button>}
         </div>
       </SettingsSection>

@@ -11,7 +11,10 @@ import { helper } from "./helpers";
 
 // Raw MPEG-TS plays through mpegts.js. Chromium has no MPEG-1/2 video, AC-3/E-AC-3 or
 // MP2 decoder, so those channels play in Core's own mpv (#644 ticket 1). ffmpeg reads the
-// channel's real codecs; mpegts.js would report MP2 as MP3. On Linux Chromium has no HEVC either.
+// channel's real codecs; mpegts.js would report MP2 as MP3. On a Linux host every HEVC
+// channel plays in mpv too: Core picks a channel's delivery once, before it knows which
+// Devices will show it, and the host's Linux Chromium (the TV appliance's main screen) has
+// no HEVC decoder, so without mpv the host would fail. Those channels play only on the host.
 const linux = process.platform === "linux";
 async function transport(url: string, signal: AbortSignal): Promise<{ mpegts?: true; mpv?: true }> {
   const ffmpeg = await helper("ffmpeg");
@@ -59,10 +62,11 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   const logos = new Map<string, Promise<{ type: string; data: Uint8Array }>>();
   let closed = false;
   const assertOpen = () => { if (closed) throw new GuideError("The guide is closing.", 503); };
-  const sources = () => db.query<GuideSource, []>(`SELECT s.id, s.name, s.updated_at AS updatedAt, s.error,
+  // Clients learn only whether a source has a guide, never its URL.
+  const sources = () => db.query<Omit<GuideSource, "hasGuide"> & { hasGuide: number }, []>(`SELECT s.id, s.name, s.updated_at AS updatedAt, s.error, s.guide_url <> '' AS hasGuide,
     (SELECT COUNT(*) FROM iptv_channels c WHERE c.source_id = s.id) AS channelCount,
     (SELECT COUNT(*) FROM iptv_programs p JOIN iptv_channels c ON p.channel_id = c.id WHERE c.source_id = s.id) AS programCount
-    FROM iptv_sources s ORDER BY s.name COLLATE NOCASE, s.id`).all();
+    FROM iptv_sources s ORDER BY s.name COLLATE NOCASE, s.id`).all().map(source => ({ ...source, hasGuide: !!source.hasGuide }));
   const definition = (id: string) => {
     const source = db.query<Definition, [string]>("SELECT id, name, playlist_url AS playlistUrl, guide_url AS guideUrl FROM iptv_sources WHERE id = ?").get(id);
     if (!source) throw new GuideError("Guide source not found.", 404);
@@ -221,7 +225,8 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
           administrator();
           definition(source.id);
           // A blank URL keeps the saved one; Couch never sends saved URLs back to clients.
-          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: value.playlistUrl === undefined || value.playlistUrl === "" ? source.playlistUrl : guideUrl(value.playlistUrl), guideUrl: value.guideUrl === undefined || value.guideUrl === "" ? source.guideUrl : guideUrl(value.guideUrl) }, administrator, req.signal, true));
+          // A null guide URL removes the guide, and the refresh drops its programmes.
+          return json(await refresh({ id: source.id, name: guideText(value.name, 100), playlistUrl: value.playlistUrl === undefined || value.playlistUrl === "" ? source.playlistUrl : guideUrl(value.playlistUrl), guideUrl: value.guideUrl === null ? "" : value.guideUrl === undefined || value.guideUrl === "" ? source.guideUrl : guideUrl(value.guideUrl) }, administrator, req.signal, true));
         }
         if (path === "/api/iptv/guide") {
           if (req.method !== "GET") return methods("GET");
