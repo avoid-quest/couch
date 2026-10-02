@@ -49,8 +49,9 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   const title = state.queue.find(entry => entry.id === state.currentEntryId)?.title;
   const output = (id: string) => outputs.find(item => item.deviceId === id);
   const here = deviceId();
-  // The Playback's Devices first, then the other online ones; an offline Device only while it is an output.
-  const devices = (state.devices ?? []).filter(device => output(device.id) || device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
+  // The Playback's Devices first, then the other online ones that share; an offline Device, or this one
+  // when it shares nothing (a remote), only while it is an output.
+  const devices = (state.devices ?? []).filter(device => output(device.id) || device.online && (device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
   const trim = state.mixTrim ?? 100;
   const playback = state.playbacks?.find(item => item.id === state.playback);
   // An mpv channel plays only on the server's own Device, its one output.
@@ -72,7 +73,9 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
       <div className="flex min-w-0 flex-1 divide-x overflow-x-auto">
         {devices.map(device => {
           const current = output(device.id);
-          const audio = device.id === here || device.sharing?.audio === true, video = device.id === here || device.sharing?.video === true;
+          // This Device controls its own strip while it plays here, as Play on → This device chose.
+          const mine = device.id === here && !!current;
+          const audio = mine || device.sharing?.audio === true, video = mine || device.sharing?.video === true;
           const sound = !!current?.sound, locked = !!host && !current;
           const only = outputs.length > 0 && outputs.every(item => item.deviceId === device.id);
           const status = doing(state, device, state.playback);

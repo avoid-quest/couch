@@ -74,7 +74,7 @@ async function rejectDrm(info: Metadata, signal?: AbortSignal) {
   if (/#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(playlist)) throw new Error("This item requires DRM playback, which is not supported.");
 }
 
-function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
+export function parseMedia(info: Metadata, subtitleLanguage: string): WebMediaSource {
   if (info.has_drm === true) throw new Error("This item requires DRM playback, which is not supported.");
   const selected = info.requested_formats === undefined ? [info] : info.requested_formats;
   if (!Array.isArray(selected) || !selected.length || selected.length > 2 || !selected.every(object)) throw new Error("The website returned an unsupported combination of media streams.");
