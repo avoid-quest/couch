@@ -17,7 +17,8 @@ and paired remotes. The rebuild is tracked in
   Browser search, with shared favorites.
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
   Sources > Live TV**. Channels that need custom headers or DRM are skipped.
-  Browse them in **Find > Live TV**.
+  Edit keeps saved URLs unless you type new ones; **Remove guide** drops a
+  source's guide and its programmes. Browse them in **Find > Live TV**.
 
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.
@@ -43,8 +44,11 @@ a Mac.
 
 - Live TV channels in MPEG-2, AC-3, E-AC-3 or MP2 play only in mpv on the
   computer that hosts Couch. Asked for elsewhere, the player says "This channel
-  plays only on" the host. HEVC channels play where the device decodes HEVC; on
-  a Linux host they go to mpv too.
+  plays only on" the host. HEVC channels play where the device decodes HEVC,
+  except on a Linux host, where every HEVC channel plays in mpv and so only on
+  the host: Couch picks a channel's player once, before it knows which devices
+  will show it, and Chromium on Linux, the TV appliance's main screen included,
+  has no HEVC decoder, so without mpv the host itself couldn't play it.
 - Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
   or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV
   channels that need custom headers or DRM are skipped when the list is added.
