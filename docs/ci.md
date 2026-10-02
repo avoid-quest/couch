@@ -27,29 +27,20 @@ The old test suite was deleted when the rebuild in
 where a behaviour must stay locked, and run it with `bun test <path>`.
 
 The update regressions run with `bun test tests/updates.test.ts` and
-`bun test tests/remote-updates.test.ts`. The paired-device integration uses
-Core's Node runtime: `bun build tests/remote-updates.integration.ts --target=node
---outfile=build/remote-updates.integration.mjs`, then
-`node --test build/remote-updates.integration.mjs`.
-The device-volume regression uses the same runtime: `bun build
-tests/device-volume.integration.ts --target=node --outfile=build/device-volume.integration.mjs`,
-then `node --test build/device-volume.integration.mjs`.
-The shared native identity regression uses `bun build
-tests/device-identity.integration.ts --target=node --outfile=build/device-identity.integration.mjs`,
-then `node --test build/device-identity.integration.mjs`. Browser storage and old
-native bridge coverage runs with `bun test tests/browser-device-identity.test.ts`.
-The device-sharing regression uses the same runtime: `bun build
-tests/device-sharing.integration.ts --target=node --outfile=build/device-sharing.integration.mjs`,
-then `node --test build/device-sharing.integration.mjs`.
-Server-selection regressions use `bun build tests/server-selection.integration.ts
---target=node --outfile=build/server-selection.integration.mjs`, then
-`node --test build/server-selection.integration.mjs`. Browser server switching
-runs with `bun test tests/browser-connections.test.ts`.
-The TV health regression needs native Linux `/proc` (CPU emulation changes the
-reported executable): `bun build tests/tv-health.integration.ts --target=node
---outfile=build/tv-health.integration.mjs`, then
-`node --test build/tv-health.integration.mjs`. The installed app's Node also
-works: `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
+`bun test tests/remote-updates.test.ts`. Browser storage and old native bridge
+coverage runs with `bun test tests/browser-device-identity.test.ts`, and browser
+server switching with `bun test tests/browser-connections.test.ts`.
+
+An integration test, `tests/<name>.integration.ts`, runs on Core's Node runtime:
+
+```sh
+bun build tests/<name>.integration.ts --target=node --outfile=build/<name>.integration.mjs
+node --test build/<name>.integration.mjs
+```
+
+The TV health integration needs native Linux `/proc` (CPU emulation changes the
+reported executable). The installed app's Node also runs it:
+`ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
 
 ## Releases
 

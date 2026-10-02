@@ -159,10 +159,10 @@ export async function createHub(options: HubOptions) {
   // loaded and media: the last load, and its source as Core fetches it, for the Sendspin group.
   // resolved: the last resolution, which a screen with the same engine reuses.
   // screens: while Synced, the tabs showing the picture and the item each loaded; heard and seen:
-  // the group's last report and a screen's, whose subtitles join it.
+  // the group's last report and a screen's, whose subtitles join it. delivery: as couch.log last said.
   type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
-    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState };
+    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
@@ -171,6 +171,10 @@ export async function createHub(options: HubOptions) {
   const deviceOf = (socket: Socket<SocketData>) => socket.data.deviceId ?? hostId();
   const newest = (deviceId: string) => [...sockets].findLast(socket => deviceOf(socket) === deviceId);
   const nameOf = (deviceId: string) => playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
+  // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
+  const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
+  const hostOf = (url = "") => { try { return new URL(url).hostname; } catch { return "unknown"; } };
+  const failures = new WeakMap<Socket<SocketData>, string>();
   const stateOf = (playback: Playback) => playback.state ??= playback.session.state;
   const servedBy = (deviceId: string) => all().find(playback => playback.outputs.some(output => output.deviceId === deviceId));
   const holding = (entryId: string) => all().find(playback => stateOf(playback).queue.some(entry => entry.id === entryId));
@@ -566,6 +570,11 @@ export async function createHub(options: HubOptions) {
     if (!pending) return;
     pending = false;
     if (closed || !sockets.size) return;
+    for (const playback of all()) {
+      const delivery = `${playback.synced ? "Synced" : "Direct"} on ${playback.outputs.map(output => nameOf(output.deviceId)).join(", ")}`;
+      if (playback.outputs.length && playback.delivery !== delivery) log(`playback ${playback.id.slice(0, 8)} ${delivery}`);
+      playback.delivery = delivery;
+    }
     const shared = {
       ...common,
       playbacks: all().map((playback): PlaybackSummary => {
@@ -1066,6 +1075,7 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        log(`device online ${nameOf(deviceOf(socket))}`);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }
         // A server switch returns to the chosen mix while it plays, else to that server's outputs.
@@ -1077,7 +1087,7 @@ export async function createHub(options: HubOptions) {
         broadcast();
       },
       close(socket: Socket<SocketData>) {
-        sockets.delete(socket);
+        if (sockets.delete(socket) && !closed) log(`device offline ${nameOf(deviceOf(socket))}`);
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
@@ -1105,7 +1115,12 @@ export async function createHub(options: HubOptions) {
         const player = parsePlayer(message);
         if (player) {
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
-          if (playback?.synced) { playback.seen = player; observeSynced(playback); }
+          // Once per error a tab reports, on one line, with any URL in it cut to its host.
+          const failure = player.status === "error" ? `${player.playbackId} ${player.error}` : "";
+          if (playback && failure && failures.get(socket) !== failure) log(`player error ${playback.id.slice(0, 8)} on ${nameOf(deviceOf(socket))} host=${hostOf(playback.media?.source)}: ${(player.error ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\bhttps?:\/\/[^\s"'<>]+/gi, url => hostOf(url))}`);
+          failures.set(socket, failure);
+          // Only a report with a picture is a screen's: one still loading, or just reconnected, has no tracks yet.
+          if (playback?.synced) { if (player.tracks?.some(track => track.kind === "video")) { playback.seen = player; observeSynced(playback); } }
           else if (playback && mpvPlayback !== playback) playback.session.observe(player);
           return;
         }

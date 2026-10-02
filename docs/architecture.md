@@ -53,7 +53,9 @@ Sendspin membership at once. Sharing speakers or a screen never grants permissio
 to update or restart the app; that stays with administrators. Full-mode host
 outputs retain the existing server network-sharing policy, and turning it off
 keeps what the host plays; Devices manages server sharing, while the client
-switches appear only when joining one.
+switches appear only when joining one. A Device that shares neither is a remote:
+the Mixer lists it, this window's own Device included, only while it is an output,
+which Play on can still make it.
 
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
@@ -158,7 +160,16 @@ and the picture follows it with `timingsrc` (`src/client/session/picture-clock.t
 which nudges the playback rate for small drift and seeks for large drift. For a live
 source the position is the source's own timestamp: FFmpeg keeps it (`-copyts`) and
 reports the first one, and hls.js maps it to its own timeline (`INIT_PTS_FOUND`), so a
-picture that joins the stream anywhere lines up with the sound.
+picture that joins the stream anywhere lines up with the sound. A screen's report
+adds its picture and subtitle tracks to the Playback's only when it has a video
+track: a screen still loading, or a tab that just reconnected, has none yet.
+
+Core prints one line per event, each starting with an ISO timestamp, which the
+app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline
+<name>` for each tab, `playback <id> Direct|Synced on <names>` when a Playback's
+delivery or outputs change, and `player error <id> on <name> host=<host>:
+<message>` once per error a tab reports. A source appears only as its host,
+because its URL can carry a token.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core
