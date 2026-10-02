@@ -6,28 +6,28 @@ Docker or a native Couch package on the controller computer.
 
 ## Connect
 
-1. Connect your computer to the playback computer's network. On a fresh TV,
-   choose **This computer**, allow remote control and open **Settings >
-   Connections > Pair a remote**. If you kept the TV private, turn on **Allow
-   remote control** there first. A configured TV also has **Pair a remote** in
-   the header. Scan its QR or type the shown address into your browser, including
-   any port.
+1. Connect your computer to the playback computer's network. On the TV, choose
+   **This computer**, open **Settings > Devices**, turn on **Share on network**
+   if it is off and choose **Pair a device**. Scan its QR or type the shown
+   address into your browser, including any port.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
-   and enter the TV's six-digit pairing code. On a fresh TV, claim Administrator
-   access in this browser's **Settings > Connections** using the separate
-   one-use code shown on the TV's Connections page.
-3. Open **Now** for current playback and **Up next**. Use its search field or
-   **Find** for a title, link, provider catalog or configured source. **Play**
-   starts now; **Up next** adds without starting. **Saved** holds lists and
-   favorites. Closing your browser leaves playback running on the TV.
+   and enter the TV's six-digit pairing code. The first device you pair becomes
+   the admin.
+3. **Home** shows current playback and **Up next**. Use **Find** for a title,
+   link, provider catalog or configured source. **Play** starts now; **Queue**
+   in its **…** menu adds to Up next. **Saved** holds lists and favorites, and
+   **Settings** the rest. Closing your browser leaves playback running on the
+   TV.
 
 Use the address shown by your TV, not `couch.avoid.quest`, which is the project
 website. A loopback address such as `127.0.0.1` reaches your own computer. For
 another computer, use the advertised LAN address or the configured hostname.
 
-Pairing grants Controller access. The first remote can claim Administrator
-access with the separate setup code on the TV; a current Administrator can
-promote later remotes in **Settings > Connections**. A browser does not become
+Pairing grants Controller access, except for the first device, which becomes
+the admin. If no paired device is admin later, the TV's **Settings > Devices**
+shows a one-use code; enter it under **Admin code** in this browser's
+**Settings > Devices** and choose **Become admin**. An admin can make later
+devices admin with **Make admin** in **Settings > Devices**. A browser does not become
 another player.
 
 ## Native desktop app
@@ -70,7 +70,7 @@ a changed address can require pairing again.
 The client retries when the TV or network returns; the header shows connection
 status and the playback computer's address. If Couch rejects the saved pairing,
 the pairing form appears. Get a current QR or code from the TV and pair again.
-An Administrator can remove an old device in **Settings > Connections > Devices**.
+An Administrator can remove an old device in **Settings > Devices**.
 Pairing again does not delete the TV's media or queue.
 
 Couch serves the LAN over HTTPS with its own self-signed certificate, so a
