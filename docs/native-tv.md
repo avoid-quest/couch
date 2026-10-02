@@ -20,7 +20,7 @@ sudo reboot
 
 Setup installs Debian's Xorg, Openbox, LightDM, PipeWire and Bluetooth support. It
 creates the locked, unprivileged `couch-tv` account and enables its graphical
-session. Couch runs from the root-owned `/usr/bin/couch` (`/opt/Couch/couch`) in TV presentation, fullscreen on the TV. No source checkout or
+session. Couch runs from the root-owned `/usr/bin/couch` (`/opt/Couch/couch`) in TV presentation, fullscreen on the TV. The mouse pointer hides after a second without movement anywhere on the TV, outside Couch's window and over the recovery notice too, and returns when it moves. No source checkout or
 manual verification utility is needed.
 
 Keep your administrator account, password and SSH access. Setup does not alter
@@ -31,15 +31,14 @@ the running app with `check-health.js`, run by the app's own Node
 with the TV's database open and a healthy loopback listener; Another Couch runs
 no Core. The check uses Core's open files and sockets rather than
 `/proc/<pid>/environ`, which Electron can clear when setting process titles. Select this
-computer for TV playback and allow remote control to pair a phone. On an
-unclaimed TV, open **Settings > Connections**. It shows the one-use administrator
-code under **Set up your administrator remote**; **Pair a remote** opens the
-pairing QR and six-digit code. Pair the phone, then enter the administrator code
-in the phone's **Settings > Connections > Claim administrator**. If you kept
-remote control private at first, turn on **Allow remote control** in Connections
-before pairing. On a configured TV, **Pair a remote** is also in the header.
-Use **Now** for playback and Up next, **Find** for search and sources, and
-**Saved** for lists and favorites. TV **Settings > Appearance** offers Default,
+computer for TV playback. To pair a phone, open **Settings > Devices**, turn on
+**Share on network** if the TV is still private, and choose **Pair a device**
+for the pairing QR and six-digit code. The first device you pair becomes the
+admin. If no paired device is admin later,
+Devices shows a one-use code under **Make a device the admin**; enter it in the
+phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
+**Home** shows what plays now and Up next, **Find** holds search and sources,
+**Saved** holds lists and favorites, and **Settings** the rest. TV **Settings > Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
@@ -85,7 +84,7 @@ The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
 error; `rollback=unavailable` means no previous package was at hand.
-**Settings > This app > Updates** shows the last install, rollback or failure
+**Settings > Updates** shows the last install, rollback or failure
 under **Automatic updates**, and a failed **Restart to update** shows its error
 instead of installing forever.
 After each install, including a rollback, the script runs the installed
@@ -93,7 +92,8 @@ package's `couch-setup --refresh`, so the one `sudo couch-setup --tv` is enough:
 on a completed setup it installs TV packages and links TV files a later release
 adds, with the same preservation as setup, and enables `couch-update.timer`
 unless masked. It leaves accounts, sign-in and power policy and the running
-session alone; `setup=failed` in the status means it failed and the update went
+session alone, so session changes, such as the hidden pointer, apply at the
+next sign-in; `setup=failed` in the status means it failed and the update went
 ahead.
 `sudo systemctl disable --now couch-update.timer` and then `sudo systemctl mask
 couch-update.timer` turn unattended updates off for good.

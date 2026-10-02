@@ -18,12 +18,15 @@ fi
 
 openbox --config-file /usr/share/couch-appliance/openbox.xml &
 wm=$!
+# Hide the pointer everywhere on the screen, the recovery notice included, until it moves.
+unclutter-xfixes --timeout 1 --jitter 3 --ignore-scrolling --start-hidden &
+pointer=$!
 notice=
 cleanup() {
     trap - EXIT HUP INT TERM
     systemctl --user stop couch-tv.service || true
     [ -z "$notice" ] || kill "$notice" 2>/dev/null || true
-    kill "$wm" 2>/dev/null || true
+    kill "$pointer" "$wm" 2>/dev/null || true
     wait || true
 }
 trap cleanup EXIT HUP INT TERM

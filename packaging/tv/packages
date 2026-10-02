@@ -17,3 +17,4 @@ va-driver-all
 mpv
 curl
 ca-certificates
+unclutter-xfixes

@@ -116,11 +116,11 @@ a clone rather than a worktree, with an event that says the run is on `main`:
 ```sh
 act workflow_dispatch -W .github/workflows/check.yml -j linux \
   -P blacksmith-4vcpu-ubuntu-2404=catthehacker/ubuntu:full-latest
-echo '{"inputs":{"version":"0.2.0-preview.1"}}' > /tmp/package-event.json
+git clone -q --depth 1 --branch v4.6.2 https://github.com/actions/upload-artifact /tmp/upload-artifact-v4
 act workflow_dispatch -W .github/workflows/package.yml -j package --matrix name:linux \
-  -e /tmp/package-event.json \
   -P blacksmith-4vcpu-ubuntu-2404=catthehacker/ubuntu:full-latest \
-  --container-architecture linux/amd64 --artifact-server-path /tmp/act-artifacts
+  --container-architecture linux/amd64 --artifact-server-path /tmp/act-artifacts \
+  --local-repository actions/upload-artifact@v7=/tmp/upload-artifact-v4
 echo '{"ref":"refs/heads/main","inputs":{"channel":"preview"}}' > /tmp/release-event.json
 act workflow_dispatch -W .github/workflows/release.yml -j preflight \
   -e /tmp/release-event.json \
@@ -128,4 +128,9 @@ act workflow_dispatch -W .github/workflows/release.yml -j preflight \
   --container-architecture linux/amd64
 ```
 
-Local emulation does not prove hosted capacity, secret access or timings.
+act's artifact server doesn't accept upload-artifact v7's requests, so the
+Package run swaps in v4 for that step only. A dispatched Package builds
+`package.json`'s version; to build a preview, as Release does, run it from a
+clone with `bun pm pkg set version=X.Y.Z-preview.N` left uncommitted. The
+installers land zipped in `/tmp/act-artifacts/1/couch-linux/`. Local emulation
+does not prove hosted capacity, secret access or timings.
