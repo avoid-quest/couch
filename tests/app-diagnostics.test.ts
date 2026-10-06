@@ -34,6 +34,14 @@ test("app evidence redacts complete long userinfo before applying its bound", ()
   expect(line.length).toBeLessThan(100);
 });
 
+test("updater cache messages redact unquoted paths containing spaces", () => {
+  for (const path of ["/Users/review name/synthetic-update.zip", "C:\\Users\\review name\\synthetic-update.exe"]) {
+    const line = appDiagnostic("update", "info", `Update has already been downloaded to ${path}).`);
+    expect(line).toContain("Update has already been downloaded to [path]");
+    expect(line).not.toMatch(/review|name|synthetic-update/);
+  }
+});
+
 test("app evidence consumes quoted paths and embedded controls before flattening", () => {
   for (const separator of [" ", "'", "' ", '"', '" ', "\t", "\n", "\r\n", "\u0085", "\u2028", "\u2029"]) {
     for (const path of [`/Users/review/private${separator}synthetic-file.txt`, `C:\\Users\\review${separator}synthetic-file.txt`, `\\\\server\\review${separator}synthetic-file.txt`]) {

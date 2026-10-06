@@ -14,7 +14,8 @@ function safeMessage(value: unknown) {
     .replace(/\b(?:password|passwd|token|secret|api[-_]?key|signature|sig|credentials?)(?:\\?["'])?\s*[:=]\s*(?:\\"(?:\\\\(?:\\["\\]|[^"\\])|[^\\])*\\"|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[^ ]+)/gi, "[credentials]")
     // Native paths may contain quotes too; consume through the last closing quote.
     .replace(/(["'])(?:[a-z]:\\|\\\\|\.{0,2}\/)[\s\S]*\1/gi, "[path]")
-    .replace(/(?:[a-z]:\\|\\\\|\.{0,2}\/)[^ ]+/gi, "[path]");
+    // An unquoted updater path has no reliable boundary before the message ends.
+    .replace(/(?:[a-z]:\\|\\\\|\.{0,2}\/)[\s\S]+/gi, "[path]");
   return safePlaybackError(message);
 }
 

@@ -119,6 +119,7 @@ assert(events.rendererCases.every((event: { level: string; isMainFrame: boolean 
 assert.equal(events.unsandboxedFrame.isMainFrame, true);
 assert.equal(events.unsandboxedFrame.sourceId, "about:srcdoc");
 assert.equal(events.updater.filesystemErrors, 8);
+assert.equal(events.updater.cacheReused, true);
 assert.deepEqual(events.updater.httpErrors, [{ path: "/plain", statusCode: 401 }, { path: "/json", statusCode: 401 }]);
 const log = readFileSync(logPath, "utf8");
 if (previous !== null) assert.equal(readFileSync(join(data, "logs/couch.1.log"), "utf8"), previous, "The previous run must rotate intact");
@@ -142,6 +143,7 @@ if (lines.some(line => /DIAG routine|DIAG child frame|synthetic-source-secret/.t
 const privacyLines = lines.filter(line => line.includes("DIAG privacy "));
 if (privacyLines.length !== rendererCases.length) failures.push("Native privacy errors were not all recorded");
 const updaterLines = lines.filter(line => line.includes("update error:"));
+if (!lines.some(line => line.includes("update info: Update has already been downloaded to [path]"))) failures.push("Real updater cache message was not recorded");
 if (updaterLines.length !== 10) failures.push("Updater default error listener did not record every real error");
 for (const line of [...privacyLines, ...updaterLines]) {
   if (!iso.test(line) || line.length > 341 || /[\p{Cc}\u2028\u2029]/u.test(line)) failures.push("Privacy record is not timestamped, bounded and single-line");
