@@ -51,7 +51,7 @@ export function HomePage() {
   const shell = useShell();
   const { on, play: playOn } = usePlayOn();
   const { credentials, available, current, programme } = shell;
-  const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, queue: queueUpNext, nativeHost, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const details = useDetailNavigation();
   const now = useDurationClock();
@@ -118,7 +118,7 @@ export function HomePage() {
   const art = (item: { thumbnail?: string; title: string }) => <Artwork item={item} />;
   const queueHistory = async (item: HistoryItem) => {
     if (!state || !item.playable) return false;
-    await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });
+    await queueUpNext(item.title, () => apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) }));
     return true;
   };
 
