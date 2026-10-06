@@ -79,7 +79,12 @@ is a queue, current item, position, pause state, speed and tracks, with its own
 outputs: each Device's `Output` `{ picture, sound }` in it. A Device's outputs
 serve one Playback at a time. A Device owns one volume and mute, persisted in the
 `devices` table; it renders a Playback's sound at
-`sound && !muted ? round(volume * mixTrim / 100) : 0`. The Playback's `mixTrim`,
+`sound && !muted ? round(volume * effectiveTrim / 100) : 0`. All applies the
+Playback's `mixTrim` only to speakers its caller may control. Private speakers
+retain their own chosen attenuation through foreign All changes; new private
+sound and revoked foreign influence return to their own level. Regranting audio
+joins the current All. These per-output trims live with the outputs, so a restart
+restores queues and All without outputs. The Playback's `mixTrim`,
 saved with it in the `playback` table, starts at 100 and attenuates its selected
 sound; zero keeps those outputs selected so raising it restores their sound, and
 the band then shows 0. Raising a volume, a fader, the TV's system volume or

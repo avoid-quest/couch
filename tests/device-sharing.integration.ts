@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import WebSocket from "ws";
+import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { defaultDeviceSharing } from "../src/shared/device-sharing";
@@ -13,11 +14,22 @@ import type { Action, ServerMessage, SessionState } from "../src/shared/protocol
 async function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "couch-device-sharing-")), databasePath = join(directory, "couch.sqlite");
   const store = openStore(databasePath, true);
-  const adminId = "a".repeat(43), deviceId = "d".repeat(43);
+  const adminKey = Identity.generate(), deviceKey = Identity.generate(), adminId = adminKey.peerId, deviceId = deviceKey.peerId;
   const adminToken = store.pair(adminId, "Admin"), deviceToken = store.pair(deviceId, "Device");
   store.close();
   const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0 });
-  const sockets: WebSocket[] = [];
+  const sockets: WebSocket[] = [], speakers: SendspinClient[] = [];
+  // A Device's Sendspin player: the levels Core sends it while its sound is synced.
+  async function speaker(key: Identity) {
+    const levels: number[] = [], client = new SendspinClient(key.peerId, "Test speaker", [Roles.PLAYER], {
+      encryption: { identity: key },
+      playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.VOLUME] },
+    });
+    speakers.push(client);
+    client.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.VOLUME) levels.push(command.player.volume!); });
+    await client.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
+    return levels;
+  }
   async function connect(token: string, id: string, options = "") {
     const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}&device=${id}${options}`, { headers: { Origin: hub.origin } });
     sockets.push(socket);
@@ -37,10 +49,10 @@ async function fixture() {
     }) };
   }
   const admin = await connect(adminToken, adminId), device = await connect(deviceToken, deviceId, "&updates=1");
-  return { hub, admin, device, adminId, deviceId, deviceToken, connect,
+  return { hub, admin, device, adminId, deviceId, deviceToken, connect, speakers: () => Promise.all([speaker(adminKey), speaker(deviceKey)]),
     api: (path: string, body?: unknown) => fetch(`${hub.origin}${path}`, { headers: { Authorization: `Bearer ${adminToken}`, ...body === undefined ? {} : { "Content-Type": "application/json" } }, ...body === undefined ? {} : { method: "POST", body: JSON.stringify(body) } }),
     subtitle: (playbackId: string) => fetch(`${hub.origin}/api/subtitles?playbackId=${playbackId}&name=subtitles.vtt`, { method: "POST", headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/octet-stream" }, body: "WEBVTT\n\n00:00.000 --> 00:01.000\nHello" }),
-    close: async () => { for (const socket of sockets) socket.terminate(); await hub.close(); rmSync(directory, { recursive: true, force: true }); },
+    close: async () => { await Promise.all(speakers.map(client => client.disconnect())); for (const socket of sockets) socket.terminate(); await hub.close(); rmSync(directory, { recursive: true, force: true }); },
   };
 }
 
@@ -148,9 +160,17 @@ test("a private self-join preserves shared group controls without granting direc
     ] satisfies Action[]) assert.equal((await f.admin.command(action)).ok, false);
     const volume = f.admin.state.devices?.find(device => device.id === f.deviceId)?.volume;
     assert.equal((await f.admin.command({ type: "volume", volume: 30 })).ok, true);
+    // All changes only the speakers the admin may control: the private Device keeps the level it plays at.
+    const [adminLevels, deviceLevels] = await f.speakers();
+    await until(() => adminLevels.at(-1) === 30 && deviceLevels.at(-1) === volume);
     assert.equal((await f.admin.command({ type: "allSpeakers", level: 0 })).ok, true);
+    await until(() => adminLevels.at(-1) === 0);
+    assert.equal(deviceLevels.at(-1), volume);
     assert.equal(f.admin.state.devices?.find(device => device.id === f.deviceId)?.volume, volume);
     assert.equal(f.admin.state.outputs?.find(output => output.deviceId === f.deviceId)?.sound, true);
+    assert.equal((await f.admin.command({ type: "allSpeakers", level: 100 })).ok, true);
+    await until(() => adminLevels.at(-1) === 30);
+    assert.equal(deviceLevels.at(-1), volume);
     assert.equal((await f.admin.command({ type: "stop", playbackId })).ok, true);
   } finally { await f.close(); source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve())); }
 });
