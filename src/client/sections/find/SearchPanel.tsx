@@ -214,6 +214,7 @@ export function CollectionHeader({ collection, canPlay }: { collection: SearchCo
           {collection.fromStart && <Button variant="ghost" size="sm" disabled={!canPlay || collection.disabled} onClick={collection.fromStart}>From start</Button>}
           <BrowseActions title={collection.title} actions={[
             ...(collection.playOn ? [{ label: "Play on", disabled: !canPlay || collection.disabled, playOn: collection.playOn }] : []),
+            ...(collection.playNext ? [{ label: "Play next", disabled: collection.disabled, run: collection.playNext }] : []),
             ...(collection.queueAll ? [{ label: collection.single ? "Queue" : "Queue all", disabled: collection.disabled, run: collection.queueAll }] : []),
             ...(collection.save ? [{ label: collection.saved ? "Saved" : "Save", disabled: collection.disabled || collection.saveDisabled, run: collection.save }] : []),
           ]} />
