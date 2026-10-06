@@ -30,7 +30,7 @@ export function ProviderPage() {
 }
 
 function CollectionPage({ provider, url, search }: { provider: ProviderId; url: string; search: ReturnType<typeof readCollectionSearch> }) {
-  const { credentials, available, openProvider, current } = useShell();
+  const { credentials, available, openProvider, current, playHistory } = useShell();
   const { connected, run, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const cursor = search.cursors.at(-1);
@@ -44,7 +44,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
   const currentId = hits.find(hit => hit.url === source)?.id;
   const emptyRoot = !url && connected && !!summary && !summary.loading && !summary.error && !summary.hits?.length;
-  const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : /\/season-\d+|\/ContentSet-/.test(url) ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
+  const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : /\/season-\d+|\/ContentSet-/.test(url) || provider === "streamingcommunity" && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media") ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
   const href = (direction: "previous" | "next") => collectionLocation({ provider, url }, { ...search,
     ...(paging.remote ? { cursors: direction === "previous" ? search.cursors.slice(0, -1) : [...search.cursors, page!.nextCursor!], page: 1 } : { page: paging.page + (direction === "previous" ? -1 : 1) }) });
   const goToPage = (href: string) => {
@@ -61,7 +61,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const pager = <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? href("previous") : undefined} next={paging.next ? href("next") : undefined} disabled={!connected || !!summary?.loading} onNavigate={turnPage}
     onSelectPage={page => goToPage(collectionLocation({ provider, url }, { ...search, page }))} />;
   return <section data-page="Collection" className="min-w-0 space-y-6">
-    <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
+    <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     <ContentBreadcrumb title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
     <CollectionHeader collection={collection} canPlay={available} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
@@ -74,14 +74,14 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
           {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: "https://www.twitch.tv/directory" })}>Categories</Link></Button>}
           <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={search.filter}
             onChange={event => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: event.target.value }), replace: true, resetScroll: false })} />
-          {pager}
+          {(paging.remote || (paging.pages ?? 1) > 1) && pager}
         </div>
       </div>
       <HitList hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: "" }), replace: true })}>Clear filter</Button>}</Empty>}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
-    {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} provider={provider} currentUrl={page?.item?.url ?? url} />}
+    {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}
   </section>;
 }
 

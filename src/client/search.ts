@@ -1,4 +1,11 @@
-import type { SearchKind, SearchLength } from "./sections/find/SearchOnlineResults";
+import type { SearchHit, SearchKind, SearchLength } from "./sections/find/SearchOnlineResults";
+
+export function mergeSearchHits(sources: readonly string[], hits: Record<string, SearchHit[]>, query: string) {
+  const normalize = (value: string) => value.normalize("NFC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  const exact = (hit: SearchHit) => !!query.trim() && normalize(hit.title) === normalize(query);
+  return sources.flatMap((source, rank) => (hits[source] ?? []).map((hit, index) => ({ hit, order: index * sources.length + rank })))
+    .sort((a, b) => Number(exact(b.hit)) - Number(exact(a.hit)) || a.order - b.order).map(({ hit }) => hit);
+}
 
 export const searchSources = ["All", "YouTube", "RaiPlay", "StreamingCommunity", "avoid radio", "Radio playlists", "Radio directory", "Twitch"];
 // Find searches no music-only source (Bandcamp opens from links), so Music isn't a filter.
