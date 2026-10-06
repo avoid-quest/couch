@@ -7,14 +7,22 @@ dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_SESSION_TYPE
 xset s off
 xset -dpms
 
-# Start on the attached TV when available, with the laptop panel as a fallback.
+# Use one active screen at 0,0: the attached TV, else the laptop panel.
+# Keep the fullscreen window and pointer in the selected screen's coordinate space.
+lay_out() {
+    local screen output off=()
+    screen=$(awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}' <<< "$1")
+    if [ -z "$screen" ] || ! { xrandr --output "$screen" --mode 1920x1080 --pos 0x0 --primary || xrandr --output "$screen" --auto --pos 0x0 --primary; }; then
+        screen=$(awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1; exit}' <<< "$1")
+        [ -n "$screen" ] && xrandr --output "$screen" --auto --pos 0x0 --primary || return 0
+    fi
+    # Turn off every other output with a mode: the panel, or a TV that was unplugged.
+    while read -r output; do off+=(--output "$output" --off); done < <(awk -v screen="$screen" '$2 ~ /connected$/ && $1 != screen && /[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/ {print $1}' <<< "$1")
+    [ "${#off[@]}" = 0 ] || xrandr "${off[@]}" || true
+}
 inventory=$(xrandr --query)
 connected=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
-output=$(awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}' <<< "$inventory")
-if [ -n "$output" ]; then
-    xrandr --output "$output" --mode 1920x1080 || xrandr --output "$output" --auto
-    while read -r panel; do xrandr --output "$panel" --auto --left-of "$output"; done < <(awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1}' <<< "$inventory")
-fi
+lay_out "$inventory"
 
 openbox --config-file /usr/share/couch-appliance/openbox.xml &
 wm=$!
@@ -36,17 +44,12 @@ systemctl --user start couch-tv.service || true
 # Keep LightDM's session alive after the restart limit, so it cannot reset the
 # budget by logging in again. Recovery remains visible until an admin restarts it.
 while kill -0 "$wm" 2>/dev/null; do
-    # Xorg updates its cached inventory on hotplug. Enable new outputs once,
-    # without reprobes or repeatedly resetting modes during playback.
+    # Xorg updates its cached inventory on hotplug. Lay out the screen once per
+    # change, without reprobes or repeatedly resetting modes during playback.
     if inventory=$(timeout 2 xrandr --current); then
-        anchor=$(awk '$2 == "connected" && /[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/ {if (!first) first=$1; if ($1 ~ /^(eDP|LVDS)/) {print $1; found=1; exit}} END {if (!found) print first}' <<< "$inventory")
-        while read -r output; do
-            [[ $'\n'$connected$'\n' != *$'\n'$output$'\n'* ]] || continue
-            placement=()
-            [ -z "$anchor" ] || placement=(--right-of "$anchor")
-            xrandr --output "$output" --mode 1920x1080 "${placement[@]}" || xrandr --output "$output" --auto "${placement[@]}" || true
-        done < <(awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ && !/[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/ {print $1}' <<< "$inventory")
-        connected=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
+        now=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
+        [ "$now" = "$connected" ] || lay_out "$inventory"
+        connected=$now
     fi
     state=$(systemctl --user show couch-tv.service --property=ActiveState --value)
     if [[ "$state" = failed || "$state" = inactive ]]; then

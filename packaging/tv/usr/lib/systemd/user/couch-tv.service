@@ -16,7 +16,9 @@ ExecStartPre=/usr/lib/couch-appliance/initialize-audio
 ExecStart=/usr/bin/couch
 Restart=always
 RestartSec=5
-KillMode=control-group
+# Main shuts down Core and Chromium; signalling their children first makes Main
+# relaunch the GPU during shutdown. Final cleanup still covers the whole group.
+KillMode=mixed
 TimeoutStopSec=10
 UMask=0077
 MemoryHigh=2500M
