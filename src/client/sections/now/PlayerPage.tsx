@@ -37,7 +37,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, nativeHost, tvPresentation, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, nativeHost, tvPresentation, videoQualityPreference, playerTarget } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -134,7 +134,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     return () => window.removeEventListener("keydown", onKey, true);
   }, [tvPresentation, shown, panel, queueOpen, closeQueue, playing, autoHide, transportReady, pausable, player?.playbackId, run, shell.leavePlayer, fullscreen]);
   // An explicitly opened queue remains available after playback stops.
-  if (!current && !queueOpen) return null;
+  if (!current && !queueOpen && !playerTarget) return null;
 
   const buffering = player?.status === "loading" && player.buffering;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
@@ -160,12 +160,13 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
     {/* Same height and gutter as the app header, with its Couch switch. */}
-    <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", !shown && "opacity-0 pointer-events-none")}>
-      <div className="min-w-0 bg-background [&_ol]:flex-nowrap"><ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} /></div>
+    <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5", !shown && "opacity-0 pointer-events-none")}>
+      <div className="min-w-0 bg-background [&_ol]:flex-nowrap">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
+      {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
       {buffering && <p role="status" className="flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
       <div className="ml-auto flex shrink-0 bg-background"><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
     </div>
-    <div className="player-workspace">
+    <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
       {current && (!picture || (active || ended) && audioOnly) && !status && <div data-player-summary className="player-summary">
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 place-items-center overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>

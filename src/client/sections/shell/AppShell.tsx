@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
+import { defaultStringifySearch, Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Keyboard, X } from "lucide-react";
@@ -52,7 +52,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference } = useSessionGate();
+  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, playerTarget } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -64,8 +64,8 @@ function useShellValue() {
   const lastBrowsePath = useRef("/");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   useEffect(() => {
-    if (section === "Now" && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
-  }, [section, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
+    if (section === "Now" && !playerTarget && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
+  }, [section, playerTarget?.id, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"radio" | "iptv" | "streaming-community">("iptv");
   const openSources = (source: typeof setupSource = "iptv") => { setSetupSource(source); setSourcesOpen(true); };
@@ -91,8 +91,11 @@ function useShellValue() {
     }
   };
   const changeSection = changePage;
-  const openPlayer = (panel?: "queue") => {
-    void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
+  const openPlayer = (panel?: "queue", targetDeviceId = playerTarget?.id) => {
+    const href = `/now${defaultStringifySearch({ queue: panel === "queue" || undefined, targetDeviceId })}`;
+    if (playerTarget && targetDeviceId === playerTarget.id) void router.navigate({ href, replace: true, state: location.state });
+    else if (targetDeviceId) detailNavigation.open(href, section === "Remote" && panel === "queue" ? '[data-remote-page] button[aria-label="Up next"]' : undefined);
+    else void router.navigate({ href, viewTransition: playerTransition });
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
@@ -116,6 +119,7 @@ function useShellValue() {
     void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };
   const leavePlayer = () => {
+    if (playerTarget) { detailNavigation.back("/remote"); return; }
     if (playerTransition) void router.navigate({ href: lastBrowsePath.current, viewTransition: true });
     else router.history.push(lastBrowsePath.current);
   };

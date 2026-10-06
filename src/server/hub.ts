@@ -1201,6 +1201,8 @@ export async function createHub(options: HubOptions) {
           const deviceId = deviceOf(socket);
           const authorize = socket.data.authorize;
           const guardedTarget = command.targetDeviceId;
+          const explicitPlayOn = action.type === "enqueue" && action.playNow && action.deviceId;
+          const remoteTarget = guardedTarget ?? (remoteControllers.has(deviceId) && !explicitPlayOn ? selected(deviceId) : undefined);
           if (guardedTarget) {
             if (selected(deviceId) !== guardedTarget) throw new Error("The controlled TV changed. Select it again before using Remote.");
             requireControl(guardedTarget, deviceId);
@@ -1283,9 +1285,19 @@ export async function createHub(options: HubOptions) {
           } else {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on the selected Device's.
+            if (remoteTarget && action.type !== "enqueue" && !servedBy(remoteTarget)) throw new Error("The TV's queue or playing item changed. Try again.");
             playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;
             playback ??= action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
-            const permitted = authorizePlayback(playback, authorize, deviceId);
+            // Queue entries can outlive their TV assignment. Recheck the resolved Playback at
+            // dispatch (and async authorization), even for an older client without an envelope guard.
+            const permitted = authorizePlayback(playback, () => {
+              authorize();
+              if (!remoteTarget) return;
+              if (selected(deviceId) !== remoteTarget) throw new Error("The controlled TV changed. Select it again before using Remote.");
+              requireControl(remoteTarget, deviceId);
+              if (!tvSocket(remoteTarget)) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+              if (servedBy(remoteTarget) !== playback) throw new Error("The TV's queue or playing item changed. Try again.");
+            }, deviceId);
             permitted();
             if (action.type === "play") present(playback, playedBy);
             const previousUndo = playback.undoable;

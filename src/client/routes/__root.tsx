@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { DeviceIdentity } from "../../shared/devices";
 import { useEffect } from "react";
 import { AppShell } from "../sections/shell/AppShell";
+import { RemotePlayerSession } from "../session/remote-player-session";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -24,7 +25,7 @@ function NotFound() {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: DeviceIdentity | null; connected: boolean }>()({
-  component: AppShell,
+  component: () => <RemotePlayerSession><AppShell /></RemotePlayerSession>,
   errorComponent: RootError,
   notFoundComponent: NotFound,
 });

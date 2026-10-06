@@ -74,9 +74,10 @@ function moveFocus(key: string) {
   focus(candidates[0]?.element);
 }
 
-function sendKey(target: HTMLElement, key: string) {
-  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  target.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }));
+export function sendKey(target: HTMLElement, key: string) {
+  const code = key === " " ? "Space" : key;
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
+  target.dispatchEvent(new KeyboardEvent("keyup", { key, code, bubbles: true, cancelable: true }));
 }
 
 // Home and Info change the TV's screen/overlay state in App. Other keys act on
@@ -118,7 +119,7 @@ export function applyTvNavigation(key: NavigationKey) {
     if (key === "back") {
       sendKey(target, "Escape");
     } else if (key === "select") {
-      if (target.closest('[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"]')) sendKey(target, "Enter");
+      if (target.closest('[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"], [aria-roledescription="sortable"]')) sendKey(target, "Enter");
       else target.click();
     } else {
       const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];

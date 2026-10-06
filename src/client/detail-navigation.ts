@@ -58,7 +58,7 @@ export function DetailFocusRestoration() {
       const element = document.querySelectorAll<HTMLElement>(target.selector)[target.index];
       if (!element) return false;
       element.focus({ preventScroll: true });
-      return true;
+      return document.activeElement === element;
     };
     const returning = !!location.state.detailFocus;
     if (restore() && returning) return;
@@ -66,7 +66,7 @@ export function DetailFocusRestoration() {
       if (document.activeElement !== document.body) return;
       if (restore() && returning) observer.disconnect();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert"] });
     return () => observer.disconnect();
   }, [location.state.__TSR_key]);
   return null;

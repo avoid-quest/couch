@@ -51,7 +51,7 @@ export function RemotePage() {
       <section className="grid content-start gap-5 border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0"><h2 className="text-lg font-medium">{current?.title ?? (ready ? "Nothing playing" : `Playback on ${target.name}`)}</h2>{current && <p className="text-sm text-muted-foreground">{state?.player.status === "error" ? state.player.error : state?.player.status === "loading" ? "Loading…" : state?.player.status === "paused" ? "Paused" : state?.player.status === "ended" ? "Finished" : "Playing"}</p>}</div>
-          <Button variant="ghost" className="min-h-11" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue")}>Up next</Button>
+          <Button variant="ghost" className="min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
         </div>
         {state && credentials && <>
           <PlaybackTransport state={state} connected={ready} run={send} />

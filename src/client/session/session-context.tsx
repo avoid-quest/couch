@@ -65,7 +65,7 @@ export type SessionGateValue = SessionBag & {
   setError: (error: string | null) => void;
   run: (action: Action, targetDeviceId?: string) => Promise<boolean>;
   queue: <T>(title: string, work: () => Promise<T>) => Promise<T>;
-  seekBy: (seconds: number) => Promise<boolean>;
+  seekBy: (seconds: number, targetDeviceId?: string) => Promise<boolean>;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
   // Pairing origin for a new remote, and the code from a scanned pairing link.
   pairingOrigin: string;
@@ -74,6 +74,7 @@ export type SessionGateValue = SessionBag & {
   unpair: () => void;
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
+  playerTarget?: { id: string; status: string };
 };
 
 export function useSessionGate(): SessionGateValue {
@@ -263,10 +264,10 @@ export function SessionGate({ children }: PropsWithChildren) {
     }
   }, [command, dismissUndo, offerUndo, queue, readObservation]);
 
-  const seekBy = useCallback((seconds: number) => {
+  const seekBy = useCallback((seconds: number, targetDeviceId?: string) => {
     const player = readObservation()?.player;
     return player?.playbackId && player.seekable && ["playing", "paused"].includes(player.status)
-      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) })
+      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) }, targetDeviceId)
       : Promise.resolve(false);
   }, [readObservation, run]);
 
