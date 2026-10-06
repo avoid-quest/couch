@@ -319,7 +319,8 @@ Messages:
   Device levels) to 0 (silent), and the Playback keeps it across restarts. It
   shows its own trim, preserves Device levels and mute, and keeps outputs
   selected at zero so raising it restores their sound; it has no Picture, Solo
-  or Mute. Its label is "Selected shared sound". Then one row per Device:
+  or Mute. Its label is "Selected sound you can control": shared sound and this
+  Device's own private sound. Then one row per Device:
   the Playback's Devices first (offline ones
   dimmed, their controls disabled), then the other online Devices that share
   audio or video, dimmed but operable when a move would not replace a private
@@ -335,8 +336,10 @@ Messages:
   Playback's factual status too; unused devices say "Not playing here".
   Private picture/sound names the consent boundary and disables changes to
   that channel for other devices; shared sound can still be muted beside a
-  private picture. Explicit self-play retains local controls. These statuses
-  describe playback and consent, never whether sound can be heard.
+  private picture. This Device retains local controls even while viewing
+  another Playback; Solo still requires consent to replace the destination's
+  whole output. These statuses describe playback and consent, never whether
+  sound can be heard.
   On phones controls wrap below name/status and Solo. Names and busy titles
   wrap without ellipses; the Sheet scrolls vertically. On wider screens the
   name/status, Picture, horizontal fader, number, Mute and Solo align in a row.
