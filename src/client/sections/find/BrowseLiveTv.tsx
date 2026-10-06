@@ -33,7 +33,7 @@ const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-dig
 /** Find > Live TV: the guide's channels with what's on now and next, a page at a time. */
 export function BrowseLiveTv() {
   const { credentials, available } = useShell();
-  const { connected, state } = useSessionGate();
+  const { connected, state, queue } = useSessionGate();
   const search: Record<string, unknown> = useLocation().search;
   const navigate = useNavigate();
   const filter = typeof search.filter === "string" ? search.filter.slice(0, 100) : "";
@@ -52,7 +52,7 @@ export function BrowseLiveTv() {
   const action = useMutation({
     mutationFn: ({ channel, playNow, deviceId }: { channel: GuideChannel; playNow: boolean; deviceId?: string }) => playNow
       ? play(on => apiSend(credentials, `/api/iptv/channels/${channel.id}/play${playOnQuery(on)}`), deviceId)
-      : apiSend(credentials, `/api/iptv/channels/${channel.id}/queue`),
+      : queue(channel.name, () => apiSend(credentials, `/api/iptv/channels/${channel.id}/queue`)),
     onError: reason => toast.error(searchError(reason)),
   });
   const go = (next: LiveTvSearch, replace = false) => void navigate({ href: liveTvLocation({ page: requested, filter, group, ...next }), replace, resetScroll: false }).then(() => {

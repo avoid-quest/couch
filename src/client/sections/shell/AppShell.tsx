@@ -112,10 +112,10 @@ function useShellValue() {
     if (before.presentation !== presentation) shownPicture.current = { picture: before.picture, presentation, settled: !presentation };
     const current = shownPicture.current!;
     const newlySelected = picture && picture !== current.picture;
-    if (pictured && state.playedBy && (newlySelected || !current.settled)) {
-      current.settled = true;
-      if (section !== "Now") openPlayer();
-    }
+    const explicitlyStarted = !!state.playedBy && !current.settled;
+    // Consume audio-only starts too: a retry can temporarily clear their media flags.
+    if (explicitlyStarted) current.settled = true;
+    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer();
     current.picture = picture;
   }, [picture, presentation, pictured, !!state?.playedBy, !!state]);
   const focusSearch = () => {

@@ -64,6 +64,7 @@ export type SessionGateValue = SessionBag & {
   error: string | null;
   setError: (error: string | null) => void;
   run: (action: Action) => Promise<boolean>;
+  queue: <T>(title: string, work: () => Promise<T>) => Promise<T>;
   seekBy: (seconds: number) => Promise<boolean>;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
   // Pairing origin for a new remote, and the code from a scanned pairing link.
@@ -206,6 +207,19 @@ export function SessionGate({ children }: PropsWithChildren) {
     undoToast.current = id;
   }, [dismissUndo]);
 
+  // Confirm the requesting action, including REST callers, under its original connection and target.
+  const queue = useCallback(async <T,>(title: string | (() => string | undefined), work: () => Promise<T>, attempt = ++commandAttempt.current) => {
+    const owner = currentCredentials.current;
+    const before = readObservation();
+    const result = await work();
+    const after = readObservation();
+    if (result !== false && result !== null && owner && owner === currentCredentials.current && attempt === commandAttempt.current && before && after && after.controlling === before.controlling) {
+      const label = typeof title === "function" ? title() : title;
+      toast(label ? `Queued ${label}` : "Queued", { id: "queued", action: <Button asChild variant="secondary" size="sm"><Link to="/now" search={{ queue: true }}>Up next</Link></Button> });
+    }
+    return result;
+  }, [readObservation]);
+
   const run = useCallback(async (action: Action) => {
     const owner = currentCredentials.current;
     const current = () => owner === currentCredentials.current;
@@ -215,15 +229,17 @@ export function SessionGate({ children }: PropsWithChildren) {
     const attempt = ++commandAttempt.current;
     setError(null);
     try {
-      await command(action);
-      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && current()) {
-        const after = readObservation();
-        if (action.playNow) announcePlay(after, action.deviceId);
-        else if (attempt === commandAttempt.current && after?.controlling === before?.controlling) {
-          const added = after?.queue.find(entry => entry.addedBy?.deviceId === deviceId() && !before?.queue.some(previous => previous.id === entry.id));
-          const title = added?.title ?? (action.type === "enqueue" ? action.entry.title : "title" in action ? action.title : undefined);
-          toast(title ? `Queued ${title}` : "Queued", { id: "queued", action: <Button asChild variant="secondary" size="sm"><Link to="/now" search={{ queue: true }}>Up next</Link></Button> });
-        }
+      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && !action.playNow) {
+        await queue(() => {
+          const entries = readObservation()?.queue ?? [];
+          if (action.type === "enqueue") return entries.find(entry => entry.id === action.entry.id)?.title ?? action.entry.title;
+          if (action.type === "enqueueRadio" || action.type === "enqueueWeb") return entries.find(entry => entry.id === action.entryId)?.title;
+          const matching = entries.filter(entry => entry.source === `web:${action.url}` && !before?.queue.some(previous => previous.id === entry.id));
+          return action.title ?? (matching.length === 1 ? matching[0]?.title : undefined);
+        }, () => command(action), attempt);
+      } else {
+        await command(action);
+        if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow && current()) announcePlay(readObservation(), action.deviceId);
       }
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";
@@ -245,7 +261,7 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (current() && attempt === commandAttempt.current) setError(errorText(reason));
       return false;
     }
-  }, [command, dismissUndo, offerUndo, readObservation]);
+  }, [command, dismissUndo, offerUndo, queue, readObservation]);
 
   const seekBy = useCallback((seconds: number) => {
     const player = readObservation()?.player;
@@ -274,8 +290,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   const pairingOrigin = credentials?.origin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
-    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect,
+    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect,
     pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }
