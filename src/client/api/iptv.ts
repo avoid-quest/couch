@@ -2,6 +2,17 @@ import { queryOptions } from "@tanstack/react-query";
 import type { GuidePage, GuideSource } from "../../shared/iptv";
 import { ApiError, apiFetch, apiJson, type ApiCredentials } from "./client";
 
+// Core gives a refresh 20 seconds; allow transport time for its result too.
+export async function iptvRequest(credentials: ApiCredentials, path: string, init: RequestInit = {}) {
+  try {
+    return await apiFetch(credentials, `/api/iptv/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers } }, 25_000);
+  } catch (error) {
+    init.signal?.throwIfAborted();
+    if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("Live TV took too long to respond. Try refreshing the source again.");
+    throw error;
+  }
+}
+
 export const iptvSourcesQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["iptv", "sources"],

@@ -14,6 +14,7 @@ import { loadBandcampAlbum } from "./bandcamp";
 import { loadRaiPlayProgramme } from "./raiplay";
 import { loadYouTubePlaylist } from "./youtube";
 import { loadStreamingCommunityList } from "./streamingcommunity";
+import { ExtractionError } from "../yt-dlp";
 import { ControllerError } from "../devices";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
@@ -160,6 +161,8 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         } finally { active--; }
       } catch (error) {
         if (error instanceof ProviderError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
+        if (error instanceof ExtractionError) return Response.json({ error: error.message }, { status: 502 });
+        if (error instanceof DOMException && error.name === "TimeoutError") return Response.json({ error: "The provider took too long to respond. Try again." }, { status: 502 });
         return Response.json({ error: "Couldn't complete this request. Try again." }, { status: 502 });
       }
     },

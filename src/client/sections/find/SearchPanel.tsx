@@ -229,7 +229,7 @@ export function SourceProblems({ summaries }: { summaries: Entry[] }) {
   const names = failed.map(([source]) => source);
   return <>
     {failed.length > 0 && <Alert variant="destructive">
-      <AlertTitle>Couldn't reach {names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}.</AlertTitle>
+      <AlertTitle>Couldn't load {names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}.</AlertTitle>
       <AlertDescription><ul>{failed.map(([source, summary]) => <li key={source} className="break-words">{failed.length > 1 && `${source}: `}{summary.errorMessage || "Didn't respond."}</li>)}</ul></AlertDescription>
       <AlertAction><Button variant="ghost" size="sm" onClick={() => failed.forEach(([, summary]) => summary.retry?.())}>Try again</Button></AlertAction>
     </Alert>}

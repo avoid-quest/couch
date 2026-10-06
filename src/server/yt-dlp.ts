@@ -3,6 +3,9 @@ import type { Readable } from "node:stream";
 import { helper, checkHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 
+// Only fixed, public messages from the extractor may cross the catalog boundary.
+export class ExtractionError extends Error {}
+
 export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; plugin?: "streamingcommunity" };
 
 let running = 0;
@@ -11,7 +14,7 @@ const waiting: Array<() => void> = [];
 function acquireSlot(signal: AbortSignal): Promise<void> {
   signal.throwIfAborted();
   if (running < 3) { running++; return Promise.resolve(); }
-  if (waiting.length >= 16) return Promise.reject(new Error("Too many website requests are waiting. Try again shortly."));
+  if (waiting.length >= 16) return Promise.reject(new ExtractionError("Too many website requests are waiting. Try again shortly."));
   return new Promise((resolve, reject) => {
     const ready = () => { signal.removeEventListener("abort", abort); resolve(); };
     const abort = () => { waiting.splice(waiting.indexOf(ready), 1); reject(signal.reason); };
@@ -34,26 +37,26 @@ async function readOutput(stream: Readable, limit: number, kill: () => void): Pr
     if (size > limit) {
       kill();
       stream.destroy();
-      throw new Error("yt-dlp returned too much output. Update yt-dlp and try again.");
+      throw new ExtractionError("yt-dlp returned too much output. Update yt-dlp and try again.");
     }
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString();
 }
 
-function extractionError(stderr: string): Error {
-  if (/\bDRM\b|digital rights/i.test(stderr)) return new Error("This item requires DRM playback, which is not supported.");
-  if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new Error("This isn't available in your region.");
-  if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new Error("This website requires an account or browser session. Website sign-in is not supported yet.");
-  if (/Requested format is not available/i.test(stderr)) return new Error("This website offers no format Couch can play yet.");
-  if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new Error("This live stream is offline or has not started yet.");
-  if (/\bvideo (?:is unavailable|unavailable|has been removed|does not exist)\b/i.test(stderr)) return new Error("This video is unavailable or was removed.");
-  return new Error("Couldn't open this page. It may be unsupported.");
+function extractionError(stderr: string): ExtractionError {
+  if (/\bDRM\b|digital rights/i.test(stderr)) return new ExtractionError("This item requires DRM playback, which is not supported.");
+  if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new ExtractionError("This isn't available in your region.");
+  if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new ExtractionError("This website requires an account or browser session. Website sign-in is not supported yet.");
+  if (/Requested format is not available/i.test(stderr)) return new ExtractionError("This website offers no format Couch can play yet.");
+  if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new ExtractionError("This live stream is offline or has not started yet.");
+  if (/\bvideo (?:is unavailable|unavailable|has been removed|does not exist)\b/i.test(stderr)) return new ExtractionError("This video is unavailable or was removed.");
+  return new ExtractionError("Couldn't open this page. It may be unsupported.");
 }
 
 function broken() {
   void checkHelper("yt-dlp");
-  return new Error("yt-dlp won't start. Couch is repairing it; try again shortly.");
+  return new ExtractionError("yt-dlp won't start. Couch is repairing it; try again shortly.");
 }
 
 async function extract(command: string, quickjs: string, args: string[], signal: AbortSignal): Promise<string> {
@@ -95,7 +98,7 @@ export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plu
     finally { releaseSlot(); }
   } catch (error) {
     signal?.throwIfAborted();
-    if (deadline.aborted) throw new Error("The website took too long to respond. Try again.");
+    if (deadline.aborted) throw new ExtractionError("The website took too long to respond. Try again.");
     throw error;
   }
 }

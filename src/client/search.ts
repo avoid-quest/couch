@@ -1,6 +1,6 @@
 import type { SearchKind, SearchLength } from "./sections/find/SearchOnlineResults";
 
-export const searchSources = ["All", "YouTube", "RaiPlay", "StreamingCommunity", "avoid radio", "Radio playlists", "Radio directory", "Twitch", "Bandcamp"];
+export const searchSources = ["All", "YouTube", "RaiPlay", "StreamingCommunity", "avoid radio", "Radio playlists", "Radio directory", "Twitch"];
 // Find searches no music-only source (Bandcamp opens from links), so Music isn't a filter.
 export const searchKinds: SearchKind[] = ["Video", "Live", "Radio", "Channels"];
 export const searchLengths: SearchLength[] = ["Under 10 min", "10–60 min", "Over 1 hr"];
