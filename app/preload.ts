@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { CouchApp, UpdateState } from "../src/shared/app-bridge";
+import type { CouchApp, UpdateAction, UpdateState } from "../src/shared/app-bridge";
 
 // The Couch window's bridge to Main (app/main.ts). The page may be this
 // computer's Core (Full mode) or another Couch (Client mode).
@@ -31,11 +31,11 @@ contextBridge.exposeInMainWorld("couchApp", {
     ipcRenderer.on("couch:addresses", handler);
     return () => { ipcRenderer.off("couch:addresses", handler); };
   },
-  updates: () => call("updates"),
-  update: action => call("update-action", action),
-  checkForUpdates: () => call("check-for-updates"),
-  setUpdateChannel: channel => call("set-update-channel", channel),
-  installUpdate: () => call("install-update"),
+  updates: () => update({ op: "read" }),
+  update,
+  checkForUpdates: () => update({ op: "check" }),
+  setUpdateChannel: channel => update({ op: "channel", channel }),
+  installUpdate: version => (version === undefined ? call("install-update") : update({ op: "install", version })).then(() => undefined),
   onUpdates: listener => {
     const handler = (_event: unknown, state: UpdateState) => listener(state);
     ipcRenderer.on("couch:updates", handler);
@@ -44,3 +44,5 @@ contextBridge.exposeInMainWorld("couchApp", {
   showLogs: () => call("show-logs"),
   reportPlayback: status => call("update-playback", status),
 } satisfies CouchApp);
+
+function update(action: UpdateAction) { return call<UpdateState>("update-action", action); }

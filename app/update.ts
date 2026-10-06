@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import type { UpdateChannel, UpdateOutcome, UpdateState } from "../src/shared/app-bridge";
+import { isUpdateChannel, isUpdateVersion, parseUpdateOutcome, validateUpdateAction, type UpdateChannel, type UpdateOutcome, type UpdateState } from "../src/shared/updates";
 
 // package.json build.publish: the public repo electron-updater reads.
 const releases = "https://github.com/avoid-quest/couch-releases/releases/download";
@@ -18,7 +18,6 @@ const own: UpdateChannel = /-preview\.\d+$/.test(app.getVersion()) ? "preview" :
 // The TV's root update script and where it records each run (packaging/tv).
 const units = ["/usr/lib/systemd/system/couch-update@.service", "/usr/lib/systemd/system/couch-update.timer"];
 const statusPath = "/var/lib/couch-update/status";
-const outcomes = new Set(["installed", "installed-unverified", "rolled-back", "failed", "skipped", "up-to-date", "waiting"]);
 
 type Options = {
   channelPath: string;
@@ -42,7 +41,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
   autoUpdater.autoInstallOnAppQuit = false;
   let saved: string | null = null;
   try { saved = readFileSync(channelPath, "utf8").trim(); } catch {}
-  let state: UpdateState = { version: app.getVersion(), channel: saved === "latest" || saved === "preview" ? saved : own, status: "idle", available: null, progress: null, checkedAt: null, error: null };
+  let state: UpdateState = { version: app.getVersion(), channel: isUpdateChannel(saved) ? saved : own, status: "idle", available: null, progress: null, checkedAt: null, error: null };
   const set = (next: Partial<UpdateState>) => { state = { ...state, ...next }; onState(state); return state; };
   const follow = (channel: UpdateChannel) => {
     autoUpdater.channel = channel;
@@ -83,11 +82,14 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
   });
   if (mac) app.once("quit", () => { if (bundle) swap(process.pid, bundle, resolve(app.getPath("exe"), "../../.."), relaunch); });
 
-  async function install(expected?: string, delay = 0) {
-    if (state.status !== "ready") { if (expected) throw new Error("The available update changed. Check again."); return; }
-    if (expected && state.available !== expected) throw new Error("The available update changed. Check again.");
+  function install(expected: string, delay: number) {
+    if (state.status !== "ready" || state.available !== expected) throw new Error("The available update changed. Check again.");
     if (tv) installing = Math.floor(Date.now() / 1000) * 1000;
     set({ status: "installing", error: null });
+    return finishInstall(expected, delay);
+  }
+
+  async function finishInstall(version: string, delay: number) {
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
     if (!tv) {
       relaunch = true;
@@ -95,7 +97,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
       return;
     }
     // Root installs the release and restarts the TV app.
-    await promisify(execFile)("systemctl", ["start", "--no-block", `couch-update@${state.available}.service`]).catch(error => {
+    await promisify(execFile)("systemctl", ["start", "--no-block", `couch-update@${version}.service`]).catch(error => {
       console.error(`Couldn't start the TV update: ${error.message}`);
       set({ status: "ready", error: "This TV can't install updates yet. Run sudo couch-setup --tv once." });
     });
@@ -110,6 +112,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
       if (tv) await automatic();
       const result = await autoUpdater.checkForUpdates();
       const found = result?.isUpdateAvailable ? result.updateInfo : null;
+      if (found && !isUpdateVersion(found.version)) throw new Error("Invalid update version.");
       set({ checkedAt: Date.now() });
       if (waiting && !tv) ready(waiting);
       else if (!found) return set({ status: "up-to-date", available: null });
@@ -141,22 +144,29 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     void check();
     setInterval(() => void check(), every);
   }
+  async function setChannel(channel: UpdateChannel) {
+    if (running || ["checking", "downloading", "installing"].includes(state.status)) throw new Error("Wait for the update to finish.");
+    if (channel === state.channel) return state;
+    writeFileSync(channelPath, channel);
+    autoUpdater.autoInstallOnAppQuit = false;
+    const previous = bundle;
+    bundle = null;
+    follow(channel);
+    set({ channel, status: "checking", available: null, progress: null, error: null });
+    if (previous) await rm(dirname(previous), { recursive: true, force: true }).catch(error => console.error(error));
+    void check();
+    return state;
+  }
   return {
     state: () => state,
     check,
-    install,
-    async setChannel(channel: unknown) {
-      if (channel !== "latest" && channel !== "preview") throw new Error("Choose Stable or Preview.");
-      if (running || ["checking", "downloading", "installing"].includes(state.status)) throw new Error("Wait for the update to finish.");
-      if (channel === state.channel) return state;
-      writeFileSync(channelPath, channel);
-      autoUpdater.autoInstallOnAppQuit = false;
-      const previous = bundle;
-      bundle = null;
-      follow(channel);
-      set({ channel, status: "checking", available: null, progress: null, error: null });
-      if (previous) await rm(dirname(previous), { recursive: true, force: true }).catch(error => console.error(error));
-      void check();
+    // Validate and reserve in the updater owner, before any asynchronous work.
+    // Main allows transport replies to leave by passing an install delay.
+    async action(action: unknown, installDelay = 0): Promise<UpdateState> {
+      validateUpdateAction(action);
+      if (action.op === "check") void check();
+      else if (action.op === "channel") return setChannel(action.channel);
+      else if (action.op === "install") void install(action.version, installDelay).catch(error => console.error(error));
       return state;
     },
   };
@@ -164,13 +174,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
 
 // KEY=value lines from the TV's update script; null when absent or garbled.
 function lastOutcome(): UpdateOutcome | null {
-  let text: string;
-  try { text = readFileSync(statusPath, "utf8"); } catch { return null; }
-  const fields = Object.fromEntries([...text.matchAll(/^(\w+)=(.*)$/gm)].map(([, key, value]) => [key, value]));
-  const at = Date.parse(fields.at ?? "");
-  if (!outcomes.has(fields.outcome) || Number.isNaN(at)) return null;
-  const release = (value = "") => /^\d+\.\d+\.\d+(-preview\.\d+)?$/.test(value) ? value : null;
-  return { version: release(fields.version), outcome: fields.outcome as UpdateOutcome["outcome"], at, error: fields.error?.trim() || null, failed: release(fields.failed) };
+  try { return parseUpdateOutcome(readFileSync(statusPath, "utf8")); } catch { return null; }
 }
 
 // Downloads the zip into a temporary directory, checks it against the update

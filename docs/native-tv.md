@@ -84,8 +84,9 @@ The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
 error; `rollback=unavailable` means no previous package was at hand.
-**Settings > Updates** shows the last install, rollback or failure
-under **Automatic updates**, and a failed **Restart to update** shows its error
+**Settings > Updates** shows the last automatic outcome under **Automatic
+updates**, including waiting while media plays, the known failed version it
+skipped, and an up-to-date check. A failed **Restart to update** shows its error
 instead of installing forever.
 After each install, including a rollback, the script runs the installed
 package's `couch-setup --refresh`, so the one `sudo couch-setup --tv` is enough:
