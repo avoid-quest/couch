@@ -34,7 +34,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
     try {
       const response = await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
       const { source, skipped } = method === "POST" ? await response.json().catch(() => ({})) as { source?: GuideSource; skipped?: { headers: number; duplicates: number } } : {};
-      if (source && skipped && skipped.headers + skipped.duplicates) toast(`${source.channelCount} channels added, ${skipped.headers + skipped.duplicates} skipped`, {
+      if (source && skipped && skipped.headers + skipped.duplicates) toast(`${source.channelCount} channel${source.channelCount === 1 ? "" : "s"} added, ${skipped.headers + skipped.duplicates} skipped`, {
         description: !skipped.duplicates ? "They need custom headers or DRM." : !skipped.headers ? "They repeat a tvg-id." : "Some need custom headers or DRM; some repeat a tvg-id.",
       });
       return true;
@@ -55,7 +55,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
     <SettingsSection aria-label="Live TV sources">
       {!sources.length && <Empty className="py-0"><EmptyHeader><EmptyDescription>No sources yet. Add an M3U channel list below, with its XMLTV guide if you have one.</EmptyDescription></EmptyHeader></Empty>}
       {sources.map(source => <SettingsRow key={source.id} label={<span className="break-words">{source.name}</span>} description={<>
-        {source.channelCount} channels · {source.programCount} programs · {updated(source.updatedAt)}
+        {source.channelCount} {source.channelCount === 1 ? "channel" : "channels"} · {source.programCount} {source.programCount === 1 ? "program" : "programs"} · {updated(source.updatedAt)}
         {source.error && <span className="block text-destructive">{source.error}</span>}
       </>}>
         <Button variant="outline" disabled={disabled} onClick={() => void mutate(`sources/${source.id}/refresh`, "POST")}>{source.error ? "Try again" : "Refresh"}</Button>

@@ -228,8 +228,10 @@ never applies, so a stray pointer can't compete with focus.
 
 ## Scale
 
-`html` font size is `clamp(16px, 1.25vw, 24px)`: 1rem is 1/80 of the width, so
-the TV and a desktop window show the same layout. Use Tailwind's rem sizes only.
+`html` font size is `clamp(16px, 1.25vw, 24px)`. Use Tailwind's rem sizes so
+the same typography and controls scale across screens. The TV uses its own
+composition: fewer focus stops, a quiet local-name header and controls revealed
+over the picture. Desktop and phone keep their browsing and Couch-switch controls.
 
 | Role | Classes |
 | --- | --- |
@@ -337,9 +339,10 @@ Messages:
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
   for confirmations; **Sheet** for player panels; **Popover** for the header's
   Couch switch: the server this window shows, with its connection status.
-  The header holds only the section nav (with Remote while a TV can be
-  driven), the Couch switch, Keyboard shortcuts and the clock; the player's
-  header carries the switch too. The Popover reuses Settings → Devices' Couch
+  The phone and desktop header holds the section nav, including Remote,
+  the Couch switch, Keyboard shortcuts and the clock; the player's
+  header carries the switch too. The TV uses its local name instead of the
+  switch and omits Remote and Keyboard shortcuts. The Popover reuses Settings → Devices' Couch
   choice: saved servers, the app's This computer option, and another address.
   On the host with sharing on, it ends with Pair a device. It scrolls within
   the available space and keeps the same flat, divided settings rows.
@@ -397,17 +400,21 @@ Messages:
   {name}" while you control another Device, and a "Playing on {name}" toast
   confirms it. The mini player, the player's summary and Home's Now row say
   "on {name}" (+N) whenever the controlled Playback plays anywhere but only here.
-- **Remote** is a section on every Device that isn't a TV, shown while a TV
-  that shares is online. It drives that TV's own screen and the Playback it
-  serves: a D-pad of `Button`s (OK is the default variant; holding an arrow
-  repeats), Back and Home, the transport, Volume as Mute, −, its level and +
-  (5 per press), and Type, an `InputGroup` whose text fills the TV's focused
-  field (or Find's search when none is focused) as you type, with Enter
-  pressing Enter there. Opening it makes that TV the Device this window
-  controls, as Play on does. With two or more TVs a Select picks one. The mini
-  player hides on the Remote. A status line says when a key didn't reach the
-  TV, and the keys are disabled while it is offline. The TV itself has no
-  Remote section and no on-screen keyboard.
+- **Remote** is a section on Devices that aren't TVs. It selects a TV to
+  control without joining or moving its outputs. With two or more TVs, a
+  Select picks one; offline or private TVs cannot be controlled. A D-pad of
+  `Button`s sends one direction per press, with OK, TV Back and TV Home.
+  The shared transport, timeline and volume controls act on that TV; Up next
+  retains the same target for queue actions, shortcuts and Undo. Commands
+  reject a disconnected, revoked or reassigned target rather than act on a
+  different TV. The mini player hides on Remote.
+  Type on TV is an `InputGroup` for the TV's focused Find field or its own
+  Device name. Send replaces the draft; Clear sends an empty draft. Only
+  Enter on TV submits the existing search or name form. Typing and reconnecting
+  do not send an unsaved draft, and no field is chosen automatically. Pairing
+  codes, source URLs and administrative fields are unavailable. Status and
+  disabled controls explain unavailable targets and fields. The TV itself
+  has no Remote section or on-screen keyboard.
 
 ## Copy
 
