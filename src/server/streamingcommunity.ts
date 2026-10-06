@@ -21,39 +21,56 @@ export function streamingCommunityLink(source: string, origin = streamingCommuni
 // VibraVid (AstraeLabs) keeps for its downloader. A candidate is kept only if it serves the site.
 const addressPages = ["https://telegra.ph/Link-Aggiornato-StreamingCommunity-09-29", "https://domains-tracker.server66.workers.dev/get"];
 let checked = { origin: "", at: 0 };
-let healing: Promise<string> | undefined;
+// A pending check belongs to its Core's store and lifetime, never another Core's startup.
+const healing = new WeakMap<object, Promise<string>>();
 
-async function servingOrigin(origin: string): Promise<string | undefined> {
+async function servingOrigin(origin: string, signal?: AbortSignal): Promise<string | undefined> {
   try {
-    const response = await fetch(origin, { headers: { "User-Agent": userAgent }, signal: AbortSignal.timeout(10_000) });
+    const requestSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
+    const response = await fetch(origin, { headers: { "User-Agent": userAgent }, signal: requestSignal });
+    requestSignal.throwIfAborted();
     const current = new URL(response.url).origin;
-    if (response.ok && validStreamingCommunityOrigin(current) && parseInertiaPage(await response.text())) return current;
+    if (response.ok && validStreamingCommunityOrigin(current) && parseInertiaPage(await response.text())) {
+      requestSignal.throwIfAborted();
+      return current;
+    }
     await response.body?.cancel();
-  } catch { /* Not serving the site. */ }
+  } catch { signal?.throwIfAborted(); /* Not serving the site. */ }
 }
 
 // The stored origin, healed: a moved site is followed through its redirect, and a dead one is
 // replaced by the first published address that serves the site. A saved origin that still
 // serves the site is kept. Each origin is checked at most every ten minutes.
-export function healStreamingCommunityOrigin(store: { streamingCommunityOrigin(): string; saveStreamingCommunityOrigin(origin: string): void }): Promise<string> {
+export async function healStreamingCommunityOrigin(store: { streamingCommunityOrigin(): string; saveStreamingCommunityOrigin(origin: string): void }, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
   const stored = store.streamingCommunityOrigin();
   if (checked.origin === stored && Date.now() - checked.at < 600_000) return Promise.resolve(stored);
-  return healing ??= (async () => {
-    let found = await servingOrigin(stored);
+  const pending = healing.get(store);
+  if (pending) return pending;
+  const check = (async () => {
+    let found = await servingOrigin(stored, signal);
     for (const page of addressPages) {
       if (found) break;
-      const text = await fetch(page, { headers: { "User-Agent": userAgent }, signal: AbortSignal.timeout(10_000) }).then(response => response.text(), () => "");
+      signal?.throwIfAborted();
+      const requestSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
+      const text = await fetch(page, { headers: { "User-Agent": userAgent }, signal: requestSignal }).then(response => response.text(), () => "");
+      signal?.throwIfAborted();
+      if (requestSignal.aborted) continue;
       for (const candidate of new Set(text.toLowerCase().match(/https:\/\/[a-z0-9.-]+/g))) {
-        if (validStreamingCommunityOrigin(candidate) && (found = await servingOrigin(candidate))) break;
+        if (validStreamingCommunityOrigin(candidate) && (found = await servingOrigin(candidate, signal))) break;
       }
     }
+    // A fetch/body reader can ignore abort. Neither SQLite nor the completed-origin cache outlives Core.
+    signal?.throwIfAborted();
     if (found && found !== stored) {
       store.saveStreamingCommunityOrigin(found);
       console.error(`Couch: StreamingCommunity moved from ${stored} to ${found}.`);
     }
     checked = { origin: found ?? stored, at: Date.now() };
     return checked.origin;
-  })().finally(() => { healing = undefined; });
+  })().finally(() => { healing.delete(store); });
+  healing.set(store, check);
+  return check;
 }
 
 // Catalogue client over StreamingCommunity's Inertia web pages (see
