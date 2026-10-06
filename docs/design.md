@@ -156,7 +156,9 @@ catalog provides interface icons, not brand identities.
 - **Details are destinations.** Item details and provider collections have
   their own URLs, resolved from stable item IDs or canonical provider URLs.
   Refresh loads the same content; Back restores the previous page, filters,
-  scroll and focus. Reuse PageHeader and existing media rows. Dialogs remain
+  scroll and focus. A provider search result's title opens its details; Play is
+  a separate, explicit action, including on phones. StreamingCommunity's
+  collections say Series or Season rather than List. Reuse PageHeader and existing media rows. Dialogs remain
   reserved for focused tasks such as pairing and source setup.
 - **Browsing stays grounded.** The sticky header and scroll edges share the
   solid black page background on desktop and web. Native video alone clears

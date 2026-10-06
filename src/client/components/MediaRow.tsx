@@ -40,7 +40,7 @@ export function MediaRow({ art, artFit = "cover", title, meta, children, descrip
     <span className="line-clamp-2 w-full text-base font-medium">{title}</span>
     {meta && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
     {children}
-    {description && <span className="line-clamp-2 max-w-prose text-sm text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
+    {description && <span className="line-clamp-2 w-full min-w-0 max-w-prose break-words text-sm text-muted-foreground group-focus-visible/main:line-clamp-none">{description}</span>}
   </>;
   return (
     <Item asChild size="xs" className={cn("grid gap-y-1 rounded-none border-0 border-b border-border px-0 py-2", compact ? "gap-x-3 grid-cols-[3rem_minmax(0,1fr)_auto]" : art ? "gap-x-4 grid-cols-[5rem_minmax(0,1fr)] @md:grid-cols-[7rem_minmax(0,1fr)] @3xl:grid-cols-[7rem_minmax(0,1fr)_auto]" : "gap-x-4 grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_auto]", className)}>
