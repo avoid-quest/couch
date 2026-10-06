@@ -45,10 +45,10 @@ a Mac.
 - Live TV channels in MPEG-2, AC-3, E-AC-3 or MP2 play only in mpv on the
   computer that hosts Couch. Asked for elsewhere, the player says "This channel
   plays only on" the host. HEVC channels play where the device decodes HEVC,
-  except on a Linux host, where every HEVC channel plays in mpv and so only on
-  the host: Couch picks a channel's player once, before it knows which devices
-  will show it, and Chromium on Linux, the TV appliance's main screen included,
-  has no HEVC decoder, so without mpv the host itself couldn't play it.
+  with conservative mpv fallback when the requested outputs include a Linux
+  host and no H.264 alternative is available. Remote-only HEVC tries that
+  browser's decoder; a decoding failure never adds or starts the host.
+  Actual HEVC support depends on the browser build and device.
 - Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
   or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV
   channels that need custom headers or DRM are skipped when the list is added.

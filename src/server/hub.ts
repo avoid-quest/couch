@@ -257,6 +257,7 @@ export async function createHub(options: HubOptions) {
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
     if (command.type === "load") {
       if (!playback.outputs.length) throw new Error("Choose a shared output to play it.");
+      if (command.mpv && !playback.outputs.some(output => output.deviceId === hostId())) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       for (const output of playback.outputs) requireOutput(output, output.local ? output.deviceId : "");
       if (command.mpv) requireOutput({ deviceId: hostId(), picture: true, sound: playback.outputs[0]?.sound ?? true }, playback.outputs.some(output => output.deviceId === hostId() && output.local) ? hostId() : "");
     }
@@ -433,7 +434,7 @@ export async function createHub(options: HubOptions) {
         playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: resolving };
         const { headers = {}, ...media } = await resolving;
         // Only the Device that runs Core has mpv; a Playback elsewhere doesn't move there unasked.
-        if (media.mpv && !playback.outputs.some(output => output.deviceId === hostId())) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
+        if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
         // Core's own FFmpeg reads the sound as resolved, before Pass-through, with its headers.
         const live = !!(entry.live || media.metadata?.live);
         playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers, live, audioOnly: media.audioOnly };
@@ -743,7 +744,7 @@ export async function createHub(options: HubOptions) {
   const passThrough = createPassThrough(playbackId => !!playing(playbackId));
   async function resolveEntry(entry: QueueEntry, playbackId: string, signal: AbortSignal, tab: Socket<SocketData> | null | undefined, playback: Playback): Promise<MediaSource & { headers?: Record<string, string> }> {
     if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage);
-    if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal);
+    if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal, playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()));
     if (entry.source.startsWith("radio:")) {
       const station = radio.getPlayable(entry.source.slice(6));
       radioPlayback = playback;

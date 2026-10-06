@@ -11,23 +11,22 @@ import { helper } from "./helpers";
 
 // Raw MPEG-TS plays through mpegts.js. Chromium has no MPEG-1/2 video, AC-3/E-AC-3 or
 // MP2 decoder, so those channels play in Core's own mpv (#644 ticket 1). ffmpeg reads the
-// channel's real codecs; mpegts.js would report MP2 as MP3. On a Linux host every HEVC
-// channel plays in mpv too: Core picks a channel's delivery once, before it knows which
-// Devices will show it, and the host's Linux Chromium (the TV appliance's main screen) has
-// no HEVC decoder, so without mpv the host would fail. Those channels play only on the host.
+// channel's real codecs; mpegts.js would report MP2 as MP3. Keep the conservative HEVC
+// fallback when a Linux host is requested; remote-only outputs try their own browser.
+// Actual HEVC decoding depends on the browser build and device.
 const linux = process.platform === "linux";
-async function transport(url: string, signal: AbortSignal): Promise<{ mpegts?: true; mpv?: true }> {
+async function transport(url: string, signal: AbortSignal, hevc: boolean): Promise<{ mpegts?: true; mpv?: true }> {
   const ffmpeg = await helper("ffmpeg");
   const probe = await new Promise<string>(resolve => execFile(ffmpeg, ["-hide_banner", "-nostdin", "-protocol_whitelist", "http,https,tcp,tls", "-probesize", "1000000", "-analyzeduration", "3000000", "-i", url],
     { timeout: 10_000, signal }, (_error, _stdout, stderr) => resolve(String(stderr))));
   signal.throwIfAborted();
   if (!/^Input #0, mpegts\b/m.test(probe)) return {};
-  return /Stream #.*: (?:Video: mpeg[12]video|Audio: (?:ac3|eac3|mp2)\b)/.test(probe) || linux && /Stream #.*: Video: hevc\b/.test(probe) ? { mpegts: true, mpv: true } : { mpegts: true };
+  return /Stream #.*: (?:Video: mpeg[12]video|Audio: (?:ac3|eac3|mp2)\b)/.test(probe) || hevc && /Stream #.*: Video: hevc\b/.test(probe) ? { mpegts: true, mpv: true } : { mpegts: true };
 }
 
 // An HLS channel says its codecs in the playlist (RFC 8216 CODECS). hls.js picks a variant
 // Chromium decodes, so it plays in mpv only when every variant needs MPEG-2 video, AC-3 or
-// E-AC-3 without AAC beside it, or HEVC on Linux.
+// E-AC-3 without AAC beside it, or HEVC when the Linux host is requested.
 export function mpvPlaylist(text: string, hevc = linux) {
   const variants = [...text.matchAll(/^#EXT-X-STREAM-INF:(.*)$/gm)].map(match => /(?:^|,)CODECS="([^"]*)"/.exec(match[1]!)?.[1]?.toLowerCase());
   return variants.length > 0 && variants.every(codecs => codecs !== undefined && (/\bmp4v\.6[0-5a]\b/.test(codecs) || /\b[ae]c-3\b/.test(codecs) && !/\bmp4a\./.test(codecs) || hevc && /\b(?:hvc1|hev1)\./.test(codecs)));
@@ -168,18 +167,18 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
 
   return {
     sources,
-    async getPlayable(id: string, signal: AbortSignal) {
+    async getPlayable(id: string, signal: AbortSignal, hostOutput: boolean) {
       const item = channel(id);
       signal.throwIfAborted();
       // Only identified HLS URLs enter this EVENT increment. Other live media
       // must not wait for a body that may never finish before playback.
-      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal])) };
+      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal]), linux && hostOutput) };
       let eventStart = false, mpv = false;
       try {
         const media = await guideFetch(item.streamUrl, 512 * 1024, request, AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]));
         const text = Buffer.from(media.bytes).toString("utf8");
         eventStart = liveHlsPlaylist(text, media.url) && /^#EXT-X-PLAYLIST-TYPE:EVENT\r?$/m.test(text);
-        mpv = mpvPlaylist(text);
+        mpv = mpvPlaylist(text, linux && hostOutput);
       } catch { /* Unknown transports and failed probes keep ordinary Play. */ }
       signal.throwIfAborted();
       shutdown.signal.throwIfAborted();
