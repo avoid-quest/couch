@@ -83,15 +83,20 @@ catalog provides interface icons, not brand identities.
   same arrow navigation.
 - **The TV has its own layout.** A TV (`body.tv-presentation`, styled with the
   `tv:` variant) keeps the sections, routes and model and recomposes them for
-  a remote at ten feet. Each media item on Home is one `MediaTile`, one focus
+  a remote at ten feet. Each media item on Home has one primary `MediaTile` focus
   stop, and OK does its main verb: Continue resumes, a station or channel
-  plays, everything else opens its page, which holds the other verbs. Focus is
+  plays, everything else opens its page, which holds the other verbs. Continue
+  alone adds a sibling secondary Details button (at least 44px): Resume's
+  playback destination lacks its history actions. This extra focus stop opens
+  existing History Details without playing, even when Resume is unavailable.
+  Tiles with complete destinations keep one stop. Focus is
   the only highlight; no hover style applies on the TV. Back closes an open
   overlay, then leaves a detail page for the page that opened it with its focus
   restored, then takes any section to Home, where Back does nothing. Opening
   Up next changes the player URL without losing its opener. Settings OK enters
   the selected page's first enabled control; Back from its content restores the
-  rail entry, then Home (a source's own Back first returns to Sources).
+  visible rail entry or narrow Settings page selector, then Home (a source's
+  own Back first returns to Sources).
   After every page change, focus is on the page's first control. The header holds the sections, the TV's name
   and the clock as plain text; the Couch choice lives in Settings → Devices.
   Volume and every fader move 5 per press. Text fields say "Type with Remote on
@@ -266,6 +271,9 @@ Shared building blocks in `src/client/components`:
   ordering controls: saved channels/stations, Live TV, and search hits without
   complete details actions. These exceptions preserve reachable operations
   without adding destinations solely for a menu.
+  A live hit uses Play only while it is enabled; otherwise it retains its
+  original Open destination, including during a pending Save. Busy actions
+  keep their existing disabled state.
 - `MediaTile`: one `Button` wrapping `MediaArtwork` (contained; 2:3 for films
   and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
   title and one meta line, plus a `DurationBar` on Continue. It is one focus

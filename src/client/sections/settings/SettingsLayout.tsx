@@ -20,8 +20,11 @@ export function SettingsLayout({ section, children }: { section: SettingsPage; c
       <div className="min-w-0 max-w-3xl" data-settings-content data-tv-local-only={source ? "" : undefined} onKeyDown={event => {
         if (!tvPresentation || source || event.defaultPrevented || !["Escape", "BrowserBack"].includes(event.key)) return;
         if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+        const navigation = [...document.querySelectorAll<HTMLElement>(`[data-settings-page="${section}"], [aria-label="Settings page"]`)]
+          .find(element => element.getClientRects().length > 0 && !element.matches(":disabled") && !element.closest("[inert]"));
+        navigation?.focus();
+        if (document.activeElement !== navigation) return;
         event.preventDefault(); event.stopPropagation();
-        document.querySelector<HTMLElement>(`[data-settings-page="${section}"]`)?.focus();
       }}>
         <PageHeader title={page.label} back={source ? { label: "Sources", onClick: () => void navigate({ to: settingsPages.sources.path }) } : undefined} />
         <div className="flex min-w-0 flex-col gap-8">

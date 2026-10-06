@@ -49,11 +49,14 @@ seconds or the TV returns to its saved size. Client size stays separate.
 
 ## TV navigation
 
-Home presents one focus stop per media item: Continue resumes, a radio station
-or channel plays, and a saved film or collection opens Details. The header keeps
+Home presents one primary focus stop per media item: Continue resumes, a radio station
+or channel plays, and a saved film or collection opens Details. Continue adds
+one secondary Details stop for its existing History actions, including inspection
+and removal when Resume is unavailable. The header keeps
 Home, Find, Saved and Settings, the TV's name and the clock. Settings OK moves
 into the selected page's first enabled control. Back closes an overlay and
-restores its opener; from Settings content it restores the selected rail entry,
+restores its opener; from Settings content it restores the visible rail entry
+or narrow Settings page selector,
 then returns Home. A source page first returns to Sources.
 
 The TV player has its own controls without the desktop breadcrumb, Couch
@@ -101,6 +104,22 @@ the same entry and paused state, then immediate OK reopens the Sheet. They use D
 and bubbling key events; also use T3 keyboard input to check actual D-pad
 navigation and capture screenshots. This browser evidence does not qualify
 native Main, Linux packaging or a physical TV remote.
+
+For Continue, stop a decoded finite video before completion on every output
+and keep the second shared output online. Build `tests/tv-continue.browser.ts` with the same browser
+command and run `await runContinueDetailsRegression()`. It requires sibling
+Resume/Details controls, a 44px Details target, inspection without playback,
+the exact History item, Back to the usable Details opener, successful Queue,
+Remove/Undo, and usable focus after the removed opener disappears. Also verify
+primary Resume, From start and actual Play on selection with trusted TV keys;
+repeat inspection/removal with an unavailable history source.
+Use `runContinueDetailsRegression(true)` for that unavailable fixture; it
+requires disabled playback and enabled Details/removal and skips successful Queue.
+The same bundle exports `runNarrowSettingsRegression()` (use a sub-md TV
+viewport, at Default and confirmed Largest) and `runBusyLiveHitRegression()`
+(first built-in Radio station unsaved). The latter holds only a successful
+real Save response, requires the original enabled Open destination and usable
+browse focus on Back, then releases the response and restores the fixture favorite.
 
 ## TV maintenance
 

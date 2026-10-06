@@ -376,13 +376,14 @@ export function ContinueSection({ credentials, connected, canPlay, feature, onPl
 
   if (history.error) return <Alert variant="destructive" className="mb-6"><AlertDescription>{history.error.message || "Couldn't load Continue."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>;
   if (!unfinished.length) return null;
-  // On the TV each item is one tile, and OK resumes it; its other verbs are on its page.
+  // Resume stays primary; Continue needs a separate stop for its complete History Details.
   if (isTvPresentation()) return <HomeRow title="Continue" time={`${unfinished.length} unfinished`}><div ref={content}><Shelf label="Continue">
-    {unfinished.map((item, index) => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
+    {unfinished.map((item, index) => <li key={item.mediaId} data-history-details={item.mediaId} className="flex shrink-0 flex-col items-start gap-2">
       <MediaTile data-page-first={index === 0 || undefined} shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={historyMeta(item)} thumbnail={item.thumbnail}
         aria-label={on(`Resume ${item.title}`)} disabled={!connected || !canPlay || !(item.playable || item.queueEntryId)} onClick={() => void act(item, "resume")}>
         <DurationBar duration={item.duration} position={item.position} />
       </MediaTile>
+      <Button variant="secondary" size="sm" className="min-h-11" aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))}>Details</Button>
     </li>)}
   </Shelf></div></HomeRow>;
   const resume = (item: HistoryItem) => <Button data-page-first disabled={!playable(item)} aria-label={on(`Resume ${item.title}`)} onClick={() => void act(item, "resume")}>{on("Resume")}</Button>;
