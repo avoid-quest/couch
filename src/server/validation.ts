@@ -1,6 +1,7 @@
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
+import { safePlaybackError } from "./playback-log";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
@@ -90,7 +91,7 @@ export function parsePlayer(message: string): PlayerState | null {
   if (!(playbackId === null || id(playbackId)) || !playerStatuses.includes(status as string) || typeof buffering !== "boolean" || !finite(position) || !(duration === null || finite(duration))
     || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed) || !finite(audioDelay) || !finite(subtitleDelay)
     || !Array.isArray(tracks) || tracks.length > 64 || !tracks.every(mediaTrack)) return null;
-  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error?.slice(0, 300) ?? null, speed, tracks: tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label: label.slice(0, 120), language: language.slice(0, 35), selected })), audioDelay, subtitleDelay };
+  return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error === null ? null : safePlaybackError(error), speed, tracks: tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label: label.slice(0, 120), language: language.slice(0, 35), selected })), audioDelay, subtitleDelay };
 }
 
 export function parseCommand(message: string): ClientMessage {

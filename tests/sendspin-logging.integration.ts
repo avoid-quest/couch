@@ -30,7 +30,7 @@ async function fixture(t: TestContext, executable?: () => Promise<string>) {
     source.closeAllConnections(); await new Promise<void>(resolve => source.close(() => resolve()));
     rmSync(directory, { recursive: true, force: true });
   });
-  return { group, load, states, marker, errors: () => lines.filter(line => line.includes("player error ")) };
+  return { group, load, states, marker, script, errors: () => lines.filter(line => line.includes("player error ")) };
 }
 
 test("an executable spawn failure logs once even when close follows error", { timeout: 10_000 }, async t => {
@@ -71,4 +71,18 @@ test("stopping a pending FFmpeg start ignores its later rejection", { timeout: 1
   assert.equal(f.errors().length, 0);
   assert.equal(f.states.at(-1)?.status, "idle");
   assert.equal(existsSync(f.marker), false);
+});
+
+for (const separator of ["", "\t", "\u2028"]) test(`Core redacts a complete source before its stderr bound (separator ${JSON.stringify(separator)})`, { timeout: 10_000 }, async t => {
+  const f = await fixture(t);
+  const username = "synthetic-private-user";
+  const prefix = "Decoder input refused: ".padEnd(200 - (`http://${username}`).length - 1, "x") + " ";
+  const source = `http://${username}:synthetic-password@127.0.0.1:42701/movie${separator}/private?sig=synthetic-query`;
+  writeFileSync(f.script, `#!${process.execPath}\nconsole.error(${JSON.stringify(prefix)} + process.argv[process.argv.indexOf('-i') + 1]); process.exitCode = 1;\n`, { mode: 0o755 });
+  f.group.send({ ...f.load, source });
+  await until(() => f.states.at(-1)?.status === "error");
+  assert.equal(f.errors().length, 1);
+  for (const secret of [username, "synthetic-password", "/private", "sig=", "synthetic-query"])
+    assert.equal(f.errors()[0]!.includes(secret), false, `Log must omit ${secret}`);
+  assert.ok(f.states.at(-1)!.error!.length < 300);
 });

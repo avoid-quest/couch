@@ -92,12 +92,12 @@ test("Core logs bounded single-line errors without signed, direct or authenticat
 
 test("Core removes complete signed URL tokens including apostrophes and quoted variants", { timeout: 15_000 }, async t => {
   const f = await fixture(t), playbackId = await f.start();
-  const url = "https://media.example/movie's/private.m3u8?sig=synthetic-secret";
-  for (const quoted of [url, `'${url}'`, `"${url}"`]) {
-    f.report({ playbackId, status: "error", error: `Input refused ${quoted}` });
+  const urls = ["'", "\t", "\u2028", "\u2029"].map(separator => `https://media.example/movie${separator}/private.m3u8?sig=synthetic-secret`);
+  for (const [index, url] of urls.entries()) for (const quoted of [url, `'${url}'`, `"${url}"`]) {
+    f.report({ playbackId, status: "error", error: `Input refused case ${index} ${quoted}` });
     await f.barrier();
   }
-  assert.equal(f.errors().length, 3);
+  assert.equal(f.errors().length, 12);
   for (const line of f.errors()) {
     assert.match(line, /media\.example/);
     for (const secret of ["movie", "private", "sig=", "synthetic-secret", "https://"]) assert.equal(line.includes(secret), false, `Log must omit ${secret}`);
@@ -112,6 +112,17 @@ test("an accepted device name cannot inject separators into a player error line"
   const line = f.errors()[0]!;
   assert.deepEqual([...line].filter(char => /[\p{Cc}\u2028\u2029]/u.test(char)).map(char => char.codePointAt(0)), []);
   assert.match(line, / on Test TV label host=127\.0\.0\.1: Picture input refused$/);
+});
+
+test("the report length bound cannot turn source credentials into a logged hostname", { timeout: 15_000 }, async t => {
+  const f = await fixture(t), playbackId = await f.start();
+  const username = "synthetic-private-user", url = `https://${username}:synthetic-password@media.example/private?sig=synthetic-query`;
+  const prefix = "Decoder input refused: ".padEnd(300 - (`https://${username}`).length - 1, "x") + " ";
+  f.report({ playbackId, status: "error", error: prefix + url });
+  await f.barrier();
+  assert.equal(f.errors().length, 1);
+  assert.equal(f.errors()[0]!.includes(username), false);
+  assert.equal(f.state.player.error?.includes(username), false);
 });
 
 test("a new Synced screen load logs an identical failure once even without an intervening state packet", { timeout: 15_000 }, async t => {
