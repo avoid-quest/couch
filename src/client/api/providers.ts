@@ -6,7 +6,21 @@ export type ProviderSearchPage = ProviderPage & { warning?: string };
 
 export const providerPageQuery = (credentials: ApiCredentials, provider: ProviderId, request: BrowseRequest) => queryOptions({
   queryKey: ["search", "provider-page", provider, request] as const,
-  queryFn: ({ signal }) => browse(credentials, provider, request, signal),
+  queryFn: async ({ signal }) => {
+    const page = await browse(credentials, provider, request, signal);
+    const season = page.items[0];
+    // Only an opened, complete one-season series skips the season chooser.
+    if (provider !== "streamingcommunity" || !request.url || request.cursor || page.nextCursor || page.item?.kind !== "collection"
+      || !/\/titles\/\d+(?:-[\w-]+)?$/.test(new URL(request.url).pathname) || page.items.length !== 1 || season?.kind !== "collection"
+      || !season.url.startsWith(`${page.item.url}/season-`)) return page;
+    try {
+      const episodes = await browse(credentials, provider, { url: season.url }, signal);
+      return episodes.items.length && episodes.items.every(item => item.kind === "media") && !episodes.nextCursor ? { ...page, items: episodes.items } : page;
+    } catch (error) {
+      signal.throwIfAborted();
+      return { ...page, warning: error instanceof Error ? error.message : "Couldn't load this season. Open it to try again." };
+    }
+  },
   staleTime: 60_000, retry: false,
 });
 

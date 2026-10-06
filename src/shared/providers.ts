@@ -56,3 +56,25 @@ export function providerForUrl(value: string): ProviderId | undefined {
     return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
   } catch { return; }
 }
+
+/** Public playable page only: never a direct stream, signed link or arbitrary provider path. */
+export function publicProviderMediaUrl(value: string): string | undefined {
+  if (value.length > 2048 || /[\u0000-\u0020\u007f\\]/.test(value)) return;
+  try {
+    const url = new URL(value), provider = providerForUrl(value);
+    if (!provider || url.port || url.hash) return;
+    const path = url.pathname.replace(/\/$/, "");
+    if (provider === "streamingcommunity" && /^\/(?:[a-z]{2}\/)?(?:titles\/\d+(?:-[\w-]+)?|watch\/\d+)$/.test(path)
+      && (!url.search || /^\?e=\d+$/.test(url.search) && /\/watch\/\d+$/.test(path))) return url.href;
+    if (provider === "youtube") {
+      if (!["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"].includes(url.hostname)) return;
+      const short = url.hostname.endsWith("youtu.be"), id = short ? path.slice(1) : path === "/watch" ? url.searchParams.get("v") : path.match(/^\/(?:shorts|live|embed)\/([^/]+)$/)?.[1];
+      const publicQuery = !short && path === "/watch" ? /^\?v=[A-Za-z0-9_-]{11}$/.test(url.search) : !url.search;
+      if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && publicQuery) return `https://www.youtube.com/watch?v=${id}`;
+    }
+    if (url.search) return;
+    if (provider === "raiplay" && ["raiplay.it", "www.raiplay.it"].includes(url.hostname) && /^\/video\/\d{4}\/\d{2}\/[a-z0-9_%.-]+\.(?:html|json)$/i.test(path)) return `https://www.raiplay.it${path.replace(/\.json$/, ".html")}`;
+    if (provider === "bandcamp" && /^[a-z0-9-]+\.bandcamp\.com$/.test(url.hostname) && /^\/track\/[a-z0-9-]+$/.test(path)) return `https://${url.hostname}${path}`;
+    if (provider === "twitch" && ["twitch.tv", "www.twitch.tv"].includes(url.hostname) && /^\/videos\/\d+$/.test(path)) return `https://www.twitch.tv${path}`;
+  } catch { /* Optional public metadata. */ }
+}

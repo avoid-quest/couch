@@ -10,6 +10,10 @@ import { providerShape } from "../../../shared/providers";
 import { providerBrowseQuery, providerPageQuery, providerFavoritesQuery, type ProviderSearchPage } from "@/api/providers";
 import { forLaterQuery } from "@/api/for-later";
 import { apiFetch } from "@/api/client";
+import { historyQuery } from "@/api/progress";
+import { usePlayOn } from "@/components/PlayOn";
+import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
+import type { HistoryItem } from "../../../shared/viewing";
 
 export type SearchKind = "Video" | "Music" | "Live" | "Radio" | "Channels";
 export type SearchLength = "Under 10 min" | "10–60 min" | "Over 1 hr";
@@ -24,7 +28,7 @@ export type SearchHit = SearchFacet & {
   /** playOn makes the action "Play on", a menu of the online Devices. */
   actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void }>;
 };
-export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playAll?: () => void; playOn?: (deviceId: string) => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
+export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
 export const lengthOf = (seconds: number): SearchLength => seconds < 600 ? "Under 10 min" : seconds <= 3600 ? "10–60 min" : "Over 1 hr";
 export function matchesFacet(item: SearchFacet, kind?: SearchKind, length?: SearchLength) {
@@ -52,6 +56,7 @@ type Props = SearchPlaybackProps & {
   provider: ProviderId; query: string; retry?: number; url?: string; quality: VideoQuality; onEnqueued: () => void;
   onOpenCollection?: (item: ProviderItem) => void;
   paged?: boolean; cursor?: string; context?: MediaCollection;
+  onPlayHistory?: (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
 };
 export function SearchOnlineResults(props: Props) {
   return <OnlineResults key={JSON.stringify([props.origin, props.token, props.provider, props.query, props.url, props.cursor])} {...props} />;
@@ -59,6 +64,7 @@ export function SearchOnlineResults(props: Props) {
 function OnlineResults(props: Props) {
   const { provider } = props;
   const client = useQueryClient();
+  const playOn = usePlayOn();
   const request = props.url ? { url: props.url } : { query: props.query };
   // Hidden sources still report search counts. Active controls presentation,
   // not whether a source participates in the cross-source search.
@@ -82,6 +88,7 @@ function OnlineResults(props: Props) {
   const kept = useQuery({ ...providerFavoritesQuery(props), enabled: props.connected, retry: false });
   const favorites = kept.error ? null : kept.data?.favorites ?? null;
   const later = useQuery({ ...forLaterQuery(props), enabled: props.connected, retry: false });
+  const history = useQuery({ ...historyQuery(props, provider), enabled: props.connected && !!props.url && !!props.onPlayHistory });
   const savedWeb = (item: ProviderItem) => later.data?.items.find(entry => entry.url === item.url);
   const [busy, setBusy] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
@@ -156,14 +163,23 @@ function OnlineResults(props: Props) {
       description: canonical.description ?? known.find(item => item.description)?.description,
       subtitle: canonical.subtitle ?? known.find(item => item.subtitle)?.subtitle,
     };
+    const seriesEpisodes = selected?.kind === "collection" && provider === "streamingcommunity" && !!page?.items.length && page.items.every(item => item.kind === "media") && /\/titles\/\d+(?:-[\w-]+)?$/.test(new URL(selected.url).pathname);
+    const start = selected?.kind === "media" ? selected : seriesEpisodes ? nextEpisode(page!.items, history.data?.items ?? []) : undefined;
+    const progress = start ? progressFor(start, history.data?.items ?? []) : selected ? seriesResumeFor(selected, history.data?.items ?? []) : undefined;
+    const resume = progress?.playable && !progress.watched && progress.position > 0 ? progress : undefined;
+    const startItem = (fromStart = false, deviceId?: string) => {
+      if (resume && props.onPlayHistory) void action(() => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on }), deviceId));
+      else if (start) play(start, true, undefined, deviceId);
+    };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
     const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
     props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
-      ...(props.url ? { collection: { title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected,
-        single: selected?.kind === "media", playAll: list(true), playOn: list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
+      ...(props.url ? { collection: { title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
+        single: selected?.kind === "media", playAll: start || resume ? () => startItem() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
+        playLabel: resume ? "Resume" : start ? "Play" : undefined, position: resume?.position, duration: resume?.duration, fromStart: resume ? () => startItem(true) : undefined,
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, JSON.stringify(props.context), page, visible, favorites, later.data, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection]);
+  }, [props.url, props.paged, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }

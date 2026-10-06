@@ -15,7 +15,6 @@ import { savedSourceLabel } from "@/saved-source";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { BrowseActions } from "@/sections/find/SearchPanel";
 import type { SearchHit } from "@/sections/find/SearchOnlineResults";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { RelatedRadio } from "@/components/RelatedRadio";
 import { useSessionGate } from "@/session/session-context";
@@ -96,7 +95,7 @@ function DetailLayout({ title, meta, description, thumbnail, position, duration,
           <div className="flex items-center gap-1">{primary}<BrowseActions title={title} actions={actions} /></div>
         </div>
       </div>
-      {description && <Collapsible className="mt-2"><CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="-ml-2.5 text-muted-foreground">About</Button></CollapsibleTrigger><CollapsibleContent><p className="max-w-prose pt-2 text-sm leading-relaxed break-words text-muted-foreground">{description}</p></CollapsibleContent></Collapsible>}
+      {description && <p className="mt-4 max-w-prose text-sm leading-relaxed break-words text-muted-foreground">{description}</p>}
     </header>
     {children}
   </>;

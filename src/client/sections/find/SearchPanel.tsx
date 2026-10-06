@@ -1,4 +1,4 @@
-import { searchSources, searchKinds, searchLengths, type SearchRouteState } from "../../search";
+import { mergeSearchHits, searchSources, searchKinds, searchLengths, type SearchRouteState } from "../../search";
 import { memo, useMemo, useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { MoreHorizontal, Play } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlayOnMenu, PlayOnGroup, usePlayOn } from "@/components/PlayOn";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
@@ -24,6 +23,7 @@ import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
+import { Progress } from "@/components/ui/progress";
 
 export type Props = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
@@ -106,9 +106,8 @@ export function SearchPanel(props: Props) {
   const asking = searchable.filter(source => !summaries[source] || summaries[source].loading);
   const total = Object.values(summaries).reduce((sum, summary) => sum + summary.count, 0);
   const facetKind = kind === "All" ? undefined : kind, facetLength = length === "All" ? undefined : length;
-  const mergedHits = useMemo(() => sourceOrder.flatMap((source, rank) => (summaries[source]?.hits ?? []).map((hit, index) => ({ hit, order: index * sourceOrder.length + rank })))
-    .filter(({ hit }) => (inScope(hit.source) && matchesFacet(hit, facetKind, facetLength)))
-    .sort((a, b) => a.order - b.order).map(({ hit }) => hit), [summaries, filter, facetKind, facetLength]);
+  const mergedHits = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), search.query)
+    .filter(hit => inScope(hit.source) && matchesFacet(hit, facetKind, facetLength)), [summaries, search.query, filter, facetKind, facetLength]);
   const focusedHit = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!props.active || !focusedHit.current || document.activeElement !== document.body) return;
@@ -203,8 +202,10 @@ export function CollectionHeader({ collection, canPlay }: { collection: SearchCo
       <div className="min-w-0 space-y-2">
         <h1 tabIndex={-1} className="max-w-3xl text-2xl font-semibold tracking-tight break-words outline-none">{collection.title}</h1>
         {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
-        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex items-center gap-1">
-          {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{on(collection.single ? "Play" : "Play all")}</Button>}
+        {!!collection.position && <div className="max-w-sm space-y-1 text-sm text-muted-foreground"><p>Resume at {formatDuration(collection.position)}{collection.duration != null && ` of ${formatDuration(collection.duration)}`}</p>{!!collection.duration && <Progress aria-label="Viewing progress" value={Math.min(100, collection.position / collection.duration * 100)} className="h-1" />}</div>}
+        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex flex-wrap items-center gap-1">
+          {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{on(collection.playLabel ?? (collection.single ? "Play" : "Play all"))}</Button>}
+          {collection.fromStart && <Button variant="ghost" size="sm" disabled={!canPlay || collection.disabled} onClick={collection.fromStart}>From start</Button>}
           <BrowseActions title={collection.title} actions={[
             ...(collection.playOn ? [{ label: "Play on", disabled: !canPlay || collection.disabled, playOn: collection.playOn }] : []),
             ...(collection.queueAll ? [{ label: collection.single ? "Queue" : "Queue all", disabled: collection.disabled, run: collection.queueAll }] : []),
@@ -213,7 +214,7 @@ export function CollectionHeader({ collection, canPlay }: { collection: SearchCo
         </div>}
       </div>
     </div>
-    {collection.description && <Collapsible className="mt-2"><CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="-ml-2.5 text-muted-foreground">About</Button></CollapsibleTrigger><CollapsibleContent><p className="max-w-prose pt-2 text-sm leading-relaxed break-words text-muted-foreground">{collection.description}</p></CollapsibleContent></Collapsible>}
+    {collection.description && <p className="mt-4 max-w-prose text-sm leading-relaxed break-words text-muted-foreground">{collection.description}</p>}
   </header>;
 }
 
