@@ -75,9 +75,11 @@ OK, OK and pausable Stop is OK, Right, OK.
 
 Use an isolated Core and data directory, a paired TV renderer, a 1920×1080
 viewport and a paused finite video that supports byte-range seeking. Network
-sharing must be enabled for the pairing-dialog check. Save the video for later
+sharing must be enabled for the pairing-dialog check. Save two videos for later
 to exercise the Home tile and asynchronous Details check. Run with the tab visible
-or a T3 recording active so Radix exit animations finish. Build the dependency-free
+or a T3 recording active so Radix exit animations finish. Also save two radio
+favorites, configure a local Live TV channel, and pair a second online shared
+output for the favorite ordering/Undo and Live TV Queue/Play on checks. Build the dependency-free
 browser checks:
 
 ```sh
@@ -88,7 +90,9 @@ Evaluate that bundle in the T3 preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
 focus and playback behavior: one Home station stop, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
-repeated Home Back, and five-point OK-to-adjust Volume. They use DOM activation
+repeated Home Back, five-point OK-to-adjust Volume, Saved removal/Undo/order,
+and retained favorite and Live TV actions. Details Back asserts Playback focus,
+the same entry and paused state, then immediate OK reopens the Sheet. They use DOM activation
 and bubbling key events; also use T3 keyboard input to check actual D-pad
 navigation and capture screenshots. This browser evidence does not qualify
 native Main, Linux packaging or a physical TV remote.

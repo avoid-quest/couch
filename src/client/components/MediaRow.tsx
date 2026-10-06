@@ -26,6 +26,8 @@ type Props = {
   /** Secondary verbs, revealed on hover or focus in wide lists; in narrow lists
    * (container queries on MediaList) and on touch they sit under the title. */
   actions?: ReactNode;
+  /** Keep operations reachable when the row has no complete Details destination. */
+  tvSecondaryActions?: boolean;
   /** Browse rows keep artwork and secondary controls on the same line. */
   compact?: boolean;
 } & Omit<ComponentProps<"li">, "title" | "children">;
@@ -34,7 +36,7 @@ type Props = {
  * Clock media row: thumbnail, title, meta and the length bar, with one main
  * verb and quiet secondary actions. Used by Home, Find and Saved; Up next has its own compact rows.
  */
-export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, compact = false, className, ...props }: Props) {
+export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, tvSecondaryActions = false, compact = false, className, ...props }: Props) {
   const tv = isTvPresentation();
   const { on } = usePlayOn();
   const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
@@ -56,7 +58,7 @@ export function MediaRow({ art, artFit = "cover", title, meta, children, descrip
           className="group/main h-auto min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal disabled:opacity-100">
           {primary.href ? <a href={primary.href}>{body}</a> : body}
         </Button> : <div className="flex min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-1.5">{body}</div>}
-        {actions && !(tv && primary) && <ItemActions className={compact ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center" : cn("flex-wrap gap-0.5 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 @3xl:col-start-auto")}>{actions}</ItemActions>}
+        {actions && !(tv && primary && !tvSecondaryActions) && <ItemActions className={compact ? "col-start-3 row-start-1 flex-nowrap gap-0.5 self-center" : cn("flex-wrap gap-0.5 @3xl:justify-end @3xl:opacity-0 @3xl:group-hover/item:opacity-100 @3xl:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 @3xl:col-start-auto")}>{actions}</ItemActions>}
       </li>
     </Item>
   );

@@ -1,4 +1,5 @@
-// Run in an isolated paired TV renderer with a seekable video loaded and saved for later.
+// Run in an isolated paired TV renderer with paused seekable video, two saved videos,
+// two radio favorites, a Live TV fixture and a second online shared output.
 // See docs/native-tv.md for the browser regression command and prerequisites.
 declare global {
   interface Window { runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]> }
@@ -15,10 +16,10 @@ const control = (selector: string) => {
   return element;
 };
 const key = async (key: string) => {
-  (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key, code: key === " " ? "Space" : key, bubbles: true, cancelable: true }));
   await wait();
 };
-const click = async (selector: string) => { control(selector).click(); await wait(350); };
+const click = async (selector: string) => { const element = control(selector); element.focus(); element.click(); await wait(350); };
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
 
 window.runTvNavigationRegression = async () => {
@@ -92,11 +93,20 @@ window.runTvNavigationRegression = async () => {
     await key("Escape");
     assert(!location.search.includes("queue=true") && document.activeElement?.getAttribute("aria-label") === "Up next", "Queue Back lost trigger focus");
     await click('.player-page button[aria-label="Playback"]');
+    const entryHref = control('[data-player-sheet] a[href^="/item"]').getAttribute("href");
     await click('[data-player-sheet] a[href^="/item"]');
     assert(location.pathname === "/item", "Details did not open");
     assert(document.activeElement?.closest('[data-page="Item"]'), "Details lost page-entry focus");
     await key("Escape");
     assert(location.pathname === "/now", "Details Back skipped player");
+    await wait(350);
+    assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Details Back lost Playback opener focus");
+    assert(document.querySelector('video')?.paused && document.querySelector('.player-page [data-play-button][aria-label="Play"]'), "Details Back changed paused playback");
+    (document.activeElement as HTMLElement).click(); await wait(350);
+    assert(document.querySelector('[data-player-sheet]') && document.querySelector('video')?.paused, "Immediate OK resumed instead of opening Playback");
+    assert(control('[data-player-sheet] a[href^="/item"]').getAttribute("href") === entryHref, "Details Back changed the played entry");
+    await key("Escape"); await wait(350);
+    assert(document.activeElement?.getAttribute("aria-label") === "Playback", "Playback Back lost opener focus");
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/find", "Queue URL or Details lost original opener");
     await key("Escape"); await key("Escape");
@@ -119,6 +129,74 @@ window.runTvNavigationRegression = async () => {
     assert(!document.querySelector('[data-slot="popover-content"][data-state="open"]') && document.activeElement?.getAttribute("aria-label") === "Volume", "Popover Back did not restore Volume");
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Volume overlay lost Home opener");
+  });
+  await check("Saved Details keeps Remove, Undo and ordering reachable with one row stop", async () => {
+    await click('[data-app-nav] a[href="/saved"]');
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[data-saved-details]')];
+    assert(rows().length >= 2, "Save two video fixtures before running");
+    assert(rows().every(row => [...row.querySelectorAll('button:not(:disabled),a[href]')].filter(element => !element.closest('[inert]')).length === 1), "Saved row has multiple focus stops");
+    const id = rows()[0]!.dataset.savedDetails!;
+    await click(`[data-saved-details="${id}"] button[aria-label^="Details"]`);
+    await until(() => !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
+    const options = async () => { control('[data-page="Item"] button[aria-label^="Options"]').focus(); await key("Enter"); await wait(350); };
+    const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent?.trim() === label);
+    await options();
+    assert(document.querySelector('[role="menu"]'), "Saved Options did not open");
+    assert(menuItem("Remove"), "Saved Details has no Remove");
+    assert(menuItem("Move down") && !menuItem("Move down")?.hasAttribute("data-disabled"), "Saved Details has no enabled Move down");
+    menuItem("Move down")!.click(); await wait(350);
+    await key("Escape"); await wait(350);
+    assert(location.pathname === "/saved" && rows()[1]?.dataset.savedDetails === id, "Move down did not persist the saved order");
+    await click(`[data-saved-details="${id}"] button[aria-label^="Details"]`);
+    await options(); menuItem("Move up")!.click(); await wait(350);
+    await options(); menuItem("Remove")!.click();
+    await until(() => location.pathname === "/saved" && !document.querySelector(`[data-saved-details="${id}"]`));
+    const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
+    assert(undo, "Saved removal did not offer Undo");
+    assert(document.activeElement?.closest('[data-page]'), "Saved removal lost page focus");
+    undo!.click();
+    await until(() => rows()[0]?.dataset.savedDetails === id);
+  });
+  await check("Saved favorites retain remote ordering, Remove and Undo", async () => {
+    await click('[data-app-nav] a[href="/saved"]');
+    await click('a[href="/saved?tab=channels"]');
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[aria-label="Channels & stations"] li')];
+    await until(() => rows().length >= 2);
+    const first = rows()[0]!;
+    const reorder = first.querySelector<HTMLElement>('button[aria-label^="Reorder"]');
+    assert(reorder, "Favorite lost Reorder");
+    const label = reorder!.getAttribute("aria-label");
+    reorder!.focus(); await key("Enter"); await key("ArrowDown"); await key("Enter");
+    await until(() => rows()[1]?.querySelector('button[aria-label^="Reorder"]')?.getAttribute("aria-label") === label);
+    const options = rows()[1]!.querySelector<HTMLElement>('button[aria-label^="Options"]');
+    assert(options, "Favorite lost Options");
+    options!.focus(); await key("Enter");
+    const remove = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === "Remove");
+    assert(remove, "Favorite lost Remove");
+    remove!.click();
+    await until(() => rows().length === 1);
+    const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
+    assert(undo && document.activeElement?.closest('[aria-label="Channels & stations"]'), "Favorite removal lost Undo or adjacent focus");
+    undo!.click(); await until(() => rows().length === 2);
+    assert(rows()[1]?.querySelector('button[aria-label^="Reorder"]')?.getAttribute("aria-label") === label, "Favorite Undo lost saved order");
+  });
+  await check("Live TV retains Queue and Play on without a Details destination", async () => {
+    await click('[data-app-nav] a[href="/find"]');
+    await click('button[aria-label="Open Live TV"]');
+    await until(() => !!document.querySelector('[aria-label="Live TV channels"] li'));
+    const title = control('[aria-label="Live TV channels"] [data-play]').getAttribute("aria-label")!.replace(/^Play /, "");
+    control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
+    const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    assert(items().some(item => item.textContent === "Play on"), "Live TV lost Play on (pair a second online output)");
+    const queue = items().find(item => item.textContent === "Queue");
+    assert(queue && !queue.hasAttribute("data-disabled"), "Live TV lost enabled Queue");
+    queue!.click(); await wait(350);
+    assert(location.search.includes("live-tv"), "Queue left Live TV");
+    await click('[data-mini-player] button[aria-label="Up next"]');
+    await until(() => !!document.querySelector('[data-queue-panel] ul[aria-label="Up next"]'));
+    assert(document.querySelector('[data-queue-panel] ul[aria-label="Up next"]')?.textContent?.includes(title), "Live TV Queue did not add the channel");
+    await key("Escape"); await key("Escape"); await key("Escape");
+    assert(location.search.includes("live-tv"), "Queue Back lost Live TV opener");
   });
   return results;
 };

@@ -176,7 +176,8 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
       return <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
-      actions={<BrowseActions title={hit.title} actions={hit.actions} />}>
+      tvSecondaryActions={!hit.primary.href || hit.kind === "Radio" || hit.actions.some(action => action.label === "Play next")}
+      actions={<BrowseActions title={hit.title} actions={tv && (play || hit.primary.label === "Play") ? hit.actions.filter(action => action.label !== "Play") : hit.actions} />}>
       {hit.id === currentId && <span className="text-sm font-medium">Playing</span>}
       {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
     </MediaRow>;

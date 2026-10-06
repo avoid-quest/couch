@@ -261,6 +261,11 @@ Shared building blocks in `src/client/components`:
   on Continue), then one "…" menu with Play on, Queue, Save and its other verbs.
   On the TV a row is one focus stop: OK does its main verb (Play for stations,
   channels and episodes, else Open), and its other verbs wait on its page.
+  For later's Details keeps Remove with Undo and Move up/down. Rows whose
+  destination does not hold every operation keep their existing Options and
+  ordering controls: saved channels/stations, Live TV, and search hits without
+  complete details actions. These exceptions preserve reachable operations
+  without adding destinations solely for a menu.
 - `MediaTile`: one `Button` wrapping `MediaArtwork` (contained; 2:3 for films
   and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
   title and one meta line, plus a `DurationBar` on Continue. It is one focus

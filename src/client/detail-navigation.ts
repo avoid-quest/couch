@@ -30,6 +30,13 @@ function opener(selector?: string): FocusTarget | undefined {
   return { selector, index: [...document.querySelectorAll(selector)].indexOf(active) };
 }
 
+export function restoreDetailFocus(target?: FocusTarget) {
+  const element = target && document.querySelectorAll<HTMLElement>(target.selector)[target.index];
+  if (!element || element.matches(":disabled") || element.closest("[inert]")) return false;
+  element.focus({ preventScroll: true });
+  return document.activeElement === element;
+}
+
 export function useDetailNavigation() {
   const router = useRouter({ warn: false });
   return {
@@ -62,24 +69,29 @@ export function DetailFocusRestoration() {
   const location = useLocation();
   useEffect(() => {
     const tv = isTvPresentation();
-    if (location.pathname === "/now") return;
     const target = location.state.detailFocus ?? (["/item", "/collection"].includes(location.pathname) ? { selector: "[data-page] h1", index: 0 } : undefined);
+    if (location.pathname === "/now" && !target) return;
     if (!target && !tv) return;
     const returning = !!location.state.detailFocus;
+    let fallbackFocus: Element | null = null;
     const restore = () => {
       if (tv && !returning) {
         const page = document.querySelector<HTMLElement>("[data-page]");
         if (page) focusPageControl(page);
         return !!page?.contains(document.activeElement) && document.activeElement !== document.body;
       }
-      const element = target && document.querySelectorAll<HTMLElement>(target.selector)[target.index];
-      if (!element) return false;
-      element.focus({ preventScroll: true });
-      return document.activeElement === element;
+      if (restoreDetailFocus(target)) return true;
+      // Removing a saved item can remove its opener. Keep focus on the page
+      // while allowing an asynchronously loaded opener to take precedence.
+      if (tv && returning && location.pathname !== "/now") {
+        const page = document.querySelector<HTMLElement>("[data-page]");
+        if (page) { focusPageControl(page); fallbackFocus = document.activeElement; }
+      }
+      return false;
     };
     if (restore() && returning) return;
     const observer = new MutationObserver(() => {
-      if (document.activeElement !== document.body) return;
+      if (document.activeElement !== document.body && document.activeElement !== fallbackFocus) return;
       // Loading can replace the first control; settle again if it lost focus.
       if (restore() && returning) stop();
     });

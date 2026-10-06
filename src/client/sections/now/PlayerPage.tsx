@@ -19,11 +19,11 @@ import { playsOn, showsPicture } from "@/session/device-id";
 import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { cn } from "@/lib/utils";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { providerForUrl } from "../../../shared/providers";
 import { isRadio } from "../../../shared/radio";
-import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
+import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
 
 type Panel = "tracks" | "settings";
 const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback" };
@@ -39,6 +39,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget } = useSessionGate();
   useCouchHotkeys([{ hotkey: "F", enabled: !tvPresentation && fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const detailNavigation = useDetailNavigation();
+  const location = useLocation();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -81,10 +82,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     if (!tvPresentation || queueOpen) return;
     const frame = requestAnimationFrame(() => {
       if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement) && !document.activeElement.matches(":disabled")) return;
+      if (restoreDetailFocus(location.state.detailFocus)) return;
       firstTransport()?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [tvPresentation, current?.id, transportReady]);
+  }, [tvPresentation, current?.id, transportReady, location.state.__TSR_key]);
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
@@ -155,7 +157,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const detailHref = current ? queueItemLocation(current) : undefined;
   const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!detailHref || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); detailNavigation.open(detailHref);
+    event.preventDefault(); detailNavigation.open(detailHref, panel === "settings" ? '.player-page button[aria-label="Playback"]' : undefined);
   };
   const details = !tvPresentation && detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref} onClick={openDetails}><Info aria-hidden="true" /></Link></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
@@ -245,7 +247,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {panel === "tracks" && <Button variant="ghost" className="-ml-2.5 mb-4 h-11" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "settings" }); }}><ArrowLeft aria-hidden="true" />Playback</Button>}
           {panel === "settings" && <div className="grid divide-y border-b">
             {!audioOnly && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "tracks" }); }}><Captions aria-hidden="true" />Audio & subtitles<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
-            {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref} onClick={openDetails}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
+            {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref} aria-label="Details" onClick={openDetails}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
           </div>}
           {panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>
