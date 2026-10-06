@@ -25,6 +25,8 @@ let bundles: string[];
 let timerActive: boolean;
 let delayedTimer: ((error: Error | null, stdout: string, stderr: string) => void) | null;
 let delayTimer: boolean;
+let starts: string[][];
+let installs: number;
 const autoUpdater = Object.assign(new EventEmitter(), {
   channel: "latest",
   autoDownload: true,
@@ -42,13 +44,14 @@ const autoUpdater = Object.assign(new EventEmitter(), {
     this.emit("update-downloaded", { version: available });
     return [];
   },
-  quitAndInstall() { if (installError) this.emit("error", installError); },
+  quitAndInstall() { installs++; if (installError) this.emit("error", installError); },
 });
 mock.module("electron", () => ({ app, Notification: class { show() {} } }));
 mock.module("electron-updater", () => ({ default: { autoUpdater } }));
 mock.module("node:child_process", () => ({
   execFile(command: string, args: string[], callback: (error: Error | null, stdout: string, stderr: string) => void) {
     if (command === "systemctl" && args[0] === "is-active") { if (delayTimer) delayedTimer = callback; else callback(timerActive ? null : new Error("inactive"), "", ""); return; }
+    if (command === "systemctl" && args[0] === "start") starts.push(args);
     if (command === "ditto") {
       const directory = args.at(-1)!;
       mkdirSync(join(directory, "Couch.app"));
@@ -68,6 +71,7 @@ const start = () => {
 beforeEach(() => {
   temporary = mkdtempSync(join(tmpdir(), "couch-update-test-"));
   bundles = []; downloads = []; swaps = [];
+  starts = []; installs = 0;
   available = null; checkError = null; installError = null;
   timerActive = false;
   delayTimer = false; delayedTimer = null;
@@ -87,11 +91,11 @@ test("returning to Stable discards the staged Mac Preview bundle", async () => {
   Object.defineProperty(process, "platform", { ...platform, value: "darwin" });
   const updates = start();
   available = "0.3.1-preview.1";
-  await updates.setChannel("preview");
+  await updates.action({ op: "channel", channel: "preview" });
   await updates.check();
   expect(updates.state().status).toBe("ready");
   available = null;
-  await updates.setChannel("latest");
+  await updates.action({ op: "channel", channel: "latest" });
   await updates.check();
   expect(updates.state().status).toBe("up-to-date");
   app.quit();
@@ -102,10 +106,10 @@ test("a missing Stable feed cannot offer the previous Preview release", async ()
   Object.defineProperty(process, "platform", { ...platform, value: "linux" });
   const updates = start();
   available = "0.3.1-preview.1";
-  await updates.setChannel("preview");
+  await updates.action({ op: "channel", channel: "preview" });
   await updates.check();
   checkError = Object.assign(new Error("No Stable release"), { code: "ERR_UPDATER_LATEST_VERSION_NOT_FOUND" });
-  await updates.setChannel("latest");
+  await updates.action({ op: "channel", channel: "latest" });
   await updates.check();
   expect(updates.state().status).toBe("error");
   expect(updates.state().available).toBeNull();
@@ -142,7 +146,7 @@ test("an installer error ends Installing and reaches Settings", async () => {
   available = "0.3.1";
   await updates.check();
   installError = new Error("Authentication was cancelled");
-  await updates.install();
+  await updates.action({ op: "install", version: "0.3.1" });
   expect(updates.state().status).toBe("ready");
   expect(updates.state().error).toBe("Couldn't install the update. Try again later.");
 });
@@ -152,12 +156,15 @@ test("remote installation reserves the version before acknowledging a restart", 
   const updates = start();
   available = "0.3.1";
   await updates.check();
-  const install = updates.install("0.3.1", 10);
+  const reply = await updates.action({ op: "install", version: "0.3.1" }, 10);
+  expect(reply.status).toBe("installing");
+  expect(installs).toBe(0);
   expect(updates.state().status).toBe("installing");
-  await expect(updates.setChannel("preview")).rejects.toThrow("Wait for the update");
+  await expect(updates.action({ op: "channel", channel: "preview" })).rejects.toThrow("Wait for the update");
   await updates.check();
   expect(updates.state().status).toBe("installing");
-  await install;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(installs).toBe(1);
 });
 
 test("a remote restart rejects a stale available version", async () => {
@@ -165,8 +172,59 @@ test("a remote restart rejects a stale available version", async () => {
   const updates = start();
   available = "0.3.1";
   await updates.check();
-  await expect(updates.install("0.3.2")).rejects.toThrow("available update changed");
+  await expect(updates.action({ op: "install", version: "0.3.2" })).rejects.toThrow("available update changed");
   expect(updates.state().status).toBe("ready");
+});
+
+test("an empty expected version cannot bypass the native install guard", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  await expect(updates.action({ op: "install", version: "" })).rejects.toThrow("Choose the available update.");
+  expect(updates.state().status).toBe("ready");
+  expect(installs).toBe(0);
+});
+
+test("malformed actions and release versions cannot invoke the native installer", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = start();
+  available = "0.3.1";
+  await updates.check();
+  for (const action of [null, [], { op: "unknown" }, { op: "channel", channel: "nightly" }, { op: "install" }, { op: "install", version: null }, { op: "install", version: "0.3.1;reboot" }, { op: "install", version: "1".repeat(81) }]) {
+    await expect(updates.action(action)).rejects.toThrow();
+    expect(updates.state().status).toBe("ready");
+  }
+  expect(installs).toBe(0);
+});
+
+test("a malformed release feed never becomes a ready TV update", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: true, onState() {} });
+  app.isPackaged = true;
+  available = "0.3.1;reboot";
+  await updates.check();
+  expect(updates.state().status).toBe("error");
+  expect(updates.state().available).toBeNull();
+  expect(starts).toEqual([]);
+});
+
+test("a delayed TV install keeps the reserved release and rejects competing actions", async () => {
+  Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+  const updates = startUpdates({ channelPath: join(temporary, "update-channel"), tv: true, onState() {} });
+  app.isPackaged = true;
+  available = "0.3.1-preview.2";
+  await updates.action({ op: "channel", channel: "preview" });
+  await updates.check();
+  await expect(updates.action({ op: "install", version: "0.3.1-preview.1" })).rejects.toThrow("available update changed");
+  expect(starts).toEqual([]);
+  expect((await updates.action({ op: "install", version: "0.3.1-preview.2" }, 10)).status).toBe("installing");
+  available = "0.3.2-preview.1";
+  await updates.check();
+  await expect(updates.action({ op: "channel", channel: "latest" })).rejects.toThrow("Wait for the update");
+  await expect(updates.action({ op: "install", version: "0.3.1-preview.2" })).rejects.toThrow("available update changed");
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(starts).toEqual([["start", "--no-block", "couch-update@0.3.1-preview.2.service"]]);
 });
 
 test("a TV check offers a newer release because root owns its package downloads", async () => {
@@ -203,7 +261,7 @@ test("a TV check reserves its action before waiting for systemctl", async () => 
   delayTimer = true;
   const check = updates.check();
   expect(updates.state().status).toBe("checking");
-  await expect(updates.install("0.3.1")).rejects.toThrow("available update changed");
+  await expect(updates.action({ op: "install", version: "0.3.1" })).rejects.toThrow("available update changed");
   delayedTimer!(null, "", "");
   await check;
   expect(updates.state().status).toBe("ready");

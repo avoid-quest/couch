@@ -1,4 +1,4 @@
-import type { UpdateAction, UpdateState, UpdateTarget } from "../shared/app-bridge";
+import { isUpdateChannel, isUpdateVersion, type UpdateAction, type UpdateState, type UpdateTarget } from "../shared/updates";
 import { isDeviceId, type DeviceIdentity } from "../shared/devices";
 import { ControllerError, settingField } from "./devices";
 import { ADMIN_ONLY } from "./messages";
@@ -21,11 +21,11 @@ export async function updateSettings(request: Request, identity: () => DeviceIde
     else if (path === "/api/updates/check" && request.method === "POST") action = { op: "check" };
     else if (path === "/api/updates/channel" && request.method === "POST") {
       const channel = await settingField(request, "channel");
-      if (channel !== "latest" && channel !== "preview") throw new ControllerError("Choose Stable or Preview.", 400);
+      if (!isUpdateChannel(channel)) throw new ControllerError("Choose Stable or Preview.", 400);
       action = { op: "channel", channel };
     } else if (path === "/api/updates/install" && request.method === "POST") {
       const version = await settingField(request, "version");
-      if (typeof version !== "string" || version.length > 80 || !/^\d+\.\d+\.\d+(-preview\.\d+)?$/.test(version)) throw new ControllerError("Choose the available update.", 400);
+      if (!isUpdateVersion(version)) throw new ControllerError("Choose the available update.", 400);
       action = { op: "install", version };
     } else return json({ error: "Not found." }, 404);
     authorize();

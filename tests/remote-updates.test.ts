@@ -3,6 +3,7 @@ import { updateSettings } from "../src/server/updates-settings";
 import { createNativeUpdates } from "../src/server/updates-native";
 import type { UpdateAction, UpdateState } from "../src/shared/app-bridge";
 import type { DeviceIdentity } from "../src/shared/devices";
+import { parseUpdateOutcome } from "../src/shared/updates";
 
 const state: UpdateState = { version: "0.3.0", channel: "latest", status: "ready", available: "0.3.1", progress: null, checkedAt: null, error: null };
 const identity = (authority: DeviceIdentity["authority"]): DeviceIdentity => ({ authority, device: null, claimAvailable: false });
@@ -58,4 +59,61 @@ test("invalid automatic-update details cannot reach the remote settings page", a
   const result = updates.request({ op: "read" }).catch(error => error as Error);
   updates.receive({ requestId: id, state: { ...state, automatic: { installed: true, active: false, last: { version: {}, at: 1, outcome: "failed", error: null } } } as unknown as UpdateState });
   expect((await result).message).toBe("Invalid update reply.");
+});
+
+test("malformed release strings in native replies cannot reach remote settings", async () => {
+  let id = "";
+  const updates = createNativeUpdates(next => { id = next; });
+  for (const invalid of [
+    { ...state, version: "" },
+    { ...state, available: "0.3.1;reboot" },
+    { ...state, channel: "nightly" },
+    { ...state, status: "waiting" },
+    { ...state, progress: NaN },
+    { ...state, progress: 101 },
+    { ...state, checkedAt: Infinity },
+    { ...state, error: "x".repeat(4097) },
+    { ...state, automatic: { installed: true, last: { version: "0.3.1", outcome: "skipped", at: 1, error: null, failed: "garbled" } } },
+  ]) {
+    const result = updates.request({ op: "read" }).catch(error => error as Error);
+    updates.receive({ requestId: id, state: invalid as UpdateState });
+    expect((await result as Error).message).toBe("Invalid update reply.");
+  }
+});
+
+test("invalid actions are rejected before being sent to a connected native app", async () => {
+  const sent: UpdateAction[] = [];
+  const updates = createNativeUpdates((_id, action) => sent.push(action));
+  for (const action of [null, { op: "install", version: "" }, { op: "channel", channel: "nightly" }]) {
+    await expect(updates.request(action as UpdateAction)).rejects.toThrow();
+  }
+  expect(sent).toEqual([]);
+});
+
+test("older native replies can omit automatic details, timer activity and failed release", async () => {
+  let id = "";
+  const updates = createNativeUpdates(next => { id = next; });
+  for (const reply of [state, { ...state, channel: "preview", available: "0.3.1-preview.2", automatic: { installed: true, last: { version: null, outcome: "waiting", at: 1, error: null } } }]) {
+    const result = updates.request({ op: "read" });
+    updates.receive({ requestId: id, state: reply as UpdateState });
+    expect(await result).toEqual(reply);
+  }
+});
+
+test("the TV status file and native reply boundary agree on every recorded outcome", async () => {
+  let id = "";
+  const updates = createNativeUpdates(next => { id = next; });
+  for (const outcome of ["installed", "installed-unverified", "rolled-back", "failed", "skipped", "up-to-date", "waiting"]) {
+    const last = parseUpdateOutcome(`at=2026-10-06T00:00:00Z\nversion=0.3.1-preview.2\noutcome=${outcome}\nerror=\nfailed=0.3.1-preview.1\n`);
+    expect(last?.outcome).toBe(outcome);
+    const reply = { ...state, automatic: { installed: true, active: true, last } };
+    const result = updates.request({ op: "read" });
+    updates.receive({ requestId: id, state: reply });
+    expect(await result).toEqual(reply);
+  }
+  expect(parseUpdateOutcome("at=garbled\noutcome=waiting")).toBeNull();
+  expect(parseUpdateOutcome("at=2026-10-06T00:00:00Z\noutcome=unknown")).toBeNull();
+  const legacy = parseUpdateOutcome("at=2026-10-06T00:00:00Z\noutcome=waiting\nversion=\n");
+  expect(legacy?.version).toBeNull();
+  expect(legacy?.failed).toBeNull();
 });

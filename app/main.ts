@@ -8,7 +8,7 @@ import { connect as connectTls } from "node:tls";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { DisplayAction, DisplayState } from "../src/shared/display";
-import type { AppMode, UpdateAction, UpdateState } from "../src/shared/app-bridge";
+import type { AppMode } from "../src/shared/app-bridge";
 import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
 import { readDeviceName, saveDeviceName } from "./device-name";
@@ -82,7 +82,7 @@ function startCore() {
       else if (message.type === "display") void display(message.action).then(
         state => child.postMessage({ type: "display", requestId: message.requestId, state } satisfies AppMessage),
         (error: Error) => child.postMessage({ type: "display", requestId: message.requestId, error: error.message } satisfies AppMessage));
-      else if (message.type === "updates") void updateAction(message.action).then(
+      else if (message.type === "updates") void updates.action(message.action, 250).then(
         state => child.postMessage({ type: "updates", requestId: message.requestId, state } satisfies AppMessage),
         (error: Error) => child.postMessage({ type: "updates", requestId: message.requestId, error: error.message } satisfies AppMessage));
     });
@@ -376,22 +376,13 @@ handle("connection", async event => {
 });
 // Set when the app is ready, in the same turn that creates the window.
 let updates: ReturnType<typeof startUpdates>;
-async function updateAction(action: UpdateAction): Promise<UpdateState> {
-  if (!action || !["read", "check", "channel", "install"].includes(action.op)) throw new Error("Invalid update action.");
-  if (action.op === "check") void updates.check();
-  else if (action.op === "channel") return updates.setChannel(action.channel);
-  else if (action.op === "install") {
-    if (updates.state().status !== "ready" || updates.state().available !== action.version) throw new Error("The available update changed. Check again.");
-    // Reserve the installer now; allow the reply to leave before the app quits.
-    void updates.install(action.version, 250).catch(error => console.error(error));
-  }
-  return updates.state();
-}
 handle("updates", () => updates.state());
-handle("update-action", (_event, action) => updateAction(action as UpdateAction));
+handle("update-action", (_event, action) => updates.action(action, 250));
 handle("check-for-updates", () => updates.check());
-handle("set-update-channel", (_event, channel) => updates.setChannel(channel));
-handle("install-update", () => updates.install());
+handle("set-update-channel", (_event, channel) => updates.action({ op: "channel", channel }));
+// Older remote renderers send no expected version. Snapshot and reserve it in
+// this turn; newer renderers always send their selected version through action.
+handle("install-update", (_event, version) => updates.action({ op: "install", version: version === undefined ? updates.state().available : version }, 250));
 handle("show-logs", () => shell.showItemInFolder(logPath));
 handle("update-playback", (_event, status) => {
   if (typeof status !== "string" || !["unavailable", "idle", "loading", "playing", "paused", "ended", "error"].includes(status)) throw new Error("Invalid playback status.");

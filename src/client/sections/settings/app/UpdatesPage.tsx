@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { couchApp } from "@/session/native-context";
+import { updateApp } from "@/session/native-updates";
 import { useSessionGate } from "@/session/session-context";
-import type { UpdateChannel, UpdateState, UpdateTarget } from "../../../../shared/app-bridge";
+import type { UpdateAction, UpdateChannel, UpdateState, UpdateTarget } from "../../../../shared/updates";
 import { SettingsLayout } from "../SettingsLayout";
 
 const statuses: Record<UpdateState["status"], string> = { idle: "Not checked yet", checking: "Checking…", "up-to-date": "Up to date", downloading: "Downloading…", ready: "Update ready", installing: "Installing…", error: "Update failed" };
@@ -22,10 +23,13 @@ const automatic = ({ version, automatic }: UpdateState) => {
   const last = automatic.last;
   if (!last) return null;
   const release = last.version ?? "The update";
+  const skipped = last.failed ?? last.version;
   return last.outcome === "installed" || last.outcome === "installed-unverified" ? `Updated to ${release} on ${when(last.at)}`
     : last.outcome === "rolled-back" ? `${release} didn't start, so the TV went back to ${version}`
     : last.outcome === "failed" ? `${release} didn't install on ${when(last.at)}${last.error ? `: ${last.error}` : ""}`
-    : `Last checked ${when(last.at)}`;
+    : last.outcome === "waiting" ? "Waiting while media is playing. Automatic updates will check again on the next run."
+    : last.outcome === "skipped" ? `Skipped ${skipped ? `Couch ${skipped}` : "a known failed version"} because it failed before. Waiting for a newer release.`
+    : `Up to date. Checked ${when(last.at)}`;
 };
 
 /** Same controls for this app and the connected Couch's authenticated updater. */
@@ -43,10 +47,11 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
     return couchApp.onUpdates(setLocal);
   }, [credentials]);
   const run = (action: () => Promise<unknown>) => { setError(null); void action().catch((reason: Error) => setError(reason.message)); };
-  const send = (action: string, body?: unknown) => apiSend<UpdateState>(credentials!, `/api/updates/${action}${suffix}`, body).then(next => client.setQueryData(key, next));
-  const check = () => credentials ? send("check") : couchApp!.checkForUpdates();
-  const channel = (channel: UpdateChannel) => credentials ? send("channel", { channel }) : couchApp!.setUpdateChannel(channel);
-  const install = () => credentials ? send("install", { version: state!.available }) : couchApp!.installUpdate();
+  const update = (action: UpdateAction) => {
+    if (!credentials) return updateApp(couchApp!, action).then(setLocal);
+    const { op, ...body } = action;
+    return apiSend<UpdateState>(credentials, `/api/updates/${op}${suffix}`, op === "check" ? undefined : body).then(next => client.setQueryData(key, next));
+  };
   const description = !state ? null
     : state.status === "downloading" ? `Couch ${state.available}${state.progress === null ? "" : `, ${state.progress}%`}`
     : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : !tv ? "installs when you quit Couch."
@@ -63,15 +68,15 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
     {state && <>
       <SettingsRow label="Version"><span className="text-sm">{state.version}</span></SettingsRow>
       <SettingsRow label="Channel" htmlFor={channelId} description="Preview gets new features first. Switch back anytime.">
-        <Select value={state.channel} disabled={busy(state)} onValueChange={value => run(() => channel(value as UpdateChannel))}>
+        <Select value={state.channel} disabled={busy(state)} onValueChange={value => run(() => update({ op: "channel", channel: value as UpdateChannel }))}>
           <SelectTrigger id={channelId} className="w-40"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="latest">Stable</SelectItem><SelectItem value="preview">Preview</SelectItem></SelectContent>
         </Select>
       </SettingsRow>
       <SettingsRow label={<span role="status" className="flex items-center gap-2">{busy(state) && <Spinner />}{statuses[state.status]}</span>} description={description}>
         {state.status === "ready"
-          ? <Button onClick={() => run(install)}>{credentials ? "Update and restart" : "Restart to update"}</Button>
-          : <Button variant="outline" disabled={busy(state)} onClick={() => run(check)}>Check for updates</Button>}
+          ? <Button onClick={() => run(() => update({ op: "install", version: state.available! }))}>{credentials ? "Update and restart" : "Restart to update"}</Button>
+          : <Button variant="outline" disabled={busy(state)} onClick={() => run(() => update({ op: "check" }))}>Check for updates</Button>}
       </SettingsRow>
       {last && <SettingsRow label="Automatic updates" description={last} />}
       {!credentials && !tv && <SettingsRow label="Logs" description="What Couch did in this run and the one before.">
