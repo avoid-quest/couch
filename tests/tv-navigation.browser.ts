@@ -1,8 +1,9 @@
 // Run in an isolated paired TV renderer with paused seekable video, two saved videos,
-// two radio favorites, a Live TV fixture and a second online shared output.
+// two radio favorites, a Live TV fixture and a second online shared output. Reload
+// before each run so the second Saved item has not already loaded its Details.
 // See docs/native-tv.md for the browser regression command and prerequisites.
 declare global {
-  interface Window { runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]> }
+  interface Window { runSavedBackRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>; runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]> }
 }
 
 const wait = (milliseconds = 150) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -21,6 +22,57 @@ const key = async (key: string) => {
 };
 const click = async (selector: string) => { const element = control(selector); element.focus(); element.click(); await wait(350); };
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
+
+// Delay only the real response; the cold test uses the second, not-yet-opened item.
+const savedBack = async (cold: boolean) => {
+  await click('[data-app-nav] a[href="/"]');
+  await click('[data-app-nav] a[href="/saved"]');
+  assert(document.activeElement?.matches('nav[aria-label="Saved sections"] [aria-current="page"]'), "Direct Saved entry lost the rail");
+  const rows = [...document.querySelectorAll<HTMLElement>('[data-saved-details]')];
+  assert(rows.length >= 2, "Save two video fixtures before running");
+  const button = rows[1]!.querySelector<HTMLElement>('button[aria-label^="Details"]')!;
+  const label = button.getAttribute("aria-label");
+  const previousLabel = rows[0]!.querySelector('button[aria-label^="Details"]')!.getAttribute("aria-label");
+  const id = rows[1]!.dataset.savedDetails;
+  const originalFetch = window.fetch;
+  let delayed = 0;
+  if (cold) window.fetch = async (...args) => {
+    const response = await originalFetch(...args);
+    if (new URL(String(args[0]), location.href).pathname === "/api/for-later") { delayed++; await wait(800); }
+    return response;
+  };
+  try {
+    button.focus(); button.click();
+    await until(() => location.pathname === "/item" && !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
+    await wait(350);
+    assert(!cold || delayed > 0, "Cold Saved check did not reach the real request; reload before running");
+    assert(document.activeElement?.closest('[data-page="Item"]'), "Loaded Saved Details lost page focus");
+    await key("Escape");
+    await until(() => location.pathname === "/saved");
+    await wait(350); // Catch a later mount frame overwriting a briefly correct restoration.
+    const restored = document.activeElement as HTMLElement;
+    assert(restored?.getAttribute("aria-label") === label && !restored.matches(':disabled, [aria-disabled="true"]')
+      && !restored.closest('[inert], [aria-hidden="true"]') && restored.getClientRects().length > 0, "Saved Back did not retain its enabled visible item opener after settling");
+    await key("ArrowUp");
+    assert(document.activeElement?.getAttribute("aria-label") === previousLabel, "Next arrow did not continue from the restored Saved item");
+    await click(`[data-saved-details="${id}"] button[aria-label^="Details"]`);
+    await key("Escape"); await wait(350);
+    assert(document.activeElement?.getAttribute("aria-label") === label, "Repeated Saved Back lost its opener");
+  } finally {
+    window.fetch = originalFetch;
+    await click('[data-app-nav] a[href="/"]');
+  }
+};
+
+window.runSavedBackRegression = async () => {
+  const results: { name: string; passed: boolean; error?: string }[] = [];
+  for (const cold of [true, false]) {
+    const name = `${cold ? "Cold delayed" : "Warm"} Saved Back retains its item opener`;
+    try { await savedBack(cold); results.push({ name, passed: true }); }
+    catch (error) { results.push({ name, passed: false, error: String(error) }); }
+  }
+  return results;
+};
 
 window.runTvNavigationRegression = async () => {
   const results: { name: string; passed: boolean; error?: string }[] = [];
@@ -51,6 +103,8 @@ window.runTvNavigationRegression = async () => {
     await key("Escape");
     assert(location.pathname === "/", "Rail Back did not reach Home");
   });
+  await check("Cold delayed Saved Back retains its item opener", () => savedBack(true));
+  await check("Warm Saved Back retains its item opener", () => savedBack(false));
   await check("Saved Home tile opens Details, settles page focus and restores its opener", async () => {
     const tile = control('[data-saved-details] button');
     const label = tile.getAttribute("aria-label");
@@ -187,16 +241,40 @@ window.runTvNavigationRegression = async () => {
     const title = control('[aria-label="Live TV channels"] [data-play]').getAttribute("aria-label")!.replace(/^Play /, "");
     control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
     const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    assert(items().some(item => item.textContent === "Play on"), "Live TV lost Play on (pair a second online output)");
+    const targets = [...control('[role="group"][aria-label="Play on"]').querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    const target = targets.find(item => !item.textContent?.includes("This device"));
+    const targetName = target?.querySelector("span")?.textContent;
+    assert(targets.length >= 2 && targetName && !target?.hasAttribute("data-disabled"), "Live TV lost enabled Play on device targets (pair a second online output)");
     const queue = items().find(item => item.textContent === "Queue");
     assert(queue && !queue.hasAttribute("data-disabled"), "Live TV lost enabled Queue");
-    queue!.click(); await wait(350);
+    const originalFetch = window.fetch;
+    let queued = false;
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      if (/\/api\/iptv\/channels\/[^/]+\/queue$/.test(new URL(String(args[0]), location.href).pathname) && response.ok) queued = true;
+      return response;
+    };
+    try { queue!.click(); await until(() => queued); }
+    finally { window.fetch = originalFetch; }
+    await wait(350);
     assert(location.search.includes("live-tv"), "Queue left Live TV");
     await click('[data-mini-player] button[aria-label="Up next"]');
     await until(() => !!document.querySelector('[data-queue-panel] ul[aria-label="Up next"]'));
     assert(document.querySelector('[data-queue-panel] ul[aria-label="Up next"]')?.textContent?.includes(title), "Live TV Queue did not add the channel");
     await key("Escape"); await key("Escape"); await key("Escape");
     assert(location.search.includes("live-tv"), "Queue Back lost Live TV opener");
+    control('[aria-label="Live TV channels"] button[aria-label^="Options"]').focus(); await key("Enter");
+    const recipient = [...control('[role="group"][aria-label="Play on"]').querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find(item => item.querySelector("span")?.textContent === targetName);
+    assert(recipient && !recipient.hasAttribute("data-disabled"), "Play on target disappeared after Queue");
+    recipient!.click();
+    await until(() => !!document.querySelector('[data-mini-player] button[aria-label="Where it plays"]:not(:disabled)'));
+    await click('[data-mini-player] button[aria-label="Where it plays"]');
+    await until(() => document.querySelector(`[aria-label="Solo ${CSS.escape(targetName!)}"]`)?.getAttribute("aria-pressed") === "true");
+    assert(control(`[aria-label="${CSS.escape(targetName!)} picture"]`).getAttribute("aria-pressed") === "true", "Play on did not select the recipient's picture");
+    assert(document.querySelector('[role="dialog"]')?.textContent?.includes(title), "Play on did not select the queued channel");
+    await key("Escape"); await wait(350);
+    assert(location.search.includes("live-tv"), "Play on lost the controller's browse page");
   });
   return results;
 };
