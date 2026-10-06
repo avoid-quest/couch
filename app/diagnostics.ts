@@ -12,8 +12,8 @@ function safeMessage(value: unknown) {
     .replace(/\bBearer\s+[^ ]+/gi, "[credentials]")
     // Updater HTTP descriptions JSON-escape their quoted fields once more.
     .replace(/\b(?:password|passwd|token|secret|api[-_]?key|signature|sig|credentials?)(?:\\?["'])?\s*[:=]\s*(?:\\"(?:\\\\(?:\\["\\]|[^"\\])|[^\\])*\\"|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[^ ]+)/gi, "[credentials]")
-    // Keep quoted spaces and raw controls inside the path until it is removed.
-    .replace(/(["'])(?:[a-z]:\\|\\\\|\.{0,2}\/)[\s\S]*?\1/gi, "[path]")
+    // Native paths may contain quotes too; consume through the last closing quote.
+    .replace(/(["'])(?:[a-z]:\\|\\\\|\.{0,2}\/)[\s\S]*\1/gi, "[path]")
     .replace(/(?:[a-z]:\\|\\\\|\.{0,2}\/)[^ ]+/gi, "[path]");
   return safePlaybackError(message);
 }

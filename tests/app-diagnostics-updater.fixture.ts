@@ -9,7 +9,7 @@ import { startUpdates } from "../app/update";
 export async function exerciseUpdater(directory: string, port: number) {
   startUpdates({ channelPath: join(directory, "update-channel"), tv: false, onState() {} });
   let filesystemErrors = 0;
-  for (const separator of [" ", "\t", "\n", "\u2028"]) {
+  for (const separator of [" ", "\t", "\n", "\u2028", "'", "' ", '"', '" ']) {
     try { readFileSync(join(directory, `missing${separator}synthetic-updater-path.txt`)); }
     catch (error) {
       assert.equal((error as NodeJS.ErrnoException).code, "ENOENT");
@@ -18,7 +18,7 @@ export async function exerciseUpdater(directory: string, port: number) {
       updater.autoUpdater.emit("error", error as Error);
     }
   }
-  assert.equal(filesystemErrors, 4);
+  assert.equal(filesystemErrors, 8);
   const server = createServer((request, response) => {
     response.writeHead(401, { "Content-Type": request.url === "/json" ? "application/json" : "text/plain" });
     response.end(JSON.stringify({ token: request.url === "/json" ? "synthetic-json-control" : 'synthetic-updater-before"synthetic-updater-after' }));

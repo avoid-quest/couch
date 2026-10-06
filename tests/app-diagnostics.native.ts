@@ -33,14 +33,14 @@ const rendererCases: [string, string][] = [
   ["json", `Response: ${JSON.stringify({ token: 'synthetic-json-before"synthetic-json-after' })}`],
   ["escaped-json", `Response: ${JSON.stringify(JSON.stringify({ token: 'synthetic-escaped-before"synthetic-escaped-after' }))}`],
 ];
-for (const separator of [" ", "\t", "\n", "\u2028"]) {
+for (const separator of [" ", "\t", "\n", "\u2028", "'", "' ", '"', '" ']) {
   try { readFileSync(join(directory, `missing${separator}synthetic-native-path.txt`)); }
   catch (error) {
     assert.equal((error as NodeJS.ErrnoException).code, "ENOENT");
     rendererCases.push([`fs-${JSON.stringify(separator)}`, (error as Error).message]);
   }
 }
-assert.equal(rendererCases.length, 8);
+assert.equal(rendererCases.length, 12);
 const rendererMessage = "DIAG native renderer failure Input refused 'https://synthetic-user:synthetic-password@media.example/movie's/private.m3u8?sig=synthetic-signed\tsecret\u2028suffix' token=synthetic-credential /Users/synthetic/private.txt\u0085\u009b\u2028\u2029\n" + "x".repeat(400);
 // Main loads Couch origins, never media URLs. Use the same shape for its failure.
 const refusedUrl = `http://127.0.0.1:${refused}/`;
@@ -118,7 +118,7 @@ assert(events.rendererCases.every((event: { level: string; isMainFrame: boolean 
 // This is a retained limitation, not universal iframe exclusion.
 assert.equal(events.unsandboxedFrame.isMainFrame, true);
 assert.equal(events.unsandboxedFrame.sourceId, "about:srcdoc");
-assert.equal(events.updater.filesystemErrors, 4);
+assert.equal(events.updater.filesystemErrors, 8);
 assert.deepEqual(events.updater.httpErrors, [{ path: "/plain", statusCode: 401 }, { path: "/json", statusCode: 401 }]);
 const log = readFileSync(logPath, "utf8");
 if (previous !== null) assert.equal(readFileSync(join(data, "logs/couch.1.log"), "utf8"), previous, "The previous run must rotate intact");
@@ -142,7 +142,7 @@ if (lines.some(line => /DIAG routine|DIAG child frame|synthetic-source-secret/.t
 const privacyLines = lines.filter(line => line.includes("DIAG privacy "));
 if (privacyLines.length !== rendererCases.length) failures.push("Native privacy errors were not all recorded");
 const updaterLines = lines.filter(line => line.includes("update error:"));
-if (updaterLines.length !== 6) failures.push("Updater default error listener did not record every real error");
+if (updaterLines.length !== 10) failures.push("Updater default error listener did not record every real error");
 for (const line of [...privacyLines, ...updaterLines]) {
   if (!iso.test(line) || line.length > 341 || /[\p{Cc}\u2028\u2029]/u.test(line)) failures.push("Privacy record is not timestamped, bounded and single-line");
 }

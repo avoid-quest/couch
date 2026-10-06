@@ -35,7 +35,7 @@ test("app evidence redacts complete long userinfo before applying its bound", ()
 });
 
 test("app evidence consumes quoted paths and embedded controls before flattening", () => {
-  for (const separator of [" ", "\t", "\n", "\r\n", "\u0085", "\u2028", "\u2029"]) {
+  for (const separator of [" ", "'", "' ", '"', '" ', "\t", "\n", "\r\n", "\u0085", "\u2028", "\u2029"]) {
     for (const path of [`/Users/review/private${separator}synthetic-file.txt`, `C:\\Users\\review${separator}synthetic-file.txt`, `\\\\server\\review${separator}synthetic-file.txt`]) {
       for (const quote of ["'", '"']) {
         const line = appDiagnostic("renderer", "error", `ENOENT: open ${quote}${path}${quote}; refused https://user:pass@media.example/private?sig=synthetic`);
@@ -45,7 +45,7 @@ test("app evidence consumes quoted paths and embedded controls before flattening
         expect(line).not.toMatch(/[\p{Cc}\u2028\u2029]/u);
       }
     }
-    if (separator !== " ") {
+    if (!separator.includes(" ")) {
       expect(appDiagnostic("update", "error", `ENOENT: open /Users/review/private${separator}synthetic-tail`)).not.toContain("synthetic-tail");
     }
   }
