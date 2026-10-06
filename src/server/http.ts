@@ -88,6 +88,14 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
       (byte[0] === 0x16 ? secure : plain).emit("connection", socket);
     });
   });
+  // The mux's inner HTTP servers never listen, so Node's closeAllConnections()
+  // has no connection tracker. Own the accepted sockets, including clients that
+  // have not sent a first byte or completed TLS yet.
+  const connections = new Set<NetSocket>();
+  server.on("connection", socket => {
+    connections.add(socket);
+    socket.once("close", () => connections.delete(socket));
+  });
   const sockets = new WebSocketServer({ noServer: true, maxPayload: websocket.maxPayload });
   // Drop sockets that miss a ping round.
   const alive = new WeakSet<WebSocket>();
@@ -129,14 +137,14 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
     server.once("error", reject);
     server.listen(port, hostname, () => { server.off("error", reject); resolve(); });
   });
+  let stopping: Promise<void> | undefined;
   return {
     port: (server.address() as AddressInfo).port,
-    stop: () => new Promise<void>(resolve => {
+    stop: () => stopping ??= new Promise<void>(resolve => {
       clearInterval(heartbeat);
       for (const socket of sockets.clients) socket.terminate();
       server.close(() => resolve());
-      plain.closeAllConnections();
-      secure?.closeAllConnections();
+      for (const socket of connections) socket.destroy();
     }),
   };
 }
