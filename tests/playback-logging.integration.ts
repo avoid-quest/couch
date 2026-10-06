@@ -67,8 +67,8 @@ async function fixture(t: TestContext, refusedFfmpeg = false, name = "Test TV") 
       await connect(deviceId, token, "&audio=1");
       return deviceId;
     },
-    start: async () => {
-      assert.equal((await tv.command({ type: "enqueue", entry: { id: "film", title: "Film", source: `${hub.origin}/api/health?token=synthetic-direct-secret` }, playNow: true, deviceId })).ok, true);
+    start: async (path = "/api/health") => {
+      assert.equal((await tv.command({ type: "enqueue", entry: { id: "film", title: "Film", source: `${hub.origin}${path}?token=synthetic-direct-secret` }, playNow: true, deviceId })).ok, true);
       await until(() => tv.commands.some(command => command.type === "load"));
       return tv.commands.find(command => command.type === "load")!.playbackId;
     },
@@ -88,6 +88,20 @@ test("Core logs bounded single-line errors without signed, direct or authenticat
   assert.match(line, /Input refused for device line paragraph media\.example auth\.example direct\.example/);
   assert.ok(line.length < 420, "Error evidence stays bounded");
   for (const secret of ["https://", "http://", "synthetic-", "sig=", "key=", "/private", "/path", "/file"]) assert.equal(line.includes(secret), false, `Log must omit ${secret}`);
+});
+
+test("Core removes complete signed URL tokens including apostrophes and quoted variants", { timeout: 15_000 }, async t => {
+  const f = await fixture(t), playbackId = await f.start();
+  const url = "https://media.example/movie's/private.m3u8?sig=synthetic-secret";
+  for (const quoted of [url, `'${url}'`, `"${url}"`]) {
+    f.report({ playbackId, status: "error", error: `Input refused ${quoted}` });
+    await f.barrier();
+  }
+  assert.equal(f.errors().length, 3);
+  for (const line of f.errors()) {
+    assert.match(line, /media\.example/);
+    for (const secret of ["movie", "private", "sig=", "synthetic-secret", "https://"]) assert.equal(line.includes(secret), false, `Log must omit ${secret}`);
+  }
 });
 
 test("an accepted device name cannot inject separators into a player error line", { timeout: 15_000 }, async t => {
@@ -150,7 +164,7 @@ test("Try again logs the same error for the new attempt while duplicate packets 
 
 test("Core logs a refused Sendspin input without any renderer report", { timeout: 15_000 }, async t => {
   const f = await fixture(t, true);
-  await f.start();
+  await f.start("/movie's/private.wav");
   const speakerId = await f.speaker();
   assert.equal((await f.command({ type: "output", deviceId: speakerId, level: 50 })).ok, true);
   await until(() => f.state.player.status === "error");
@@ -160,6 +174,7 @@ test("Core logs a refused Sendspin input without any renderer report", { timeout
   assert.deepEqual([...line].filter(char => /[\p{Cc}\u2028\u2029]/u.test(char)).map(char => char.codePointAt(0)), []);
   assert.equal(line.includes("synthetic-"), false);
   assert.equal(line.includes("http://"), false);
+  assert.equal(line.includes("private.wav"), false);
   // A tab that echoes the group's published error adds no second account of it.
   f.report({ playbackId: f.state.player.playbackId, status: "error", error: f.state.player.error });
   await f.barrier();
