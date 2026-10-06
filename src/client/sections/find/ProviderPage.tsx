@@ -1,4 +1,4 @@
-import { useCallback, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
 import { collectionLocation } from "@/detail-navigation";
@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrowsePagination } from "@/components/BrowsePagination";
+import { MediaTile } from "@/components/MediaTile";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { CollectionHeader, HitList, SourceProblems } from "./SearchPanel";
@@ -39,6 +40,17 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const summary = reported?.cursor === cursor ? reported?.summary : undefined;
   const collection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
   const page = summary?.page;
+  // Use the provider's canonical catalogue route; title and season pages keep their rows.
+  const posterCatalogue = provider === "streamingcommunity" && (!url || /^\/(?:[a-z]{2}\/)?(?:archive|browse\/genre)\/?$/.test(new URL(page?.item?.url ?? url).pathname));
+  useEffect(() => {
+    // Back can restore focus while the cached results are still mounting; scroll once they settle.
+    if (!posterCatalogue) return;
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.matches("[data-media-tile]")) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [posterCatalogue, summary?.hits]);
   const source = current?.source.replace(/^web:/, "");
   const hits = (summary?.hits ?? []).filter(hit => `${hit.title} ${hit.meta}`.toLocaleLowerCase().includes(search.filter.toLocaleLowerCase()));
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
@@ -77,7 +89,18 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
           {(paging.remote || (paging.pages ?? 1) > 1) && pager}
         </div>
       </div>
-      <HitList hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />
+      {posterCatalogue ? <>
+        <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="hidden list-none grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-4 gap-y-2 p-0 md:grid">
+          {hits.slice(paging.start, paging.end).map(hit => {
+            const item = page?.items.find(item => item.url === hit.url);
+            return item && <li key={hit.id} className="min-w-0">
+              <MediaTile title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} shape="poster" className="[&_[data-tile-art]]:h-36" aria-label={`Open ${hit.title}`} data-hit-id={hit.id}
+                href={collectionLocation(item)} onClick={() => openProvider(item)} />
+            </li>;
+          })}
+        </ul>
+        <div className="md:hidden"><HitList hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} /></div>
+      </> : <HitList hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: "" }), replace: true })}>Clear filter</Button>}</Empty>}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />

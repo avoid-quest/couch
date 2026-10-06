@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, MouseEventHandler, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { cn } from "@/lib/utils";
@@ -16,15 +16,17 @@ export function tileShape(source: string | undefined, episode: boolean): TileSha
  * and one meta line. The shadcn catalog has no media tile and Card breaks Flat, so it is the smallest
  * Button composition; index.css outlines its artwork and inverts its caption on focus.
  */
-export function MediaTile({ title, meta, thumbnail, shape, children, className, ...props }: {
+export function MediaTile({ title, meta, thumbnail, shape, children, className, href, onClick, disabled, ...props }: {
   title: string;
   meta?: string;
   thumbnail?: string;
   shape: TileShape;
   /** Extra caption line, e.g. Continue's DurationBar. */
   children?: ReactNode;
-} & Omit<ComponentProps<typeof Button>, "title" | "children">) {
-  return <Button variant="ghost" data-media-tile className={cn("h-auto w-min flex-col items-stretch gap-2 rounded-none border-0 p-0 text-left font-normal whitespace-normal disabled:opacity-100", className)} {...props}>
+  href?: string;
+  onClick?: MouseEventHandler<HTMLElement>;
+} & Omit<ComponentProps<typeof Button>, "title" | "children" | "asChild" | "onClick">) {
+  const body = <>
     <span data-tile-art className={cn("block h-44 overflow-hidden bg-muted", shapes[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className="aspect-auto size-full object-contain" /></span>
     {/* The caption takes the artwork's width. A DurationBar keeps one scale across tiles and wraps its label under the bar. */}
     <span data-tile-caption className="grid w-0 min-w-full gap-0.5 px-1 pb-1 [--duration-width:6.5rem] [&_span:has(>[data-slot=progress])]:flex-wrap [&_span:has(>[data-slot=progress])]:gap-y-1">
@@ -32,5 +34,14 @@ export function MediaTile({ title, meta, thumbnail, shape, children, className, 
       {meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}
       {children}
     </span>
+  </>;
+  return <Button variant="ghost" data-media-tile asChild={!!href && !disabled} disabled={disabled} className={cn("h-auto w-min flex-col items-stretch gap-2 rounded-none border-0 p-0 text-left font-normal whitespace-normal disabled:opacity-100", className)} {...props} onClick={event => {
+    if (href && onClick) {
+      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+    }
+    onClick?.(event);
+  }}>
+    {href && !disabled ? <a href={href}>{body}</a> : body}
   </Button>;
 }
