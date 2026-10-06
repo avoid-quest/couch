@@ -293,7 +293,7 @@ has room to read. Keep the parser's safe URL handling and omit raw HTML.
 
 Messages:
 
-- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity and unexpected outcomes; routine user-triggered actions stay quiet. One line, at most one action.
+- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity and unexpected outcomes. Successful explicit Queue confirms `Queued {title}` with Up next on the requesting controller, idle or playing; other controllers and queue snapshots stay quiet. Other routine user-triggered actions stay quiet. One line, at most one action.
 - **System notification**: the desktop app has one, "Couch X is ready", shown
   once per version when an update has downloaded. It stays because desktop
   updates install only when Couch quits or restarts, which can be days away

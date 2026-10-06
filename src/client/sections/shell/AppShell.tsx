@@ -100,14 +100,24 @@ function useShellValue() {
   const openPlayer = (panel?: "queue") => {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
-  // Keep the requested page on first sync; later picture changes, as after Solo, open the player (#644 ticket 9).
+  // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
-  const shownPicture = useRef(state ? picture : undefined);
+  const pictured = !!picture && !state?.playbacks?.find(playback => playback.id === state.playback)?.audioOnly;
+  const presentation = state?.presentationId;
+  const shownPicture = useRef<{ picture?: string | null; presentation?: string | null; settled: boolean } | null>(null);
   useEffect(() => {
-    if (!state) return;
-    if (picture && shownPicture.current !== undefined && picture !== shownPicture.current && section !== "Now") openPlayer();
-    shownPicture.current = picture;
-  }, [picture, !!state]);
+    if (!state) { shownPicture.current = null; return; }
+    const before = shownPicture.current;
+    if (!before) { shownPicture.current = { picture, presentation, settled: true }; return; }
+    if (before.presentation !== presentation) shownPicture.current = { picture: before.picture, presentation, settled: !presentation };
+    const current = shownPicture.current!;
+    const newlySelected = picture && picture !== current.picture;
+    const explicitlyStarted = !!state.playedBy && !current.settled;
+    // Consume audio-only starts too: a retry can temporarily clear their media flags.
+    if (explicitlyStarted) current.settled = true;
+    if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer();
+    current.picture = picture;
+  }, [picture, presentation, pictured, !!state?.playedBy, !!state]);
   const focusSearch = () => {
     void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };
@@ -288,16 +298,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
       toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
     }
   }, [state?.activity?.id, identity?.device?.id]);
-  // An idle Playback has no player or mini player, so whatever is queued into it offers Play here.
-  const idleUpNext = state && !state.currentEntryId ? state.queue.slice(state.queue.findIndex(entry => entry.id === state.queueCursorEntryId) + 1) : null;
-  const idleQueued = useRef(idleUpNext?.length);
-  useEffect(() => {
-    const before = idleQueued.current;
-    idleQueued.current = idleUpNext?.length;
-    const first = idleUpNext?.[0];
-    if (connected && first && before !== undefined && idleUpNext.length > before) toast("Queued", { id: "queued", action: { label: "Play", onClick: () => void run({ type: "play", entryId: first.id }) } });
-    return () => { toast.dismiss("queued"); };
-  }, [idleUpNext?.length, idleUpNext?.[0]?.id, connected]);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
   const onPlayer = paired && section === "Now";

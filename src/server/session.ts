@@ -282,7 +282,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     finishProgress();
     state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
       if (!admitted()) return;
-      try { play(entry!.id, true, true, () => {}, playedBy); } catch { /* The attempt already published its failure. */ }
+      try { play(entry!.id, true, "retry", () => {}, playedBy); } catch { /* The attempt already published its failure. */ }
     }) : null;
     // Ignore all later player reports and controls for the failed load, including Stop's idle acknowledgement.
     state.player = {
@@ -295,7 +295,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     return true;
   };
   const assertCurrentPlay = (intent: number) => { if (intent !== playIntent) throw new Error(PLAY_CANCELED); };
-  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue, context?: PlaybackContinuation | null, preserveContext = false) => {
+  const play = (entryId: string, fromStart = false, reason: "play" | "next" | "retry" = "play", authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = [], proposedQueue = state.queue, context?: PlaybackContinuation | null, preserveContext = false) => {
     authorize();
     available();
     options.prepareAudio?.();
@@ -315,7 +315,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     awaitingContinuation = false;
     if (preserveContext && continuationResolution) continuationManualSources.push(entry.source);
     if (!preserveContext) cancelContinuation();
-    if (retry) state.radioRetry = { ...state.radioRetry!, retryAt: null };
+    if (reason === "retry") state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
     activePlayIntent = ++playIntent;
     webRecovery = null;
@@ -333,10 +333,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const preferences = { ...state.preferences!.profile };
     state.playedBy = undefined;
     state.currentEntryId = entry.id;
-    state.presentationId = playbackId;
+    state.presentationId = reason === "play" ? playbackId : null;
     state.player = { ...state.player, playbackId, status: "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
     broadcast();
-    if (!preserveContext && context === undefined && !retry) resolveContinuation(entry);
+    if (!preserveContext && context === undefined && reason !== "retry") resolveContinuation(entry);
     const failed = (error: unknown) => {
       if (!admitted() || state.player.playbackId !== playbackId) return;
       const message = error instanceof Error ? error.message : "Couldn't open this source.";
@@ -468,8 +468,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     const following = nextCandidate();
     if (!following) return false;
     const manual = state.queue.some(entry => entry.id === following.id);
-    if (manual) play(following.id, false, false, authorize, playedBy, [], state.queue, afterManualEntry(following), true);
-    else play(following.id, false, false, authorize, playedBy, [], automaticQueue(following), remainingContinuation());
+    if (manual) play(following.id, false, "next", authorize, playedBy, [], state.queue, afterManualEntry(following), true);
+    else play(following.id, false, "next", authorize, playedBy, [], automaticQueue(following), remainingContinuation());
     return true;
   };
   const next = (authorize = () => {}, playedBy?: PlaybackActor) => {
@@ -502,7 +502,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       ids.add(entry.id);
     }
     const added = entries.map(entry => ({ ...entry, addedBy: playedBy ? { ...playedBy } : entry.addedBy }));
-    play(added[0]!.id, fromStart, false, authorize, playedBy, added.map(entry => entry.id), [...state.queue, ...added], context);
+    play(added[0]!.id, fromStart, "play", authorize, playedBy, added.map(entry => entry.id), [...state.queue, ...added], context);
     return added;
   };
 
@@ -633,7 +633,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     },
     playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) {
       assertCurrentPlay(intent);
-      play(entryId, fromStart, false, authorize, playedBy, selectedEntryIds);
+      play(entryId, fromStart, "play", authorize, playedBy, selectedEntryIds);
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();
@@ -644,7 +644,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
       if (!existing && state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
       const entry = existing ?? { ...saved, id: crypto.randomUUID() };
-      if (existing) play(entry.id, fromStart, false, authorize, playedBy);
+      if (existing) play(entry.id, fromStart, "play", authorize, playedBy);
       else playNewEntries([entry], { fromStart, authorize, playedBy });
     },
     close() { if (!quiescing) end(false); },
@@ -705,7 +705,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
           break;
         }
         case "videoQuality": return changeVideoQuality(action, authorize);
-        case "play": play(action.entryId, action.fromStart, false, authorize, playedBy); break;
+        case "play": play(action.entryId, action.fromStart, "play", authorize, playedBy); break;
         case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);

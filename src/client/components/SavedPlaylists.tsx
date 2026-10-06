@@ -82,7 +82,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
   const { on, play } = usePlayOn();
   const load = async (target: { id: string; name: string; revision: number }, mode: PlaylistLoadMode, deviceId?: string) => {
     const send = (on?: string) => write(`${listPath(target.id)}/load${playOnQuery(on)}`, { revision: target.revision, mode });
-    await (mode === "play" ? play(async on => await send(on) ?? false, deviceId) : send());
+    await (mode === "play" ? play(async on => await send(on) ?? false, deviceId) : session ? session.queue(target.name, send) : send());
   };
   const deleteList = async (target: SavedPlaylist) => {
     const result = await write(listPath(target.id), { revision: target.revision }, "DELETE");

@@ -136,19 +136,20 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     actions={[
       { label: "Play on", disabled: blocked || !playable || !item.playable, playOn: deviceId => action.mutate(() => play(on => shell.playHistory(item, { fromStart: item.position === 0, on }), deviceId)) },
       ...(item.position ? [{ label: "From start", disabled: blocked || !playable, run: () => action.mutate(() => play(() => shell.playHistory(item, { fromStart: true }))) }] : []),
-      { label: "Queue", disabled: blocked, run: () => action.mutate(() => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id })) },
+      { label: "Queue", disabled: blocked, run: () => action.mutate(() => session.queue(item.title, () => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id }))) },
       ...(item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []),
     ]} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
 }
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
   const shell = useShell();
-  const { connected } = useSessionGate();
+  const { connected, queue } = useSessionGate();
   const client = useQueryClient();
   const action = useDetailAction();
   const { on, play } = usePlayOn();
   const load = async (mode: "play" | "append", on?: string) => {
-    const result = await apiSend<{ notice?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load${playOnQuery(on)}`, { mode }, "POST", 30_000);
+    const send = () => apiSend<{ notice?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load${playOnQuery(on)}`, { mode }, "POST", 30_000);
+    const result = await (mode === "append" ? queue(item.title, send) : send());
     if (result?.notice) toast(result.notice);
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
