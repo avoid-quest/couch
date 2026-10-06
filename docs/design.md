@@ -340,8 +340,9 @@ Messages:
   for confirmations; **Sheet** for player panels; **Popover** for the header's
   Couch switch: the server this window shows, with its connection status.
   The phone and desktop header holds the section nav, including Remote,
-  the Couch switch, Keyboard shortcuts and the clock; the player's
-  header carries the switch too. The TV uses its local name instead of the
+  and the Couch switch. Wide screens also show the clock and, outside Remote,
+  Keyboard shortcuts; the player's header carries the switch too.
+  The TV uses its local name instead of the
   switch and omits Remote and Keyboard shortcuts. The Popover reuses Settings → Devices' Couch
   choice: saved servers, the app's This computer option, and another address.
   On the host with sharing on, it ends with Pair a device. It scrolls within
