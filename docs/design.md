@@ -321,18 +321,31 @@ Messages:
   foreign influence return to their own level. Sharing audio again joins All. It
   shows its own trim, preserves Device levels and mute, and keeps outputs
   selected at zero so raising it restores their sound; it has no Picture, Solo
-  or Mute. Then one row per Device: the Playback's Devices first (offline ones
+  or Mute. Its label is "Selected sound you can control": shared sound and this
+  Device's own private sound. Then one row per Device:
+  the Playback's Devices first (offline ones
   dimmed, their controls disabled), then the other online Devices that share
-  audio or video, dimmed but fully operable. A Device that shares neither, this
-  one included, is listed only while it is an output, so it never has to take
+  audio or video, dimmed but operable when a move would not replace a private
+  channel. A Device that shares neither, this one included, is listed only
+  while it is an output, so it never has to take
   part to start playback; Play on → This device still plays on it. A row reads
   the Device's icon, name and what it is doing, then Picture (pressed toggles
   invert, because Toggle's muted pressed state barely shows on black), the
   fader with its number, Mute and Solo (pressed, they invert too). What a
   Device is doing includes another Playback, with its status ("Paused
   {title}"): moving a Device that is busy elsewhere interrupts that Playback,
-  so the row says so before you press. On phones a
-  row wraps to two lines: name and Solo, then Picture, fader, number and Mute.
+  so the row says so before you press. Joined outputs keep the current
+  Playback's factual status too; unused devices say "Not playing here".
+  Private picture/sound names the consent boundary and disables changes to
+  that channel for other devices; shared sound can still be muted beside a
+  private picture. This Device retains local controls even while viewing
+  another Playback; Solo still requires consent to replace the destination's
+  whole output. These statuses describe playback and consent, never whether
+  sound can be heard.
+  On phones controls wrap below name/status and Solo. Names and busy titles
+  wrap without ellipses; the Sheet scrolls vertically. On wider screens the
+  name/status, Picture, horizontal fader, number, Mute and Solo align in a row.
+  Its controls and slider tracks have at least a 44px target at the base scale.
   The fader is the Device's one volume while its sound is in, else 0: 0 turns
   its sound off and raising it turns it on. Rows show saved levels
   independently of All's trim. A row's "Earlier" slider, shown under its fader
