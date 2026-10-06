@@ -28,7 +28,7 @@ export type SearchHit = SearchFacet & {
   /** playOn makes the action "Play on", a menu of the online Devices. */
   actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void }>;
 };
-export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
+export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };
 export const lengthOf = (seconds: number): SearchLength => seconds < 600 ? "Under 10 min" : seconds <= 3600 ? "10–60 min" : "Over 1 hr";
 export function matchesFacet(item: SearchFacet, kind?: SearchKind, length?: SearchLength) {
@@ -176,6 +176,7 @@ function OnlineResults(props: Props) {
     props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
       ...(props.url ? { collection: { title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
         single: selected?.kind === "media", playAll: start || resume ? () => startItem() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),
+        playNext: selected?.kind === "media" && props.onCommand ? () => play(selected, false, "next") : undefined,
         playLabel: resume ? "Resume" : start ? "Play" : undefined, position: resume?.position, duration: resume?.duration, fromStart: resume ? () => startItem(true) : undefined,
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
