@@ -59,8 +59,11 @@ not switched.
 
 The TV checks for updates like the desktop app and shows them in **Settings >
 Updates**, but root installs them. `couch-update.timer` runs
-`couch-update.service` roughly 15–75 minutes after boot and daily between 04:00 and 05:00:
-it installs the newest release on the TV's channel (the one picked in Settings;
+`couch-update.service` roughly 15–75 minutes after boot and daily between 04:00 and 05:00.
+Enabling the timer more than 15 minutes into an existing boot can run it
+immediately; a missed overnight check can also run earlier after boot. These are
+systemd's [`OnBootSec` and `Persistent` rules](https://github.com/systemd/systemd/blob/v257/man/systemd.timer.xml).
+The updater installs the newest release on the TV's channel (the one picked in Settings;
 by default Preview on a preview build, else Stable) unless something plays. It
 never goes back to an older version, except from a preview to Stable. **Restart
 to update** installs a release sooner: the `couch-tv` account may only start
@@ -79,7 +82,9 @@ one appears.
 From SSH, `sudo systemctl start couch-update@<version>.service` installs a release
 by hand, `systemctl list-timers couch-update.timer` shows the next run,
 `/var/lib/couch-update/status` holds the last run's outcome and
-`journalctl -u couch-update.service -u 'couch-update@*'` shows how updates went.
+`journalctl -u couch-update.service -u 'couch-update@*'` shows how updates went,
+with `stage=… elapsed_ms=…` lines for download, installation, setup refresh,
+restart and health checking.
 The outcome is `installed`, `installed-unverified` when no TV session runs to
 check, `rolled-back` with the `failed` release and its error, `skipped` for that
 release, `up-to-date`, `waiting` while something plays, or `failed` with its
