@@ -179,7 +179,7 @@ export async function createHub(options: HubOptions) {
   const nameOf = (deviceId: string) => playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
   // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
-  const failures = new WeakMap<Socket<SocketData>, string>();
+  const failures = new WeakMap<Socket<SocketData>, Set<string>>();
   const stateOf = (playback: Playback) => playback.state ??= playback.session.state;
   const servedBy = (deviceId: string) => all().find(playback => playback.outputs.some(output => output.deviceId === deviceId));
   const holding = (entryId: string) => all().find(playback => stateOf(playback).queue.some(entry => entry.id === entryId));
@@ -1176,8 +1176,11 @@ export async function createHub(options: HubOptions) {
           // own failure; an echoed state adds no second account of the same error.
           const echoed = playback?.synced && playback.heard?.status === "error" && player.playbackId === playback.heard.playbackId && player.error === playback.heard.error?.slice(0, 300);
           const failure = player.status === "error" ? `${player.playbackId} ${player.error}` : "";
-          if (playback && failure && !echoed && failures.get(socket) !== failure) logPlaybackError(playback.id, `on ${nameOf(deviceOf(socket))}`, playback.media?.source, player.error ?? "");
-          failures.set(socket, failure);
+          if (playback && failure && !echoed && !failures.get(socket)?.has(failure)) {
+            logPlaybackError(playback.id, `on ${nameOf(deviceOf(socket))}`, playback.media?.source, player.error ?? "");
+            if (!failures.has(socket)) failures.set(socket, new Set());
+            failures.get(socket)!.add(failure);
+          }
           // Only a report with a picture is a screen's: one still loading, or just reconnected, has no tracks yet.
           if (playback?.synced) { if (player.tracks?.some(track => track.kind === "video")) { playback.seen = player; observeSynced(playback); } }
           else if (playback && mpvPlayback !== playback) playback.session.observe(player);

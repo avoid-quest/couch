@@ -143,6 +143,28 @@ test("a new Synced screen load logs an identical failure once even without an in
   assert.equal(f.errors().length, 3);
 });
 
+test("alternating failures and healthy reports keep each error once within the same screen load", { timeout: 15_000 }, async t => {
+  const f = await fixture(t), playbackId = await f.start(), speakerId = await f.speaker();
+  f.report({ playbackId, status: "paused", error: null });
+  await f.barrier();
+  assert.equal((await f.command({ type: "output", deviceId: speakerId, level: 50 })).ok, true);
+  const loads = f.commands.filter(command => command.type === "load").length;
+  for (const error of ["Picture refused", "Audio refused", "Picture refused", null, "Audio refused"]) {
+    f.report({ playbackId, status: error ? "error" : "paused", error });
+    await f.barrier();
+  }
+  assert.equal(f.commands.filter(command => command.type === "load").length, loads);
+  assert.equal(f.errors().length, 2, "A later different error or healthy packet must not forget an already logged error");
+  assert.equal((await f.command({ type: "output", deviceId: "t".repeat(43), picture: false })).ok, true);
+  assert.equal((await f.command({ type: "output", deviceId: "t".repeat(43), picture: true })).ok, true);
+  await until(() => f.commands.filter(command => command.type === "load").length === loads + 1);
+  for (const error of ["Picture refused", "Audio refused", "Picture refused"]) {
+    f.report({ playbackId, status: "error", error });
+    await f.barrier();
+  }
+  assert.equal(f.errors().length, 4, "Both errors must be observable again for the new load");
+});
+
 test("Try again logs the same error for the new attempt while duplicate packets stay quiet", { timeout: 15_000 }, async t => {
   const f = await fixture(t), first = await f.start();
   f.report({ playbackId: first, status: "error", error: "Connection refused" });
