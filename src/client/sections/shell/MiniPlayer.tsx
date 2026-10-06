@@ -67,7 +67,7 @@ export function MiniPlayer({ state, connected, run, onOpen }: { state: ClientSes
   const artwork = programme?.artworkUrl ? <MediaArtwork thumbnail={programme.artworkUrl} title={programme.title} /> : <MediaArtwork thumbnail={current.thumbnail} title={current.title} />;
   // Fixed slots, in the band's order: Play/Pause, Stop, Next, timeline · volume, Where it plays, Up next, Expand.
   // A phone puts the title on its own row above them; unavailable controls stay in place, disabled.
-  return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
+  return <footer ref={bar} data-mini-player aria-label="Now playing" className="sticky bottom-0 z-20 grid grid-cols-[auto_minmax(0,1fr)] max-[359px]:grid-cols-1 items-center gap-x-4 gap-y-1 border-t bg-background px-(--gutter) py-2 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,1.15fr)_minmax(0,1fr)] min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(0,1fr)] [view-transition-name:couch-player-band]">
     <div className="col-span-full flex min-w-0 items-center gap-3 sm:col-span-1">
       <span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted sm:size-14 [&_img]:size-full [&_img]:object-contain [&>*]:size-full">{artwork}</span>
       <div className="min-w-0">
