@@ -89,11 +89,13 @@ export function DetailFocusRestoration() {
       }
       return false;
     };
-    if (restore() && returning) return;
+    // Cached results can briefly restore an opener that a fresh result removes.
+    // Keep watching for lost focus until input, navigation or the timeout.
+    restore();
     const observer = new MutationObserver(() => {
       if (document.activeElement !== document.body && document.activeElement !== fallbackFocus) return;
       // Loading can replace the first control; settle again if it lost focus.
-      if (restore() && returning) stop();
+      restore();
     });
     const stop = () => { observer.disconnect(); clearTimeout(timer); window.removeEventListener("keydown", stop, true); window.removeEventListener("pointerdown", stop, true); };
     const timer = setTimeout(stop, 15_000);

@@ -208,8 +208,18 @@ window.runTvNavigationRegression = async () => {
     const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
     assert(undo, "Saved removal did not offer Undo");
     assert(document.activeElement?.closest('[data-page]'), "Saved removal lost page focus");
+    const fallback = document.activeElement as HTMLElement;
+    assert(!fallback.matches(':disabled, [aria-disabled="true"]') && !fallback.closest('[inert], [aria-hidden="true"]') && fallback.getClientRects().length > 0, "Saved removal fallback is unavailable");
+    await wait(350);
+    assert(document.activeElement === fallback, "Saved removal fallback did not survive settling");
+    await key("ArrowDown");
+    const next = document.activeElement;
+    assert(next !== fallback && next?.closest('[data-page]'), "Next arrow did not continue from the removal fallback");
+    await wait(350);
+    assert(document.activeElement === next, "Removal restoration stole deliberate next-key focus");
     undo!.click();
     await until(() => rows()[0]?.dataset.savedDetails === id);
+    assert(document.activeElement === next, "Saved Undo stole deliberate focus");
   });
   await check("Saved favorites retain remote ordering, Remove and Undo", async () => {
     await click('[data-app-nav] a[href="/saved"]');
