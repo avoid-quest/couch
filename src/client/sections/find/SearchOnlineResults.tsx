@@ -22,7 +22,7 @@ export type SearchHit = SearchFacet & {
   id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
   /** What an openable hit is, shown instead of a length. */
-  collection?: "Channel" | "List";
+  collection?: "Channel" | "List" | "Series" | "Season";
   thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   /** playOn makes the action "Play on", a menu of the online Devices. */
@@ -141,8 +141,8 @@ function OnlineResults(props: Props) {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
-      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : "List", thumbnail: item.thumbnail,
-        primary: { label: !props.paged && item.kind === "media" ? "Play" : "Open", href: props.paged || item.kind !== "media" ? collectionLocation(item) : undefined, disabled: !props.paged && item.kind === "media" && (!props.canPlay || busy || !props.onCommand), run: () => !props.paged && item.kind === "media" ? play(item, true) : props.onOpenCollection?.(item) },
+      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : provider === "streamingcommunity" ? /\/season-\d+$/.test(new URL(item.url).pathname) ? "Season" : "Series" : "List", thumbnail: item.thumbnail,
+        primary: { label: "Open", href: collectionLocation(item), run: () => props.onOpenCollection?.(item) },
         actions: item.kind === "media" ? [
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(item, true) },
           { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(item, true, undefined, deviceId) },

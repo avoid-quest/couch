@@ -220,7 +220,7 @@ export function CollectionHeader({ collection, canPlay }: { collection: SearchCo
 
 export function MoreResults({ summaries }: { summaries: Entry[] }) {
   const more = summaries.filter(([, summary]) => summary.more);
-  return more.length ? <div className="flex flex-wrap gap-2">{more.map(([source, summary]) => <Button key={source} variant="outline" disabled={summary.moreDisabled} onClick={summary.more}>More from {source}</Button>)}</div> : null;
+  return more.length ? <div className="flex flex-wrap gap-2">{more.map(([source, summary]) => <Button key={source} variant="outline" className="h-auto min-h-8 max-w-full whitespace-normal" disabled={summary.moreDisabled} onClick={summary.more}>More from {source}</Button>)}</div> : null;
 }
 
 /** Sources that failed, as one Alert with one Try again; then source notes. */
