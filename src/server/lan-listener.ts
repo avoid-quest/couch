@@ -59,6 +59,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
   let pending: Promise<void> = Promise.resolve();
   let last = "";
+  const selectedNetwork = () => selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
   const stopAll = async () => { await Promise.all([active?.stop(), port80?.stop()]); active = port80 = null; };
   const changed = (urls: string[], error: string | null) => {
     const state = JSON.stringify([urls, error]);
@@ -69,7 +70,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
     const advertised = typeof options.advertised === "function" ? options.advertised() : options.advertised;
     const wantsPort80 = options.port !== 80 && advertised.some(value => { try { const url = new URL(value); return url.protocol === "http:" && !url.port; } catch { return false; } });
     try {
-      const next = selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
+      const next = selectedNetwork();
       const moved = JSON.stringify(next) !== JSON.stringify(network);
       if ((active || port80) && (!enabled || moved)) await stopAll();
       if (closed) return;
@@ -93,9 +94,23 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
       throw error;
     }
   });
-  const timer = setInterval(() => { void refresh().catch(() => {}); }, 60_000);
+  // DHCP can arrive after Core starts. Check the selected interface promptly,
+  // without repeating alias DNS or queuing refreshes behind a slow lookup.
+  let polling = false;
+  const poll = () => {
+    if (closed || polling) return;
+    polling = true;
+    void refresh().catch(() => {}).finally(() => { polling = false; });
+  };
+  const interfaceTimer = setInterval(() => {
+    let next: LanNetwork | null = null;
+    try { next = selectedNetwork(); } catch {}
+    if (JSON.stringify(next) !== JSON.stringify(network) || (enabled && next && !active)) poll();
+  }, 1_000);
+  interfaceTimer.unref();
+  const timer = setInterval(poll, 60_000);
   timer.unref();
-  void refresh().catch(() => {});
+  poll();
   return {
     get server() { return active; },
     get servers() { return [active, port80].filter((server): server is T => server !== null); },
@@ -117,12 +132,12 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
     }),
     async setEnabled(value: boolean) {
       enabled = value;
-      if (!value && (active || port80)) await stopAll();
+      if (!value) await (pending = pending.catch(() => {}).then(stopAll));
       if (value) {
         try { await refresh(); }
         catch (error) { enabled = false; throw error; }
       }
     },
-    async close() { closed = true; clearInterval(timer); await pending.catch(() => {}); await stopAll(); },
+    async close() { closed = true; clearInterval(timer); clearInterval(interfaceTimer); await pending.catch(() => {}); await stopAll(); },
   };
 }
