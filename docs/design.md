@@ -379,3 +379,5 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | Couldn't load X. | Could not…, Check the connection and… |
 | Offline. Reconnecting to {name}… | 30 variants of "Reconnect to…" |
 | Only an admin can change this. | 20 variants of "An administrator can…" |
+
+Play on targets sit in a labelled group inside search result menus, with device names that can wrap. A nested flyout left too little width on a 320–390px phone at larger interface sizes. Use the standard dropdown Group and Label, and bound long menus to the available viewport height so keyboard and touch can reach every target. The separate inline Play on menu uses the same target rows.
