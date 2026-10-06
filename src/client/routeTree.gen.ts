@@ -15,6 +15,7 @@ import { Route as CollectionRouteImport } from './routes/collection'
 import { Route as FindRouteImport } from './routes/find'
 import { Route as ItemRouteImport } from './routes/item'
 import { Route as NowRouteImport } from './routes/now'
+import { Route as RemoteRouteImport } from './routes/remote'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
@@ -62,6 +63,11 @@ const ItemRoute = ItemRouteImport.update({
 const NowRoute = NowRouteImport.update({
   id: '/now',
   path: '/now',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RemoteRoute = RemoteRouteImport.update({
+  id: '/remote',
+  path: '/remote',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SavedRoute = SavedRouteImport.update({
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
   '/now': typeof NowRoute
+  '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
   '/now': typeof NowRoute
+  '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/bluetooth': typeof SettingsBluetoothRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
   '/now': typeof NowRoute
+  '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/find'
     | '/item'
     | '/now'
+    | '/remote'
     | '/saved'
     | '/settings'
     | '/settings/appearance'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/find'
     | '/item'
     | '/now'
+    | '/remote'
     | '/saved'
     | '/settings/appearance'
     | '/settings/bluetooth'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/find'
     | '/item'
     | '/now'
+    | '/remote'
     | '/saved'
     | '/settings'
     | '/settings/appearance'
@@ -319,6 +331,7 @@ export interface RootRouteChildren {
   FindRoute: typeof FindRoute
   ItemRoute: typeof ItemRoute
   NowRoute: typeof NowRoute
+  RemoteRoute: typeof RemoteRoute
   SavedRoute: typeof SavedRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       path: '/now'
       fullPath: '/now'
       preLoaderRoute: typeof NowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/remote': {
+      id: '/remote'
+      path: '/remote'
+      fullPath: '/remote'
+      preLoaderRoute: typeof RemoteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/saved': {
@@ -556,6 +576,7 @@ const rootRouteChildren: RootRouteChildren = {
   FindRoute: FindRoute,
   ItemRoute: ItemRoute,
   NowRoute: NowRoute,
+  RemoteRoute: RemoteRoute,
   SavedRoute: SavedRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }

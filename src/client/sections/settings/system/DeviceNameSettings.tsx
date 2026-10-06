@@ -22,7 +22,7 @@ export function DeviceNameSettings() {
   return <>
     <SettingsRow label="Device name" htmlFor="local-device-name" description="This device uses the same name with every server.">
       <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
-        <Input id="local-device-name" className="min-w-0 flex-1" value={name} placeholder={localHost ? state?.installationName : undefined} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={saving.isPending} />
+        <Input data-remote-field="device-name" id="local-device-name" className="min-w-0 flex-1" value={name} placeholder={localHost ? state?.installationName : undefined} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={saving.isPending} />
         <Button type="submit" variant="outline" disabled={saving.isPending || !name.trim() || name.trim() === savedName}>{saving.isPending ? "Saving…" : "Save"}</Button>
       </form>
     </SettingsRow>

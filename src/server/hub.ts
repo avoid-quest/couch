@@ -36,6 +36,7 @@ import type { DeviceIdentity } from "../shared/devices";
 import { defaultDeviceSharing, type DeviceSharing } from "../shared/device-sharing";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
+import { createTvRemote } from "./remote";
 import { createGuide } from "./iptv";
 
 import { createSoundRouting, soundRaised } from "./sound-routing";
@@ -186,11 +187,18 @@ export async function createHub(options: HubOptions) {
   const playing = (playbackId: string) => all().find(playback => stateOf(playback).player.playbackId === playbackId);
   // The output Device each controller chose (Play on, or following its mix) while Core runs; none is the server's own.
   const targets = new Map<string, string>();
+  // An explicit Remote choice stays on its TV through idle/disconnect/output changes.
+  const remoteControllers = new Set<string>();
+  const tvDevices = new Set<string>();
+  const tvSocket = (id: string) => { const socket = newest(id); return socket?.data.tv ? socket : undefined; };
+  const remote = createTvRemote<Socket<SocketData>>({ current: socket => socket.data.tv && newest(deviceOf(socket)) === socket, send: (socket, message) => send(socket, JSON.stringify(message)), changed: () => broadcast() });
   const shares = (id: string, actor: string) => { try { requireControl(id, actor); return true; } catch { return false; } };
   // Play and the view go to that choice while it is shared, else to the server's own Device; while that
   // Device is offline and idle, to the controller's own. Only Play on and the mixer change the choice.
   const selected = (actorId: string) => {
-    const target = targets.get(actorId), choice = target && shares(target, actorId) ? target : hostId();
+    const target = targets.get(actorId);
+    if (target && remoteControllers.has(actorId)) return target;
+    const choice = target && shares(target, actorId) ? target : hostId();
     return servedBy(choice) || newest(choice) ? choice : actorId;
   };
   // The Device a request's Play on names (the WS action's deviceId, or REST's ?on=).
@@ -198,10 +206,10 @@ export async function createHub(options: HubOptions) {
   const playingOn = (actor: PlaybackActor | undefined, on: string | null | undefined) => { if (actor && on) playOn.set(actor, on); return actor; };
   // A window looks at the Playback its selected Device serves. An idle one looks at the newest
   // Playback waiting for a Device (a saved Up next, or one whose last output was switched off).
-  const lookedAt = (deviceId: string) => servedBy(selected(deviceId)) ?? all().findLast(playback => !playback.outputs.length);
+  const lookedAt = (deviceId: string) => servedBy(selected(deviceId)) ?? (remoteControllers.has(deviceId) ? undefined : all().findLast(playback => !playback.outputs.length));
   // Windows controlling a Device that the Playback moved off follow it (Solo, mpv fallback, or the Device stops serving).
   const follow = (left: string[], to: string) => {
-    for (const id of new Set([hostId(), ...store.devices().map(device => device.id)])) if (left.includes(targets.get(id) ?? hostId())) {
+    for (const id of new Set([hostId(), ...store.devices().map(device => device.id)])) if (!remoteControllers.has(id) && left.includes(targets.get(id) ?? hostId())) {
       const output = outputFor(to, id);
       targets.set(id, output.picture || output.sound ? to : id);
     }
@@ -463,7 +471,7 @@ export async function createHub(options: HubOptions) {
     let playback = servedBy(deviceId);
     if (!playback || on && playback.outputs.length > 1) { playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); }
     else requirePlayback(playback, actorId);
-    if (on) targets.set(actorId, on);
+    if (on) { remoteControllers.delete(actorId); targets.set(actorId, on); }
     playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
     return playback;
   };
@@ -628,7 +636,7 @@ export async function createHub(options: HubOptions) {
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
           ...mpvPlayback === playback ? { hostOnly: true } : {}, ...loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
-      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
+      devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
     };
     const views = new Map<string, string>();
     // A speaker's delay is its player's own; it shows once the speaker is connected.
@@ -638,7 +646,7 @@ export async function createHub(options: HubOptions) {
       const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket));
       // Volume keeps its saved level while muted, like each Device's mixer fader.
       const volume = playback?.mixTrim === 0 ? 0 : Math.max(0, ...sounding(playback, device).map(id => soundOf(id).volume)), view = `${playback?.id}:${device}:${volume}`;
-      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
+      if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback?.outputs ?? []) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
       const listen = hearing.has(deviceOf(socket)) && newest(deviceOf(socket)) === socket, watch = all().some(playback => playback.screens.has(socket));
@@ -1128,12 +1136,13 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        if (socket.data.tv) tvDevices.add(deviceOf(socket));
         log(`device online ${nameOf(deviceOf(socket))}`);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
         if (socket.data.deviceId) { shared.set(socket.data.deviceId, socket.data.sharing); applyConsent(); }
         // A server switch returns to the chosen mix while it plays, else to that server's outputs.
         const target = targets.get(deviceOf(socket));
-        if (target && !servedBy(target)) targets.delete(deviceOf(socket));
+        if (target && !remoteControllers.has(deviceOf(socket)) && !servedBy(target)) targets.delete(deviceOf(socket));
         // The newest tab renders for its Device (#644 Tabs); an output back online resumes, paused.
         const playback = servedBy(deviceOf(socket));
         if (playback && mpvPlayback !== playback) handOver(playback, socket);
@@ -1141,6 +1150,7 @@ export async function createHub(options: HubOptions) {
       },
       close(socket: Socket<SocketData>) {
         if (sockets.delete(socket) && !closed) log(`device offline ${nameOf(deviceOf(socket))}`);
+        remote.close(socket);
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
@@ -1165,6 +1175,7 @@ export async function createHub(options: HubOptions) {
             if (reply?.type === "updates") { clientUpdates.get(socket)!.receive(reply); return; }
           } catch { /* The normal command parser rejects invalid JSON. */ }
         }
+        if (remote.receive(socket, message)) return;
         const player = parsePlayer(message);
         if (player) {
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
@@ -1189,6 +1200,17 @@ export async function createHub(options: HubOptions) {
           const playedBy = playingOn(playbackActor(socket.data.deviceId), "playNow" in action && action.playNow ? action.deviceId : null);
           const deviceId = deviceOf(socket);
           const authorize = socket.data.authorize;
+          const guardedTarget = command.targetDeviceId;
+          const explicitPlayOn = action.type === "enqueue" && action.playNow && action.deviceId;
+          const remoteTarget = guardedTarget ?? (remoteControllers.has(deviceId) && !explicitPlayOn ? selected(deviceId) : undefined);
+          if (guardedTarget) {
+            if (selected(deviceId) !== guardedTarget) throw new Error("The controlled TV changed. Select it again before using Remote.");
+            requireControl(guardedTarget, deviceId);
+            if (!tvSocket(guardedTarget)) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+            if ((action.type === "volume" || action.type === "mute" || action.type === "navigate" || action.type === "text") && action.deviceId && action.deviceId !== guardedTarget) throw new Error("This command addresses another TV. Select it before using Remote.");
+            if ("playbackId" in action && action.playbackId && servedBy(guardedTarget) !== playing(action.playbackId)) throw new Error("The TV's playing item changed. Try again.");
+            if ("entryId" in action && servedBy(guardedTarget) !== holding(action.entryId)) throw new Error("The TV's queue changed. Try again.");
+          }
           let playback: Playback | undefined;
           let removed: string | undefined;
           const enqueued = enqueueMedia(action, authorize, playedBy);
@@ -1198,12 +1220,20 @@ export async function createHub(options: HubOptions) {
             playback = lookedAt(deviceId);
           } else if (action.type === "sharing") {
             if (socket.data.deviceId) { shared.set(socket.data.deviceId, { audio: action.sharing.audio, video: action.sharing.video }); applyConsent(); }
-          } else if (action.type === "navigate") {
-            requireControl(hostId(), deviceId);
-            const hosts = [...sockets].filter(socket => socket.data.trusted);
-            if (!hosts.length) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
-            const navigation = JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage);
-            for (const host of hosts) send(host, navigation);
+          } else if (action.type === "control") {
+            requireControl(action.deviceId, deviceId);
+            if (!tvSocket(action.deviceId)) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+            targets.set(deviceId, action.deviceId);
+            remoteControllers.add(deviceId);
+            broadcast();
+          } else if (action.type === "navigate" || action.type === "text") {
+            const target = action.deviceId ?? selected(deviceId);
+            requireControl(target, deviceId);
+            if (action.deviceId && selected(deviceId) !== target) throw new Error("The controlled TV changed. Select it again before using Remote.");
+            const tv = tvSocket(target);
+            if (!tv) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+            if (action.type === "navigate") send(tv, JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage));
+            else await remote.text(tv, action.token, action.text, action.submit === true);
           } else if (action.type === "solo" || action.type === "allSpeakers" || action.type === "output") {
             const target = lookedAt(deviceId);
             if (!target) throw new Error("Play something first.");
@@ -1255,9 +1285,19 @@ export async function createHub(options: HubOptions) {
           } else {
             // Transport commands name their player and queue commands their entry; the rest act on
             // the looked-at Playback, and Play now on the selected Device's.
+            if (remoteTarget && action.type !== "enqueue" && !servedBy(remoteTarget)) throw new Error("The TV's queue or playing item changed. Try again.");
             playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;
             playback ??= action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
-            const permitted = authorizePlayback(playback, authorize, deviceId);
+            // Queue entries can outlive their TV assignment. Recheck the resolved Playback at
+            // dispatch (and async authorization), even for an older client without an envelope guard.
+            const permitted = authorizePlayback(playback, () => {
+              authorize();
+              if (!remoteTarget) return;
+              if (selected(deviceId) !== remoteTarget) throw new Error("The controlled TV changed. Select it again before using Remote.");
+              requireControl(remoteTarget, deviceId);
+              if (!tvSocket(remoteTarget)) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+              if (servedBy(remoteTarget) !== playback) throw new Error("The TV's queue or playing item changed. Try again.");
+            }, deviceId);
             permitted();
             if (action.type === "play") present(playback, playedBy);
             const previousUndo = playback.undoable;
@@ -1338,6 +1378,7 @@ export async function createHub(options: HubOptions) {
   let closing: Promise<void> | undefined;
   const close = () => closing ??= (async () => {
     closed = true;
+    remote.close();
     shutdown.abort();
     for (const controller of inspections.values()) controller.abort();
     let progressError: unknown;

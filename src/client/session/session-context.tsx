@@ -63,9 +63,9 @@ export type SessionGateValue = SessionBag & {
   booting: boolean;
   error: string | null;
   setError: (error: string | null) => void;
-  run: (action: Action) => Promise<boolean>;
+  run: (action: Action, targetDeviceId?: string) => Promise<boolean>;
   queue: <T>(title: string, work: () => Promise<T>) => Promise<T>;
-  seekBy: (seconds: number) => Promise<boolean>;
+  seekBy: (seconds: number, targetDeviceId?: string) => Promise<boolean>;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
   // Pairing origin for a new remote, and the code from a scanned pairing link.
   pairingOrigin: string;
@@ -74,6 +74,7 @@ export type SessionGateValue = SessionBag & {
   unpair: () => void;
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
+  playerTarget?: { id: string; status: string };
 };
 
 export function useSessionGate(): SessionGateValue {
@@ -208,19 +209,19 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, [dismissUndo]);
 
   // Confirm the requesting action, including REST callers, under its original connection and target.
-  const queue = useCallback(async <T,>(title: string | (() => string | undefined), work: () => Promise<T>, attempt = ++commandAttempt.current) => {
+  const queue = useCallback(async <T,>(title: string | (() => string | undefined), work: () => Promise<T>, attempt = ++commandAttempt.current, targetDeviceId?: string) => {
     const owner = currentCredentials.current;
     const before = readObservation();
     const result = await work();
     const after = readObservation();
     if (result !== false && result !== null && owner && owner === currentCredentials.current && attempt === commandAttempt.current && before && after && after.controlling === before.controlling) {
       const label = typeof title === "function" ? title() : title;
-      toast(label ? `Queued ${label}` : "Queued", { id: "queued", action: <Button asChild variant="secondary" size="sm"><Link to="/now" search={{ queue: true }}>Up next</Link></Button> });
+      toast(label ? `Queued ${label}` : "Queued", { id: "queued", action: <Button asChild variant="secondary" size="sm"><Link to="/now" search={{ queue: true, targetDeviceId }}>Up next</Link></Button> });
     }
     return result;
   }, [readObservation]);
 
-  const run = useCallback(async (action: Action) => {
+  const run = useCallback(async (action: Action, targetDeviceId?: string) => {
     const owner = currentCredentials.current;
     const current = () => owner === currentCredentials.current;
     const started = performance.now();
@@ -236,9 +237,9 @@ export function SessionGate({ children }: PropsWithChildren) {
           if (action.type === "enqueueRadio" || action.type === "enqueueWeb") return entries.find(entry => entry.id === action.entryId)?.title;
           const matching = entries.filter(entry => entry.source === `web:${action.url}` && !before?.queue.some(previous => previous.id === entry.id));
           return action.title ?? (matching.length === 1 ? matching[0]?.title : undefined);
-        }, () => command(action), attempt);
+        }, () => command(action, targetDeviceId), attempt, targetDeviceId);
       } else {
-        await command(action);
+        await command(action, targetDeviceId);
         if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow && current()) announcePlay(readObservation(), action.deviceId);
       }
       if (before && current() && attempt === commandAttempt.current) {
@@ -253,7 +254,7 @@ export function SessionGate({ children }: PropsWithChildren) {
         const remaining = 6_000 - (performance.now() - started);
         if (plan && remaining > 0 && current() && attempt === commandAttempt.current) {
           const confirmed = plan;
-          offerUndo(confirmed.text, () => applyUndo(confirmed, command, readObservation), remaining);
+          offerUndo(confirmed.text, () => applyUndo(confirmed, action => command(action, targetDeviceId), readObservation), remaining);
         }
       }
       return current();
@@ -263,10 +264,10 @@ export function SessionGate({ children }: PropsWithChildren) {
     }
   }, [command, dismissUndo, offerUndo, queue, readObservation]);
 
-  const seekBy = useCallback((seconds: number) => {
+  const seekBy = useCallback((seconds: number, targetDeviceId?: string) => {
     const player = readObservation()?.player;
     return player?.playbackId && player.seekable && ["playing", "paused"].includes(player.status)
-      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) })
+      ? run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) }, targetDeviceId)
       : Promise.resolve(false);
   }, [readObservation, run]);
 

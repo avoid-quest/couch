@@ -32,7 +32,9 @@ function validEntry(value: unknown): value is QueueEntry {
 function validAction(value: unknown): value is Action {
   if (!object(value)) return false;
   switch (value.type) {
-    case "navigate": return typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
+    case "control": return id(value.deviceId);
+    case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
+    case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
     case "enqueue": return validEntry(value.entry) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
@@ -96,26 +98,27 @@ export function parsePlayer(message: string): PlayerState | null {
 export function parseCommand(message: string): ClientMessage {
   let value: unknown;
   try { value = JSON.parse(message); } catch { throw new Error("Invalid JSON command."); }
-  if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action)) throw new Error("Invalid command or unsupported media source.");
+  if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action) || !(value.targetDeviceId === undefined || id(value.targetDeviceId))) throw new Error("Invalid command or unsupported media source.");
+  const guard = value.targetDeviceId === undefined ? {} : { targetDeviceId: value.targetDeviceId };
   if (value.action.type === "videoQuality") {
     const { playbackId, quality } = value.action;
-    return { type: "command", requestId: value.requestId, action: { type: "videoQuality", playbackId, quality } };
+    return { type: "command", requestId: value.requestId, ...guard, action: { type: "videoQuality", playbackId, quality } };
   }
-  if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
+  if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, ...guard, action: { type: "navigate", key: value.action.key, ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }) } };
   if (value.action.type === "enqueueProvider") {
     const { provider, url, shape, title, thumbnail, playNow, quality, placement, collection, deviceId } = value.action;
-    return { type: "command", requestId: value.requestId, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
+    return { type: "command", requestId: value.requestId, ...guard, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
       ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
       ...(collection === undefined ? {} : { collection: { title: collection.title, url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }), ...(collection.parent ? { parent: { title: collection.parent.title, url: collection.parent.url } } : {}) } }),
       ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }), ...(deviceId === undefined ? {} : { deviceId }) } };
   }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
-    return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }), ...(value.action.placement === undefined ? {} : { placement: value.action.placement }), ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }) } };
+    return { type: "command", requestId: value.requestId, ...guard, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }), ...(value.action.placement === undefined ? {} : { placement: value.action.placement }), ...(value.action.deviceId === undefined ? {} : { deviceId: value.action.deviceId }) } };
   }
   if (value.action.type === "preferences") {
     const { audioLanguage, subtitleLanguage, subtitles, speed, autoplay } = value.action.preferences;
-    return { type: "command", requestId: value.requestId, action: { type: "preferences", profileId: value.action.profileId, preferences: {
+    return { type: "command", requestId: value.requestId, ...guard, action: { type: "preferences", profileId: value.action.profileId, preferences: {
       ...(audioLanguage === undefined ? {} : { audioLanguage: audioLanguage.toLowerCase() }),
       ...(subtitleLanguage === undefined ? {} : { subtitleLanguage: subtitleLanguage.toLowerCase() }),
       ...(subtitles === undefined ? {} : { subtitles }), ...(speed === undefined ? {} : { speed }),
@@ -124,7 +127,7 @@ export function parseCommand(message: string): ClientMessage {
   }
   if (value.action.type === "savePlaybackDefault") {
     const { profileId, playbackId, setting } = value.action;
-    return { type: "command", requestId: value.requestId, action: { type: "savePlaybackDefault", profileId, playbackId, setting } };
+    return { type: "command", requestId: value.requestId, ...guard, action: { type: "savePlaybackDefault", profileId, playbackId, setting } };
   }
   return value as ClientMessage;
 }
