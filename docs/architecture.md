@@ -178,7 +178,10 @@ Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline
 <name>` for each tab, `playback <id> Direct|Synced on <names>` when a Playback's
 delivery or outputs change, and `player error <id> on <name> host=<host>:
-<message>` once per error a tab reports. A source appears only as its host,
+<message>` once per error a tab reports for each load. Core also logs a Sendspin
+FFmpeg failure as `player error <id> Synced host=<host>: <message>`, even without
+a reporting tab; stop and pause stay quiet. Error text is bounded to 300 characters
+and stripped of controls and line separators. A source appears only as its host,
 because its URL can carry a token.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium

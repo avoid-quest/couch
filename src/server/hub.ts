@@ -48,6 +48,7 @@ import { updateSettings } from "./updates-settings";
 import { createNativeUpdates } from "./updates-native";
 import type { UpdateAction, UpdateState, UpdateTarget } from "../shared/app-bridge";
 import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
+import { logPlaybackError } from "./playback-log";
 import { helper } from "./helpers";
 import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -178,7 +179,6 @@ export async function createHub(options: HubOptions) {
   const nameOf = (deviceId: string) => playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
   // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
-  const hostOf = (url = "") => { try { return new URL(url).hostname; } catch { return "unknown"; } };
   const failures = new WeakMap<Socket<SocketData>, string>();
   const stateOf = (playback: Playback) => playback.state ??= playback.session.state;
   const servedBy = (deviceId: string) => all().find(playback => playback.outputs.some(output => output.deviceId === deviceId));
@@ -252,7 +252,10 @@ export async function createHub(options: HubOptions) {
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
   const deliver = (playback: Playback, command: PlaybackCommand) => {
     if (mpvPlayback === playback) mpv.send(command);
-    else if (playback.renderer) send(playback.renderer, playerCommand(command));
+    else if (playback.renderer) {
+      if (command.type === "load") failures.delete(playback.renderer);
+      send(playback.renderer, playerCommand(command));
+    }
   };
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
     if (command.type === "load") {
@@ -347,6 +350,7 @@ export async function createHub(options: HubOptions) {
       void screenLoad(playback, entry, loaded, tab).then(command => {
         if (playback.screens.get(tab) !== loaded.playbackId || !sockets.has(tab)) return;
         if (command.type === "load" && command.mpv) { playback.session.reload(); return; }
+        failures.delete(tab);
         send(tab, playerCommand(command));
         send(tab, playerCommand({ type: "volume", volume: 0 }));
       }, () => { if (playback.screens.get(tab) === loaded.playbackId) playback.screens.delete(tab); });
@@ -1168,9 +1172,11 @@ export async function createHub(options: HubOptions) {
         const player = parsePlayer(message);
         if (player) {
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
-          // Once per error a tab reports, on one line, with any URL in it cut to its host.
+          // Once per error a tab reports for this load. Core already logged a group's
+          // own failure; an echoed state adds no second account of the same error.
+          const echoed = playback?.synced && playback.heard?.status === "error" && player.playbackId === playback.heard.playbackId && player.error === playback.heard.error?.slice(0, 300);
           const failure = player.status === "error" ? `${player.playbackId} ${player.error}` : "";
-          if (playback && failure && failures.get(socket) !== failure) log(`player error ${playback.id.slice(0, 8)} on ${nameOf(deviceOf(socket))} host=${hostOf(playback.media?.source)}: ${(player.error ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\bhttps?:\/\/[^\s"'<>]+/gi, url => hostOf(url))}`);
+          if (playback && failure && !echoed && failures.get(socket) !== failure) logPlaybackError(playback.id, `on ${nameOf(deviceOf(socket))}`, playback.media?.source, player.error ?? "");
           failures.set(socket, failure);
           // Only a report with a picture is a screen's: one still loading, or just reconnected, has no tracks yet.
           if (playback?.synced) { if (player.tracks?.some(track => track.kind === "video")) { playback.seen = player; observeSynced(playback); } }

@@ -5,6 +5,7 @@ import type { WebSocket } from "ws";
 import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, SendspinCore, serverNowUs, type SendspinSession } from "@sonn-audio/node-sendspin";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
+import { logPlaybackError } from "./playback-log";
 
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
@@ -170,7 +171,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
       run = undefined;
       each(session => { if (end) { session.sendStreamEnd(); session.sendGroupUpdate(PlaybackStateType.STOPPED, id, options.name); } else session.sendStreamClear(); });
     };
-    const fail = (message: string) => { halt(true); state = { ...state, status: "error", error: message }; report(); };
+    const fail = (message: string) => {
+      logPlaybackError(id, "Synced", load?.audioSource ?? load?.source, message);
+      halt(true); state = { ...state, status: "error", error: message }; report();
+    };
     const restart = async () => { const at = position(); halt(); state = { ...state, position: at }; await start(); };
     const start = async () => {
       const current = load!, attempt = ++generation;
