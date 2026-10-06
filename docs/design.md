@@ -294,6 +294,19 @@ Shared building blocks in `src/client/components`:
   or the source, then the collection). It replaces a Back control, so its
   links are `text-sm`, the controls' size, rather than Mira's `text-xs`
   caption size, and each is `min-h-11`, a 44px target on every screen.
+  The ordinary player's fixed-height header uses a compact trail of the same
+  collection links, with single-line, truncated labels and at least `min-w-11`
+  targets. Its title already appears in the player; Find and the provider remain
+  in the full browse trail. Without a collection, the player links to Radio,
+  its provider or Find. The Couch switch takes at most two fifths of the header's
+  content width so a long device name leaves room for the trail. The
+  [shadcn Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
+  supports composing links, but its wrapping default overlaps the switch on a
+  phone; a collapsed menu would add a step to these existing destinations.
+  The ordinary player's transient Buffering status has its own row above the
+  transport: keeping it beside two 44px collection links
+  obscures a link and clips the status at 320px and 130% interface size.
+  The scoped Remote header keeps its own status arrangement.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
