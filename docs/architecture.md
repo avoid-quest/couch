@@ -184,6 +184,15 @@ a reporting tab; stop and pause stay quiet. Error text is bounded to 300 charact
 and stripped of controls and line separators. A source appears only as its host,
 because its URL can carry a token.
 
+Main also records timestamped, bounded failures from Main and the updater, plus
+renderer error-level messages Electron attributes to the main frame. URLs retain
+only their host; credentials and filesystem paths are removed before controls
+are flattened and the message is bounded. Routine renderer messages and events
+attributed to child frames are excluded. Electron 44 can attribute unsandboxed
+same-origin `srcdoc` errors to the main frame, so those are included; the app
+currently creates no iframes. The existing stdout/stderr tee remains raw for
+other output, with current/previous-run rotation and its 10 MB write gate.
+
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core
 (`src/server/mpv.ts`, JSON IPC). ffmpeg reads the channel's codecs when it

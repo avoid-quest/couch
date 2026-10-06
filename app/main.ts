@@ -13,6 +13,7 @@ import type { AppMessage, CoreMessage } from "../src/shared/protocol";
 import { startUpdates } from "./update";
 import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
+import { diagnosticHost, logAppError } from "./diagnostics";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -91,7 +92,7 @@ function startCore() {
       if (core === current) core = null;
       if (current.stopping || quitting) return;
       // An unexpected stop ends the app, like the Tauri host did; the TV's service restarts it.
-      console.error(`Couch Core exited with code ${code}`);
+      logAppError("main", `Couch Core exited with code ${code}`);
       if (!tv) dialog.showErrorBox("Couch stopped", `Couch stopped unexpectedly (code ${code}). Open Couch again.`);
       app.exit(1);
     });
@@ -165,7 +166,7 @@ async function load() {
   if (!window) return;
   if (choice.mode !== "remote") {
     if (!await startCore().catch(() => null)) return;
-    await window.loadURL(`${localOrigin}/`).catch(error => console.error(`Couldn't load Couch: ${error.message}`));
+    await window.loadURL(`${localOrigin}/`).catch(error => logAppError("main", `Couldn't load Couch: ${error.message}`));
     return;
   }
   await stopCore();
@@ -173,6 +174,7 @@ async function load() {
   for (;;) {
     try { return void await window.loadURL(address = await trust(address, false)); } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
+      logAppError("main", `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`);
       // Keep trying in the background; a successful probe closes the prompt and loads the page.
       const reachable = new AbortController();
       let answered = false;
@@ -295,12 +297,19 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  // Electron-attributed main-frame errors only; Electron 44 can attribute
+  // unsandboxed same-origin srcdoc output to mainFrame too.
+  contents.on("console-message", details => {
+    if (details.level === "error" && details.frame === contents.mainFrame) {
+      logAppError("renderer", `host=${diagnosticHost(contents.mainFrame.url)}: ${details.message}`);
+    }
+  });
   contents.on("did-start-loading", () => { updatePlayback = "loading"; });
   // A page that dies, usually out of memory on a long session, loads again, at most 3 times a minute.
   let gone: number[] = [];
   contents.on("render-process-gone", (_event, { reason }) => {
     updatePlayback = "unavailable";
-    console.error(`Couch's page stopped: ${reason}`);
+    logAppError("main", `Couch's page stopped: ${reason}`);
     gone = [...gone.filter(at => Date.now() - at < 60_000), Date.now()];
     if (["crashed", "oom", "abnormal-exit"].includes(reason) && gone.length <= 3) void load();
   });
@@ -452,7 +461,7 @@ else {
       callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
     });
     createWindow();
-    if (tv) setInterval(() => { try { reportPlayback(); } catch (error) { console.error(error); } }, 5_000).unref();
+    if (tv) setInterval(() => { try { reportPlayback(); } catch (error) { logAppError("main", `Couldn't report playback for updates: ${error instanceof Error ? error.message : error}`); } }, 5_000).unref();
     updates = startUpdates({
       channelPath: join(dataDir, "update-channel"),
       tv,

@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { isUpdateChannel, isUpdateVersion, parseUpdateOutcome, validateUpdateAction, type UpdateChannel, type UpdateOutcome, type UpdateState } from "../src/shared/updates";
+import { appDiagnostic, logAppError } from "./diagnostics";
 
 // package.json build.publish: the public repo electron-updater reads.
 const releases = "https://github.com/avoid-quest/couch-releases/releases/download";
@@ -34,6 +35,12 @@ type Options = {
 // update starts couch-update@<version>.service (docs/native-tv.md).
 export function startUpdates({ channelPath, tv, onState }: Options) {
   const { autoUpdater } = updater;
+  // Its default console logger prints raw URLs and stacks before our error handler.
+  autoUpdater.logger = {
+    info: message => console.log(appDiagnostic("update", "info", message)),
+    warn: message => console.warn(appDiagnostic("update", "warning", message)),
+    error: message => logAppError("update", message),
+  };
   const mac = process.platform === "darwin";
   // Keep a ready installer until it is used; a replacement download clears
   // electron-updater's pending cache even when that download fails.
@@ -98,7 +105,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     }
     // Root installs the release and restarts the TV app.
     await promisify(execFile)("systemctl", ["start", "--no-block", `couch-update@${version}.service`]).catch(error => {
-      console.error(`Couldn't start the TV update: ${error.message}`);
+      logAppError("update", `Couldn't start the TV update: ${error.message}`);
       set({ status: "ready", error: "This TV can't install updates yet. Run sudo couch-setup --tv once." });
     });
   }
@@ -129,7 +136,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
         ready(found.version);
       } else ready(found.version);
     } catch (error) {
-      console.error(`Update failed: ${error instanceof Error ? error.message : error}`);
+      logAppError("update", `Update failed: ${error instanceof Error ? error.message : error}`);
       const code = (error as { code?: string }).code ?? "";
       // An update downloaded earlier still installs.
       set({ status: waiting ? "ready" : "error", available: waiting, progress: null, error: state.status === "downloading" ? "Couldn't download the update. Try again later."
@@ -153,7 +160,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     bundle = null;
     follow(channel);
     set({ channel, status: "checking", available: null, progress: null, error: null });
-    if (previous) await rm(dirname(previous), { recursive: true, force: true }).catch(error => console.error(error));
+    if (previous) await rm(dirname(previous), { recursive: true, force: true }).catch(error => logAppError("update", `Couldn't remove the previous update: ${error.message}`));
     void check();
     return state;
   }
@@ -166,7 +173,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
       validateUpdateAction(action);
       if (action.op === "check") void check();
       else if (action.op === "channel") return setChannel(action.channel);
-      else if (action.op === "install") void install(action.version, installDelay).catch(error => console.error(error));
+      else if (action.op === "install") void install(action.version, installDelay).catch(error => logAppError("update", `Couldn't install the update: ${error.message}`));
       return state;
     },
   };
