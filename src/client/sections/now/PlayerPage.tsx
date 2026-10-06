@@ -151,6 +151,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   if (!current && !queueOpen && !playerTarget) return null;
 
   const buffering = player?.status === "loading" && player.buffering;
+  const bufferingStatus = buffering && <p role="status" className={cn("flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm", !playerTarget && "ml-auto w-fit")}><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
   const radio = isRadio(current);
@@ -181,7 +182,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     {!tvPresentation && <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5", !shown && "opacity-0 pointer-events-none")}>
       <div className="min-w-0 bg-background">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb compact title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
       {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
-      {buffering && <p role="status" className="flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
+      {playerTarget && bufferingStatus}
       <div className={cn("ml-auto flex shrink-0 bg-background", !playerTarget && "max-w-2/5")}><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
     </div>}
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
@@ -227,6 +228,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           A timeline takes its own row above (index.css); live that can't seek leaves "Live" in its slot. Every tool is an icon. */}
       <div className="grid gap-1">
         {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm tv:text-2xl font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{tvPresentation && buffering && <span role="status" className="text-sm">Buffering…</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
+        {!tvPresentation && !playerTarget && bufferingStatus}
         <div className="player-control-row">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
           {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}

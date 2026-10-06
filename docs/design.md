@@ -303,6 +303,10 @@ Shared building blocks in `src/client/components`:
   [shadcn Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
   supports composing links, but its wrapping default overlaps the switch on a
   phone; a collapsed menu would add a step to these existing destinations.
+  The ordinary player's transient Buffering status has its own row above the
+  transport: keeping it beside two 44px collection links
+  obscures a link and clips the status at 320px and 130% interface size.
+  The scoped Remote header keeps its own status arrangement.
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
