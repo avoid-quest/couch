@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent } from "react";
 import type { Action } from "../../shared/protocol";
 import { playbackCapabilities } from "@/components/PlaybackTransport";
+import { isRadio } from "../../shared/radio";
 import { useSessionGate } from "./session-context";
 import { usePlaybackClock } from "./playback-clock";
 
@@ -19,7 +20,7 @@ export function useMediaSession() {
   const artist = programme?.artist ?? player?.nowPlaying?.artist ?? current?.subtitle ?? "";
   const album = programme?.album ?? current?.collection?.title ?? "";
   const artwork = programme?.artworkUrl ?? current?.thumbnail ?? null;
-  const live = !!current?.live || current?.kind === "radio" || !!current?.source.startsWith("radio:");
+  const live = !!current?.live || isRadio(current);
   const position = clock.playbackId === playbackId ? clock.position : 0;
   const duration = live ? null : clock.playbackId === playbackId ? clock.duration ?? current?.duration ?? null : current?.duration ?? null;
   const { transportReady, pausable, seekable, nextReady, hasNext } = playbackCapabilities(state, connected);

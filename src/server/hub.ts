@@ -162,7 +162,9 @@ export async function createHub(options: HubOptions) {
   // the group's last report and a screen's, whose subtitles join it. delivery: as couch.log last said.
   type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
-    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string };
+    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
+    // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
+    undoable?: ReturnType<typeof setTimeout> };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
@@ -612,7 +614,7 @@ export async function createHub(options: HubOptions) {
   };
   // When the queue ends, the Playback ends (#644 End).
   const settle = (playback: Playback) => {
-    if (playbacks.get(playback.id) !== playback) return;
+    if (playbacks.get(playback.id) !== playback || playback.undoable) return;
     const state = stateOf(playback);
     const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
     const done = state.currentEntryId === null || state.player.status === "ended" && !state.autoplay?.pending;
@@ -1207,12 +1209,23 @@ export async function createHub(options: HubOptions) {
             const permitted = authorizePlayback(playback, authorize, deviceId);
             permitted();
             if (action.type === "play") present(playback, playedBy);
+            const previousUndo = playback.undoable;
+            if (action.type === "stop") {
+              const stopped = playback;
+              stopped.undoable = setTimeout(() => { stopped.undoable = undefined; if (!closed) settle(stopped); }, 10_000);
+              stopped.undoable.unref();
+            }
             if (action.type === "remove") {
               inspections.get(action.entryId)?.abort();
               removed = stateOf(playback).queue.find(entry => entry.id === action.entryId)?.title;
             }
             if (soundRouting && action.type === "pause" && !action.paused) soundRouting.prepare();
-            await playback.session.command(action, permitted, playedBy);
+            try { await playback.session.command(action, permitted, playedBy); }
+            catch (error) {
+              if (action.type === "stop") { clearTimeout(playback.undoable); playback.undoable = previousUndo; }
+              throw error;
+            }
+            if (action.type === "stop") clearTimeout(previousUndo);
             if (action.type === "preferences" || action.type === "savePlaybackDefault" || action.type === "audioDelay") setViewing(common.activeProfile);
           }
           if (playedBy && playback && playbacks.has(playback.id)) {

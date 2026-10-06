@@ -4,7 +4,8 @@ import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, In
 import { Button } from "@/components/ui/button";
 import type { Action } from "../../shared/protocol";
 import type { Credentials } from "../session/session";
-import { PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
+import { PlaybackTransport, PlaybackVolume, playbackCapabilities } from "./PlaybackTransport";
+import { PlaybackSettings } from "./PlaybackSettings";
 import { deviceName, offline } from "@/copy";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +59,10 @@ export function RemotePad({ connected, onNavigate, run, state, credentials }: {
       {tool("info", "Info", <Info />)}
     </div>
     {state && <div className="flex flex-wrap items-center justify-between gap-2">
-      <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} />
+      <div className="flex items-center gap-0.5">
+        <PlaybackTransport state={state} connected={connected} run={run} />
+        {state.preferences && <PlaybackSettings entry={state.queue.find(entry => entry.id === state.currentEntryId)} player={state.player} ready={playbackCapabilities(state, connected).transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
+      </div>
       <PlaybackVolume state={state} connected={connected} run={run} />
     </div>}
     <p id={descriptionId} className={cn("text-sm text-muted-foreground", failed && connected && "text-destructive")} role="status">

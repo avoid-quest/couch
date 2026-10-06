@@ -168,6 +168,10 @@ html { view-transition-name: none; }
   [data-player-audio-copy] h1 { font-size: 1.25rem; }
   .player-timeline [data-current-chapter], .player-timeline [data-end-time] { display: none; }
 }
+/* Keep the transport and 44px tools reachable on narrow phones. */
+@media (max-width: 399px) {
+  .player-control-row > [data-player-tools] { grid-column: 1 / -1; justify-self: end; }
+}
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace, [data-queue-open] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
