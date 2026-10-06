@@ -140,8 +140,10 @@ export async function createHub(options: HubOptions) {
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   // Checked at start so saved pages load from the current address; afterwards only
   // StreamingCommunity requests wait for the check.
-  void healStreamingCommunityOrigin(store);
-  const streamingCommunityOrigin = async (url: string) => providerForUrl(url) === "streamingcommunity" ? healStreamingCommunityOrigin(store) : undefined;
+  const healStreamingCommunity = () => healStreamingCommunityOrigin(store, shutdown.signal);
+  const startupOrigin = healStreamingCommunity();
+  void startupOrigin.catch(error => { if (error !== shutdown.signal.reason) console.error("Couch: StreamingCommunity address check failed.", error); });
+  const streamingCommunityOrigin = async (url: string) => providerForUrl(url) === "streamingcommunity" ? healStreamingCommunity() : undefined;
   const startup = createStartup(async () => null);
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const systemAudio = !!options.native && process.platform === "linux";
@@ -789,7 +791,7 @@ export async function createHub(options: HubOptions) {
       else playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, permitted, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => invalidate("providers"), streamingCommunityOrigin: () => healStreamingCommunityOrigin(store) });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => invalidate("providers"), streamingCommunityOrigin: healStreamingCommunity });
   const forLater = createForLater({
     webMetadata: (url, collection) => providerMetadata(providers.cachedItem(url, collection), !!collection),
     databasePath: options.databasePath, onChange: () => invalidate("for-later"),
