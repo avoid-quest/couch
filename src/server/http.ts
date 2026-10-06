@@ -78,7 +78,7 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
   const plain = createServer(handle);
   const secure = tls && createSecureServer({ key: tls.key, cert: tls.cert }, handle);
   // A TLS connection opens with a handshake record (0x16); anything else is plain HTTP.
-  const server = !secure ? plain : createNetServer(socket => {
+  const server = !secure ? plain : createNetServer({ noDelay: true }, socket => {
     socket.setTimeout(10_000, () => socket.destroy());
     socket.once("readable", function first() {
       const byte = socket.read(1) as Buffer | null;
