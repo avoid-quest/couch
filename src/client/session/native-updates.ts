@@ -11,5 +11,5 @@ export async function updateApp(app: Pick<CouchApp, "update" | "updates" | "chec
   const current = await app.updates();
   if (current.status !== "ready" || current.available !== action.version) throw new Error("The available update changed. Check again.");
   await app.installUpdate(action.version);
-  return { ...current, status: "installing", error: null };
+  return app.updates();
 }
