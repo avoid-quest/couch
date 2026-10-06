@@ -27,6 +27,9 @@ import type { PlaybackCollection } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { sourceLabel } from "@/source-label";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
+import { useDetailNavigation } from "@/detail-navigation";
+import { reorderedIds } from "@/lib/dnd";
+import { savedNotice } from "@/copy";
 
 const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = typeof kinds[number];
@@ -143,10 +146,31 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
   const shell = useShell();
-  const { connected, queue } = useSessionGate();
+  const { connected, tvPresentation, offerUndo, queue } = useSessionGate();
+  const navigation = useDetailNavigation();
   const client = useQueryClient();
   const action = useDetailAction();
   const { on, play } = usePlayOn();
+  const list = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected && tvPresentation });
+  const items = list.data?.items ?? [];
+  const index = items.findIndex(saved => saved.id === item.id);
+  const refresh = () => client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
+  const remove = async () => {
+    const result = await apiSend<{ undoToken?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}`, undefined, "DELETE");
+    if (result?.undoToken) offerUndo(savedNotice(item.title, false), async () => {
+      await apiSend(shell.credentials, "/api/for-later/restore", { token: result.undoToken }, "POST", 10_000);
+      await refresh();
+    });
+    await refresh();
+    navigation.back("/saved");
+  };
+  const move = async (offset: number) => {
+    const adjacent = items[index + offset];
+    const order = adjacent && reorderedIds(items, saved => saved.id, item.id, adjacent.id);
+    if (!order) return;
+    await apiSend(shell.credentials, "/api/for-later/reorder", { order: order.map(saved => saved.id) }, "POST", 10_000);
+    await refresh();
+  };
   const load = async (mode: "play" | "append", on?: string) => {
     const send = () => apiSend<{ notice?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load${playOnQuery(on)}`, { mode }, "POST", 30_000);
     const result = await (mode === "append" ? queue(item.title, send) : send());
@@ -155,7 +179,15 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
   };
   return <><DetailLayout title={item.title} collection={item.collection} thumbnail={item.thumbnail} duration={item.duration} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} description={item.description}
     primary={<Button size="sm" disabled={!connected || !shell.available || action.isPending} onClick={() => action.mutate(() => play(() => load("play")))}>{on("Play")}</Button>}
-    actions={[{ label: "Play on", disabled: !connected || !shell.available || action.isPending, playOn: deviceId => action.mutate(() => play(on => load("play", on), deviceId)) }, { label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
+    actions={[
+      { label: "Play on", disabled: !connected || !shell.available || action.isPending, playOn: deviceId => action.mutate(() => play(on => load("play", on), deviceId)) },
+      { label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) },
+      ...(tvPresentation ? [
+        { label: "Move up", disabled: !connected || action.isPending || index <= 0, run: () => action.mutate(() => move(-1)) },
+        { label: "Move down", disabled: !connected || action.isPending || index < 0 || index >= items.length - 1, run: () => action.mutate(() => move(1)) },
+      ] : []),
+      { label: "Remove", disabled: !connected || action.isPending, run: () => action.mutate(remove) },
+    ]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
 }
 
 function RadioDetails({ item }: { item: RadioStation }) {

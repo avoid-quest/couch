@@ -24,6 +24,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Progress } from "@/components/ui/progress";
+import { isTvPresentation } from "@/session/native-context";
 
 export type Props = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
@@ -165,17 +166,22 @@ function FilterGroup<T extends string>({ label, value, onChange, options }: { la
 
 /** Search hits as media rows under one time ruler. */
 export const HitList = memo(function HitList({ hits, label, timeline = true, currentId }: { hits: SearchHit[]; label: string; timeline?: boolean; currentId?: string }) {
+  const tv = isTvPresentation();
   if (!hits.length) return null;
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
     {timeline && hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
-    <MediaList aria-label={label}>{hits.map(hit => <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
+    <MediaList aria-label={label}>{hits.map(hit => {
+      const play = tv && hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
+      return <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
-      primary={{ label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
-      actions={<BrowseActions title={hit.title} actions={hit.actions} />}>
+      primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
+      tvSecondaryActions={!hit.primary.href || hit.kind === "Radio" || hit.actions.some(action => action.label === "Play next")}
+      actions={<BrowseActions title={hit.title} actions={tv && (play || hit.primary.label === "Play") ? hit.actions.filter(action => action.label !== "Play") : hit.actions} />}>
       {hit.id === currentId && <span className="text-sm font-medium">Playing</span>}
       {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
-    </MediaRow>)}</MediaList>
+    </MediaRow>;
+    })}</MediaList>
   </div>;
 });
 

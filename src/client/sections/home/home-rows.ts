@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // Home's rows, in the order a fresh device shows them. Each device keeps its own choice.
 export const homeRowLabels = { now: "Now", continue: "Continue", later: "For later", radio: "Radio", recent: "Played recently", upNext: "Up next" } as const;
@@ -47,4 +47,17 @@ export function useHomeRows() {
     },
     reset: () => save(defaultHomeRows),
   }), [rows, save]);
+}
+
+/** Items in the order Home first showed them: known ones keep their place, new ones follow in their own order. */
+export function keptOrder<T>(order: readonly string[], items: readonly T[], key: (item: T) => string): T[] {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  return items.map((item, index) => ({ item, rank: rank.get(key(item)) ?? order.length + index })).sort((a, b) => a.rank - b.rank).map(({ item }) => item);
+}
+
+/** A row's order, taken once its data is ready, so nothing moves under the focus while Home stays open. */
+export function useKeptOrder<T>(items: T[], key: (item: T) => string, ready = true): T[] {
+  const order = useRef<string[] | null>(null);
+  if (!order.current && ready && items.length) order.current = items.map(key);
+  return order.current ? keptOrder(order.current, items, key) : items;
 }

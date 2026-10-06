@@ -105,6 +105,10 @@ body { min-width: 0; }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
 [role="slider"][data-adjusting] { scale: 1.75; }
 :is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
+/* Artwork stays contained; focus outlines it and inverts only the tile caption. */
+[data-media-tile]:focus-visible { background: none; color: inherit; }
+[data-media-tile]:focus-visible [data-tile-art] { outline: .125rem solid var(--foreground); outline-offset: .125rem; }
+[data-media-tile]:focus-visible [data-tile-caption] { background: var(--foreground); color: var(--background); }
 html { view-transition-name: none; }
 
 /* The mini player grows into the player band and back. */

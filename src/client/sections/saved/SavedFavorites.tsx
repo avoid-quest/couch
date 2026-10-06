@@ -18,6 +18,7 @@ import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
+import { isTvPresentation } from "@/session/native-context";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean, deviceId?: string) => Promise<boolean>;
@@ -106,7 +107,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   const row = (favorite: Favorite, index: number) => {
     const itemTitle = title(favorite);
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
-    return <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${itemTitle}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
+    return <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${itemTitle}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style} tvSecondaryActions
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}
@@ -115,7 +116,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         : { label: "Play", onClick: () => void enqueue(favorite, true), disabled: !connected || !canPlay || pending }}
       actions={<>
         <BrowseActions title={itemTitle} actions={[
-          { label: "Play", disabled: !connected || !canPlay || pending, run: () => void enqueue(favorite, true) },
+          ...(isTvPresentation() && !browse ? [] : [{ label: "Play", disabled: !connected || !canPlay || pending, run: () => void enqueue(favorite, true) }]),
           { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => void enqueue(favorite, true, deviceId) },
           { label: "Queue", disabled: !connected || pending, run: () => void enqueue(favorite, false) },
           { label: "Remove", disabled: !connected || pending, run: () => { if (!connected || pending) return; removing(key(favorite), index); remove.mutate(favorite); } },

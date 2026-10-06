@@ -1,7 +1,7 @@
 import type { ClientSessionState } from "@/session/session";
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 
 import type { Credentials } from "../../session/session";
@@ -31,12 +31,17 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
   onFind: () => void;
 }) {
   const page = useRef<HTMLElement>(null);
-  // The TV starts on the current section so the remote can move straight into it.
+  const detailFocus = useLocation({ select: location => location.state.detailFocus });
+  // Section entry yields to detail restoration and any later user focus.
   useEffect(() => {
     if (!page.current?.closest(".tv-shell")) return;
-    const frame = requestAnimationFrame(() => page.current?.querySelector<HTMLElement>('nav [aria-current="page"]')?.focus());
+    const focused = document.activeElement;
+    const frame = requestAnimationFrame(() => {
+      if ((!detailFocus && document.activeElement === focused) || document.activeElement === document.body)
+        page.current?.querySelector<HTMLElement>('nav [aria-current="page"]')?.focus();
+    });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [tab, detailFocus]);
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected });
   const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
   const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
@@ -58,8 +63,8 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
     </Select>
     <nav aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
       <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{shared}</p>
-      {tabs.map(([value, label, count], index) => <Button key={value} variant="ghost" asChild className="w-full justify-start font-normal">
-        <Link to="/saved" search={value === "later" ? {} : { tab: value }} replace data-page-first={index === 0 || undefined} aria-current={tab === value ? "page" : undefined}>
+      {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="w-full justify-start font-normal">
+        <Link to="/saved" search={value === "later" ? {} : { tab: value }} replace activeOptions={{ exact: true }} data-page-first={tab === value || undefined}>
           <Check aria-hidden="true" className={tab === value ? undefined : "invisible"} />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count != null && <span className="tabular-nums text-muted-foreground">{count}</span>}
