@@ -1,72 +1,34 @@
-import type { ClientSessionState } from "@/session/session";
-import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, Info } from "lucide-react";
+import { type KeyboardEvent, type ReactNode } from "react";
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Action } from "../../shared/protocol";
-import type { Credentials } from "../session/session";
-import { PlaybackTransport, PlaybackVolume, playbackCapabilities } from "./PlaybackTransport";
-import { PlaybackSettings } from "./PlaybackSettings";
-import { deviceName, offline } from "@/copy";
+import type { NavigationKey } from "../../shared/protocol";
 import { cn } from "@/lib/utils";
 
-type RemoteKey = "up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
-
-export function RemotePad({ connected, onNavigate, run, state, credentials }: {
-  connected: boolean;
-  onNavigate: (key: RemoteKey) => Promise<boolean>;
-  run: (action: Action) => Promise<boolean>;
-  state: ClientSessionState | null;
-  credentials: Credentials;
-}) {
-  const descriptionId = useId();
-  const [failed, setFailed] = useState(false);
-  const navigate = async (key: RemoteKey) => {
-    if (!connected) return;
-    try { setFailed(!await onNavigate(key)); }
-    catch { setFailed(true); }
-  };
+export function RemotePad({ connected, onNavigate }: { connected: boolean; onNavigate: (key: NavigationKey) => Promise<boolean> }) {
+  const navigate = (key: NavigationKey) => { if (connected) void onNavigate(key); };
   const keydown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.target instanceof HTMLElement
-      && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
-    const keys: Record<string, RemoteKey> = {
-      ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
-      Escape: "back", BrowserBack: "back", Home: "home", i: "info", I: "info",
-    };
-    // Buttons keep their native Enter/Space click. Only the pad itself maps them to OK.
-    const key = event.target === event.currentTarget && ["Enter", " "].includes(event.key)
-      ? "select" : keys[event.key];
+    if (event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+    const keys: Record<string, NavigationKey> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", Home: "home" };
+    // Tab moves through the phone's controls; Enter/Space activate their native button once.
+    const key = event.target === event.currentTarget && ["Enter", " "].includes(event.key) ? "select" : keys[event.key];
     if (!key) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (!event.repeat) void navigate(key);
+    event.preventDefault(); event.stopPropagation();
+    if (!event.repeat) navigate(key);
   };
-  const name = deviceName(state?.installationName);
-  const key = (direction: RemoteKey, label: string, icon: ReactNode, className: string) => <Button type="button" variant={direction === "select" ? "default" : "outline"} size="icon" className={cn("size-12 touch:size-12", className)} aria-label={label}
-    disabled={!connected} onClick={() => void navigate(direction)}>{icon}</Button>;
-  const tool = (direction: RemoteKey, label: string, icon: ReactNode) => <Button type="button" variant="outline" aria-label={`TV ${label.toLowerCase()}`}
-    disabled={!connected} onClick={() => void navigate(direction)}>{icon}{label}</Button>;
-  return <section data-remote-pad className="grid min-w-0 gap-4 outline-none" aria-label="TV remote" aria-describedby={descriptionId} tabIndex={0} onKeyDown={keydown}>
-    <div className="mx-auto grid grid-cols-3 gap-1" role="group" aria-label="TV directions">
+  const key = (direction: NavigationKey, label: string, icon: ReactNode, className: string) => <Button type="button" variant={direction === "select" ? "default" : "outline"} size="icon" className={cn("size-16 touch:size-16", className)} aria-label={label}
+    disabled={!connected} onClick={() => navigate(direction)}>{icon}</Button>;
+  return <section data-remote-pad className="grid gap-5 outline-none" aria-label="TV directions" tabIndex={0} onKeyDown={keydown}>
+    <div className="mx-auto grid grid-cols-3 gap-2">
       {key("up", "TV up", <ChevronUp />, "col-start-2")}
       {key("left", "TV left", <ChevronLeft />, "col-start-1 row-start-2")}
       {key("select", "TV select", "OK", "col-start-2 row-start-2")}
       {key("right", "TV right", <ChevronRight />, "col-start-3 row-start-2")}
       {key("down", "TV down", <ChevronDown />, "col-start-2 row-start-3")}
     </div>
-    <div className="grid grid-cols-3 gap-1">
-      {tool("back", "Back", <ArrowLeft />)}
-      {tool("home", "Home", <House />)}
-      {tool("info", "Info", <Info />)}
+    <div className="grid grid-cols-2 gap-2">
+      <Button type="button" variant="outline" className="min-h-11" disabled={!connected} onClick={() => navigate("back")}><ArrowLeft />TV Back</Button>
+      <Button type="button" variant="outline" className="min-h-11" disabled={!connected} onClick={() => navigate("home")}><House />TV Home</Button>
     </div>
-    {state && <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center gap-0.5">
-        <PlaybackTransport state={state} connected={connected} run={run} />
-        {state.preferences && <PlaybackSettings entry={state.queue.find(entry => entry.id === state.currentEntryId)} player={state.player} ready={playbackCapabilities(state, connected).transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
-      </div>
-      <PlaybackVolume state={state} connected={connected} run={run} />
-    </div>}
-    <p id={descriptionId} className={cn("text-sm text-muted-foreground", failed && connected && "text-destructive")} role="status">
-      {!connected ? offline(state?.installationName) : failed ? `Didn't reach ${name}. Try again.` : "Arrow keys work here."}
-    </p>
+    <p className="text-sm text-muted-foreground">Arrow keys work on the pad. Tab moves through these controls.</p>
   </section>;
 }

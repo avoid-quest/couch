@@ -1,8 +1,8 @@
 import { settingsPageForPath, settingsPages } from "./settings-pages";
 
-// Four destinations and the player. Sources are filters inside Find, not places.
+// Main destinations and the player. Sources are filters inside Find, not places.
 export const pagePaths: Record<string, string> = {
-  Home: "/", Now: "/now", Find: "/find", Saved: "/saved", Settings: "/settings",
+  Home: "/", Now: "/now", Find: "/find", Saved: "/saved", Settings: "/settings", Remote: "/remote",
 };
 
 export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...Object.values(settingsPages).map(page => page.path)];
@@ -15,4 +15,3 @@ export const sectionForPath = (pathname: string): string | undefined => {
   return settingsPageForPath(pathname) ? "Settings" : undefined;
 };
 export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Saved" : section] ?? "/";
-

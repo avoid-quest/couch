@@ -1,12 +1,11 @@
 import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Keyboard, Tv, X } from "lucide-react";
+import { Keyboard, X } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
-import { RemotePad } from "@/components/RemotePad";
 import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
@@ -21,7 +20,6 @@ import { pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiSend } from "@/api/client";
 import { useIdleCursor } from "@/useIdleCursor";
 import { useNavigation } from "@/navigation";
@@ -73,7 +71,6 @@ function useShellValue() {
   const openSources = (source: typeof setupSource = "iptv") => { setSetupSource(source); setSourcesOpen(true); };
   const installationId = credentials?.installationId ?? details?.installationId;
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
-  const [remoteOpen, setRemoteOpen] = useState(false);
   useEffect(() => { setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
@@ -93,10 +90,7 @@ function useShellValue() {
       else router.history.push(to);
     }
   };
-  const changeSection = (name: string) => {
-    if (name === "Remote") { setRemoteOpen(true); return; }
-    changePage(name);
-  };
+  const changeSection = changePage;
   const openPlayer = (panel?: "queue") => {
     void router.navigate({ href: panel === "queue" ? "/now?queue=true" : "/now", viewTransition: playerTransition });
   };
@@ -142,7 +136,6 @@ function useShellValue() {
     if (to !== at) router.history.replace(to);
   };
   useNavigation(() => {
-    if (remoteOpen) { setRemoteOpen(false); return; }
     if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/find"); return; }
     if (section === "Now") leavePlayer();
     else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
@@ -200,9 +193,9 @@ function useShellValue() {
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
-    openSources, openProvider, setRemoteOpen, setSourcesOpen,
+    openSources, openProvider, setSourcesOpen,
     enqueueProvider, enqueueRadio, playHistory,
-    remoteOpen, setupSource, sourcesOpen,
+    setupSource, sourcesOpen,
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
 }
@@ -304,7 +297,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
   useRememberCouchName(installationName);
-  const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now";
+  const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && section !== "Remote";
 
   if (setupPending) return <div className="app-shell drag-region flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
@@ -313,29 +306,27 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          <header className={cn("app-header drag-region window-controls-inset sticky top-0 z-30 flex h-14 shrink-0 flex-nowrap items-center gap-2 bg-background px-(--gutter) py-0 max-[359px]:has-[.tv-remote-shortcut]:h-auto max-[359px]:has-[.tv-remote-shortcut]:flex-wrap max-[359px]:has-[.tv-remote-shortcut]:py-1.5", onPlayer && "hidden")}>
+          <header className={cn("app-header drag-region window-controls-inset sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-(--gutter) py-1.5", onPlayer && "hidden")}>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). */}
-            {paired && <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex shrink-0 items-center">
-              {navItems.map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground max-sm:px-1.5 max-sm:text-sm">
+            {paired && <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex max-w-full flex-wrap items-center max-sm:w-full">
+              {[...navItems.slice(0, 3), ...(!tvPresentation ? ["Remote"] : []), "Settings"].map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground min-h-11 min-w-11 max-sm:px-2 max-sm:text-sm">
                 <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{name}</Link>
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
               <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />
-              {paired && !tvPresentation && details?.tvPresentation && <Button variant="ghost" size="icon" className="tv-remote-shortcut sm:hidden" aria-label="TV remote" onClick={() => shell.setRemoteOpen(true)}><Tv aria-hidden="true" /></Button>}
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && !tvPresentation && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
+              {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-2 max-sm:hidden" />
             </div>
           </header>
-          {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
+          {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && section !== "Remote" && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
           {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
           {!paired ? <PairingPage /> : <>
-            {!tvPresentation && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
+            {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-6 pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
             {miniPlayer && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
-            <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>TV remote</DialogTitle></DialogHeader><RemotePad connected={connected} onNavigate={key => run({ type: "navigate", key })} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>}
         </div>
         <Toaster />

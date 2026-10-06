@@ -8,6 +8,7 @@ import { connectRenderer, play, playsVp9 } from "./renderer";
 import { listen } from "./sendspin";
 import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceIdentity } from "./device-id";
 import type { DeviceSharing } from "../../shared/device-sharing";
+import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -57,6 +58,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let authenticate = !!credentials;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let handshake: ReturnType<typeof setTimeout> | undefined;
+    let textInput: ReturnType<typeof connectRemoteText> | undefined;
     let stopRendering: (() => void) | undefined;
     let rendererStatus: SessionState["player"]["status"] = "idle";
     let syncedStatus: SessionState["player"]["status"] = "idle";
@@ -71,7 +73,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const stopPlayback = () => { textInput?.close(); textInput = undefined; stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -146,7 +148,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       advertised = localDeviceSharing();
       for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
-      if (couchApp?.update) { url.searchParams.set("updates", "1"); if (couchApp.tvPresentation) url.searchParams.set("tv", "1"); }
+      if (couchApp?.update) url.searchParams.set("updates", "1");
+      if (couchApp?.tvPresentation) url.searchParams.set("tv", "1");
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -160,6 +163,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (!isCurrent()) return;
         setStatus("syncing");
         advertiseSharing();
+        if (couchApp?.tvPresentation) textInput = connectRemoteText(field => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textFocus", field })); });
         stopRendering = connectRenderer(state => {
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
@@ -205,6 +209,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           play(message.command);
         } else if (message.type === "sendspin") {
           listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
+        } else if (message.type === "text") {
+          void (textInput?.receive(message) ?? Promise.resolve(false)).then(ok => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textResult", requestId: message.requestId, ok })); });
         } else if (message.type === "navigation") {
           navigate(message.key);
         } else if (message.type === "result") {
@@ -309,7 +315,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     setReconnectAttempt(attempt => attempt + 1);
   }, []);
 
-  const command = useCallback((action: Action) => {
+  const command = useCallback((action: Action, targetDeviceId?: string) => {
     const connection = socket.current;
     if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("Reconnecting. Try again in a moment."));
@@ -321,7 +327,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         reject(new Error("No reply from Couch. Check before retrying."));
       }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
       pending.current.set(requestId, { resolve, reject, timer });
-      const message: ClientMessage = { type: "command", requestId, action };
+      const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
       try {
         connection.send(JSON.stringify(message));
       } catch (error) {

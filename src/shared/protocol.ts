@@ -45,12 +45,13 @@ export type Output = { deviceId: string; picture: boolean; sound: boolean; delay
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
-export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
+export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 
 // The Playback this window looks at, with what every window shares: Devices, Playbacks and settings.
 // controlling: this server's selected output Device (the server's own by default), whose Playback is in view.
 export type SessionState = {
   controlling?: string;
+  textField?: import("./remote").RemoteTextField | null;
   queue: QueueEntry[];
   autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
@@ -86,7 +87,9 @@ export type SessionState = {
 
 export type Action =
   | { type: "sharing"; sharing: DeviceSharing }
-  | { type: "navigate"; key: NavigationKey }
+  | { type: "control"; deviceId: string }
+  | { type: "navigate"; key: NavigationKey; deviceId?: string }
+  | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }
   // With playNow, deviceId plays on that Device, which this window then controls.
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next"; deviceId?: string }
   | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next"; collection?: PlaybackCollection; deviceId?: string }
@@ -120,7 +123,7 @@ export type Action =
   // Device's sound out, more sets its volume and puts its sound in.
   | { type: "output"; deviceId: string; picture?: boolean; level?: number; delay?: number };
 
-export type ClientMessage = { type: "command"; requestId: string; action: Action };
+export type ClientMessage = { type: "command"; requestId: string; action: Action; targetDeviceId?: string };
 // Every Device plays what Core sends it and reports back; Core listens only to the one it chose (#644 ticket 6).
 export type PlayerMessage = { type: "player"; state: PlayerState };
 export type UpdateReply = { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string };
@@ -130,6 +133,7 @@ export type ServerMessage =
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
   | { type: "navigation"; key: NavigationKey }
+  | { type: "text"; requestId: string; token: string; text: string; submit: boolean }
   | { type: "player"; command: PlaybackCommand }
   // This tab plays its Device's sound in a synced Playback over Sendspin (#644 ticket 10), or
   // shows its picture and needs only the Sendspin clock (ticket 11).
