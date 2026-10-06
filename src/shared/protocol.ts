@@ -55,6 +55,7 @@ export type SessionState = {
   autoplay?: { enabled: boolean; contextTitle: string | null; next: QueueEntry | null; pending?: boolean };
   queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
+  // An explicit Play's picture intent; stable across quality/transport reloads, null on Next/retry.
   presentationId?: string | null;
   playedBy?: PlaybackActor;
   // The looked-at Playback, its outputs, and every Playback and Device (#644 ticket 9).

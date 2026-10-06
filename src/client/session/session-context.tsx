@@ -1,6 +1,8 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { Button } from "../components/ui/button";
 import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
 import { couchApp, isNativeHost, isTvPresentation } from "./native-context";
@@ -190,7 +192,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     if (undoToast.current !== null) toast.dismiss(undoToast.current);
     undoToast.current = null;
   }, []);
-  useEffect(() => { dismissUndo(); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
+  useEffect(() => { dismissUndo(); toast.dismiss("queued"); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
 
   const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration = 6_000) => {
     dismissUndo();
@@ -214,7 +216,15 @@ export function SessionGate({ children }: PropsWithChildren) {
     setError(null);
     try {
       await command(action);
-      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow && current()) announcePlay(readObservation(), action.deviceId);
+      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && current()) {
+        const after = readObservation();
+        if (action.playNow) announcePlay(after, action.deviceId);
+        else if (attempt === commandAttempt.current && after?.controlling === before?.controlling) {
+          const added = after?.queue.find(entry => entry.addedBy?.deviceId === deviceId() && !before?.queue.some(previous => previous.id === entry.id));
+          const title = added?.title ?? (action.type === "enqueue" ? action.entry.title : "title" in action ? action.title : undefined);
+          toast(title ? `Queued ${title}` : "Queued", { id: "queued", action: <Button asChild variant="secondary" size="sm"><Link to="/now" search={{ queue: true }}>Up next</Link></Button> });
+        }
+      }
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";
         let after = readObservation();
