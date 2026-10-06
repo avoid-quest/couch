@@ -1209,9 +1209,9 @@ export async function createHub(options: HubOptions) {
             const permitted = authorizePlayback(playback, authorize, deviceId);
             permitted();
             if (action.type === "play") present(playback, playedBy);
+            const previousUndo = playback.undoable;
             if (action.type === "stop") {
               const stopped = playback;
-              clearTimeout(stopped.undoable);
               stopped.undoable = setTimeout(() => { stopped.undoable = undefined; if (!closed) settle(stopped); }, 10_000);
               stopped.undoable.unref();
             }
@@ -1220,7 +1220,12 @@ export async function createHub(options: HubOptions) {
               removed = stateOf(playback).queue.find(entry => entry.id === action.entryId)?.title;
             }
             if (soundRouting && action.type === "pause" && !action.paused) soundRouting.prepare();
-            await playback.session.command(action, permitted, playedBy);
+            try { await playback.session.command(action, permitted, playedBy); }
+            catch (error) {
+              if (action.type === "stop") { clearTimeout(playback.undoable); playback.undoable = previousUndo; }
+              throw error;
+            }
+            if (action.type === "stop") clearTimeout(previousUndo);
             if (action.type === "preferences" || action.type === "savePlaybackDefault" || action.type === "audioDelay") setViewing(common.activeProfile);
           }
           if (playedBy && playback && playbacks.has(playback.id)) {

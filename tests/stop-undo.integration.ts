@@ -36,9 +36,14 @@ test("Stop keeps the last item until its Undo has had time, then the Playback en
   try {
     await new Promise(resolve => socket.once("open", resolve));
     await until(() => !!state);
+    await assert.rejects(command({ type: "stop", playbackId: "stale-media-session-playback" }), /playing item changed/);
+    // The next command is an ordering barrier after rejection and cleanup.
+    await command({ type: "sharing", sharing: { audio: true, video: true } });
+    assert.equal(state!.playbacks?.length, 0, "Rejected Stop must not reserve an empty Playback");
     await command({ type: "enqueue", entry: { id: "film", title: "Film", source: `${hub.origin}/api/health` }, playNow: true });
     await until(() => state!.currentEntryId === "film");
     await command({ type: "stop" });
+    await assert.rejects(command({ type: "stop", playbackId: "stale-media-session-playback" }), /playing item changed/);
     // Undo plays the stopped item again, so it stays in its Playback a while.
     await new Promise(resolve => setTimeout(resolve, 1_000));
     assert.equal(state!.currentEntryId, null);
