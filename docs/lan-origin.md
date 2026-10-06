@@ -12,8 +12,10 @@ configure router forwarding or expose Couch to the internet.
 
 ## Select the local address
 
-Couch discovers its private IPv4 address every ten seconds. With several eligible
-interfaces, set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
+Couch checks its private IPv4 selection every second, so sharing can start after
+DHCP assigns an address and recover when an address or occupied port returns.
+Custom DNS names are rechecked every minute. With several eligible interfaces,
+set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
 has multiple private IPv4 addresses, also set `COUCH_LAN_ADDRESS` to the specific
 local address to use. For example, if `eth0` owns `192.168.1.20`:
 

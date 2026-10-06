@@ -99,13 +99,6 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
   const sockets = new WebSocketServer({ noServer: true, maxPayload: websocket.maxPayload });
   // Drop sockets that miss a ping round.
   const alive = new WeakSet<WebSocket>();
-  const heartbeat = setInterval(() => {
-    for (const socket of sockets.clients) {
-      if (!alive.delete(socket)) socket.terminate();
-      else socket.ping();
-    }
-  }, 30_000);
-  heartbeat.unref();
   const upgrade = async (message: IncomingMessage, stream: NetSocket, head: Buffer) => {
     let upgraded = false;
     stream.on("error", () => {});
@@ -137,6 +130,14 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
     server.once("error", reject);
     server.listen(port, hostname, () => { server.off("error", reject); resolve(); });
   });
+  // Failed binds return no listener to stop; start background work only once listening.
+  const heartbeat = setInterval(() => {
+    for (const socket of sockets.clients) {
+      if (!alive.delete(socket)) socket.terminate();
+      else socket.ping();
+    }
+  }, 30_000);
+  heartbeat.unref();
   let stopping: Promise<void> | undefined;
   return {
     port: (server.address() as AddressInfo).port,
