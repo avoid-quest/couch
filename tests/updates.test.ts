@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -28,6 +28,7 @@ let delayTimer: boolean;
 let starts: string[][];
 let installs: number;
 const autoUpdater = Object.assign(new EventEmitter(), {
+  logger: null as { info(message: unknown): void; warn(message: unknown): void; error(message: unknown): void } | null,
   channel: "latest",
   autoDownload: true,
   autoInstallOnAppQuit: true,
@@ -138,6 +139,44 @@ test("a same-channel check failure keeps its downloaded installer ready", async 
   await updates.check();
   expect(updates.state().status).toBe("ready");
   expect(updates.state().available).toBe("0.3.1");
+});
+
+test("update failures log ISO time and bounded private single-line evidence", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const updates = start();
+    checkError = new Error("Input refused 'https://synthetic-user:synthetic-password@media.example/movie's/private?sig=synthetic-signed\tsecret\u2028suffix' token=synthetic-credential /Users/synthetic/private.txt\n\u009b " + "x".repeat(400));
+    await updates.check();
+    expect(logged).toHaveBeenCalledTimes(1);
+    const line = String(logged.mock.calls[0]![0]);
+    expect(line).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z update error: Update failed: Input refused /);
+    expect(line).toContain("media.example");
+    expect(line.length).toBeLessThanOrEqual(420);
+    expect(line).not.toMatch(/[\p{Cc}\u2028\u2029]/u);
+    for (const privatePart of ["synthetic-", "movie", "private", "suffix", "secret", "sig=", "https://", "/Users/"]) expect(line).not.toContain(privatePart);
+    expect(updates.state().status).toBe("error");
+    expect(updates.state().error).toBe("Couldn't check for updates. Try again later.");
+  } finally { logged.mockRestore(); }
+});
+
+test("the updater's first-class logger cannot bypass app privacy formatting", () => {
+  const info = spyOn(console, "log").mockImplementation(() => {});
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    start();
+    const message = "Input refused https://synthetic-user:synthetic-password@media.example/movie's/private?sig=synthetic\tsecret\u2028suffix\n";
+    autoUpdater.logger!.info(message);
+    autoUpdater.logger!.warn(message);
+    autoUpdater.logger!.error(new Error(message));
+    for (const [logged, level] of [[info, "info"], [warn, "warning"], [error, "error"]] as const) {
+      expect(logged).toHaveBeenCalledTimes(1);
+      const line = String(logged.mock.calls[0]![0]);
+      expect(line).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z update /);
+      expect(line).toContain(`update ${level}: Input refused media.example`);
+      expect(line).not.toMatch(/synthetic|movie|private|suffix|https:\/\/|[\p{Cc}\u2028\u2029]/u);
+    }
+  } finally { info.mockRestore(); warn.mockRestore(); error.mockRestore(); }
 });
 
 test("an installer error ends Installing and reaches Settings", async () => {
