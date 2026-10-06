@@ -35,7 +35,10 @@ labels/addresses in the URL fragment: the whole saved list to a server already o
 it, only the current server to a newly typed address. The destination keeps the
 labels only when the page that sent it there is one of them, then removes the
 hints from the URL. A name from any other page only fills in the pairing form's
-name field. Pairing credentials and keys remain in their original storage.
+name field. That unsubmitted suggestion is a page draft: reloading before
+pairing discards it. Submitting pairing saves the chosen name; an existing
+saved name survives reload and Forget, which removes a server connection.
+Pairing credentials and keys remain in their original storage.
 
 Client devices opt into sharing audio and video independently in General; both
 start off. Like the name, the choice belongs to the device: the Couch app keeps one
@@ -53,9 +56,9 @@ Sendspin membership at once. Sharing speakers or a screen never grants permissio
 to update or restart the app; that stays with administrators. Full-mode host
 outputs retain the existing server network-sharing policy, and turning it off
 keeps what the host plays; Devices manages server sharing, while the client
-switches appear only when joining one. A Device that shares neither is a remote:
-the Mixer lists it, this window's own Device included, only while it is an output,
-which Play on can still make it.
+switches appear only when joining one. A Device that shares neither can still
+control playback. Where it plays lists it, this window's own Device included,
+only while it is an output, which Play on can still make it.
 
 The LAN reaches Core over HTTPS with a self-signed certificate (key and certificate
 in `<data>/tls`), so browsers get a secure context for WebCodecs Opus. Plain HTTP
