@@ -1,4 +1,4 @@
-import { providerForUrl } from "../shared/providers";
+import { providerForUrl, publicProviderMediaUrl } from "../shared/providers";
 import type { PlaybackActor, QueueEntry, SessionState } from "../shared/protocol";
 import type { HistoryItem, WatchingProfile } from "../shared/viewing";
 import { RadioError, type createRadio } from "./radio";
@@ -76,7 +76,8 @@ export function createCatalog({ radio, viewing }: Services) {
     const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail, collection: queueEntry.collection ?? (saved.id === queueEntry.id ? saved.collection : undefined) } : {}) } : saved;
     const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
     const sourceLabel = provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" }[provider] : "Online";
-    return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
+    const url = source?.source.startsWith("web:") && !source.live && source.kind !== "radio" ? publicProviderMediaUrl(source.source.slice(4)) : undefined;
+    return { ...item, ...(url ? { url } : {}), ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
   };
   return {
     async handle(request: Request, _trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
