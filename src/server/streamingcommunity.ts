@@ -280,7 +280,7 @@ function listPage(page: InertiaPage, origin: string, pageNumber: number, label?:
   const total = integer(page.props.totalCount);
   return {
     ...(label ? { title: label } : {}), items,
-    ...(items.length === pageSize && (!total || items.length < total) ? { nextCursor: String(pageNumber + 1) } : {}),
+    ...(items.length === pageSize && (!total || (pageNumber - 1) * pageSize + items.length < total) ? { nextCursor: String(pageNumber + 1) } : {}),
   };
 }
 
@@ -290,8 +290,9 @@ export async function streamingCommunityBrowse(request: BrowseRequest, origin = 
   const query = clean(request.query, 200);
   if (request.query !== undefined && !query) throw new ProviderError("Search StreamingCommunity with some text.", 400);
   if (request.url === undefined && !query) {
-    const archive = await streamingCommunityBody(catalogueTarget(`${origin}/${locale}/archive`), {}, signal, fetchPage);
-    return listPage(parseInertiaPage(archive), origin, 1, "Catalogue");
+    const target = catalogueTarget(`${origin}/${locale}/archive`, request.cursor);
+    const archive = await streamingCommunityBody(target, {}, signal, fetchPage);
+    return listPage(parseInertiaPage(archive), origin, Number(target.searchParams.get("page") ?? 1), "Catalogue");
   }
   if (request.url === undefined) {
     const search = new URL(`${origin}/${locale}/search`);
