@@ -165,7 +165,7 @@ export async function createHub(options: HubOptions) {
   // Private speakers keep their effective trim when another Device sets All. Output consent is live.
   type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
-    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
+    resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
     undoable?: ReturnType<typeof setTimeout> };
   const playbacks = new Map<string, Playback>();
@@ -256,6 +256,8 @@ export async function createHub(options: HubOptions) {
   };
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
     if (command.type === "load") {
+      // A remote HEVC load retains the Linux host's policy, including cached reloads and joins.
+      if (playback.hostMpv?.has(command.playbackId) && playback.outputs.some(output => output.deviceId === hostId())) command = { ...command, mpv: true, source: playback.media?.playbackId === command.playbackId ? playback.media.source : command.source };
       if (!playback.outputs.length) throw new Error("Choose a shared output to play it.");
       if (command.mpv && !playback.outputs.some(output => output.deviceId === hostId())) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       for (const output of playback.outputs) requireOutput(output, output.local ? output.deviceId : "");
@@ -344,6 +346,7 @@ export async function createHub(options: HubOptions) {
       playback.screens.set(tab, loaded.playbackId);
       void screenLoad(playback, entry, loaded, tab).then(command => {
         if (playback.screens.get(tab) !== loaded.playbackId || !sockets.has(tab)) return;
+        if (command.type === "load" && command.mpv) { playback.session.reload(); return; }
         send(tab, playerCommand(command));
         send(tab, playerCommand({ type: "volume", volume: 0 }));
       }, () => { if (playback.screens.get(tab) === loaded.playbackId) playback.screens.delete(tab); });
@@ -360,7 +363,7 @@ export async function createHub(options: HubOptions) {
     const { headers = {}, ...media } = await (reuse ?? resolveEntry(entry, loaded.playbackId, signal, tab, playback));
     const fresh = await passThrough.prepare(loaded.playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal);
     const { player } = stateOf(playback);
-    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
+    return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, mpv: fresh.mpv, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
   };
   // The group reports the sound; a screen adds the subtitles it shows.
   const observeSynced = (playback: Playback) => {
@@ -485,7 +488,11 @@ export async function createHub(options: HubOptions) {
   // Solo (#644 Actions): the Device takes over the Playback's outputs, and the current item
   // continues there where it was.
   const sendTo = async (playback: Playback, output: Output, authorize: () => void, actor: string) => {
-    const permitted = () => { authorize(); requireOutput(output, actor); requireReplacement(output.deviceId, actor); };
+    const permitted = () => {
+      authorize();
+      if (!output.picture && !output.sound) throw new Error("Playback destination was withdrawn. Try Solo again to play it there.");
+      requireOutput(output, actor); requireReplacement(output.deviceId, actor);
+    };
     permitted();
     const tab = newest(output.deviceId);
     if (!tab) throw new Error(`${nameOf(output.deviceId)} is offline.`);
@@ -525,6 +532,8 @@ export async function createHub(options: HubOptions) {
       playback.outputs = [...playback.outputs, next];
     } else if (!next.picture && !next.sound) leave(playback, deviceId);
     else playback.outputs = playback.outputs.map(output => output === current ? next : output);
+    const playbackId = stateOf(playback).player.playbackId;
+    if (deviceId === hostId() && (next.picture || next.sound) && playbackId && playback.hostMpv?.has(playbackId) && mpvPlayback !== playback) playback.session.reload();
     // A screen that joins a synced Playback loads the picture for itself and follows the clock.
     reconcile(playback);
     if (!playback.synced && current && next.sound !== current.sound) deliver(playback, { type: "volume", volume: levelOf(playback) });
@@ -744,7 +753,16 @@ export async function createHub(options: HubOptions) {
   const passThrough = createPassThrough(playbackId => !!playing(playbackId));
   async function resolveEntry(entry: QueueEntry, playbackId: string, signal: AbortSignal, tab: Socket<SocketData> | null | undefined, playback: Playback): Promise<MediaSource & { headers?: Record<string, string> }> {
     if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage);
-    if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5), signal, playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()));
+    if (entry.source.startsWith("iptv:")) {
+      const { hostMpv, ...media } = await guide.getPlayable(entry.source.slice(5), signal, playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()));
+      // Keep codec policy in Core, never in the browser player protocol.
+      playback.hostMpv ??= new Set();
+      // A pending Solo and the playing transport can resolve concurrently. Retire older policies.
+      for (const id of playback.hostMpv) if (id !== playbackId && id !== stateOf(playback).player.playbackId && id !== playback.resolved?.playbackId) playback.hostMpv.delete(id);
+      if (hostMpv || media.mpv) playback.hostMpv.add(playbackId);
+      else playback.hostMpv.delete(playbackId);
+      return media;
+    }
     if (entry.source.startsWith("radio:")) {
       const station = radio.getPlayable(entry.source.slice(6));
       radioPlayback = playback;

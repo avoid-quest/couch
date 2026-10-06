@@ -17,6 +17,24 @@ async function until(predicate: () => boolean) {
 
 const master = (...codecs: string[]) => ["#EXTM3U", ...codecs.flatMap((list, index) => [`#EXT-X-STREAM-INF:BANDWIDTH=${index + 1}000000,CODECS="${list}"`, `${index}.m3u8`])].join("\n");
 
+// Only newline-terminated records are complete; malformed complete records still fail.
+const nativeRecords = (path: string) => existsSync(path) ? readFileSync(path, "utf8").split("\n").slice(0, -1).filter(line => line.trim()).map(line => JSON.parse(line) as { pid: number; source: string }) : [];
+
+test("native log polling waits for complete records and reports malformed records", () => {
+  const directory = mkdtempSync(join(process.env.COUCH_DATA_DIR ?? tmpdir(), "iptv-native-log-")), path = join(directory, "native.jsonl");
+  try {
+    assert.deepEqual(nativeRecords(path), []);
+    writeFileSync(path, "");
+    assert.deepEqual(nativeRecords(path), []);
+    writeFileSync(path, '{"pid":123');
+    assert.deepEqual(nativeRecords(path), []);
+    writeFileSync(path, '\n{"pid":123,"source":"fixture"}\n{"pid":456');
+    assert.deepEqual(nativeRecords(path), [{ pid: 123, source: "fixture" }]);
+    writeFileSync(path, '{broken}\n');
+    assert.throws(() => nativeRecords(path), SyntaxError);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 async function fixture(raw = false) {
   const directory = mkdtempSync(join(process.env.COUCH_DATA_DIR ?? tmpdir(), "iptv-routing-"));
   const databasePath = join(directory, "couch.sqlite"), remoteId = "r".repeat(43), hostId = "t".repeat(43), hostToken = "h".repeat(64);
@@ -30,6 +48,8 @@ async function fixture(raw = false) {
   };
   const binary = join(directory, "bin"), nativeLog = join(directory, "mpv.jsonl"), readyLog = join(directory, "mpv-ready"), originalPath = process.env.PATH;
   mkdirSync(binary);
+  // The native process can create its log before its first record is readable.
+  writeFileSync(nativeLog, "");
   // Model only the external mpv executable/IPC boundary. No video/audio device is opened.
   writeFileSync(join(binary, "mpv"), `#!${process.execPath}\n${[
     'const { appendFileSync, rmSync } = require("node:fs"), { createServer } = require("node:net");',
@@ -86,7 +106,7 @@ async function fixture(raw = false) {
       const requestId = String(++sequence); pending.set(requestId, resolve); socket.send(JSON.stringify({ type: "command", requestId, action }));
     }) };
   };
-  const nativeLoads = () => existsSync(nativeLog) ? readFileSync(nativeLog, "utf8").trim().split("\n").map(line => JSON.parse(line) as { pid: number; source: string }) : [];
+  const nativeLoads = () => nativeRecords(nativeLog);
   // Wait for mpv's observation commands to drain before replacing its IPC process.
   const nativeReady = () => until(() => existsSync(readyLog) && readFileSync(readyLog, "utf8").split("\n").includes(String(nativeLoads().at(-1)?.pid)));
   const close = async () => {
@@ -114,6 +134,34 @@ async function fixture(raw = false) {
 }
 
 const loads = (device: Awaited<ReturnType<typeof fixture>>["remote"]) => device.messages.flatMap(message => message.type === "player" && message.command.type === "load" ? [message.command] : []);
+
+async function started(f: Awaited<ReturnType<typeof fixture>>, name: string) {
+  assert.equal((await f.play(name)).status, 200);
+  await until(() => loads(f.remote).length === 1);
+  await until(() => f.remote.state.player.playbackId === loads(f.remote)[0]!.playbackId);
+  f.remote.socket.send(JSON.stringify({ type: "player", state: { ...f.remote.state.player, speed: 1, buffering: false, status: "playing" } }));
+  await until(() => f.remote.state.player.status === "playing");
+}
+
+for (const raw of [false, true]) for (const pending of [false, true]) for (const name of raw ? ["TS_H264", "TS_HEVC"] : ["H264", "Alternative", "HEVC"]) {
+  test(`host joining ${pending ? "pending" : "playing"} remote ${name} takes its requested route`, { timeout: 15_000, skip: raw && !process.env.COUCH_TEST_FFMPEG }, async () => {
+    const f = await fixture(raw);
+    try {
+      const gate = pending ? f.hold(name) : undefined;
+      if (gate) { assert.equal((await f.play(name)).status, 200); await gate.entered; }
+      else await started(f, name);
+      assert.equal((await f.remote.command({ type: "output", deviceId: f.hostId, picture: true })).ok, true);
+      gate?.release();
+      const native = process.platform === "linux" && ["HEVC", "TS_HEVC"].includes(name);
+      await until(() => f.nativeLoads().length > 0 || loads(f.host).length > 0);
+      assert.equal(f.nativeLoads().length, Number(native));
+      assert.equal(loads(f.host).length, Number(!native));
+      if (native) await f.nativeReady();
+      await until(() => f.remote.state.outputs?.length === (native ? 1 : 2));
+      assert.deepEqual(f.remote.state.outputs?.map(output => output.deviceId), native ? [f.hostId] : [f.remoteId, f.hostId]);
+    } finally { await f.close(); }
+  });
+}
 
 test("remote-only HEVC can try its browser without starting the host", { timeout: 15_000 }, async () => {
   const f = await fixture();
@@ -275,5 +323,65 @@ test("Solo to the host resolves HEVC for the requested destination", { timeout: 
       await f.nativeReady();
       assert.equal(loads(f.host).length, 0);
     } else await until(() => loads(f.host).length === 1);
+  } finally { await f.close(); }
+});
+
+test("withdrawing every pending Solo channel keeps the remote playing and allows a retry", { timeout: 15_000 }, async () => {
+  const f = await fixture();
+  try {
+    await started(f, "HEVC");
+    const playbackId = f.remote.state.player.playbackId, gate = f.hold("HEVC");
+    const moving = f.remote.command({ type: "solo", deviceId: f.hostId });
+    await gate.entered;
+    assert.equal((await f.remote.command({ type: "output", deviceId: f.hostId, picture: false, level: 0 })).ok, true);
+    gate.release();
+    const result = await moving;
+    // On the red baseline, drain the unwanted native process before asserting and cleaning up.
+    if (result.ok && process.platform === "linux") { await until(() => f.nativeLoads().length === 1); await f.nativeReady(); }
+    assert.equal(result.ok, false, "Solo must refuse its withdrawn destination before assigning it.");
+    assert.match(result.error!, /cancel|withdraw/i);
+    assert.equal(f.nativeLoads().length, 0);
+    assert.equal(loads(f.host).length, 0);
+    assert.deepEqual(f.remote.state.outputs?.map(output => output.deviceId), [f.remoteId]);
+    assert.equal(f.remote.state.player.playbackId, playbackId);
+    assert.equal(f.remote.state.player.status, "playing");
+    assert.equal((await f.remote.command({ type: "solo", deviceId: f.hostId })).ok, true);
+    if (process.platform === "linux") { await until(() => f.nativeLoads().length === 1); await f.nativeReady(); }
+    else await until(() => loads(f.host).length === 1);
+  } finally { await f.close(); }
+});
+
+test("withdrawing only pending Solo sound preserves the requested picture", { timeout: 15_000 }, async () => {
+  const f = await fixture();
+  try {
+    await started(f, "HEVC");
+    const gate = f.hold("HEVC"), moving = f.remote.command({ type: "solo", deviceId: f.hostId });
+    await gate.entered;
+    assert.equal((await f.remote.command({ type: "output", deviceId: f.hostId, level: 0 })).ok, true);
+    gate.release();
+    assert.equal((await moving).ok, true);
+    await until(() => f.host.state.outputs?.[0]?.deviceId === f.hostId);
+    assert.equal(f.host.state.outputs![0]!.picture, true);
+    assert.equal(f.host.state.outputs![0]!.sound, false);
+    if (process.platform === "linux") { await until(() => f.nativeLoads().length === 1); await f.nativeReady(); }
+    else await until(() => loads(f.host).length === 1);
+  } finally { await f.close(); }
+});
+
+test("revoking host sharing during pending Solo prevents host loads", { timeout: 15_000 }, async () => {
+  const f = await fixture();
+  try {
+    await started(f, "HEVC");
+    const gate = f.hold("HEVC"), moving = f.remote.command({ type: "solo", deviceId: f.hostId });
+    await gate.entered;
+    assert.equal((await f.api("/api/settings/sharing", { enabled: false }, f.hostToken)).status, 200);
+    gate.release();
+    // Disabling server sharing disconnects the requesting remote; inspect the host's published state.
+    void moving;
+    await until(() => f.remote.socket.readyState === WebSocket.CLOSED);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    assert.equal(f.nativeLoads().length, 0);
+    assert.equal(loads(f.host).length, 0);
+    assert.equal(f.host.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === f.hostId)), false);
   } finally { await f.close(); }
 });

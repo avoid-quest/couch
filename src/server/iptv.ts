@@ -15,13 +15,15 @@ import { helper } from "./helpers";
 // fallback when a Linux host is requested; remote-only outputs try their own browser.
 // Actual HEVC decoding depends on the browser build and device.
 const linux = process.platform === "linux";
-async function transport(url: string, signal: AbortSignal, hevc: boolean): Promise<{ mpegts?: true; mpv?: true }> {
+async function transport(url: string, signal: AbortSignal, hevc: boolean): Promise<{ mpegts?: true; mpv?: true; hostMpv?: true }> {
   const ffmpeg = await helper("ffmpeg");
   const probe = await new Promise<string>(resolve => execFile(ffmpeg, ["-hide_banner", "-nostdin", "-protocol_whitelist", "http,https,tcp,tls", "-probesize", "1000000", "-analyzeduration", "3000000", "-i", url],
     { timeout: 10_000, signal }, (_error, _stdout, stderr) => resolve(String(stderr))));
   signal.throwIfAborted();
   if (!/^Input #0, mpegts\b/m.test(probe)) return {};
-  return /Stream #.*: (?:Video: mpeg[12]video|Audio: (?:ac3|eac3|mp2)\b)/.test(probe) || hevc && /Stream #.*: Video: hevc\b/.test(probe) ? { mpegts: true, mpv: true } : { mpegts: true };
+  const hostMpv = linux && /Stream #.*: Video: hevc\b/.test(probe);
+  const mpv = /Stream #.*: (?:Video: mpeg[12]video|Audio: (?:ac3|eac3|mp2)\b)/.test(probe) || hevc && hostMpv;
+  return { mpegts: true, ...mpv ? { mpv: true } : {}, ...hostMpv ? { hostMpv: true } : {} };
 }
 
 // An HLS channel says its codecs in the playlist (RFC 8216 CODECS). hls.js picks a variant
@@ -173,17 +175,18 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       // Only identified HLS URLs enter this EVENT increment. Other live media
       // must not wait for a body that may never finish before playback.
       if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl, ...await transport(item.streamUrl, AbortSignal.any([signal, shutdown.signal]), linux && hostOutput) };
-      let eventStart = false, mpv = false;
+      let eventStart = false, mpv = false, hostMpv = false;
       try {
         const media = await guideFetch(item.streamUrl, 512 * 1024, request, AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]));
         const text = Buffer.from(media.bytes).toString("utf8");
         eventStart = liveHlsPlaylist(text, media.url) && /^#EXT-X-PLAYLIST-TYPE:EVENT\r?$/m.test(text);
         mpv = mpvPlaylist(text, linux && hostOutput);
+        hostMpv = linux && mpvPlaylist(text, true);
       } catch { /* Unknown transports and failed probes keep ordinary Play. */ }
       signal.throwIfAborted();
       shutdown.signal.throwIfAborted();
       if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
-      return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}), ...(mpv ? { mpv: true } : {}) };
+      return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}), ...(mpv ? { mpv: true } : {}), ...(hostMpv ? { hostMpv: true } : {}) };
     },
     async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this device first.", 401); return value; };
