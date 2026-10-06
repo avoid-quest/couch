@@ -34,6 +34,36 @@ test("app evidence redacts complete long userinfo before applying its bound", ()
   expect(line.length).toBeLessThan(100);
 });
 
+test("app evidence consumes quoted paths and embedded controls before flattening", () => {
+  for (const separator of [" ", "\t", "\n", "\r\n", "\u0085", "\u2028", "\u2029"]) {
+    for (const path of [`/Users/review/private${separator}synthetic-file.txt`, `C:\\Users\\review${separator}synthetic-file.txt`, `\\\\server\\review${separator}synthetic-file.txt`]) {
+      for (const quote of ["'", '"']) {
+        const line = appDiagnostic("renderer", "error", `ENOENT: open ${quote}${path}${quote}; refused https://user:pass@media.example/private?sig=synthetic`);
+        expect(line).toContain("ENOENT: open [path]");
+        expect(line).toContain("media.example");
+        expect(line).not.toMatch(/synthetic|private|review|user:pass/);
+        expect(line).not.toMatch(/[\p{Cc}\u2028\u2029]/u);
+      }
+    }
+    if (separator !== " ") {
+      expect(appDiagnostic("update", "error", `ENOENT: open /Users/review/private${separator}synthetic-tail`)).not.toContain("synthetic-tail");
+    }
+  }
+});
+
+test("app evidence redacts JSON credential keys and escaped HTTP error descriptions", () => {
+  for (const key of ["token", "password", "passwd", "secret", "api_key", "api-key", "signature", "sig", "credential", "credentials"]) {
+    for (const value of ["synthetic-credential", 'synthetic-before"synthetic-after', "synthetic-before\\synthetic-after", "synthetic value\\"]) {
+      const json = JSON.stringify({ [key]: value, status: 401 });
+      for (const message of [json, JSON.stringify(json), `{'${key}':'synthetic credential'}`]) {
+        const line = appDiagnostic("update", "error", `Response: ${message}`);
+        expect(line).toContain("Response:");
+        expect(line).not.toContain("synthetic");
+      }
+    }
+  }
+});
+
 test("app failure records carry current ISO time, component and a bounded single line", () => {
   const before = Date.now();
   const line = appDiagnostic("renderer", "error", new Error("Input refused\n\t\u0085\u009b\u2028\u2029" + "x".repeat(400)));

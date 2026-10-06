@@ -6,15 +6,16 @@ export const diagnosticHost = (source: string) => { try { return new URL(source)
 // controls/separators before removing them, so a signed URL's suffix stays private.
 function safeMessage(value: unknown) {
   const message = String(value instanceof Error ? value.message : value)
-    .replace(/\b(?!https?:)[a-z][a-z\d+.-]*:\/\/[^ ]+/gi, diagnosticHost)
+    .replace(/\b[a-z][a-z\d+.-]*:\/\/[^ ]+/gi, diagnosticHost)
     .replace(/\b(?:data|blob):[^ ]+/gi, "[url]")
-    .replace(/\b(?:authorization|cookie|set-cookie)\s*[:=][\s\S]*/gi, "[credentials]")
+    .replace(/\b(?:authorization|cookie|set-cookie)(?:\\?["'])?\s*[:=][\s\S]*/gi, "[credentials]")
     .replace(/\bBearer\s+[^ ]+/gi, "[credentials]")
-    .replace(/\b(?:password|passwd|token|secret|api[-_]?key|signature|sig|credentials?)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^ ]+)/gi, "[credentials]");
-  // Redact the complete HTTP URL before bounding or flattening other app details.
-  return safePlaybackError(message, Infinity)
-    .replace(/(?:[a-z]:\\|\\\\|\.{0,2}\/)[^ ]+/gi, "[path]")
-    .slice(0, 300);
+    // Updater HTTP descriptions JSON-escape their quoted fields once more.
+    .replace(/\b(?:password|passwd|token|secret|api[-_]?key|signature|sig|credentials?)(?:\\?["'])?\s*[:=]\s*(?:\\"(?:\\\\(?:\\["\\]|[^"\\])|[^\\])*\\"|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[^ ]+)/gi, "[credentials]")
+    // Keep quoted spaces and raw controls inside the path until it is removed.
+    .replace(/(["'])(?:[a-z]:\\|\\\\|\.{0,2}\/)[\s\S]*?\1/gi, "[path]")
+    .replace(/(?:[a-z]:\\|\\\\|\.{0,2}\/)[^ ]+/gi, "[path]");
+  return safePlaybackError(message);
 }
 
 export function appDiagnostic(component: "main" | "renderer" | "update", level: "info" | "warning" | "error", message: unknown) {

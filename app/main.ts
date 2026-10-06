@@ -297,6 +297,8 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  // Electron-attributed main-frame errors only; Electron 44 can attribute
+  // unsandboxed same-origin srcdoc output to mainFrame too.
   contents.on("console-message", details => {
     if (details.level === "error" && details.frame === contents.mainFrame) {
       logAppError("renderer", `host=${diagnosticHost(contents.mainFrame.url)}: ${details.message}`);
