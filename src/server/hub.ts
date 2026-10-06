@@ -228,11 +228,12 @@ export async function createHub(options: HubOptions) {
   const trimOf = (playback: Playback, deviceId: string) => playback.privateTrims.get(deviceId) ?? playback.mixTrim;
   // New private sound and revoked foreign influence return to the Device's own level. Regranting
   // audio joins the current All; a Device's own All remains its choice while it stays private.
+  // Restored All has no actor: only shared audio accepts it until a new All establishes authority.
   const refreshTrims = (playback: Playback) => {
     let changed = false;
     for (const output of playback.outputs) {
       const before = trimOf(playback, output.deviceId);
-      if (output.sound && playback.trimActor !== undefined && !outputFor(output.deviceId, playback.trimActor).sound) {
+      if (output.sound && !outputFor(output.deviceId, playback.trimActor ?? "").sound) {
         if (!playback.privateTrims.has(output.deviceId)) playback.privateTrims.set(output.deviceId, 100);
       } else playback.privateTrims.delete(output.deviceId);
       changed ||= before !== trimOf(playback, output.deviceId);
