@@ -22,7 +22,8 @@ test("shared HTTP and HTTPS keep-alive responses retain plain HTTP latency", { s
         websocket: { maxPayload: 4096, open() {}, message() {}, close() {} },
       });
       const secure = mode === "shared-https";
-      const agent = secure ? new https.Agent({ keepAlive: true, ca: tls.cert }) : new http.Agent({ keepAlive: true });
+      // Trust only this fixture's leaf, including Electron's BoringSSL runtime.
+      const agent = secure ? new https.Agent({ keepAlive: true, ca: tls.cert, allowPartialTrustChain: true }) : new http.Agent({ keepAlive: true });
       try {
         const samples: number[] = [];
         for (let i = 0; i < 25; i++) {
