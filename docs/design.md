@@ -261,9 +261,11 @@ Shared building blocks in `src/client/components`:
   are plain overflow rows (`data-nav-row`), as Played recently already is:
   Carousel's own arrow handling fights spatial navigation, and focus scrolls a
   plain row into view.
-- `BrowsePagination`: every collection and radio list keeps its count, Filter
-  and pager in fixed slots, and the pager always shows Previous, "Page N of M"
-  and Next, disabled when they can't move. The page Select's trigger is
+- `BrowsePagination`: collection and radio lists keep count and Filter in fixed
+  slots. Remote or multiple-page collections show Previous, "Page N of M" and
+  Next, disabled when they can't move. A complete local collection on one page
+  omits the inert pager, including a single season's episodes and a short list
+  of seasons; its count still identifies the content. The page Select's trigger is
   borderless and transparent, in muted ink: it reads as the pager's
   "Page N of M" text between two ghost icon buttons, as shadcn Pagination's
   links do, and a bordered field there would be a panel inside the pager.

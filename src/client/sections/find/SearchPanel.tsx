@@ -203,11 +203,11 @@ export function CollectionHeader({ collection, canPlay }: { collection: SearchCo
         <h1 tabIndex={-1} className="max-w-3xl text-2xl font-semibold tracking-tight break-words outline-none">{collection.title}</h1>
         {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
         {!!collection.position && <div className="max-w-sm space-y-1 text-sm text-muted-foreground"><p>Resume at {formatDuration(collection.position)}{collection.duration != null && ` of ${formatDuration(collection.duration)}`}</p>{!!collection.duration && <Progress aria-label="Viewing progress" value={Math.min(100, collection.position / collection.duration * 100)} className="h-1" />}</div>}
-        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex items-center gap-1">
+        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex flex-wrap items-center gap-1">
           {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{on(collection.playLabel ?? (collection.single ? "Play" : "Play all"))}</Button>}
+          {collection.fromStart && <Button variant="ghost" size="sm" disabled={!canPlay || collection.disabled} onClick={collection.fromStart}>From start</Button>}
           <BrowseActions title={collection.title} actions={[
             ...(collection.playOn ? [{ label: "Play on", disabled: !canPlay || collection.disabled, playOn: collection.playOn }] : []),
-            ...(collection.fromStart ? [{ label: "From start", disabled: !canPlay || collection.disabled, run: collection.fromStart }] : []),
             ...(collection.queueAll ? [{ label: collection.single ? "Queue" : "Queue all", disabled: collection.disabled, run: collection.queueAll }] : []),
             ...(collection.save ? [{ label: collection.saved ? "Saved" : "Save", disabled: collection.disabled || collection.saveDisabled, run: collection.save }] : []),
           ]} />
