@@ -315,8 +315,10 @@ Messages:
   mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
   mistaken for the header's Couch switch. It opens a bottom Sheet of divided
   rows (`Item`). The first row, set off by a rule like a console's master
-  fader, is All: its fader trims the Playback's selected sound from 100 (the
-  Device levels) to 0 (silent), and the Playback keeps it across restarts. It
+  fader, is All: its fader trims only the selected speakers you may control from
+  100 (the Device levels) to 0 (silent), and the Playback keeps it across restarts.
+  Private speakers keep their own attenuation; new private sound and revoked
+  foreign influence return to their own level. Sharing audio again joins All. It
   shows its own trim, preserves Device levels and mute, and keeps outputs
   selected at zero so raising it restores their sound; it has no Picture, Solo
   or Mute. Then one row per Device: the Playback's Devices first (offline ones
