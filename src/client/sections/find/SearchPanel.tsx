@@ -10,7 +10,7 @@ import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { MoreHorizontal, Play } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PlayOnMenu, PlayOnSub, usePlayOn } from "@/components/PlayOn";
+import { PlayOnMenu, PlayOnGroup, usePlayOn } from "@/components/PlayOn";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
@@ -189,7 +189,7 @@ export function BrowseActions({ title, actions }: { title: string; actions: Sear
   return <>
     {play && <Button variant="ghost" size="icon" aria-label={on(`${play.label} ${title}`)} title={on(play.label)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4 fill-current" /></Button>}
     {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnSub key={action.label} disabled={action.disabled} onPlay={action.playOn} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
+      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>}
   </>;
 }

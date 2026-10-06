@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 
@@ -28,17 +28,17 @@ export function usePlayOn() {
 /** Play on for a REST play request: Core isolates that Device when it reserves the play. */
 export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}` : "";
 
-function Devices({ onPlay }: { onPlay: (deviceId: string) => void }) {
+function Devices({ onPlay, disabled }: { onPlay: (deviceId: string) => void; disabled?: boolean }) {
   const { devices, here } = usePlayOn();
-  return devices.map(device => <DropdownMenuItem key={device.id} onSelect={() => onPlay(device.id)}>
-    <span className="truncate">{device.name}</span>{device.id === here && <span className="ml-auto pl-4 text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">This device</span>}
+  return devices.map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
+    <span className="w-full break-words">{device.name}</span>{device.id === here && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">This device</span>}
   </DropdownMenuItem>);
 }
 
 /** "Play on" inside an item's menu; nothing when only this Device is online. */
-export function PlayOnSub({ onPlay, disabled }: { onPlay: (deviceId: string) => void; disabled?: boolean }) {
+export function PlayOnGroup({ onPlay, disabled }: { onPlay: (deviceId: string) => void; disabled?: boolean }) {
   if (!usePlayOn().devices.length) return null;
-  return <DropdownMenuSub><DropdownMenuSubTrigger disabled={disabled}>Play on</DropdownMenuSubTrigger><DropdownMenuSubContent><Devices onPlay={onPlay} /></DropdownMenuSubContent></DropdownMenuSub>;
+  return <><DropdownMenuSeparator /><DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} /></DropdownMenuGroup></>;
 }
 
 /** "Play on" beside a row's inline verbs. */
