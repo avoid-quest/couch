@@ -36,7 +36,7 @@ import { StatusLine } from "./StatusLine";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { hear, onBlocked } from "@/session/renderer";
-import { showsPicture } from "@/session/device-id";
+import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id";
 
 const navItems = ["Home", "Find", "Saved", "Settings"];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
@@ -52,7 +52,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, playerTarget } = useSessionGate();
+  const { nativeHost, tvPresentation, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, playerTarget } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -86,7 +86,11 @@ function useShellValue() {
     // layer over the player instead of floating the controls above the page.
     const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
     if (to !== at) {
-      if (playerTransition && (section === "Now" || name === "Now")) void router.navigate({ href: to, viewTransition: true });
+      if (name === "Now") {
+        if (section === "Now") void router.navigate({ href: to, replace: true, state: previous => previous });
+        else detailNavigation.open(to, undefined, playerTransition);
+      }
+      else if (playerTransition && section === "Now") void router.navigate({ href: to, viewTransition: true });
       else router.history.push(to);
     }
   };
@@ -95,7 +99,8 @@ function useShellValue() {
     const href = `/now${defaultStringifySearch({ queue: panel === "queue" || undefined, targetDeviceId })}`;
     if (playerTarget && targetDeviceId === playerTarget.id) void router.navigate({ href, replace: true, state: location.state });
     else if (targetDeviceId) detailNavigation.open(href, section === "Remote" && panel === "queue" ? '[data-remote-page] button[aria-label="Up next"]' : undefined);
-    else void router.navigate({ href, viewTransition: playerTransition });
+    else if (section === "Now") void router.navigate({ href, replace: true, state: previous => previous });
+    else detailNavigation.open(href, undefined, playerTransition);
   };
   // An explicit Play opens its picture once. Initial sync, Next and transport reloads keep the page.
   const picture = showsPicture(state) ? state?.playback : null;
@@ -119,9 +124,7 @@ function useShellValue() {
     void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
   };
   const leavePlayer = () => {
-    if (playerTarget) { detailNavigation.back("/remote"); return; }
-    if (playerTransition) void router.navigate({ href: lastBrowsePath.current, viewTransition: true });
-    else router.history.push(lastBrowsePath.current);
+    detailNavigation.back(playerTarget ? "/remote" : lastBrowsePath.current);
   };
   const browseSection = (name: string) => {
     const destination = name === "Home" || name === "Queue" ? "Home" : name === "For later" ? "Saved" : "Find";
@@ -142,9 +145,8 @@ function useShellValue() {
   useNavigation(() => {
     if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/find"); return; }
     if (section === "Now") leavePlayer();
-    else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
+    else if (section === "Find" && !tvPresentation && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
     else if (section !== "Home") changeSection("Home");
-    else if (state?.currentEntryId) changeSection("Now");
   });
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, deviceId?: string, quality = videoQualityPreference.quality) =>
@@ -300,6 +302,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
+  const localName = useLocalDeviceName();
+  const tvName = localName ?? state?.devices?.find(device => device.id === deviceId())?.name ?? installationName;
   useRememberCouchName(installationName);
   const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && section !== "Remote";
 
@@ -318,7 +322,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
-              <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />
+              {tvPresentation ? <span className="max-w-64 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
               <span role="status" className="sr-only">{statusLabel}</span>
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-2 max-sm:hidden" />

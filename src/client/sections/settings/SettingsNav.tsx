@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { couchApp } from "@/session/native-context";
 import { useSessionGate } from "@/session/session-context";
+import { focusPageControl } from "@/navigation";
 
 type Props = { active: SettingsPage };
 
@@ -51,7 +52,14 @@ export function SettingsNav({ active }: Props) {
           <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{group.label}</p>
           {group.pages.map(id => (
             <Button key={id} data-settings-page={id} variant="ghost" asChild className="w-full justify-start font-normal">
-              <Link data-page-first={current === id || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path}>
+              <Link data-page-first={current === id || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path} onClick={event => {
+                if (!tvPresentation || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                void navigate({ to: settingsPages[id].path }).then(() => {
+                  const content = document.querySelector<HTMLElement>("[data-settings-content]");
+                  if (content) focusPageControl(content);
+                });
+              }}>
                 <Check aria-hidden="true" className={cn(current !== id && "invisible")} />
                 {settingsPages[id].label}
               </Link>

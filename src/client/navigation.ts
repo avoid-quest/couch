@@ -37,6 +37,11 @@ function focus(element: HTMLElement | undefined) {
   element.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
+/** Use the same enabled, visible controls for page entry as for D-pad movement. */
+export function focusPageControl(scope: HTMLElement) {
+  focus(entry(controlsIn(scope)) ?? scope.querySelector<HTMLElement>('h1[tabindex="-1"]') ?? undefined);
+}
+
 function moveFocus(key: string) {
   const scope = navigationScope();
   const controls = controlsIn(scope);

@@ -8,8 +8,8 @@ export const Route = createFileRoute("/now")({
 });
 
 function NowRoute() {
-  const { queue, targetDeviceId } = Route.useSearch();
+  const { queue } = Route.useSearch();
   const navigate = Route.useNavigate();
   return <NowPage queueOpen={queue === true} onQueueOpenChange={open => void navigate({ search: previous => ({ ...previous, queue: open || undefined }),
-    replace: true, state: targetDeviceId ? true : undefined })} />;
+    replace: true, state: previous => previous })} />;
 }

@@ -88,20 +88,26 @@ catalog provides interface icons, not brand identities.
   plays, everything else opens its page, which holds the other verbs. Focus is
   the only highlight; no hover style applies on the TV. Back closes an open
   overlay, then leaves a detail page for the page that opened it with its focus
-  restored, then takes any section to Home. After every page change, focus is
-  on the page's first control. The header holds the sections, the TV's name
+  restored, then takes any section to Home, where Back does nothing. Opening
+  Up next changes the player URL without losing its opener. Settings OK enters
+  the selected page's first enabled control; Back from its content restores the
+  rail entry, then Home (a source's own Back first returns to Sources).
+  After every page change, focus is on the page's first control. The header holds the sections, the TV's name
   and the clock as plain text; the Couch choice lives in Settings → Devices.
   Volume and every fader move 5 per press. Text fields say "Type with Remote on
   your phone": a phone's Remote is the TV's text entry.
 - **The TV player answers a remote.** With its controls hidden, OK shows them
-  on Play/Pause, Up and Down show them on the timeline, and Left and Right seek
+  on the first enabled transport slot, Up and Down show them on the timeline (or
+  that transport slot when there is no seekable timeline), and Left and Right seek
   10 s and show the timeline (live media that can't seek only shows them). Back
   hides the controls; with them hidden it leaves the player for the page that
   opened it, and playback goes on in Home's Now row and the mini player.
-  Paused shows a large Pause glyph and "Paused", and the controls stay up. The
-  TV's player has no breadcrumb, Couch switch, Details button or fullscreen;
-  Details is in the Playback sheet. From hidden controls, Stop is OK, Right,
-  OK.
+  Paused shows a large Pause glyph and "Paused", and the controls stay up until
+  Back hides them. The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
+  Details is in the Playback sheet. From hidden controls, Stop for pausable media
+  is OK, Right, OK. Nonpausable radio/live starts on Stop, so it is OK, OK.
+  Home's Now row uses that
+  same transport rather than maintaining separate Play/Pause, Stop and Next logic.
 - **First run names the computer.** The app asks "Where is your Couch?" (This
   computer hosts it; Another Couch joins one, and this computer still plays),
   then asks for its name once, with the random default shown, and whether to

@@ -47,6 +47,54 @@ phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
+## TV navigation
+
+Home presents one focus stop per media item: Continue resumes, a radio station
+or channel plays, and a saved film or collection opens Details. The header keeps
+Home, Find, Saved and Settings, the TV's name and the clock. Settings OK moves
+into the selected page's first enabled control. Back closes an overlay and
+restores its opener; from Settings content it restores the selected rail entry,
+then returns Home. A source page first returns to Sources.
+
+The TV player has its own controls without the desktop breadcrumb, Couch
+switch or fullscreen button. Details lives in Playback. A paused picture shows
+a large Pause glyph and “Paused”. Back hides the controls, then returns to the
+page that opened the player; Back on Home does nothing. Up next and Details
+preserve this route even after the queue changes the player URL. Playback
+continues when browsing.
+
+With controls hidden, OK focuses the first enabled transport slot, which is
+Stop for nonpausable radio. Up/Down reveals the timeline when available;
+Left/Right also seeks ten seconds when supported. Without a seekable timeline,
+arrows reveal the transport. Volume moves five points per press after OK enters
+adjustment; OK or Back ends adjustment before navigation resumes. The fixed
+Play/Pause, Stop, Next slots are shared with Home's Now row; radio Stop is
+OK, OK and pausable Stop is OK, Right, OK.
+
+### Browser regression
+
+Use an isolated Core and data directory, a paired TV renderer, a 1920×1080
+viewport and a paused finite video that supports byte-range seeking. Network
+sharing must be enabled for the pairing-dialog check. Save the video for later
+to exercise the Home tile and asynchronous Details check. Run with the tab visible
+or a T3 recording active so Radix exit animations finish. Build the dependency-free
+browser checks:
+
+```sh
+bun build tests/tv-navigation.browser.ts --target browser --format iife --outfile build/tv-navigation.browser.js
+```
+
+Evaluate that bundle in the T3 preview, then evaluate
+`await window.runTvNavigationRegression()`. The checks exercise real route,
+focus and playback behavior: one Home station stop, pairing overlay → content
+→ rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
+repeated Home Back, and five-point OK-to-adjust Volume. They use DOM activation
+and bubbling key events; also use T3 keyboard input to check actual D-pad
+navigation and capture screenshots. This browser evidence does not qualify
+native Main, Linux packaging or a physical TV remote.
+
+## TV maintenance
+
 A paired administrator's **Settings > Updates** updates this TV remotely with
 **Update and restart**. A TV in **Another Couch** mode appears by its paired
 Device name in that Couch's Updates page; the request travels over its existing

@@ -87,7 +87,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       </SettingsRow>}
       <SettingsRow label="New device" description={!manager ? "Only an admin can pair devices." : !remoteControlEnabled ? host ? "Turn on Share on network first." : `Turn on Share on network on ${hostName} first.`
         : `Show a code to scan or type on the new device.${host && !administratorClaimed && paired === false ? " The first device you pair becomes the admin." : ""}`}>
-        {manager && <Button ref={pairingRef} variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
+        {manager && <Button ref={pairingRef} data-page-first variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
       </SettingsRow>
       {manager && managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A DNS name for ${hostName}, like couch.home.${port ? ` If port 80 is taken, add :${port}.` : ""}`}>
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={submitDomain}>

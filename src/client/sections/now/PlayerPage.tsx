@@ -1,6 +1,6 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Settings, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
+import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Pause, Settings, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -23,7 +23,7 @@ import { Link } from "@tanstack/react-router";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { providerForUrl } from "../../../shared/providers";
 import { isRadio } from "../../../shared/radio";
-import { queueItemLocation } from "@/detail-navigation";
+import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
 
 type Panel = "tracks" | "settings";
 const panelTitles: Record<Panel, string> = { tracks: "Audio & subtitles", settings: "Playback" };
@@ -34,10 +34,11 @@ const isWide = () => window.matchMedia(wideQuery).matches;
 
 export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }: { queueOpen?: boolean; onQueueOpenChange?: (open: boolean) => void } = {}) {
   const fullscreen = usePlayerFullscreen();
-  useCouchHotkeys([{ hotkey: "F", enabled: fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, nativeHost, tvPresentation, videoQualityPreference, playerTarget } = useSessionGate();
+  const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget } = useSessionGate();
+  useCouchHotkeys([{ hotkey: "F", enabled: !tvPresentation && fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
+  const detailNavigation = useDetailNavigation();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const [localQueueOpen, setLocalQueueOpen] = useState(false);
@@ -47,6 +48,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const queueClose = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const root = useRef<HTMLElement>(null);
+  const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
     (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus();
@@ -75,6 +77,14 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
   useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
+  useEffect(() => {
+    if (!tvPresentation || queueOpen) return;
+    const frame = requestAnimationFrame(() => {
+      if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement) && !document.activeElement.matches(":disabled")) return;
+      firstTransport()?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tvPresentation, current?.id, transportReady]);
   const name = deviceName(state?.installationName);
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
@@ -110,19 +120,21 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         event.preventDefault(); event.stopImmediatePropagation();
         if (panel) setPanelState(null);
         else if (queueOpen) closeQueue();
-        else if (event.key === "Escape" && fullscreen.supported && fullscreen.fullscreen) void fullscreen.toggle();
+        else if (tvPresentation && shown) {
+          clearTimeout(timer.current);
+          if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement)) document.activeElement.blur();
+          setShown(false);
+        }
+        else if (!tvPresentation && event.key === "Escape" && fullscreen.supported && fullscreen.fullscreen) void fullscreen.toggle();
         else shell.leavePlayer();
         return;
       }
       const inPlayer = root.current?.contains(document.activeElement) || document.activeElement === document.body;
       if (!panel && !shown && inPlayer && (tvPresentation ? ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "] : ["Enter"]).includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation(); wake();
-        // OK lands on the transport (Play/Pause, else Stop), so OK, Right, OK stops; the arrows land on the timeline.
-        requestAnimationFrame(() => {
-          const transport = root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
-          const timeline = root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])');
-          (["Enter", " "].includes(event.key) ? transport ?? timeline : timeline ?? transport)?.focus();
-        });
+        if (tvPresentation && (event.key === "ArrowLeft" || event.key === "ArrowRight")) void seekBy(event.key === "ArrowLeft" ? -10 : 10);
+        const timeline = tvPresentation && event.key.startsWith("Arrow");
+        requestAnimationFrame(() => (timeline ? root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])') ?? firstTransport() : firstTransport())?.focus());
         return;
       }
       if (tvPresentation && !panel && event.key === " " && inPlayer && !(event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea, [role="slider"]')) && transportReady && pausable && player?.playbackId) {
@@ -132,7 +144,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [tvPresentation, shown, panel, queueOpen, closeQueue, playing, autoHide, transportReady, pausable, player?.playbackId, run, shell.leavePlayer, fullscreen]);
+  }, [tvPresentation, shown, panel, queueOpen, closeQueue, playing, autoHide, transportReady, pausable, player?.playbackId, run, seekBy, shell.leavePlayer, fullscreen]);
   // An explicitly opened queue remains available after playback stops.
   if (!current && !queueOpen && !playerTarget) return null;
 
@@ -141,7 +153,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
   const radio = isRadio(current);
   const detailHref = current ? queueItemLocation(current) : undefined;
-  const details = detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref}><Info aria-hidden="true" /></Link></Button>;
+  const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!detailHref || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); detailNavigation.open(detailHref);
+  };
+  const details = !tvPresentation && detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref} onClick={openDetails}><Info aria-hidden="true" /></Link></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
@@ -160,14 +176,17 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
     {/* Same height and gutter as the app header, with its Couch switch. */}
-    <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5", !shown && "opacity-0 pointer-events-none")}>
+    {!tvPresentation && <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5", !shown && "opacity-0 pointer-events-none")}>
       <div className="min-w-0 bg-background [&_ol]:flex-nowrap">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
       {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
       {buffering && <p role="status" className="flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm"><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>}
       <div className="ml-auto flex shrink-0 bg-background"><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
-    </div>
+    </div>}
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
+      {tvPresentation && player?.status === "paused" && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+        <div className="grid justify-items-center gap-2 bg-background px-6 py-4"><Pause aria-hidden="true" className="size-20 fill-current" /><span className="text-2xl font-medium">Paused</span></div>
+      </div>}
       {current && (!picture || (active || ended) && audioOnly) && !status && <div data-player-summary className="player-summary">
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 place-items-center overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         <div data-player-audio-copy className="grid min-w-0 max-w-xl gap-2 text-center">
@@ -195,7 +214,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>}
       </div>
       {(artworkStage || queueOpen) && <aside data-player-queue aria-label="Up next" className="player-queue bg-background">
-        {queueOpen && current && <div className="flex shrink-0 justify-end pb-2"><Button ref={queueClose} variant="ghost" className="h-11" onClick={closeQueue}><ArrowLeft aria-hidden="true" />Back to player</Button></div>}
+        {queueOpen && current && <div className="flex shrink-0 justify-end pb-2"><Button ref={queueClose} variant="ghost" className="h-11" onClick={closeQueue}><ArrowLeft aria-hidden="true" />Close Up next</Button></div>}
         <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
           <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} />
         </div>
@@ -205,7 +224,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       {/* Gutter to gutter like the mini player, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
           A timeline takes its own row above (index.css); live that can't seek leaves "Live" in its slot. Every tool is an icon. */}
       <div className="grid gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
+        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm tv:text-2xl font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{tvPresentation && buffering && <span role="status" className="text-sm">Buffering…</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
         <div className="player-control-row">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
           {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}
@@ -214,7 +233,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {state && <WhereItPlays state={state} run={run} className="size-11" />}
             <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
             <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
-            <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>
+            {!tvPresentation && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>
       </div>
@@ -226,7 +245,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           {panel === "tracks" && <Button variant="ghost" className="-ml-2.5 mb-4 h-11" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "settings" }); }}><ArrowLeft aria-hidden="true" />Playback</Button>}
           {panel === "settings" && <div className="grid divide-y border-b">
             {!audioOnly && <Button variant="ghost" className="h-14 justify-start rounded-none px-0" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "tracks" }); }}><Captions aria-hidden="true" />Audio & subtitles<ChevronRight aria-hidden="true" className="ml-auto" /></Button>}
-            {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
+            {detailHref && <Button asChild variant="ghost" className="h-14 justify-start rounded-none px-0"><Link to={detailHref} onClick={openDetails}><Info aria-hidden="true" />Details<ChevronRight aria-hidden="true" className="ml-auto" /></Link></Button>}
           </div>}
           {panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
         </div>

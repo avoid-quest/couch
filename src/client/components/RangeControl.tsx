@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
+import { isTvPresentation } from "@/session/native-context";
 
-export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = 1, pageFirst = false, orientation }: {
+// A remote moves volume and faders 5 per press; the playback position passes its own 10 s step.
+export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = isTvPresentation() ? 5 : 1, pageFirst = false, orientation }: {
   label: string;
   value: number;
   max: number;
@@ -19,6 +21,7 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
   const cancel = () => { keyboard.current = false; revision.current++; setDraft(null); };
   useEffect(() => { if (disabled) cancel(); }, [disabled]);
   const current = Math.min(max, draft ?? value);
+  const [less, more] = orientation === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowLeft", "ArrowRight"];
   const commit = (next: number) => {
     const committed = ++revision.current;
     void onCommit(next).then(
@@ -39,10 +42,10 @@ export function RangeControl({ label, value, max, disabled, onCommit, showValue 
     onValueChange={values => setDraft(values[0]!)}
     onKeyDownCapture={event => {
       if (disabled) return;
-      if (keyboardStep !== 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      if (keyboardStep !== 1 && (event.key === less || event.key === more)) {
         event.preventDefault(); event.stopPropagation();
         keyboard.current = true;
-        const next = Math.max(0, Math.min(max, current + (event.key === "ArrowLeft" ? -keyboardStep : keyboardStep)));
+        const next = Math.max(0, Math.min(max, current + (event.key === less ? -keyboardStep : keyboardStep)));
         setDraft(next); commit(next);
       }
       if (label === "Playback position" && event.key === "ArrowDown") {
