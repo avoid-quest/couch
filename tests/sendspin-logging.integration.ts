@@ -73,16 +73,32 @@ test("stopping a pending FFmpeg start ignores its later rejection", { timeout: 1
   assert.equal(existsSync(f.marker), false);
 });
 
-for (const separator of ["", "\t", "\u2028"]) test(`Core redacts a complete source before its stderr bound (separator ${JSON.stringify(separator)})`, { timeout: 10_000 }, async t => {
+for (const [separator, chunked] of [["", false], ["\t", false], ["\u2028", false], ["\n", false], ["\r\n", false], ["\n", true]] as const) test(`Core redacts a complete source before its stderr bound (separator ${JSON.stringify(separator)}, chunked ${chunked})`, { timeout: 10_000 }, async t => {
   const f = await fixture(t);
   const username = "synthetic-private-user";
   const prefix = "Decoder input refused: ".padEnd(200 - (`http://${username}`).length - 1, "x") + " ";
   const source = `http://${username}:synthetic-password@127.0.0.1:42701/movie${separator}/private?sig=synthetic-query`;
-  writeFileSync(f.script, `#!${process.execPath}\nconsole.error(${JSON.stringify(prefix)} + process.argv[process.argv.indexOf('-i') + 1]); process.exitCode = 1;\n`, { mode: 0o755 });
+  writeFileSync(f.script, `#!${process.execPath}\nconst message = ${JSON.stringify(prefix)} + process.argv[process.argv.indexOf('-i') + 1];
+    ${chunked ? `const cut = message.indexOf("\\n") + 1; process.stderr.write(message.slice(0, cut)); setTimeout(() => { process.stderr.write(message.slice(cut)); process.exitCode = 1; }, 25);` : `console.error(message); process.exitCode = 1;`}\n`, { mode: 0o755 });
   f.group.send({ ...f.load, source });
   await until(() => f.states.at(-1)?.status === "error");
   assert.equal(f.errors().length, 1);
   for (const secret of [username, "synthetic-password", "/private", "sig=", "synthetic-query"])
-    assert.equal(f.errors()[0]!.includes(secret), false, `Log must omit ${secret}`);
+    assert.equal((f.errors()[0]! + f.states.at(-1)!.error!).includes(secret), false, `Log and published error must omit ${secret}`);
   assert.ok(f.states.at(-1)!.error!.length < 300);
+});
+
+test("Core discards an oversized stderr token and retains the following failure", { timeout: 10_000 }, async t => {
+  const f = await fixture(t);
+  writeFileSync(f.script, `#!${process.execPath}
+    process.stderr.write("Duration: 00:00:20.50\\nError opening input http://synthetic-private-user:" + "x".repeat(5000));
+    setTimeout(() => { process.stderr.write("@media.example/private?sig=synthetic-query (Connection refused)\\n"); process.exitCode = 1; }, 25);
+  `, { mode: 0o755 });
+  f.group.send(f.load);
+  await until(() => f.states.at(-1)?.status === "error");
+  assert.equal(f.errors().length, 1);
+  assert.match(f.errors()[0]!, /Connection refused/);
+  assert.equal(f.states.at(-1)!.duration, 20.5);
+  for (const secret of ["synthetic-private-user", "/private", "sig=", "synthetic-query"])
+    assert.equal((f.errors()[0]! + f.states.at(-1)!.error!).includes(secret), false);
 });

@@ -5,7 +5,7 @@ import type { WebSocket } from "ws";
 import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, SendspinCore, serverNowUs, type SendspinSession } from "@sonn-audio/node-sendspin";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 import { loopbackPeer } from "./lan-listener";
-import { logPlaybackError, safePlaybackError } from "./playback-log";
+import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
 
 // Synced sound (#644 Delivery). Every Device plays sound over Sendspin with the official JS player;
 // Core runs the server. One FFmpeg per Playback decodes the source once and encodes it once per
@@ -203,8 +203,10 @@ export function createSendspin(options: { identity: string; name: string; admit:
         run = next;
         state = { ...state, status: "loading", buffering: false, error: null };
         report();
-        let log = "", partial = "";
+        const diagnostic = ffmpegErrorLog();
+        let partial = "";
         child.stderr!.setEncoding("utf8").on("data", (text: string) => {
+          diagnostic.write(text);
           const lines = (partial + text).split("\n");
           partial = lines.pop()!;
           for (const line of lines) {
@@ -213,7 +215,6 @@ export function createSendspin(options: { identity: string; name: string; admit:
               if (first) { next.start = Number(first[1]); next.anchored = true; }
               continue;
             }
-            log = (log + safePlaybackError(line, 4000) + "\n").slice(-4000);
             const duration = /Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(line);
             if (duration && state.duration === null) state = { ...state, duration: Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]), seekable: !current.radio };
           }
@@ -222,7 +223,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
         child.on("close", code => {
           if (run !== next) return;
           next.exit = code;
-          if (code !== 0) fail(`The audio couldn't play here (${safePlaybackError((log + safePlaybackError(partial, 4000)).trim().split("\n").at(-1) ?? "", 200) || `FFmpeg exited with ${code}`}).`);
+          if (code !== 0) fail(`The audio couldn't play here (${diagnostic.last() || `FFmpeg exited with ${code}`}).`);
         });
         const queue = (wire: Wire, pipe: Readable, chunk: Chunk) => {
           const list = next.queues[wire];
