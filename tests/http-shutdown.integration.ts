@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir, networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { connect, type Socket } from "node:net";
+import { connect, createServer, type Socket } from "node:net";
 import { connect as connectTLS, type TLSSocket } from "node:tls";
 import WebSocket from "ws";
 import { certificate } from "../src/server/certificate";
@@ -201,3 +201,42 @@ test("shared listener retains the LAN HTTP redirect and refuses insecure upgrade
   request(upgrade, "/", "Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n");
   await bounded(closed, "insecure upgrade refusal"); assert.equal(calls, 0);
 });
+
+// A failed constructor has no returned stop() for its caller to invoke.
+for (const secure of [false, true]) {
+  test(`${secure ? "TLS mux" : "plain HTTP"}: failed binds release heartbeat timers before retry`, async t => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-bind-cleanup-"));
+    const tls = secure ? await certificate(directory, ["localhost", "127.0.0.1"]) : undefined;
+    const blocker = createServer();
+    blocker.listen(0, "127.0.0.1");
+    await once(blocker, "listening");
+    const address = blocker.address();
+    assert.ok(address && typeof address !== "string");
+    const timers = new Set<ReturnType<typeof setInterval>>();
+    const set = globalThis.setInterval, clear = globalThis.clearInterval;
+    t.mock.method(globalThis, "setInterval", (...args: Parameters<typeof setInterval>) => {
+      const timer = set(...args); timers.add(timer); return timer;
+    });
+    t.mock.method(globalThis, "clearInterval", (timer: Parameters<typeof clearInterval>[0]) => {
+      timers.delete(timer as ReturnType<typeof setInterval>); clear(timer);
+    });
+    let listener: Awaited<ReturnType<typeof serve>> | undefined;
+    t.after(async () => {
+      await listener?.stop();
+      if (blocker.listening) await new Promise<void>(resolve => blocker.close(() => resolve()));
+      for (const timer of timers) clear(timer);
+      await rm(directory, { recursive: true, force: true });
+    });
+    const start = () => serve({ hostname: "127.0.0.1", port: address.port, tls, maxRequestBodySize: 4096,
+      fetch: async () => Response.json({ ok: true }),
+      websocket: { maxPayload: 4096, open() {}, message() {}, close() {} },
+    });
+    for (let attempt = 0; attempt < 3; attempt++) await assert.rejects(start(), { code: "EADDRINUSE" });
+    assert.equal(timers.size, 0, "failed binds retained active heartbeat intervals");
+    await new Promise<void>(resolve => blocker.close(() => resolve()));
+    listener = await start();
+    assert.equal((await fetch(`http://127.0.0.1:${listener.port}`)).status, 200);
+    await listener.stop();
+    assert.equal(timers.size, 0, "successful recovery retained heartbeat intervals after stop");
+  });
+}
