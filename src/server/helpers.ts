@@ -159,8 +159,10 @@ async function check(name: Helper): Promise<string> {
   const systemVersion = system && await version(name, system);
   // Only yt-dlp is kept current, so only its latest release matters up front.
   const current = name === "yt-dlp" ? await latest(name).catch(() => null) : null;
-  if (system && systemVersion && recentEnough(name, systemVersion, current?.version)) return system;
-  const copy = await installed(name);
+  // A failed release check must not prefer an older PATH copy over the cached one.
+  const offlineCopy = name === "yt-dlp" && !current ? await installed(name) : null;
+  if (system && systemVersion && recentEnough(name, systemVersion, current?.version ?? offlineCopy?.version)) return system;
+  const copy = offlineCopy ?? await installed(name);
   if (copy && (!current || copy.version >= current.version)) return copy.path;
   try { return await install(name, current ?? await latest(name)); }
   catch (error) {
