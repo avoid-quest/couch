@@ -31,6 +31,8 @@ export type CouchApp = {
   installUpdate(version?: string): Promise<void>;
   onUpdates(listener: (state: UpdateState) => void): () => void;
   showLogs(): Promise<void>;
+  /** Quits this app and shuts down its Core, even when the system tray is unavailable. */
+  quit?(): Promise<void>;
   // The TV's own renderer also plays in Client mode, without a local Core.
   reportPlayback?(status: import("./protocol").PlayerState["status"]): Promise<void>;
 };
