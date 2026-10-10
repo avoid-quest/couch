@@ -26,6 +26,12 @@ export function secureOrigin(value: string, port: number) {
   url.port = String(port);
   return url.origin;
 }
+export function httpOrigin(value: string, port: number) {
+  const url = new URL(value);
+  url.protocol = "http:";
+  url.port = String(port);
+  return url.origin;
+}
 export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup, port80 = false) {
   const ip = `https://${network.address}:${port}`;
   const results = await Promise.all(advertised.map(async (value, index) => {

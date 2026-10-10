@@ -9,12 +9,18 @@ import { get as getPlain } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
-import { selectLan } from "../src/server/lan-listener";
+import { httpOrigin, selectLan } from "../src/server/lan-listener";
 
 const candidate = Object.entries(networkInterfaces()).find(([name, entries]) => {
   try { selectLan({ [name]: entries }, name); return true; } catch { return false; }
 });
 const hostToken = "h".repeat(64), device = "t".repeat(43);
+test("HTTP aliases keep Couch's port when HTTPS omits its default port", () => {
+  assert.equal(httpOrigin("https://couch.home", 443), "http://couch.home:443");
+  assert.equal(httpOrigin("https://192.168.1.20:443", 443), "http://192.168.1.20:443");
+  assert.equal(httpOrigin("https://couch.home:4100", 4100), "http://couch.home:4100");
+  assert.equal(httpOrigin("https://couch.home:80", 80), "http://couch.home");
+});
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 2500;
   while (!predicate()) { assert.ok(Date.now() < deadline, "LAN listener did not become ready"); await sleep(10); }

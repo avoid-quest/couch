@@ -1,5 +1,5 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
-import { createLanListener, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
+import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { healStreamingCommunityOrigin } from "./streamingcommunity";
@@ -1368,7 +1368,7 @@ export async function createHub(options: HubOptions) {
   if (urls.length === 0) urls.push(origin);
   const connectionUrls: string[] = [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
   const retainedOrigins = new Set<string>();
-  const withHttp = (urls: string[]) => options.allowLanHttp ? [...urls, ...urls.map(url => url.replace(/^https:/, "http:"))] : urls;
+  const withHttp = (urls: string[]) => options.allowLanHttp ? [...urls, ...urls.map(url => httpOrigin(url, port))] : urls;
 
   if (options.managedLan) {
     lan = createLanListener({
