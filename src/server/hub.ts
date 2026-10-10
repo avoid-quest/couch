@@ -1,5 +1,5 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
-import { createLanListener, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
+import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
 import { systemLanNames } from "./lan-name";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
@@ -58,6 +58,7 @@ import type { DisplayAction, DisplayState } from "../shared/display";
 type HubOptions = {
   hostname?: string;
   managedLan?: boolean;
+  allowLanHttp?: boolean;
   onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
@@ -90,6 +91,7 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 
 export async function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
+  if (options.allowLanHttp && !options.managedLan) throw new Error("HTTP compatibility requires the managed LAN listener.");
   const suggestedNames = options.managedLan && options.advertisedUrls === undefined ? await systemLanNames() : [];
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
@@ -1129,6 +1131,8 @@ export async function createHub(options: HubOptions) {
     port: options.port ?? 3800,
     maxRequestBodySize: subtitleSizeLimit,
     fetch: async (request: Request, upgrade: Upgrade<SocketData>) => {
+      // Compatibility serves even public pages only to the selected LAN and admitted origins.
+      if (options.allowLanHttp && !loopbackPeer(requestPeer(request)) && !allowed(request, false)) return json({ error: "Unrecognized host or origin." }, 403);
       const { pathname } = new URL(request.url);
       const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
       if (route) return route(request);
@@ -1368,23 +1372,24 @@ export async function createHub(options: HubOptions) {
   if (urls.length === 0) urls.push(origin);
   const connectionUrls: string[] = [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
   const retainedOrigins = new Set<string>();
+  const withHttp = (urls: string[]) => options.allowLanHttp ? [...urls, ...urls.map(url => httpOrigin(url, port))] : urls;
 
   if (options.managedLan) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
-      start: async (network, listenPort) => serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port } }),
+      start: async (network, listenPort) => serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: options.allowLanHttp && listenPort === port } }),
       changed: (next, error, suggested) => {
         lanError = error;
         suggestedDomain = suggested ? `http://${new URL(suggested).hostname}:${port}` : "";
         const current = store.originDomain() || suggestedDomain;
         const currentAlias = current ? secureOrigin(originDomainUrl(current, port, !current.startsWith("http://")), port) : "";
-        const published = next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.some(value => { try { return secureOrigin(value, port) === url; } catch { return false; } }));
+        const published = withHttp(next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.some(value => { try { return secureOrigin(value, port) === url; } catch { return false; } })));
         urls.splice(0, urls.length, ...published);
         connectionUrls.splice(0, connectionUrls.length, ...published);
         allowedHosts.clear(); allowedOrigins.clear();
-        for (const url of [...local, ...next]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
+        for (const url of [...local, ...withHttp(next)]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
         options.onAddresses?.(published);
       },
     });
