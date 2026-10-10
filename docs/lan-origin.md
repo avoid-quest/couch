@@ -48,7 +48,7 @@ For an AppImage, replace `couch` with its executable path. For TV setup, put
 `COUCH_ALLOW_HTTP=1` in `/etc/couch/appliance.env` and restart Couch.
 Enable **Allow remote control**, then open the `http://<LAN-IP>:4100` address
 shown in Connection on the TV (use `COUCH_PORT` if customized). HTTPS and the
-HTTPS QR code remain available. Port 80 still redirects to HTTPS, so include
+HTTPS QR code remain available. The separate port 80 listener still redirects to HTTPS, so include
 Couch's port in the HTTP address. A new browser origin requires pairing again.
 If the browser cached an old HTTPS redirect, clear its data for that address.
 
