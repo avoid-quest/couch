@@ -42,6 +42,8 @@ default. A machine named `couch` with the gateway-provided search domain
 only to the selected Couch IPv4 address. The first working search-domain name
 wins; a qualified machine hostname is the fallback. The IP address always stays
 available, and a missing or incorrect automatic name does not raise a setup warning.
+The detected name still uses Couch's self-signed certificate; naming the server
+does not make that certificate trusted by a TV browser.
 
 **Settings → Devices → Network address** shows the detected name. Save a
 different address to override it; clearing the field restores automatic selection.
