@@ -29,9 +29,13 @@ async function fixture(t: TestContext, allowLanHttp = false) {
   const [name, entries] = candidate!;
   const { address } = selectLan({ [name]: entries }, name);
   const directory = await mkdtemp(join(tmpdir(), "couch-lan-http-"));
-  const previous = process.env.COUCH_LAN_INTERFACE;
+  const previous = process.env.COUCH_LAN_INTERFACE, previousAddress = process.env.COUCH_LAN_ADDRESS;
   process.env.COUCH_LAN_INTERFACE = name;
-  t.after(() => { if (previous === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previous; });
+  process.env.COUCH_LAN_ADDRESS = address;
+  t.after(() => {
+    if (previous === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previous;
+    if (previousAddress === undefined) delete process.env.COUCH_LAN_ADDRESS; else process.env.COUCH_LAN_ADDRESS = previousAddress;
+  });
   // Keep provider discovery offline without mocking local transport or the LAN inventory.
   const fetchLocal = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (input: Parameters<typeof fetch>[0], init?: RequestInit) => ["127.0.0.1", "localhost", address].includes(new URL(String(input)).hostname) ? fetchLocal(input, init) : Promise.resolve(new Response("")));

@@ -57,6 +57,9 @@ and control traffic. Enable it only on a trusted private network. It retains
 the selected interface/subnet, Host and Origin checks, pairing, and the sharing
 switch. Turning sharing off closes both LAN transports. Remove the environment
 variable and restart to return to HTTPS only; Couch never downgrades automatically.
+If you suspect someone intercepted HTTP traffic, revoke the affected paired
+devices and pair them again over HTTPS. Switching back to HTTPS does not revoke
+credentials that may already have been copied.
 
 HTTP cannot install Couch as a PWA and may lack some browser codecs. Sendspin
 can use PCM through Web Audio when Opus decoding is unavailable, but TV browser
