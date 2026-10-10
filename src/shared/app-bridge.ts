@@ -11,6 +11,9 @@ export type { UpdateAction, UpdateChannel, UpdateOutcome, UpdateState, UpdateTar
 export type AppMode = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 export type CouchApp = {
   tvPresentation: boolean;
+  /** A dedicated TV launcher keeps this enabled. Older apps lack the setting. */
+  tvPresentationLocked?: boolean;
+  setTvPresentation?(enabled: boolean): Promise<void>;
   /** Reads, or saves, this computer's name; null until it has one. Older apps lack it. */
   deviceName?(name?: string): Promise<string | null>;
   /** Reads, or saves, what this computer shares with every Couch it joins. Older apps lack it. */

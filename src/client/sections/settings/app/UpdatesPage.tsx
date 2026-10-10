@@ -54,7 +54,7 @@ function UpdateControls({ credentials, target, name, tv }: { credentials?: ApiCr
   };
   const description = !state ? null
     : state.status === "downloading" ? `Couch ${state.available}${state.progress === null ? "" : `, ${state.progress}%`}`
-    : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : !tv ? "installs when you quit Couch."
+    : state.status === "ready" ? `Couch ${state.available} ${credentials ? `is ready. Updating restarts ${name}.` : !state.automatic ? "installs when you quit Couch."
       // The timer isn't there, or skips a release that didn't start.
       : state.automatic?.installed === false || state.automatic?.active === false ? "is ready. Restart to update."
       : state.automatic?.last?.failed === state.available ? "didn't start last time, so it only installs when you restart to update."

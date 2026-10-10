@@ -5,6 +5,7 @@ import { StartupSettings } from "./StartupSettings";
 import { useSessionGate } from "@/session/session-context";
 import { DeviceNameSettings } from "./DeviceNameSettings";
 import { DeviceSharingSettings } from "./DeviceSharingSettings";
+import { TvPresentationSettings } from "./TvPresentationSettings";
 
 export function GeneralPage() {
   const { credentials } = useShell();
@@ -14,7 +15,8 @@ export function GeneralPage() {
     <SettingsLayout section="general">
       <SettingsSection>
         <DeviceNameSettings />
-        {manager && credentials && details?.tvPresentation && <StartupSettings credentials={credentials} connected={connected} />}
+        {localHost && <TvPresentationSettings />}
+        {manager && credentials && (details?.tvAppliance ?? details?.tvPresentation) && <StartupSettings credentials={credentials} connected={connected} />}
       </SettingsSection>
       {!localHost && <DeviceSharingSettings />}
     </SettingsLayout>

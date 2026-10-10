@@ -33,13 +33,11 @@ for (const stream of [process.stdout, process.stderr]) {
   const write = stream.write.bind(stream) as (chunk: unknown, ...rest: unknown[]) => boolean;
   stream.write = ((chunk: unknown, ...rest: unknown[]) => { if (log.bytesWritten < 10_000_000) log.write(chunk); return write(chunk, ...rest); }) as typeof stream.write;
 }
-const tv = process.env.COUCH_TV_PRESENTATION === "1";
+const appliance = process.env.COUCH_TV_PRESENTATION === "1";
 const port = Number(process.env.COUCH_PORT ?? 4100);
 // Twitch rejects Origin 127.0.0.1 but accepts localhost (#644 ticket 1).
 const localOrigin = `http://localhost:${port}`;
 const icons = join(app.getAppPath(), "packaging/icons");
-// The Mac window hides its title bar; its controls sit in the page's header (index.css).
-const macChrome = process.platform === "darwin" && !tv;
 
 const readJson = (path: string) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return {}; } };
 const readText = (path: string) => { try { return readFileSync(path, "utf8").trim() || null; } catch { return null; } };
@@ -47,9 +45,12 @@ const write = (path: string, text: string) => { writeFileSync(`${path}.tmp`, tex
 
 // Full mode ("local") runs Core here; Client mode ("remote") shows another Couch.
 // pins: each Couch's certificate key (SHA-256 of its SPKI) by hostname.
-type Choice = AppMode & { pins?: Record<string, string> };
+type Choice = AppMode & { pins?: Record<string, string>; tvPresentation?: boolean };
 const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
+const tv = appliance || choice.tvPresentation === true;
+// The Mac window hides its title bar; its controls sit in the page's header (index.css).
+const macChrome = process.platform === "darwin" && !tv;
 const save = (next: Choice) => {
   next.targets = [...new Set([...next.targets, ...next.address ? [next.address] : []])];
   write(modePath, JSON.stringify(next));
@@ -60,7 +61,7 @@ let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let updatePlayback = "unavailable";
-const reportPlayback = () => { if (tv) write(join(dataDir, "update-playback"), `${Math.floor(Date.now() / 1000)} ${updatePlayback}\n`); };
+const reportPlayback = () => { if (appliance) write(join(dataDir, "update-playback"), `${Math.floor(Date.now() / 1000)} ${updatePlayback}\n`); };
 
 type Ready = Extract<CoreMessage, { type: "ready" }>;
 let core: { child: UtilityProcess; token: string; ready: Promise<Ready>; stopping: boolean } | null = null;
@@ -72,7 +73,7 @@ function startCore() {
   const child = utilityProcess.fork(join(import.meta.dirname, "core.mjs"), [], {
     serviceName: "Couch Core",
     stdio: "pipe",
-    env: { ...process.env, COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dataDir, COUCH_PORT: String(port) },
+    env: { ...process.env, COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dataDir, COUCH_PORT: String(port), COUCH_TV_PRESENTATION: tv ? "1" : "0", COUCH_TV_APPLIANCE: appliance ? "1" : "0" },
   });
   child.stdout?.pipe(process.stdout, { end: false });
   child.stderr?.pipe(process.stderr, { end: false });
@@ -274,7 +275,7 @@ function createWindow() {
       preload: join(import.meta.dirname, "preload.cjs"),
       autoplayPolicy: "no-user-gesture-required",
       backgroundThrottling: false,
-      additionalArguments: tv ? ["--couch-tv-presentation"] : [],
+      additionalArguments: [...tv ? ["--couch-tv-presentation"] : [], ...appliance ? ["--couch-tv-presentation-locked"] : []],
     },
   });
   if (!tv && readJson(statePath).main?.maximized) window.maximize();
@@ -331,6 +332,18 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
+let restarting = false;
+handle("tv-presentation", (event, enabled) => {
+  if (choice.mode !== "local" || new URL(event.senderFrame!.url).origin !== localOrigin) throw new Error("Change TV mode on this computer's Couch.");
+  if (typeof enabled !== "boolean") throw new Error("Choose whether to use TV mode.");
+  if (appliance) throw new Error("TV mode is set by this app's launcher.");
+  if (restarting || quitting) throw new Error("Couch is restarting or closing.");
+  if (enabled === tv) return;
+  save({ ...choice, tvPresentation: enabled });
+  restarting = true;
+  // Let the IPC reply leave before the normal shutdown stops Core and its players.
+  setTimeout(() => { app.relaunch(); app.quit(); }, 250);
+});
 // Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.
 handle("device-name", (_event, name) => {
   if (name === undefined) return readDeviceName(join(dataDir, "couch.sqlite"));
@@ -461,10 +474,10 @@ else {
       callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
     });
     createWindow();
-    if (tv) setInterval(() => { try { reportPlayback(); } catch (error) { logAppError("main", `Couldn't report playback for updates: ${error instanceof Error ? error.message : error}`); } }, 5_000).unref();
+    if (appliance) setInterval(() => { try { reportPlayback(); } catch (error) { logAppError("main", `Couldn't report playback for updates: ${error instanceof Error ? error.message : error}`); } }, 5_000).unref();
     updates = startUpdates({
       channelPath: join(dataDir, "update-channel"),
-      tv,
+      tv: appliance,
       onState: state => window?.webContents.send("couch:updates", state),
     });
   });
