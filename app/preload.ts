@@ -18,6 +18,8 @@ if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presenta
 
 contextBridge.exposeInMainWorld("couchApp", {
   tvPresentation: process.argv.includes("--couch-tv-presentation"),
+  tvPresentationLocked: process.argv.includes("--couch-tv-presentation-locked"),
+  setTvPresentation: enabled => call("tv-presentation", enabled),
   deviceName: name => call("device-name", name),
   deviceSharing: sharing => call("device-sharing", sharing),
   mode: () => call("mode"),

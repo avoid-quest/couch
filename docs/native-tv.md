@@ -7,6 +7,19 @@ restart** from their paired remote.
 The Linux `.deb` includes optional TV setup (`/usr/sbin/couch-setup`, with the session files in `/usr/share/couch/tv`). Installing the package alone leaves
 the current login, display manager and power policy unchanged.
 
+## Use an existing desktop installation as a TV
+
+On that computer, choose **This computer**, then open **Settings > General**
+and turn on **TV mode**. Confirm **Restart Couch** to save the choice and open
+fullscreen. Playback stops during the restart; the library and paired devices
+stay saved. Turn on **Share on network** in **Settings > Devices** to let paired
+phones use **Remote**. Turn TV mode off in General to return to the desktop window.
+
+This choice keeps the desktop's normal login and update mechanism. **Start on
+boot** and the overnight update service belong to the dedicated TV setup below.
+`COUCH_TV_PRESENTATION=1` still forces TV mode for that launcher and locks the
+setting; remove that launch override to use the saved desktop choice.
+
 ## Dedicated TV
 
 On minimal Debian 13 amd64, install the package and explicitly enable TV

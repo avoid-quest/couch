@@ -1012,7 +1012,7 @@ export async function createHub(options: HubOptions) {
   const frontend = createFrontend();
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
-    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance: (process.env.COUCH_TV_APPLIANCE ?? process.env.COUCH_TV_PRESENTATION) === "1", systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": async request => {
       if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
       const respond = (body: unknown, status = 200) => cors(request, json(body, status));
