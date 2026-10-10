@@ -39,7 +39,7 @@ export type SearchPlaybackProps = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   onCommand?: (action: Action) => Promise<boolean>;
 };
-export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
+export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity" };
 export const searchError = (reason: unknown) => reason instanceof Error ? reason.message : "Didn't respond.";
 function webThumbnail(value?: string) {
   if (!value || value.length > 2048) return undefined;
@@ -94,7 +94,8 @@ function OnlineResults(props: Props) {
   const lifetime = useRef<AbortController | null>(null);
   // Only presentation state is retained locally. Query owns pages, requests,
   // errors and retries, so changing a query or connection retires its reads.
-  const facet = (item: ProviderItem): SearchFacet => ({ kind: item.kind !== "media" ? "Channels" : item.live ? "Live" : provider === "bandcamp" ? "Music" : "Video", duration: item.duration });
+  const music = provider === "bandcamp" || provider === "soundcloud";
+  const facet = (item: ProviderItem): SearchFacet => ({ kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Live" : "Video", duration: item.duration });
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   async function more() {
     if (!page || loading || !props.connected) return;
@@ -114,7 +115,7 @@ function OnlineResults(props: Props) {
   }
   function play(item: ProviderItem, playNow: boolean, placement?: "next", deviceId?: string) {
     void action(async signal => {
-      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}), ...(deviceId ? { deviceId } : {}) });
+      const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(!music ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}), ...(deviceId ? { deviceId } : {}) });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
     });

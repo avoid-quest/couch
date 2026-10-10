@@ -1,7 +1,7 @@
 import type { CollectionLink, MediaCollection, MediaShape } from "./media";
 import { isStreamingCommunityHost } from "./streamingcommunity";
 
-export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "streamingcommunity";
+export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export type ProviderItem = {
@@ -52,7 +52,7 @@ export function providerForUrl(value: string): ProviderId | undefined {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
     if (isStreamingCommunityHost(url.hostname)) return "streamingcommunity";
-    const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
+    const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"], soundcloud: ["soundcloud.com"] };
     return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
   } catch { return; }
 }
@@ -73,6 +73,8 @@ export function publicProviderMediaUrl(value: string): string | undefined {
       if (id && /^[A-Za-z0-9_-]{11}$/.test(id) && publicQuery) return `https://www.youtube.com/watch?v=${id}`;
     }
     if (url.search) return;
+    if (provider === "soundcloud" && ["soundcloud.com", "www.soundcloud.com", "m.soundcloud.com"].includes(url.hostname) && /^\/[a-z0-9_-]+\/[a-z0-9_-]+$/i.test(path)
+      && !/^\/(?:search|discover|you|stations|charts|library)\//i.test(path) && !/\/(?:sets|tracks|albums|reposts|popular-tracks)$/i.test(path)) return `https://soundcloud.com${path}`;
     if (provider === "raiplay" && ["raiplay.it", "www.raiplay.it"].includes(url.hostname) && /^\/video\/\d{4}\/\d{2}\/[a-z0-9_%.-]+\.(?:html|json)$/i.test(path)) return `https://www.raiplay.it${path.replace(/\.json$/, ".html")}`;
     if (provider === "bandcamp" && /^[a-z0-9-]+\.bandcamp\.com$/.test(url.hostname) && /^\/track\/[a-z0-9-]+$/.test(path)) return `https://${url.hostname}${path}`;
     if (provider === "twitch" && ["twitch.tv", "www.twitch.tv"].includes(url.hostname) && /^\/videos\/\d+$/.test(path)) return `https://www.twitch.tv${path}`;

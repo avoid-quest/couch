@@ -1,6 +1,6 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { runYtDlp } from "../yt-dlp";
-import { ProviderError, providerItemId, withProviderItem } from "./http";
+import { ProviderError, providerItemId, providerJson, withProviderItem } from "./http";
 
 type Metadata = Record<string, unknown>;
 type Target = { url: string; kind: "track" | "album"; host: string };
@@ -57,7 +57,30 @@ function checkTrack(info: Metadata, source: Target) {
   if (!playable) throw new ProviderError("This Bandcamp track has no supported public audio stream. Account-only playback is not supported.");
 }
 
-export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
+export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request: typeof fetch = globalThis.fetch) {
+  async function search(query: string, signal?: AbortSignal): Promise<ProviderPage> {
+    if (query.length > 200) throw new ProviderError("Enter a Bandcamp search of at most 200 characters.", 400);
+    // Bandcamp's own search box uses this public JSON endpoint. The documented
+    // partner API covers accounts and sales, not catalog search (/developer).
+    const info = await providerJson("https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify({ search_text: query, search_filter: "", full_page: true, fan_id: null }),
+    }, request);
+    if (!object(info) || !object(info.auto) || info.auto.ac_error || !Array.isArray(info.auto.results)) throw new ProviderError("Bandcamp search is unavailable. Try again shortly.");
+    const seen = new Set<string>();
+    const items = info.auto.results.slice(0, 50).flatMap((entry): ProviderItem[] => {
+      if (!object(entry) || !["a", "t"].includes(String(entry.type))) return [];
+      let source: Target;
+      try { source = target(entry.item_url_path); } catch { return []; }
+      const title = label(entry.name);
+      if (!title || seen.has(source.url) || source.kind !== (entry.type === "a" ? "album" : "track")) return [];
+      seen.add(source.url);
+      return [{ id: providerItemId("bandcamp", source.url), provider: "bandcamp", kind: source.kind === "album" ? "collection" : "media",
+        title, url: source.url, subtitle: label(entry.band_name), thumbnail: thumbnail({ thumbnail: entry.img }) }];
+    });
+    return { title: "Bandcamp", items };
+  }
+
   async function extract(source: Target, signal?: AbortSignal): Promise<Metadata> {
     signal?.throwIfAborted();
     const args = source.kind === "album" ? ["--flat-playlist", "--playlist-items", "1:501"] : ["--no-playlist", "--playlist-items", "1", "--format", "bestaudio/best"];
@@ -105,11 +128,12 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp) {
 
   async function browse(request: BrowseRequest, signal?: AbortSignal): Promise<ProviderPage> {
     signal?.throwIfAborted();
-    if (request.cursor !== undefined) throw new ProviderError("Bandcamp albums are shown in full. Open a track or album link.", 400);
+    if (request.cursor !== undefined) throw new ProviderError("Start a new Bandcamp search or open an album link.", 400);
     if (request.query !== undefined && (typeof request.query !== "string" || request.query.length > 2_048 || /[\u0000-\u001f\u007f]/.test(request.query))) throw new ProviderError("Enter a public Bandcamp track or album link.", 400);
     if (request.url !== undefined && typeof request.url !== "string") throw new ProviderError("Enter a public Bandcamp track or album link.", 400);
     const value = request.url || request.query?.trim();
     if (!value) return { title: "Bandcamp", items: [] };
+    if (!request.url && !/^https?:\/\//i.test(value)) return search(value, signal);
     const source = target(value);
     if (source.kind === "album") return album(source.url, signal);
     const info = await extract(source, signal);

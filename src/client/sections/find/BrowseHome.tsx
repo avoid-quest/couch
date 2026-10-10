@@ -8,6 +8,7 @@ import type { ProviderId } from "../../../shared/providers";
 
 const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
   { title: "Bandcamp", meta: "Albums and tracks", provider: "bandcamp" },
+  { title: "SoundCloud", meta: "Tracks", provider: "soundcloud" },
   { title: "RaiPlay", meta: "Programmes and live TV", provider: "raiplay" },
   { title: "StreamingCommunity", meta: "Films and series", provider: "streamingcommunity" },
   { title: "YouTube", meta: "Channels and playlists", provider: "youtube" },

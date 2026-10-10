@@ -5,7 +5,7 @@ export function supportsWebVideoQuality(source: string) {
   try {
     const url = new URL(source.trim());
     const extension = decodeURIComponent(url.pathname).split(".").at(-1)!.toLowerCase();
-    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !audioExtensions.has(extension) && !["oga", "mka"].includes(extension);
+    return !["bandcamp.com", "soundcloud.com"].some(host => url.hostname === host || url.hostname.endsWith(`.${host}`)) && !audioExtensions.has(extension) && !["oga", "mka"].includes(extension);
   } catch { return true; }
 }
 

@@ -179,12 +179,10 @@ catalog provides interface icons, not brand identities.
   without artwork shows a muted folder, not title initials.
 - **Real content only.** A browse page shows what its source returns, never
   suggestions Couch picked. A source without a home page of its own (YouTube,
-  Bandcamp) opens on an Empty whose next step is a search field scoped to it,
-  or a link field where it only takes links. Find's filters are Video, Live,
-  Radio and Channels. Music is not one on purpose: Find never searches Bandcamp
-  (`searchable` in `SearchPanel.tsx`), which Find's Browse lists instead, so the
-  filter could only ever be empty. Music returns when a searched source yields
-  music.
+  Bandcamp, SoundCloud) opens on an Empty with a search field scoped to it.
+  Find searches after one second without typing; Enter submits immediately.
+  Its filters are Video, Music, Live, Radio and Channels. Music includes
+  Bandcamp albums and tracks and SoundCloud tracks.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29". The band and mini player read "−3:24 ends 20:59";
   live reads "Live", with no total.

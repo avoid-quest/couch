@@ -10,6 +10,7 @@ import { browseYouTube } from "./youtube";
 import { browseTwitch } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
 import { browseBandcamp } from "./bandcamp";
+import { browseSoundCloud } from "./soundcloud";
 import { loadBandcampAlbum } from "./bandcamp";
 import { loadRaiPlayProgramme } from "./raiplay";
 import { loadYouTubePlaylist } from "./youtube";
@@ -19,7 +20,7 @@ import { ControllerError } from "../devices";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
 const adapters = (streamingCommunityOrigin: () => Promise<string>): Record<ProviderId, Adapter> => ({
-  youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp,
+  youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp, soundcloud: browseSoundCloud,
   streamingcommunity: async (request, signal) => browseStreamingCommunity(request, signal, await streamingCommunityOrigin()),
 });
 const providerIds = new Set(Object.keys(adapters(async () => "")));
@@ -29,7 +30,7 @@ function publicUrl(value: unknown, provider?: ProviderId): string {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f\\]/.test(value)) throw new ProviderError("Invalid provider URL.", 400);
   let url: URL;
   try { url = new URL(value); } catch { throw new ProviderError("Invalid provider URL.", 400); }
-  const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
+  const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"], soundcloud: ["soundcloud.com"] };
   const hostAllowed = (candidate: ProviderId) => candidate === "streamingcommunity" ? isStreamingCommunityHost(url.hostname) : domains[candidate]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || provider && !hostAllowed(provider)) throw new ProviderError("Use a public URL from this provider.", 400);
   return url.href;
@@ -60,6 +61,7 @@ function savedItem(value: unknown): ProviderItem {
 
 // A saved or browsed list expands at queue time so the queue itself stays flat.
 export async function loadProviderList(provider: ProviderId, url: string, signal?: AbortSignal): Promise<ProviderPage> {
+  if (provider === "soundcloud") throw new ProviderError("Choose an individual SoundCloud track.", 400);
   if (provider === "youtube") return loadYouTubePlaylist(url, signal);
   if (provider === "bandcamp") return loadBandcampAlbum(url, signal);
   if (provider === "raiplay") return loadRaiPlayProgramme(url, signal);
@@ -139,7 +141,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
           if (request.method !== "GET") return wrongMethod("GET");
           return Response.json(await streamingCommunityPreview(Number(preview[1]), await streamingCommunityOrigin(), AbortSignal.any([request.signal, shutdown.signal])));
         }
-        const match = /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|streamingcommunity)\/items$/.exec(pathname);
+        const match = /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|soundcloud|streamingcommunity)\/items$/.exec(pathname);
         if (!match) return Response.json({ error: "Not found." }, { status: 404 });
         if (request.method !== "GET") return wrongMethod("GET");
         const provider = match[1] as ProviderId;
@@ -150,7 +152,8 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         const key = JSON.stringify([provider, query, url, cursor]);
         const cached = cache.get(key);
         if (cached && cached.expires > Date.now()) return Response.json(cached.page);
-        if (active >= 6) throw new ProviderError("The catalog is busy. Try again shortly.", 503);
+        // Find asks six providers, plus RaiPlay's separate live-channel request.
+        if (active >= 8) throw new ProviderError("The catalog is busy. Try again shortly.", 503);
         active++;
         try {
           const page = await browse[provider]({ ...(query ? { query } : {}), ...(url ? { url } : {}), ...(cursor ? { cursor } : {}) }, AbortSignal.any([request.signal, shutdown.signal]));

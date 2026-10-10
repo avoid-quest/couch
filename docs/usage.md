@@ -9,8 +9,8 @@ and paired remotes. The rebuild is tracked in
 
 - **Online video and music** through yt-dlp: YouTube (search, channels and
   playlists), Twitch (live channels and categories), RaiPlay (live TV,
-  programmes and replays), public Bandcamp albums and tracks, and pasted links
-  from other sites yt-dlp supports.
+  programmes and replays), public Bandcamp albums and tracks (including keyword
+  search), SoundCloud track search, and pasted links from other sites yt-dlp supports.
 - **StreamingCommunity** catalogue browsing, search, seasons and episodes. An
   administrator sets its current origin in **Settings > Sources**.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
@@ -73,7 +73,9 @@ a Mac.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
    device you pair becomes the admin. The dialog closes when the phone pairs,
    and a message names it, ending in "· admin" for the first.
-3. Search in **Find**, or paste a link. **Play** starts an item now; **Queue** in
+3. Search in **Find**, or paste a link. Searches wait one second after you stop
+   typing; Enter searches immediately. The **Music** filter shows Bandcamp and
+   SoundCloud results. **Play** starts an item now; **Queue** in
    its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp or
    StreamingCommunity link opens its page.
 

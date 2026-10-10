@@ -40,8 +40,7 @@ export type Props = {
 type Entry = [source: string, summary: SearchResultSummary];
 
 // Sources in the order their results interleave; the rest are searched too.
-const sourceOrder = ["YouTube", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "Bandcamp"];
-const searchable = sourceOrder.filter(source => source !== "Bandcamp");
+const sourceOrder = ["YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 const isLink = (value: string) => {
   try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
@@ -96,15 +95,15 @@ export function SearchPanel(props: Props) {
   const commitDraft = useEffectEvent(() => commit(draft.trim()));
   useEffect(() => {
     if (composing || !props.active || !props.connected || draft.trim() === search.query) return;
-    const timer = setTimeout(() => commitDraft(), 300);
+    const timer = setTimeout(() => commitDraft(), 1000);
     return () => clearTimeout(timer);
   }, [draft, search.query, props.active, props.connected, composing]);
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(search.query) ? search.query : undefined;
-  const providers = url ? [] : ["youtube", "raiplay", "twitch", "streamingcommunity"] as ProviderId[];
+  const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity"] as ProviderId[];
   const inScope = (source: string) => filter === "All" || filter === source;
-  const asking = searchable.filter(source => !summaries[source] || summaries[source].loading);
+  const asking = sourceOrder.filter(source => !summaries[source] || summaries[source].loading);
   const total = Object.values(summaries).reduce((sum, summary) => sum + summary.count, 0);
   const facetKind = kind === "All" ? undefined : kind, facetLength = length === "All" ? undefined : length;
   const mergedHits = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), search.query)
@@ -146,7 +145,7 @@ export function SearchPanel(props: Props) {
       <div className="min-w-0 space-y-6">
         {results("Search results")}
         {total > 0 && !asking.length && !mergedHits.length && <Empty><EmptyHeader><EmptyTitle>Nothing matches these filters</EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={clearFilters}>Clear filters</Button></EmptyContent></Empty>}
-        {props.connected && !asking.length && total === 0 && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{search.query}”</h2></EmptyTitle><EmptyDescription>{filter === "Bandcamp" ? "Paste a Bandcamp album or track link." : "Try fewer words or paste a link."}</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
+        {props.connected && !asking.length && total === 0 && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{search.query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       </div>
     </div>}
     {search.query && providers.map(provider => <SearchOnlineResults key={`${provider}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && inScope(providerNames[provider])} provider={provider} query={search.query} quality={quality} onEnqueued={resetQuality} />)}

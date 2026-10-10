@@ -108,14 +108,14 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   </section>;
 }
 
-// Sources without a home page of their own start from a search or, for Bandcamp, a link.
+// Sources without a home page of their own start from a search.
 function EmptyRoot({ provider }: { provider: ProviderId }) {
   const navigate = useNavigate();
   const [value, setValue] = useState("");
-  const name = providerNames[provider], linksOnly = provider === "bandcamp";
+  const name = providerNames[provider];
   const open = () => { const query = value.trim(); if (query) void navigate({ href: providerForUrl(query) === provider ? collectionLocation({ provider, url: query }) : searchLocation({ query, source: name }) }); };
   return <Empty className="py-0">
-    <EmptyHeader><EmptyDescription>{linksOnly ? `Paste a ${name} album or track link.` : provider === "youtube" ? "Search YouTube or paste a channel, playlist or video link." : `Search ${name} or paste a ${name} link.`}</EmptyDescription></EmptyHeader>
-    <EmptyContent><SearchBar id="collection-search" className="w-full" ariaLabel={linksOnly ? `Paste a ${name} link` : `Search ${name}`} value={value} onValueChange={setValue} onSubmit={open} onClear={() => setValue("")} /></EmptyContent>
+    <EmptyHeader><EmptyDescription>{provider === "youtube" ? "Search YouTube or paste a channel, playlist or video link." : `Search ${name} or paste a ${name} link.`}</EmptyDescription></EmptyHeader>
+    <EmptyContent><SearchBar id="collection-search" className="w-full" ariaLabel={`Search ${name}`} value={value} onValueChange={setValue} onSubmit={open} onClear={() => setValue("")} /></EmptyContent>
   </Empty>;
 }

@@ -23,6 +23,7 @@ for (const url of [
   "https://www.youtube.com/watch?v=abcdefghijk",
   "https://www.raiplay.it/video/2026/09/episode.html",
   "https://artist.bandcamp.com/track/song",
+  "https://soundcloud.com/arsiderprod/track",
   "https://www.twitch.tv/videos/12345",
 ]) test(`history exposes only the public provider page: ${url}`, async () => {
   const item = await history(`web:${url}`);
@@ -40,6 +41,7 @@ for (const source of [
   "web:https://www.youtube.com/watch?v=abcdefghijk&token=PRIVATE",
   "web:https://www.raiplay.it/video/2026/09/movie.html?token=PRIVATE",
   "web:https://artist.bandcamp.com/track/song?token=PRIVATE",
+  "web:https://soundcloud.com/arsiderprod/track?secret_token=PRIVATE",
   "web:https://www.twitch.tv/videos/12345?token=PRIVATE",
   "web:https://user:password@www.youtube.com/watch?v=abcdefghijk",
   "web:https://www.youtube.com:444/watch?v=abcdefghijk",
