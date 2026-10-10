@@ -35,7 +35,7 @@ async function fixture(t: TestContext, allowLanHttp = false) {
   // Keep provider discovery offline without mocking local transport or the LAN inventory.
   const fetchLocal = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (input: Parameters<typeof fetch>[0], init?: RequestInit) => ["127.0.0.1", "localhost", address].includes(new URL(String(input)).hostname) ? fetchLocal(input, init) : Promise.resolve(new Response("")));
-  const hub = await createHub({ managedLan: true, allowLanHttp, databasePath: join(directory, "couch.sqlite"), port: 0, hostToken, pairingCode: "123456" });
+  const hub = await createHub({ managedLan: true, allowLanHttp, advertisedUrls: [], databasePath: join(directory, "couch.sqlite"), port: 0, hostToken, pairingCode: "123456" });
   const sockets: WebSocket[] = [];
   t.after(async () => { for (const socket of sockets) socket.terminate(); await hub.close(); await rm(directory, { recursive: true, force: true }); });
   const http = `http://${address}:${hub.server.port}`, https = http.replace("http:", "https:");
