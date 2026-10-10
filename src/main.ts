@@ -18,6 +18,7 @@ if (process.argv.includes("--version")) {
 type ParentPort = { postMessage(message: CoreMessage): void; on(event: "message", listener: (event: { data: AppMessage }) => void): void };
 const app = (process as NodeJS.Process & { parentPort?: ParentPort }).parentPort;
 const native = !!app;
+const allowLanHttp = process.env.COUCH_ALLOW_HTTP === "1";
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
@@ -32,7 +33,8 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 startHelpers(join(dataDir, "helpers"));
 const hub = await createHub({
-  managedLan: native,
+  managedLan: native || allowLanHttp,
+  allowLanHttp,
   onAddresses: urls => app?.postMessage({ type: "addresses", urls }),
   remoteControlEnabled: !native,
   native,

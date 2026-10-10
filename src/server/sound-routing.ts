@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SavedSoundProfile, SoundInventory, SoundRouteState } from "../shared/sound";
 import { ControllerError } from "./devices";
-import { environment, pulseRouting } from "./sound-pulse";
+import { environment, pulseRouting, SoundError } from "./sound-pulse";
 
 type Options = {
   saved: () => string | null;
@@ -22,6 +22,9 @@ function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => 
   let exited = false;
   const exit = () => { if (!exited) { exited = true; onExit(); } };
   child.once("error", exit);
+  // A recovered server may send no events until its next change. Refresh on
+  // every new subscription so fixing the audio session also clears stale errors.
+  child.once("spawn", onEvent);
   // PipeWire-Pulse restarting ends the stream; onExit resubscribes.
   createInterface({ input: child.stdout }).on("line", line => { if (/on (sink|source|card|server) #/.test(line)) onEvent(); }).once("close", exit);
   return { stop: () => child.kill() };
@@ -84,7 +87,7 @@ export function createSoundRouting(options: Options) {
     if (busy || closed) return;
     busy = true;
     try { await refresh(); }
-    catch { lost("Couldn't verify the audio output. Playback stopped."); }
+    catch (error) { lost(error instanceof SoundError ? error.message : "Couldn't verify the audio output. Playback stopped."); }
     finally { busy = false; }
   };
   const mutate = async (work: () => Promise<void>) => {
@@ -138,7 +141,8 @@ export function createSoundRouting(options: Options) {
     if (closed) return;
     subscription = pactlSubscribe(wake, () => {
       subscription = undefined;
-      if (!closed) { respawn = setTimeout(listen, 1_000); respawn.unref?.(); }
+      wake();
+      if (!closed) { respawn = setTimeout(listen, 5_000); respawn.unref?.(); }
     });
   };
   void check();

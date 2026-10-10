@@ -26,6 +26,12 @@ export function secureOrigin(value: string, port: number) {
   url.port = String(port);
   return url.origin;
 }
+export function httpOrigin(value: string, port: number) {
+  const url = new URL(value);
+  url.protocol = "http:";
+  url.port = String(port);
+  return url.origin;
+}
 export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup, port80 = false) {
   const ip = `https://${network.address}:${port}`;
   const results = await Promise.all(advertised.map(async (value, index) => {
@@ -51,8 +57,9 @@ export async function lanUrls(network: LanNetwork, port: number, advertised: str
 
 export function createLanListener<T extends { stop(): Promise<void> }>(options: {
   port: number; enabled: boolean; selected?: string; address?: string; advertised: string[] | (() => string[]);
+  suggested?: () => string[];
   start: (network: LanNetwork, port: number) => Promise<T>;
-  changed: (urls: string[], error: string | null) => void;
+  changed: (urls: string[], error: string | null, suggested: string) => void;
   interfaces?: typeof networkInterfaces;
   resolve?: typeof lookup;
 }) {
@@ -61,9 +68,9 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
   let last = "";
   const selectedNetwork = () => selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
   const stopAll = async () => { await Promise.all([active?.stop(), port80?.stop()]); active = port80 = null; };
-  const changed = (urls: string[], error: string | null) => {
-    const state = JSON.stringify([urls, error]);
-    if (last !== state) { last = state; options.changed(urls, error); }
+  const changed = (urls: string[], error: string | null, suggested = "") => {
+    const state = JSON.stringify([urls, error, suggested]);
+    if (last !== state) { last = state; options.changed(urls, error, suggested); }
   };
   const refresh = () => pending = pending.catch(() => {}).then(async () => {
     if (closed) return;
@@ -85,7 +92,11 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
       if (!wantsPort80 && port80) { await port80.stop(); port80 = null; }
       if (moved) changed([`https://${next.address}:${options.port}`], null);
       const { urls, error } = await lanUrls(next, options.port, advertised, options.resolve, !!port80);
-      if (!closed) changed(urls, error);
+      const candidates = options.suggested?.() ?? [];
+      const defaults = candidates.length ? await lanUrls(next, options.port, candidates, options.resolve) : null;
+      // An unavailable automatic name is normal: keep the IP without a setup warning.
+      const suggested = defaults?.urls.find(url => candidates.some(candidate => secureOrigin(candidate, options.port) === url)) ?? "";
+      if (!closed) changed([...new Set([...suggested ? [suggested] : [], ...urls])], error, suggested);
     } catch (error) {
       await stopAll().catch(() => {});
       network = null;

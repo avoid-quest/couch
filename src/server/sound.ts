@@ -1,7 +1,7 @@
 import type { DeviceIdentity } from "../shared/devices";
 import type { SoundState, SoundTest } from "../shared/sound";
 import { ControllerError, settingField } from "./devices";
-import { pulseSound, type SoundProcess } from "./sound-pulse";
+import { pulseSound, SoundError, type SoundProcess } from "./sound-pulse";
 import { ADMIN_ONLY } from "./messages";
 
 type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; idle: () => boolean };
@@ -92,7 +92,7 @@ export function createSound(options: Options) {
         } finally { starting = false; }
       } catch (error) {
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
-        return json({ error: "Couldn't read sound settings." }, 503);
+        return json({ error: error instanceof SoundError ? error.message : "Couldn't read sound settings." }, 503);
       }
     },
     interrupt() { if (!options.idle()) finish("stopped", "Playback started; the sound test stopped."); },
