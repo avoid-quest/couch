@@ -67,11 +67,11 @@ test("opt-in HTTP preserves pairing, origin checks, host isolation and sharing s
   assert.equal((await f.pair("wrong")).status, 401);
   assert.equal((await f.pair("123456", null)).status, 403);
   assert.equal((await f.pair("123456", "http://foreign.example")).status, 403);
-  for (const path of ["/", "/api/health", "/api/subtitles/example.vtt"]) {
+  for (const path of ["/", "/api/health", "/api/subtitles/example.vtt", `${f.https}/`]) {
     for (const headers of [{ Host: "foreign.example" }, { Origin: "http://foreign.example" }]) {
       // Node's fetch replaces Host; send the actual hostile header over the wire.
       const status = await new Promise<number | undefined>((resolve, reject) => {
-        getPlain(`${f.http}${path}`, { headers, agent: false }, response => { response.resume(); response.on("end", () => resolve(response.statusCode)); }).on("error", reject);
+        getPlain(f.http, { path, headers, agent: false }, response => { response.resume(); response.on("end", () => resolve(response.statusCode)); }).on("error", reject);
       });
       assert.equal(status, 403, `${path} with ${JSON.stringify(headers)}`);
     }

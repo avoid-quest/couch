@@ -1128,7 +1128,7 @@ export async function createHub(options: HubOptions) {
     maxRequestBodySize: subtitleSizeLimit,
     fetch: async (request: Request, upgrade: Upgrade<SocketData>) => {
       // Compatibility serves even public pages only to the selected LAN and admitted origins.
-      if (options.allowLanHttp && new URL(request.url).protocol === "http:" && !loopbackPeer(requestPeer(request)) && !allowed(request, false)) return json({ error: "Unrecognized host or origin." }, 403);
+      if (options.allowLanHttp && !loopbackPeer(requestPeer(request)) && !allowed(request, false)) return json({ error: "Unrecognized host or origin." }, 403);
       const { pathname } = new URL(request.url);
       const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
       if (route) return route(request);
