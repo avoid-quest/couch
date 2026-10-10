@@ -215,6 +215,8 @@ YouTube's challenges) and ffmpeg. The app ships none of them
 
 - Core uses the copy on `PATH` when it is recent enough: yt-dlp at its latest
   release, QuickJS-NG 0.12 or later, ffmpeg 7 or later.
+  If yt-dlp's release check fails, it uses the newer runnable copy from `PATH`
+  or its own cache, preferring `PATH` when the versions match.
 - Otherwise it downloads the official build into `<data>/helpers/<name>/<version>`,
   checks the SHA-256 and runs it before switching to it:
   - yt-dlp's own `yt-dlp_macos.zip`, `yt-dlp_linux*.zip` or `yt-dlp_win*.zip`.
