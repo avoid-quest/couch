@@ -36,6 +36,25 @@ around playback.
 
 ## Add an optional DNS name
 
+Couch proposes the machine's hostname joined to its network search domain by
+default. A machine named `couch` with the gateway-provided search domain
+`avoid.local` offers `https://couch.avoid.local:4100` when DNS resolves that name
+only to the selected Couch IPv4 address. The first working search-domain name
+wins; a qualified machine hostname is the fallback. The IP address always stays
+available, and a missing or incorrect automatic name does not raise a setup warning.
+
+**Settings → Devices → Network address** shows the detected name. Save a
+different address to override it; clearing the field restores automatic selection.
+`COUCH_ADVERTISE_URLS` also takes precedence, and setting it to an empty string
+disables automatic names. Names use Couch's port, so automatic selection needs no
+port 80 permissions. DNS is rechecked every minute. Restart Couch after changing
+the machine hostname or network search-domain configuration.
+
+Search domains come from Linux's `/etc/resolv.conf` (with `LOCALDOMAIN` taking
+precedence), macOS's system DNS configuration, or Windows DNS Client settings.
+Couch does not create a DNS record: the gateway or DNS administrator must already
+make the name work on the LAN.
+
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
 The name must work from the TV and each phone that will use it. From the
 playback computer or a paired Administrator, open **Settings → Devices →

@@ -35,7 +35,8 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed && !!paired });
   const originDomain = useQuery({ ...originDomainQuery(credentials), enabled: connected && manager && managedLan });
   const [domainDraft, setDomainDraft] = useState<string | null>(null);
-  const domain = domainDraft ?? originDomain.data?.domain ?? "";
+  const savedDomain = originDomain.data?.domain || originDomain.data?.suggested || "";
+  const domain = domainDraft ?? savedDomain;
   const [code, setCode] = useState("");
   const [pairingOpen, setPairingOpen] = useState(false);
   const [removing, setRemoving] = useState<Device | null>(null);
@@ -59,7 +60,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   // The server bumps the devices revision, which refreshes remoteControlEnabled.
   const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
   const saveDomain = useMutation({
-    mutationFn: (value: string) => apiSend<{ domain: string }>(credentials, "/api/settings/origin-domain", { domain: value }),
+    mutationFn: (value: string) => apiSend<{ domain: string; suggested?: string }>(credentials, "/api/settings/origin-domain", { domain: value }),
     onSuccess: result => { queryClient.setQueryData(originDomainQuery(credentials).queryKey, result); setDomainDraft(null); },
   });
   const message = (error: Error | null, fallback: string) => error ? error.message || fallback : null;
@@ -89,10 +90,10 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         : `Show a code to scan or type on the new device.${host && !administratorClaimed && paired === false ? " The first device you pair becomes the admin." : ""}`}>
         {manager && <Button ref={pairingRef} data-page-first variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
       </SettingsRow>
-      {manager && managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || `A DNS name for ${hostName}, like couch.home.${port ? ` If port 80 is taken, add :${port}.` : ""}`}>
+      {manager && managedLan && <SettingsRow label="Network address" htmlFor="origin-domain" description={lanError || (originDomain.data?.suggested ? "Using this machine's name on your network. Enter another address to customize it." : `A DNS name for ${hostName}, like couch.home.${port ? ` If port 80 is taken, add :${port}.` : ""}`)}>
         <form className="flex w-full flex-wrap items-center gap-2" onSubmit={submitDomain}>
           <Input id="origin-domain" className="min-w-0 flex-1" placeholder="couch.home" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomainDraft(event.target.value)} disabled={!connected || saveDomain.isPending || originDomain.isPending} />
-          <Button type="submit" variant="outline" disabled={!connected || saveDomain.isPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{saveDomain.isPending ? "Saving…" : "Save"}</Button>
+          <Button type="submit" variant="outline" disabled={!connected || saveDomain.isPending || originDomain.isPending || domain.trim() === savedDomain}>{saveDomain.isPending ? "Saving…" : "Save"}</Button>
         </form>
       </SettingsRow>}
       {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Share on network.")}</AlertDescription></Alert>}

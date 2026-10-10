@@ -1,6 +1,7 @@
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
 import { createLanListener, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
+import { systemLanNames } from "./lan-name";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { healStreamingCommunityOrigin } from "./streamingcommunity";
 import { createStartup } from "./startup";
@@ -89,6 +90,7 @@ const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueE
 
 export async function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
+  const suggestedNames = options.managedLan && options.advertisedUrls === undefined ? await systemLanNames() : [];
   const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
@@ -102,6 +104,8 @@ export async function createHub(options: HubOptions) {
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Listener>> | undefined;
   let lanError: string | null = null;
+  let suggestedDomain = "";
+  const originSettings = () => ({ domain: store.originDomain(), suggested: suggestedDomain });
   const addresses = new Set(["localhost", "127.0.0.1", "::1"]);
   const lanAddresses = new Set<string>();
   for (const entries of Object.values(networkInterfaces())) {
@@ -118,7 +122,7 @@ export async function createHub(options: HubOptions) {
     const name = machineName().toLowerCase();
     const aliases = [store.originDomain(), ...options.advertisedUrls ?? []].flatMap(value => { try { return value ? [new URL(value.includes("://") ? value : `http://${value}`).hostname] : []; } catch { return []; } });
     const addresses = Object.values(networkInterfaces()).flatMap(entries => (entries ?? []).filter(entry => !entry.address.includes("%")).map(entry => entry.address));
-    return certificate(join(dirname(options.databasePath), "tls"), [...new Set(["localhost", name, ...name.includes(".") ? [] : [`${name}.local`], ...addresses, ...aliases])]);
+    return certificate(join(dirname(options.databasePath), "tls"), [...new Set(["localhost", name, ...name.includes(".") ? [] : [`${name}.local`], ...addresses, ...aliases, ...suggestedNames])]);
   };
   let closed = false;
   const shutdown = new AbortController();
@@ -1068,7 +1072,7 @@ export async function createHub(options: HubOptions) {
     }
     if (url.pathname === "/api/settings/origin-domain") {
       if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
-      if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
+      if (request.method === "GET") { await lan?.refresh().catch(() => {}); return cors(request, json(originSettings())); }
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
       try {
         const value = await settingField(request, "domain");
@@ -1078,7 +1082,7 @@ export async function createHub(options: HubOptions) {
         if (alias) try { await lan?.validateAlias(alias); }
         catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
         if (identity()?.authority === "controller" || !identity()) throw new ControllerError(NO_LONGER_ADMIN, 403);
-        const previous = store.originDomain();
+        const previous = store.originDomain() || suggestedDomain;
         const previousAlias = previous ? secureOrigin(originDomainUrl(previous, port, !previous.startsWith("http://")), port) : "";
         store.saveOriginDomain(alias);
         // Keep only the address used by this administrator until Couch restarts.
@@ -1086,7 +1090,7 @@ export async function createHub(options: HubOptions) {
         const usingPreviousAlias = previousAlias && (request.headers.get("host")?.toLowerCase() === new URL(previousAlias).host || request.headers.get("origin") === previousAlias);
         if (usingPreviousAlias && previousAlias !== (alias && secureOrigin(alias, port))) retainedOrigins.add(previousAlias);
         await lan?.refresh().catch(() => {});
-        return cors(request, json({ domain: alias }));
+        return cors(request, json(originSettings()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the network address." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
@@ -1369,10 +1373,12 @@ export async function createHub(options: HubOptions) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
+      suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
       start: async (network, listenPort) => serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port } }),
-      changed: (next, error) => {
+      changed: (next, error, suggested) => {
         lanError = error;
-        const current = store.originDomain();
+        suggestedDomain = suggested ? `http://${new URL(suggested).hostname}:${port}` : "";
+        const current = store.originDomain() || suggestedDomain;
         const currentAlias = current ? secureOrigin(originDomainUrl(current, port, !current.startsWith("http://")), port) : "";
         const published = next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.some(value => { try { return secureOrigin(value, port) === url; } catch { return false; } }));
         urls.splice(0, urls.length, ...published);
