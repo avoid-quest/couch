@@ -41,7 +41,9 @@ The app remembers the chosen mode and addresses. If the other Couch is
 unreachable, the app keeps trying and offers **Try again** or **Use this
 computer**; it never switches on its own. Closing the window keeps Couch running
 (minimized on Linux); reopen it from the tray, the Dock or by starting it again.
-**Quit Couch** in the tray or app menu stops the app and its Core. See the
+**Quit Couch** in **Settings → General**, the tray or the app menu stops the app
+and its Core. On Linux and Windows, **File → Quit Couch** and **Ctrl+Q** also work
+when the system tray is unavailable or the page cannot load. See the
 [current architecture](architecture.md).
 
 ## Keep a shortcut

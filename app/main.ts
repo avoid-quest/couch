@@ -60,6 +60,7 @@ const save = (next: Choice) => {
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+let stopped = false;
 let updatePlayback = "unavailable";
 const reportPlayback = () => { if (appliance) write(join(dataDir, "update-playback"), `${Math.floor(Date.now() / 1000)} ${updatePlayback}\n`); };
 
@@ -406,6 +407,7 @@ handle("set-update-channel", (_event, channel) => updates.action({ op: "channel"
 // this turn; newer renderers always send their selected version through action.
 handle("install-update", (_event, version) => updates.action({ op: "install", version: version === undefined ? updates.state().available : version }, 250));
 handle("show-logs", () => shell.showItemInFolder(logPath));
+handle("quit", () => { setImmediate(() => app.quit()); });
 handle("update-playback", (_event, status) => {
   if (typeof status !== "string" || !["unavailable", "idle", "loading", "playing", "paused", "ended", "error"].includes(status)) throw new Error("Invalid playback status.");
   if (updatePlayback !== status) { updatePlayback = status; reportPlayback(); }
@@ -421,9 +423,11 @@ handle("interface-size", (_event, size) => {
 // Quit is deliberate (closing the window only hides it), and a SIGTERM from
 // systemd or logout arrives here too, so nothing asks for confirmation.
 async function quit() {
+  if (quitting) return;
   quitting = true;
   saveBounds();
   await stopCore();
+  stopped = true;
   app.quit();
 }
 
@@ -431,11 +435,13 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", show);
   app.on("activate", show);
-  app.on("before-quit", event => { if (!quitting) { event.preventDefault(); void quit(); } });
+  app.on("before-quit", event => { if (!stopped) { event.preventDefault(); void quit(); } });
   void app.whenReady().then(() => {
     // Couch is black everywhere, so native title bars, menus and dialogs are dark too.
     nativeTheme.themeSource = "dark";
-    Menu.setApplicationMenu(process.platform !== "darwin" ? null : Menu.buildFromTemplate([
+    Menu.setApplicationMenu(process.platform !== "darwin" ? tv ? null : Menu.buildFromTemplate([
+      { label: "File", submenu: [{ role: "quit", label: "Quit Couch", accelerator: "Control+Q" }] },
+    ]) : Menu.buildFromTemplate([
       { role: "appMenu", submenu: [{ role: "about" }, { label: "Show Couch", click: show }, { type: "separator" }, { role: "services" }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] },
       { role: "editMenu" },
       { label: "View", submenu: [{ role: "togglefullscreen" }] },

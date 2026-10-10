@@ -5,6 +5,7 @@ import { StartupSettings } from "./StartupSettings";
 import { useSessionGate } from "@/session/session-context";
 import { DeviceNameSettings } from "./DeviceNameSettings";
 import { DeviceSharingSettings } from "./DeviceSharingSettings";
+import { QuitAppSettings } from "./QuitAppSettings";
 import { TvPresentationSettings } from "./TvPresentationSettings";
 
 export function GeneralPage() {
@@ -19,6 +20,7 @@ export function GeneralPage() {
         {manager && credentials && (details?.tvAppliance ?? details?.tvPresentation) && <StartupSettings credentials={credentials} connected={connected} />}
       </SettingsSection>
       {!localHost && <DeviceSharingSettings />}
+      <QuitAppSettings />
     </SettingsLayout>
   );
 }

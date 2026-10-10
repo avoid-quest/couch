@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld("couchApp", {
     return () => { ipcRenderer.off("couch:updates", handler); };
   },
   showLogs: () => call("show-logs"),
+  quit: () => call("quit"),
   reportPlayback: status => call("update-playback", status),
 } satisfies CouchApp);
 
