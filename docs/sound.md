@@ -4,6 +4,23 @@ An administrator opens Settings → Sound to inspect the outputs reported by the
 
 Sound settings and the sound test run on Linux, through `pactl` and `paplay`; on macOS and Windows use the system settings. Stop playback before testing. A test sends three seconds of stereo PCM, a left 440 Hz tone followed by a right 660 Hz tone, to the explicitly chosen output. The waveform peaks at 12% of full scale and includes short fades. Existing output volume and mute still apply. Muted or unavailable outputs cannot be tested. Legacy PulseAudio flat-volume outputs are also refused because creating a test stream could raise their system volume.
 
+ALSA drivers alone do not supply Couch's output routing and volume controls.
+The desktop session needs either PulseAudio or PipeWire's `pipewire-pulse`
+service, plus `pulseaudio-utils` for `pactl` and `paplay`. PipeWire users do not
+need to replace their sound server with PulseAudio. AppImages cannot install
+these system packages. Check `pactl info` as the same user running Couch,
+without `sudo`; a root session may address a different audio server.
+
+Sound settings distinguishes missing tools from an unreachable audio session.
+After repairing the session, Couch retries its subscription every five seconds
+and refreshes the output even if the server sends no change event. Playback
+stays interrupted until the user resumes it.
+
+FFmpeg is separate from the sound server. Couch downloads and verifies its own
+copy when needed; it need not appear on the shell's `PATH`. If a download fails,
+inspect `logs/couch.log` under Couch's data directory for `Couch helpers:`.
+The [helper lifecycle](architecture.md#helpers) describes the cache and fallback.
+
 Stop sound test is available while the test starts. The server checks the actual test-stream route rather than treating a launched process as success. A wrong or lost observed route stops the test; the test also stops if playback starts or the application shuts down. A fixed three-second deadline remains active if the phone disconnects. No test resumes media or changes the saved playback route, system default, system volume or Couch volume.
 
 Shared playback volume and mute control the selected system sink. Couch holds its native software volume at unity, and reads actual system volume and mute every half second, including changes made with Ubuntu controls or hardware keys. Flat-volume servers are refused to avoid raising the sink level through stream creation. The shared volume is not restored from an old app setting at restart. Settings exposes the saved TV audio delay while idle; it applies to the current item and every subsequent item.

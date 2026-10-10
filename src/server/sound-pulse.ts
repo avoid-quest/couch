@@ -6,9 +6,15 @@ type Card = { index: number; name: string; active_profile?: string; properties?:
 type Sink = { card?: number; properties?: Record<string, string>; flags?: string[]; index: number; name: string; description?: string; state?: string; mute?: boolean; volume?: Record<string, { value: number }>; active_port?: string; ports?: { name: string; availability?: string }[] };
 export type SoundProcess = { pid: number; exited: Promise<number>; stop: () => void };
 export type SoundBackend = { inventory: () => Promise<SoundInventory>; start: (output: string) => SoundProcess; route: (pid: number) => Promise<string | null> };
+export class SoundError extends Error {}
 export const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
 export const querySound = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
-  execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => error ? reject(new Error("The TV audio session did not answer. Check PipeWire/PulseAudio and pulseaudio-utils.")) : resolve(stdout.trim()));
+  execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => {
+    if (!error) return resolve(stdout.trim());
+    reject(new SoundError(error.code === "ENOENT"
+      ? "Linux sound controls need pactl. Install pulseaudio-utils, then try again."
+      : "Couch couldn't reach the Linux audio session. Run pactl info as the user running Couch and check that PulseAudio or PipeWire with pipewire-pulse is running. ALSA alone is not enough for Couch's sound controls."));
+  });
 });
 
 const bluetoothAddress = (card?: Card) => { const value = card?.properties?.["api.bluez5.address"] ?? card?.properties?.["device.string"]; return value && /^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(value) ? { bluetoothAddress: value.toUpperCase() } : {}; };
