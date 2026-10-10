@@ -34,6 +34,44 @@ Set the variables in the desktop app's launching environment, or in
 `/etc/couch/appliance.env` for TV setup, then restart Couch. Schedule the restart
 around playback.
 
+## TVs that refuse the certificate
+
+HTTPS remains the default. Some TV browsers cannot bypass a self-signed
+certificate warning. To permit HTTP on the selected LAN as well, quit Couch,
+then launch it with `COUCH_ALLOW_HTTP=1` in its environment. On Linux:
+
+```sh
+COUCH_ALLOW_HTTP=1 couch
+```
+
+For an AppImage, replace `couch` with its executable path. For TV setup, put
+`COUCH_ALLOW_HTTP=1` in `/etc/couch/appliance.env` and restart Couch.
+Enable **Allow remote control**, then open the `http://<LAN-IP>:4100` address
+shown in Connection on the TV (use `COUCH_PORT` if customized). HTTPS and the
+HTTPS QR code remain available. The separate port 80 listener still redirects to HTTPS, so include
+Couch's port in the HTTP address. A new browser origin requires pairing again.
+If the browser cached an old HTTPS redirect, clear its data for that address.
+
+HTTP is unencrypted: other people on that network can read or change pairing
+and control traffic. Enable it only on a trusted private network. It retains
+the selected interface/subnet, Host and Origin checks, pairing, and the sharing
+switch. Turning sharing off closes both LAN transports. Remove the environment
+variable and restart to return to HTTPS only; Couch never downgrades automatically.
+If you suspect someone intercepted HTTP traffic, revoke the affected paired
+devices and pair them again over HTTPS. Switching back to HTTPS does not revoke
+credentials that may already have been copied.
+
+HTTP cannot install Couch as a PWA and may lack some browser codecs. Sendspin
+can use PCM through Web Audio when Opus decoding is unavailable, but TV browser
+support and synchronization still need testing on the actual device.
+
+Trusted HTTPS is the longer-term alternative: a certificate trusted by the TV
+and a matching DNS name avoid the warning while preserving secure-context
+features. A public certificate can use DNS validation without exposing Couch
+to the internet; a private CA works only if the TV browser trusts it. Couch's
+direct listener currently generates its own certificate. Custom certificate
+loading and renewal would be a separate change, not a setting enabled here.
+
 ## Add an optional DNS name
 
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
