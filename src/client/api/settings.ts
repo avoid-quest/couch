@@ -82,8 +82,8 @@ export const streamingCommunityQuery = (credentials: ApiCredentials) =>
     },
   });
 
-export const originDomainQuery = (credentials: ApiCredentials) =>
+export const originDomainQuery = (credentials: ApiCredentials, urls: string[]) =>
   queryOptions({
-    queryKey: ["settings", "origin-domain"],
+    queryKey: ["settings", "origin-domain", urls],
     queryFn: ({ signal }) => apiJson<{ domain: string; suggested?: string }>(credentials, "/api/settings/origin-domain", { signal }),
   });

@@ -33,7 +33,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   // The first device paired becomes the admin, so the admin code is useful only once devices are paired.
   const paired = devices.data?.some(device => device.role !== "host");
   const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed && !!paired });
-  const originDomain = useQuery({ ...originDomainQuery(credentials), enabled: connected && manager && managedLan });
+  const originDomain = useQuery({ ...originDomainQuery(credentials, urls), enabled: connected && manager && managedLan });
   const [domainDraft, setDomainDraft] = useState<string | null>(null);
   const savedDomain = originDomain.data?.domain || originDomain.data?.suggested || "";
   const domain = domainDraft ?? savedDomain;
@@ -61,7 +61,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
   const saveDomain = useMutation({
     mutationFn: (value: string) => apiSend<{ domain: string; suggested?: string }>(credentials, "/api/settings/origin-domain", { domain: value }),
-    onSuccess: result => { queryClient.setQueryData(originDomainQuery(credentials).queryKey, result); setDomainDraft(null); },
+    onSuccess: result => { queryClient.setQueryData(originDomainQuery(credentials, urls).queryKey, result); setDomainDraft(null); },
   });
   const message = (error: Error | null, fallback: string) => error ? error.message || fallback : null;
   const pending = deviceChange.isPending;
