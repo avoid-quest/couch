@@ -14,8 +14,9 @@ const candidate = Object.entries(networkInterfaces()).find(([name, entries]) => 
 test("Core admits and certifies its detected name, exposes it in Settings, and preserves customization", { skip: !candidate, timeout: 10000 }, async t => {
   const [name, entries] = candidate!, { address } = selectLan({ [name]: entries }, name);
   const directory = await mkdtemp(join(tmpdir(), "couch-lan-name-"));
-  const previous = process.env.COUCH_LAN_INTERFACE;
+  const previous = process.env.COUCH_LAN_INTERFACE, previousAddress = process.env.COUCH_LAN_ADDRESS;
   process.env.COUCH_LAN_INTERFACE = name;
+  process.env.COUCH_LAN_ADDRESS = address;
   t.mock.method(os, "hostname", () => "couch.avoid.local");
   t.mock.method(dns, "lookup", async (host: string) => { await sleep(20); return ["couch.avoid.local", "cinema.avoid.local"].includes(host) ? [{ address, family: 4 }] : []; });
   syncBuiltinESMExports();
@@ -26,6 +27,7 @@ test("Core admits and certifies its detected name, exposes it in Settings, and p
   t.after(async () => {
     await hub?.close(); t.mock.restoreAll(); syncBuiltinESMExports();
     if (previous === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previous;
+    if (previousAddress === undefined) delete process.env.COUCH_LAN_ADDRESS; else process.env.COUCH_LAN_ADDRESS = previousAddress;
     await rm(directory, { recursive: true, force: true });
   });
   hub = await createHub({ managedLan: true, databasePath: join(directory, "couch.sqlite"), hostToken, port: 0 });
