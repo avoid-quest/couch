@@ -18,8 +18,8 @@ type Options<T> = {
   hostname: string;
   port: number;
   // Serves HTTPS and plain HTTP on one port. Plain HTTP is for this machine only (localhost is
-  // a secure context); the LAN gets a redirect to HTTPS on `securePort` (#644 ticket 8).
-  tls?: { key: string; cert: string; securePort?: number };
+  // a secure context); the LAN redirects to HTTPS unless compatibility mode is enabled.
+  tls?: { key: string; cert: string; securePort?: number; allowHttp?: boolean };
   maxRequestBodySize: number;
   fetch: (request: Request, upgrade: Upgrade<T>) => Promise<Response | undefined>;
   websocket: {
@@ -54,12 +54,12 @@ async function readBody(message: IncomingMessage, limit: number) {
 }
 
 export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch, websocket }: Options<T>): Promise<Listener> {
-  const insecure = (message: IncomingMessage) => !!tls && !encrypted(message) && !loopbackPeer(message.socket.remoteAddress ?? "");
+  const insecure = (message: IncomingMessage) => !!tls && !tls.allowHttp && !encrypted(message) && !loopbackPeer(message.socket.remoteAddress ?? "");
   const handle = async (message: IncomingMessage, response: ServerResponse) => {
     try {
       if (insecure(message)) {
         const { hostname: host } = new URL(`http://${message.headers.host}`);
-        response.writeHead(308, { Location: `https://${host}:${tls!.securePort ?? port}${message.url ?? "/"}` }).end();
+        response.writeHead(308, { Location: `https://${host}:${tls!.securePort ?? port}${message.url ?? "/"}`, "Cache-Control": "no-store" }).end();
         return;
       }
       const aborted = new AbortController();

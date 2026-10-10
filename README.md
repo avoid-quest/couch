@@ -26,6 +26,15 @@ Device. The plan, decisions and tickets live in
 **This computer** hosts Couch in the app; **Another Couch** shows a paired host's
 own page in the app window. Browser remotes connect on your local network.
 
+On Linux Mint, Ubuntu and Debian, install the `.deb` with APT so its sound
+dependencies are installed too: `sudo apt install ./couch_<version>_amd64.deb`.
+Couch needs `pulseaudio-utils` and either PulseAudio or `pipewire-pulse`; an
+installed alternative satisfies the dependency without requiring both sound
+servers. AppImage users must provide these packages and `libgbm1` themselves. Check
+`pactl info` in the desktop user's session before playing. ALSA drivers alone
+do not provide Couch's sound controls. FFmpeg is downloaded separately by
+Couch when a suitable copy is not already installed.
+
 ## Develop
 
 Couch uses React for the TV and browser remote, Core on Node for the shared queue
