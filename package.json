@@ -134,8 +134,9 @@
         "libatspi2.0-0",
         "libuuid1",
         "libsecret-1-0",
-        "libasound2",
-        "pulseaudio-utils"
+        "libasound2t64 | libasound2",
+        "pulseaudio-utils",
+        "pulseaudio | pipewire-pulse"
       ],
       "fpm": [
         "packaging/tv/=/usr/share/couch/tv/",
