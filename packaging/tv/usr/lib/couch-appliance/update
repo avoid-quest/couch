@@ -2,13 +2,13 @@
 # Root-side Couch update. couch-update@<version>.service installs the release
 # the TV account picked; couch-update.timer runs it without a version to install
 # the newest release on the TV's channel while nothing plays. Trust rests on
-# HTTPS to the fixed couch-releases repository, as electron-updater's does on
+# HTTPS to the fixed couch repository, as electron-updater's does on
 # the other platforms. A release that leaves the TV app unhealthy is rolled back
 # to the previous package, which is kept for that.
 set -euo pipefail
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH DEBIAN_FRONTEND=noninteractive
-releases=https://github.com/avoid-quest/couch-releases/releases
+releases=https://github.com/avoid-quest/couch/releases
 pattern='^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$'
 fail() { echo "couch-update: $*" >&2; error=$*; exit 1; }
 [[ $EUID = 0 ]] || fail 'Run as root.'

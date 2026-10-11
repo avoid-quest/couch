@@ -12,7 +12,7 @@ import { isUpdateChannel, isUpdateVersion, parseUpdateOutcome, validateUpdateAct
 import { appDiagnostic, logAppError } from "./diagnostics";
 
 // package.json build.publish: the public repo electron-updater reads.
-const releases = "https://github.com/avoid-quest/couch-releases/releases/download";
+const releases = "https://github.com/avoid-quest/couch/releases/download";
 const every = 4 * 60 * 60 * 1000;
 // The channel this build was released on (scripts/package.ts).
 const own: UpdateChannel = /-preview\.\d+$/.test(app.getVersion()) ? "preview" : "latest";

@@ -119,7 +119,7 @@ QR code.
 ## Install
 
 Download Couch, or Couch Preview, from
-[couch-releases](https://github.com/avoid-quest/couch-releases/releases): the
+[Couch releases](https://github.com/avoid-quest/couch/releases): the
 dmg on a Mac, the exe on Windows, the AppImage or deb on Linux. After that it
 updates itself.
 

@@ -147,7 +147,7 @@
     "publish": {
       "provider": "github",
       "owner": "avoid-quest",
-      "repo": "couch-releases"
+      "repo": "couch"
     }
   }
 }

@@ -43,9 +43,8 @@ reported executable). The installed app's Node also runs it:
 
 ## Releases
 
-Couch ships on two channels, both published on the public
-[avoid-quest/couch-releases](https://github.com/avoid-quest/couch-releases),
-which holds only installers, update files and notes:
+Couch ships on two channels, both published in
+[this repository's releases](https://github.com/avoid-quest/couch/releases):
 
 - **Preview**, `vX.Y.Z-preview.N`: `main` when you run Release with
   `channel=preview`, skipped when that commit already has a preview. It
@@ -74,7 +73,7 @@ a root unit ([native TV](native-tv.md)).
 release with GitHub's generated notes, builds with
 [Package](../.github/workflows/package.yml) (AppImage and deb on Linux, dmg and
 zip on macOS, nsis on Windows), which uploads straight into the draft, then
-publishes it and tags this repository's commit too. Nothing passes through
+publishes it with a tag pointing to the built commit. Nothing passes through
 artifact storage, and the updater never sees a draft, so a failed run publishes
 nothing; rerun its failed jobs to finish it. Write pull request titles as plain
 sentences: they become the release notes. Package can also be dispatched on its
@@ -86,15 +85,20 @@ as in t3code: macOS on `blacksmith-6vcpu-macos-26` and Windows on
 `blacksmith-4vcpu-windows-2025`, beside Linux. Their minutes cost 20× and 4×
 Linux's from the same allowance, so a release costs roughly one Mac build.
 
-One-time setup, done by the owner:
+Release and Package use GitHub's automatic `GITHUB_TOKEN` with
+`contents: write` for release creation, uploads and publication. No separate
+release repository or personal access token is needed. Existing credentials
+remain available for the integrations that use them.
 
-1. Create the public repository with a first commit:
-   `gh repo create avoid-quest/couch-releases --public --add-readme --description "Couch installers and updates"`.
-2. Create a fine-grained personal access token with the resource owner
-   avoid-quest, access to only avoid-quest/couch-releases, and the repository
-   permission Contents: Read and write.
-3. Save it as this repository's secret:
-   `gh secret set COUCH_RELEASES_TOKEN -R avoid-quest/couch`.
+The repository must be public before the website and installed apps can read
+its releases without authentication. Workflow dispatches do not change its
+visibility. Keep the Blacksmith GitHub App enabled for this repository.
+
+Older installed builds still read the
+[release archive](https://github.com/avoid-quest/couch-releases/releases). Keep
+those downloads available during the transition; installing a build from this
+repository switches its updater to the new location. The website's fallback
+catalog should list only installers that have actually been published here.
 
 ## Workflow changes
 

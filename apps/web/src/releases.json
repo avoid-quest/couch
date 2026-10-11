@@ -1,25 +1,4 @@
 {
   "stable": {},
-  "preview": {
-    "dmg": {
-      "version": "0.3.0-preview.1",
-      "filename": "Couch-0.3.0-preview.1-arm64.dmg",
-      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/Couch-0.3.0-preview.1-arm64.dmg"
-    },
-    "nsis": {
-      "version": "0.3.0-preview.1",
-      "filename": "Couch-0.3.0-preview.1-x64.exe",
-      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/Couch-0.3.0-preview.1-x64.exe"
-    },
-    "appimage": {
-      "version": "0.3.0-preview.1",
-      "filename": "Couch-0.3.0-preview.1-x86_64.AppImage",
-      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/Couch-0.3.0-preview.1-x86_64.AppImage"
-    },
-    "deb": {
-      "version": "0.3.0-preview.1",
-      "filename": "couch_0.3.0-preview.1_amd64.deb",
-      "url": "https://github.com/avoid-quest/couch-releases/releases/download/v0.3.0-preview.1/couch_0.3.0-preview.1_amd64.deb"
-    }
-  }
+  "preview": {}
 }

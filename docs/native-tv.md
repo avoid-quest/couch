@@ -162,7 +162,7 @@ by default Preview on a preview build, else Stable) unless something plays. It
 never goes back to an older version, except from a preview to Stable. **Restart
 to update** installs a release sooner: the `couch-tv` account may only start
 `couch-update@<version>.service`. Both run a root script that downloads the
-release's `.deb` from avoid-quest/couch-releases, checks its sha512 against the
+release's `.deb` from avoid-quest/couch, checks its sha512 against the
 release's update file, installs it and restarts the TV app. The timer checks
 both Core and the TV window's fresh playback report, including Client-mode
 video and synced audio, and checks again after refreshing package lists. A

@@ -18,12 +18,12 @@ name: Package
         required: true
         type: string
       release:
-        description: The draft release on avoid-quest/couch-releases to upload to
+        description: The draft release in this repository to upload to
         required: true
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -64,14 +64,14 @@ jobs:
       - if: inputs.release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
           files=()
           for file in .artifacts/app/*.{AppImage,deb,dmg,zip,exe,blockmap,yml}; do
             [[ $file == *builder-debug.yml ]] || files+=("$file")
           done
-          gh release upload "${{ inputs.release }}" "${files[@]}" -R avoid-quest/couch-releases --clobber
+          gh release upload "${{ inputs.release }}" "${files[@]}" -R "$GITHUB_REPOSITORY" --clobber
       - if: ${{ !inputs.release }}
         uses: actions/upload-artifact@v7
         with:

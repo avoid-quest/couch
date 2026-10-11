@@ -70,8 +70,11 @@ the Tauri app did. Development uses `.data/`.
 `bun run web:dev`; `bun run web:build` builds it and `bun run web:deploy`
 publishes it to Cloudflare Workers at `couch.avoid.quest`. The download page
 finds the newest release and preview on
-[couch-releases](https://github.com/avoid-quest/couch-releases) through
+[this repository's releases](https://github.com/avoid-quest/couch/releases) through
 GitHub's API, with `apps/web/src/releases.json` as fallback.
+
+Earlier installers remain available in the
+[release archive](https://github.com/avoid-quest/couch-releases/releases).
 
 - [Usage and development](docs/usage.md)
 - [Checks and releases](docs/ci.md)

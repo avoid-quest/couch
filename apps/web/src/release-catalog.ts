@@ -1,7 +1,7 @@
 import fallback from "./releases.json";
 
 // The public repo the app publishes to and updates from (package.json build.publish).
-const repo = "avoid-quest/couch-releases";
+const repo = "avoid-quest/couch";
 export type Channel = "stable" | "preview";
 export const formats = ["dmg", "nsis", "appimage", "deb"] as const;
 export type PackageFormat = (typeof formats)[number];

@@ -1,9 +1,9 @@
 name: Release
 
-# Publishes Couch on the public avoid-quest/couch-releases, where the installed
-# app's electron-updater looks. Dispatched by hand only: channel preview
+# Publishes Couch in this repository, where the installed app's updater looks.
+# Dispatched by hand only: channel preview
 # publishes main as vX.Y.Z-preview.N, channel production promotes the latest
-# preview's commit to vX.Y.Z. The tag also goes on this repo, for history.
+# preview's commit to vX.Y.Z. Each release tags the commit that was built.
 # See docs/ci.md.
 "on":
   workflow_dispatch:
@@ -68,13 +68,12 @@ jobs:
       NAME: ${{ needs.preflight.outputs.name }}
       REF: ${{ needs.preflight.outputs.ref }}
       PREVIOUS_TAG: ${{ needs.preflight.outputs.previous_tag }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       # GitHub's notes from this repo's merged pull requests since the previous
       # release on the same channel.
       # Every release opens with the one command an unsigned Mac app needs (docs/usage.md).
       - name: Write the notes
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           app=$([[ $CHANNEL == preview ]] && echo "Couch Preview" || echo Couch)
           cat > notes.md <<EOF
@@ -93,19 +92,18 @@ jobs:
             --jq .body >> notes.md
           cat notes.md
       # A rerun keeps the draft it made before.
-      - name: Draft on avoid-quest/couch-releases
-        env:
-          GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
+      - name: Draft the release
         run: |
-          gh release view "$TAG" -R avoid-quest/couch-releases >/dev/null 2>&1 ||
-            gh release create "$TAG" -R avoid-quest/couch-releases --draft \
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --target "$REF" \
               --title "$NAME" --notes-file notes.md \
               $([[ $CHANNEL == preview ]] && echo --prerelease)
 
   package:
     needs: [preflight, draft]
+    permissions:
+      contents: write
     uses: ./.github/workflows/package.yml
-    secrets: inherit
     with:
       version: ${{ needs.preflight.outputs.version }}
       ref: ${{ needs.preflight.outputs.ref }}
@@ -120,15 +118,9 @@ jobs:
     env:
       CHANNEL: ${{ needs.preflight.outputs.channel }}
       TAG: ${{ needs.preflight.outputs.tag }}
-      REF: ${{ needs.preflight.outputs.ref }}
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Publish on avoid-quest/couch-releases
-        env:
-          GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
+      - name: Publish the release
         run: |
-          gh release edit "$TAG" -R avoid-quest/couch-releases --draft=false \
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --draft=false \
             $([[ $CHANNEL == production ]] && echo --latest)
-      - name: Tag this repo
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$REF"
