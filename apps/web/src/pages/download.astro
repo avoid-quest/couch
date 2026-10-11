@@ -1,0 +1,113 @@
+---
+import "../styles.css";
+import { buttonVariants } from "../../../../src/client/components/ui/button";
+import { currentCatalog, formats, type Channel, type PackageFormat } from "../release-catalog";
+
+export const prerender = false;
+
+const releases = await currentCatalog();
+const deb = releases.stable.deb ?? releases.preview.deb;
+const channels = ["stable", "preview"] as const satisfies readonly Channel[];
+const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
+  dmg: { name: "Mac", target: "Apple Silicon, macOS 14 or later", note: "Couch isn't signed by Apple, so move it to Applications, then run this once in Terminal:" },
+  nsis: { name: "Windows", target: "x86_64, Windows 11", note: "Installs for your user only. The first time, SmartScreen shows More info > Run anyway." },
+  appimage: { name: "Linux", target: "x86_64 AppImage", note: "Make it executable, then open it. Needs FUSE 2." },
+  deb: { name: "Debian TV", target: "Debian 13, x86_64, X11", note: "For Debian desktops and dedicated TVs." },
+};
+const primary = buttonVariants();
+const secondary = buttonVariants({ variant: "outline" });
+// Chromium names the platform in a client hint; other browsers only in the user agent.
+const ua = Astro.request.headers.get("user-agent") ?? "";
+const platform = Astro.request.headers.get("sec-ch-ua-platform")?.replaceAll('"', "") ?? "";
+const mine: PackageFormat | null = /iPhone|iPad|Android/.test(ua) || platform === "Android" ? null
+  : platform === "macOS" || /Macintosh/.test(ua) ? "dmg"
+  : platform === "Windows" || /Windows/.test(ua) ? "nsis"
+  : platform === "Linux" || /Linux/.test(ua) ? "appimage"
+  : null;
+---
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Download Couch</title>
+    <meta name="description" content="Download Couch for Mac, Windows and Linux." />
+    <link rel="canonical" href={new URL("/download", Astro.site)} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <main>
+      <nav aria-label="Home"><a href="/"><img src="/mark.svg" width="24" height="24" alt="" aria-hidden="true" />couch.avoid.quest</a></nav>
+      <h1>Download Couch</h1>
+      <p class="intro">When you open it, choose <strong>This computer</strong> or connect to another Couch.</p>
+
+      {channels.map(channel => <section aria-labelledby={channel} data-channel={channel} hidden={Object.keys(releases[channel]).length === 0}>
+        <h2 id={channel}>{channel === "preview" ? "Preview" : "Stable"}</h2>
+        <ul>
+          {formats.map(format => {
+            const item = releases[channel][format];
+            return <li data-format={format} data-mine={format === mine || undefined} hidden={!item}>
+              <div>
+                <h3>{labels[format].name}</h3>
+                <p>{labels[format].target}</p>
+                <p>{labels[format].note}</p>
+                {format === "dmg" && <p><code>xattr -dr com.apple.quarantine "/Applications/{channel === "preview" ? "Couch Preview" : "Couch"}.app"</code></p>}
+              </div>
+              <span data-version>{item?.version}</span>
+              <a class={format === mine ? primary : secondary} href={item?.url} data-download aria-label={`Download for ${labels[format].name}`}>Download</a>
+            </li>;
+          })}
+        </ul>
+      </section>)}
+      <p id="no-releases" hidden={formats.some(format => releases.stable[format] || releases.preview[format])}>Downloads are unavailable right now. Try again later.</p>
+
+      <details>
+        <summary>Install and update</summary>
+        <p>Couch checks its own channel for updates when it starts and installs them when you quit.</p>
+        <p>Reinstall in the same place to keep your data and pairing. Don't install an older version as a repair.</p>
+      </details>
+      <details id="tv" hidden={!deb}>
+        <summary>Set up a dedicated Debian TV</summary>
+        <p>In the folder with the package, run:</p>
+        <pre><code id="deb-command">sudo apt install ./{deb?.filename}</code></pre>
+        <p>Then run <code>sudo couch-setup --tv</code> and reboot. Couch gets its own account with automatic sign-in; your admin account stays. Pair your phone with the code on screen.</p>
+      </details>
+      <footer>Dependency licenses and notices come with each package.</footer>
+    </main>
+    <script is:inline define:vars={{ secondary }}>
+      // Desktop-mode iPad Safari says Macintosh, and iPads can't run the Mac app. Only touch support tells them apart.
+      if (navigator.maxTouchPoints > 1) for (const row of document.querySelectorAll("li[data-mine]")) {
+        row.removeAttribute("data-mine");
+        row.querySelector("a").className = secondary;
+      }
+    </script>
+  </body>
+</html>
+
+<style>
+  main { max-width: 48rem; margin: auto; padding: 2rem var(--gutter) 4rem; }
+  nav a { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; color: var(--muted-foreground); }
+  nav a:hover { color: var(--foreground); }
+  h1 { margin: 3rem 0 .5rem; font-size: 1.5rem; font-weight: 600; line-height: 2rem; letter-spacing: -.025em; }
+  .intro { font-size: .875rem; color: var(--muted-foreground); }
+  section { margin-top: 3rem; }
+  h2, summary { font-size: 1rem; font-weight: 500; }
+  ul { display: flex; flex-direction: column; margin-top: 1rem; border-bottom: 1px solid var(--border); }
+  li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.5rem; padding-block: 1.25rem; border-top: 1px solid var(--border); }
+  li[data-mine] { order: -1; }
+  h3 { font-size: 1rem; font-weight: 500; }
+  li p, [data-version] { font-size: .875rem; }
+  li p, [data-version], footer { color: var(--muted-foreground); }
+  li p + p { margin-top: .25rem; }
+  details { margin-top: 1.5rem; }
+  details + details { margin-top: .75rem; }
+  summary { cursor: pointer; }
+  details p { margin-top: .75rem; max-width: 60ch; font-size: .875rem; line-height: 1.6; color: var(--muted-foreground); }
+  pre { overflow-x: auto; margin-top: .75rem; padding-block: 1rem; border-top: 1px solid var(--border); font-size: .875rem; }
+  footer { margin-top: 3rem; font-size: .75rem; }
+  @media (max-width: 40rem) {
+    li { grid-template-columns: 1fr auto; }
+    li [data-version] { display: none; }
+  }
+</style>

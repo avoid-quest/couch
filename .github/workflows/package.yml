@@ -1,0 +1,89 @@
+name: Package
+
+# Builds the app's installers and update files with electron-builder. Release
+# calls it with the version to build and uploads them to that version's draft
+# release; a manual dispatch builds package.json's version as run artifacts,
+# for test builds that are never published. A -preview.N version builds Couch
+# Preview (scripts/package.ts). Mac and Windows run on Blacksmith, like Linux.
+"on":
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: The version to build, set in package.json for this build only
+        required: true
+        type: string
+      ref:
+        description: The commit to build
+        required: true
+        type: string
+      release:
+        description: The draft release on avoid-quest/couch-releases to upload to
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runs-on: blacksmith-4vcpu-ubuntu-2404
+            targets: --linux AppImage deb --x64
+          # The zip is what the app updates itself from on macOS (app/update.ts).
+          - name: mac
+            runs-on: blacksmith-6vcpu-macos-26
+            targets: --mac dmg zip --arm64
+          - name: windows
+            runs-on: blacksmith-4vcpu-windows-2025
+            targets: --win nsis --x64
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # Release passes the commit preflight chose: for production, the latest
+      # preview's rather than this run's. (A `ref` on checkout would stop act
+      # from using the local tree.)
+      - if: inputs.ref
+        shell: bash
+        run: git fetch --depth=1 origin "${{ inputs.ref }}" && git checkout --detach FETCH_HEAD
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - if: inputs.version
+        run: bun pm pkg set version=${{ inputs.version }}
+      # Unsigned. electron-builder signs by itself once CSC_LINK and
+      # CSC_KEY_PASSWORD (plus APPLE_* for notarising) are in this step's env.
+      - run: bun run package ${{ matrix.targets }}
+      - if: inputs.release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.COUCH_RELEASES_TOKEN }}
+        run: |
+          shopt -s nullglob
+          files=()
+          for file in .artifacts/app/*.{AppImage,deb,dmg,zip,exe,blockmap,yml}; do
+            [[ $file == *builder-debug.yml ]] || files+=("$file")
+          done
+          gh release upload "${{ inputs.release }}" "${files[@]}" -R avoid-quest/couch-releases --clobber
+      - if: ${{ !inputs.release }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: couch-${{ matrix.name }}
+          path: |
+            .artifacts/app/*.AppImage
+            .artifacts/app/*.deb
+            .artifacts/app/*.dmg
+            .artifacts/app/*.zip
+            .artifacts/app/*.exe
+            .artifacts/app/*.blockmap
+            .artifacts/app/*.yml
+            !.artifacts/app/builder-debug.yml
+          if-no-files-found: error
+          retention-days: 14

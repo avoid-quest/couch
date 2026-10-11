@@ -1,0 +1,197 @@
+/* The only client stylesheet under Vite. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter-tight";
+
+@layer components {
+/* Keep scroll edges continuous with the black page, and focus clear of the sticky header and mini player. */
+html { background: var(--background); scroll-padding-top: calc(4rem * var(--interface-scale)); scroll-padding-bottom: calc(var(--bottom-bar, 0px) * var(--interface-scale)); }
+html, body { overscroll-behavior: none; }
+[hidden] { display: none !important; }
+button, a, input { -webkit-tap-highlight-color: transparent; }
+a { text-underline-offset: 4px; }
+/* Per-client interface size (Settings, Appearance). */
+:root { --interface-scale: 1; }
+body { min-width: 0; }
+/* Radix positions portal wrappers in viewport pixels. Scale their contents. */
+#root, [data-slot="dialog-content"], [data-slot="select-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"] { zoom: var(--interface-scale); }
+
+[data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
+[data-slot="popover-content"], [data-slot="dropdown-menu-content"] { max-width: calc((100vw - 2rem) / var(--interface-scale)); }
+}
+
+@custom-variant dark (&:is(.dark *));
+/* Phones and narrow windows get 44px targets; Mira stays compact elsewhere. */
+@custom-variant touch { @media (max-width: 959px) { @slot; } @media (pointer: coarse) { @slot; } }
+/* The TV presentation (session-context.tsx sets body.tv-presentation). */
+@custom-variant tv (&:is(.tv-presentation *));
+/* Tailwind's hover, minus the TV: a stray pointer there must never compete with focus. :where keeps hover's specificity. */
+@custom-variant hover { @media (hover: hover) { &:where(:not(.tv-presentation *)):hover { @slot; } } }
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Inter Tight Variable', sans-serif;
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Clock: one dark theme. Black ground, white ink, hairlines; the picture brings the colour. */
+:root {
+    --background: #000;
+    --foreground: #fff;
+    --card: #000;
+    --card-foreground: #fff;
+    --popover: #0a0a0a;
+    --popover-foreground: #fff;
+    --primary: #fff;
+    --primary-foreground: #000;
+    --secondary: #171717;
+    --secondary-foreground: #fff;
+    --muted: #171717;
+    --muted-foreground: #a3a3a3;
+    --accent: #fff;
+    --accent-foreground: #000;
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: rgb(255 255 255 / 16%);
+    --input: rgb(255 255 255 / 20%);
+    --ring: #fff;
+    --radius: .25rem;
+    --gutter: 3rem;
+    color-scheme: dark;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  /* One layout scaled proportionally: 1rem is 1/80 of the width (24px on a 1080p TV). */
+  html { @apply font-sans; font-size: clamp(16px, 1.25vw, 24px); font-variant-numeric: tabular-nums; }
+  body { @apply bg-background text-foreground; }
+  button, [role="button"] { touch-action: manipulation; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+@media (max-width: 700px) { :root { --gutter: 1rem; } }
+
+/* Clock focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
+   Unlayered on purpose so it wins over component rings and hover backgrounds. */
+:is(button, a, [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
+[data-slot="button"][data-variant="default"]:focus-visible,
+:is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
+/* A TV fader that OK handed Up/Down to (navigation.ts). */
+[role="slider"][data-adjusting] { scale: 1.75; }
+:is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
+/* Artwork stays contained; focus outlines it and inverts only the tile caption. */
+[data-media-tile]:focus-visible { background: none; color: inherit; }
+[data-media-tile]:focus-visible [data-tile-art] { outline: .125rem solid var(--foreground); outline-offset: .125rem; }
+[data-media-tile]:focus-visible [data-tile-caption] { background: var(--foreground); color: var(--background); }
+html { view-transition-name: none; }
+
+/* The mini player grows into the player band and back. */
+::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+
+/* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window
+   around their controls and leave 90pt for the window's buttons, which don't zoom.
+   Electron 44 inherits app-region, so children reset to initial and add no rectangles;
+   open dialogs sit above a header and take its clicks back. */
+[data-window-controls] .drag-region { app-region: drag; }
+@layer base { [data-window-controls] .drag-region > * { app-region: initial; } }
+[data-window-controls] :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
+[data-window-controls] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
+/* 90pt is where the first control's box starts, so the nav keeps its hit area inside it. */
+[data-window-controls] .window-controls-inset > [data-app-nav] { margin-left: 0; }
+
+/* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
+.app-shell { min-height: calc(100dvh / var(--interface-scale)); }
+.app-shell:has(.player-page) { min-height: 0; height: calc(100dvh / var(--interface-scale)); }
+.player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
+.player-main { position: relative; min-width: 0; min-height: 0; }
+.player-band { position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
+/* Video controls shade the picture without a hard edge that looks like a crop. */
+.player-band.player-video-controls { pointer-events: none; padding-top: 3.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 3rem, rgb(0 0 0 / 96%)); }
+.player-video-controls > * { pointer-events: auto; }
+.player-band[data-player-band="hidden"] { pointer-events: none; }
+.player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
+[data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
+[data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
+.player-summary { display: flex; flex-direction: column; align-items: center; gap: 1rem; width: min(26rem, 100%); min-height: 0; flex: 0 1 auto; pointer-events: auto; }
+.player-art { width: min(22rem, 100%); aspect-ratio: 1; min-height: 0; max-height: 22rem; flex: 0 1 auto; }
+.player-art > :not(svg), .player-art img { width: 100%; height: 100%; min-height: 0; min-width: 0; object-fit: contain; background: transparent; }
+.player-art > svg { width: 4rem; height: 4rem; }
+[data-player-audio-copy] { flex: 0 0 auto; }
+.player-timeline:has([role="slider"]) { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
+.player-timeline:has([role="slider"]) > .relative { grid-column: 2; grid-row: 1; }
+.player-timeline:has([role="slider"]) [data-time-labels] { display: contents; }
+.player-timeline:has([role="slider"]) [data-time-labels] > span:first-child { grid-column: 1; grid-row: 1; max-width: 9rem; }
+.player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
+/* Transport, then the timeline's slot, then the tools. A timeline takes its own row above (it comes first in the
+   DOM, so focus lands on it); "Live" stays in the slot between transport and tools. */
+.player-control-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .25rem 1.5rem; }
+.player-control-row > .player-timeline:has([role="slider"]) { grid-column: 1 / -1; grid-row: 1; }
+.player-control-row > .player-transport { order: -1; }
+.player-control-row > [data-player-tools] { grid-column: -2; }
+@media (min-width: 960px) {
+  [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
+  [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: 3.5rem; bottom: var(--bottom-bar, 10rem); grid-template-columns: minmax(0, 1fr) 24rem; }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-video { right: 24rem; }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-queue { display: flex; border-left: 1px solid var(--border); padding: 1.5rem; }
+}
+@media (max-width: 959px) {
+  [data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1rem); }
+  [data-queue-open] .player-main { display: none; }
+  [data-queue-open] .player-summary { display: none; }
+  [data-queue-open] .player-queue { display: flex; grid-row: 1; }
+  .player-control-row { column-gap: .5rem; }
+}
+@media (max-width: 599px) {
+  [data-player-audio-copy] h1 { font-size: 1.25rem; }
+  .player-timeline [data-current-chapter], .player-timeline [data-end-time] { display: none; }
+}
+/* Keep the transport and 44px tools reachable on narrow phones. */
+@media (max-width: 399px) {
+  .player-control-row > [data-player-tools] { grid-column: 1 / -1; justify-self: end; }
+}
+@media (max-height: 500px) {
+  [data-artwork-stage] .player-workspace, [data-queue-open] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
+  [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
+  .player-header { padding-block: .25rem; }
+  [data-player-band] { padding-block: .25rem; }
+  .player-band.player-video-controls { padding-top: 1.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 1.5rem, rgb(0 0 0 / 96%)); }
+  .player-control-row { column-gap: .5rem; }
+  [data-player-audio-copy] { gap: .25rem; }
+  [data-player-audio-copy] h1 { font-size: 1.125rem; -webkit-line-clamp: 1; }
+}
+
+.player-page[data-player-idle][data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) 1rem; display: flex; justify-content: center; }
+.player-page[data-player-idle] .player-main { display: none; }
+.player-page[data-player-idle][data-queue-open] .player-queue { display: flex; width: 100%; max-width: 48rem; border: 0; padding: 0; }
+
+/* The TV and the playing picture hide an idle pointer, even over elements with their own cursor. */
+html[data-cursor-hidden], html[data-cursor-hidden] * { cursor: none !important; }
+
+@media (max-width: 959px) { [data-queue-open] .player-band.player-video-controls { padding-top: 0; background: var(--background); } }

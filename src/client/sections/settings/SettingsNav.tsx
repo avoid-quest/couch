@@ -1,0 +1,72 @@
+import { Check } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { deviceName } from "@/copy";
+import { cn } from "@/lib/utils";
+import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
+import { couchApp } from "@/session/native-context";
+import { useSessionGate } from "@/session/session-context";
+import { focusPageControl } from "@/navigation";
+
+type Props = { active: SettingsPage };
+
+/** Grouped settings pages: a rail with a check on wide screens, a Select on narrow ones. */
+export function SettingsNav({ active }: Props) {
+  const navigate = useNavigate();
+  const { identity, tvPresentation, details, state } = useSessionGate();
+  const administrator = identity?.authority === "host" || identity?.authority === "administrator";
+  const visible = (id: SettingsPage) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
+    && (id !== "display" || !!details?.tvPresentation)
+    // Sound outputs and Bluetooth exist only where Couch controls the system's sound (Linux).
+    && (id !== "sound" && id !== "bluetooth" || !!details?.systemAudio)
+    && (id !== "updates" || !!couchApp?.updates || administrator && (!!details?.updates || state?.devices?.some(device => device.updates)))
+    && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
+  const groups = ([
+    // Identity, everyday use, media, the Couch's hardware, then maintenance.
+    [deviceName(state?.installationName ?? details?.name), ["general", "connection"]],
+    ["Preferences", ["playback", "home", "appearance"]],
+    ["Media", ["sources"]],
+    ["Hardware", ["sound", "bluetooth", "display", "tv-appearance"]],
+    ["Updates", ["updates"]],
+  ] as const).map(([label, pages]) => ({ label, pages: pages.filter(visible) })).filter(group => group.pages.length);
+  const current = active.startsWith("source-") ? "sources" : active;
+
+  return <>
+    <Select value={current} onValueChange={id => void navigate({ to: settingsPages[id as SettingsPage].path })}>
+      <SelectTrigger aria-label="Settings page" data-page-first className="w-full md:hidden">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {groups.map(group => (
+          <SelectGroup key={group.label}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.pages.map(id => <SelectItem key={id} value={id}>{settingsPages[id].label}</SelectItem>)}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+    <nav aria-label="Settings pages" className="hidden min-w-0 flex-col gap-6 md:flex">
+      {groups.map(group => (
+        <div key={group.label} className="flex flex-col">
+          <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{group.label}</p>
+          {group.pages.map(id => (
+            <Button key={id} data-settings-page={id} variant="ghost" asChild className="w-full justify-start font-normal">
+              <Link data-page-first={current === id || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path} onClick={event => {
+                if (!tvPresentation || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                void navigate({ to: settingsPages[id].path }).then(() => {
+                  const content = document.querySelector<HTMLElement>("[data-settings-content]");
+                  if (content) focusPageControl(content);
+                });
+              }}>
+                <Check aria-hidden="true" className={cn(current !== id && "invisible")} />
+                {settingsPages[id].label}
+              </Link>
+            </Button>
+          ))}
+        </div>
+      ))}
+    </nav>
+  </>;
+}

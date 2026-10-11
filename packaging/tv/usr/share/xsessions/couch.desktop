@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Couch TV
+Comment=Supervised fullscreen Couch
+Exec=/usr/lib/couch-appliance/session
+Type=Application
+DesktopNames=Couch

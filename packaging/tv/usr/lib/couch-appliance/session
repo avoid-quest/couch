@@ -1,0 +1,78 @@
+#!/bin/bash
+set -eu
+[ "$(id -un)" = couch-tv ] || { echo 'Couch session requires the couch-tv runtime account' >&2; exit 1; }
+export XDG_SESSION_TYPE=x11
+systemctl --user import-environment DISPLAY XAUTHORITY XDG_SESSION_TYPE
+dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_SESSION_TYPE
+xset s off
+xset -dpms
+
+# Use one active screen at 0,0: the attached TV, else the laptop panel.
+# Keep the fullscreen window and pointer in the selected screen's coordinate space.
+lay_out() {
+    local screen output off=()
+    screen=$(awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}' <<< "$1")
+    if [ -z "$screen" ] || ! { xrandr --output "$screen" --mode 1920x1080 --pos 0x0 --primary || xrandr --output "$screen" --auto --pos 0x0 --primary; }; then
+        screen=$(awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1; exit}' <<< "$1")
+        [ -n "$screen" ] && xrandr --output "$screen" --auto --pos 0x0 --primary || return 0
+    fi
+    # Turn off every other output with a mode: the panel, or a TV that was unplugged.
+    while read -r output; do off+=(--output "$output" --off); done < <(awk -v screen="$screen" '$2 ~ /connected$/ && $1 != screen && /[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/ {print $1}' <<< "$1")
+    [ "${#off[@]}" = 0 ] || xrandr "${off[@]}" || true
+}
+inventory=$(xrandr --query)
+connected=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
+lay_out "$inventory"
+
+openbox --config-file /usr/share/couch-appliance/openbox.xml &
+wm=$!
+# Hide the pointer everywhere on the screen, the recovery notice included, until it moves.
+unclutter-xfixes --timeout 1 --jitter 3 --ignore-scrolling --start-hidden &
+pointer=$!
+notice=
+cleanup() {
+    trap - EXIT HUP INT TERM
+    systemctl --user stop couch-tv.service || true
+    [ -z "$notice" ] || kill "$notice" 2>/dev/null || true
+    [ -z "$pointer" ] || kill "$pointer" 2>/dev/null || true
+    kill "$wm" 2>/dev/null || true
+    wait || true
+}
+trap cleanup EXIT HUP INT TERM
+systemctl --user reset-failed couch-tv.service || true
+systemctl --user start couch-tv.service || true
+
+# Keep LightDM's session alive after the restart limit, so it cannot reset the
+# budget by logging in again. Recovery remains visible until an admin restarts it.
+while kill -0 "$wm" 2>/dev/null; do
+    if [ -n "$pointer" ] && ! kill -0 "$pointer" 2>/dev/null; then
+        status=0
+        wait "$pointer" || status=$?
+        logger -t couch-session "Cursor hiding stopped (exit $status). The TV session remains available; inspect couch-session logs and restart the session to retry."
+        pointer=
+    fi
+    # Xorg updates its cached inventory on hotplug. Lay out the screen once per
+    # change, without reprobes or repeatedly resetting modes during playback.
+    if inventory=$(timeout 2 xrandr --current); then
+        now=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
+        [ "$now" = "$connected" ] || lay_out "$inventory"
+        connected=$now
+    fi
+    state=$(systemctl --user show couch-tv.service --property=ActiveState --value)
+    if [[ "$state" = failed || "$state" = inactive ]]; then
+        if [ -z "$notice" ]; then
+            logger -t couch-session "Couch TV is $state. Inspect couch-session logs; recover with couch-session restart."
+            xmessage -center -buttons '' 'Couch TV needs attention.
+
+From SSH or Ctrl+Alt+F3, sign in with your administrator account.
+Run: sudo couch-session logs
+Then: sudo couch-session restart' &
+            notice=$!
+        fi
+    elif [ -n "$notice" ]; then
+        kill "$notice" 2>/dev/null || true
+        wait "$notice" 2>/dev/null || true
+        notice=
+    fi
+    sleep 2
+done

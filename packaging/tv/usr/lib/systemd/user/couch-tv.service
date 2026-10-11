@@ -1,0 +1,28 @@
+[Unit]
+Description=Couch TV app
+Wants=pipewire.service pipewire-pulse.service wireplumber.service
+After=pipewire.service pipewire-pulse.service wireplumber.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=exec
+Environment=GDK_BACKEND=x11
+Environment=COUCH_TV_PRESENTATION=1
+EnvironmentFile=/etc/couch/appliance.env
+EnvironmentFile=-/run/couch-appliance/recovery.env
+ExecStartPre=/usr/bin/pactl info
+ExecStartPre=/usr/lib/couch-appliance/initialize-audio
+ExecStart=/usr/bin/couch
+Restart=always
+RestartSec=5
+# Main shuts down Core and Chromium; signalling their children first makes Main
+# relaunch the GPU during shutdown. Final cleanup still covers the whole group.
+KillMode=mixed
+TimeoutStopSec=10
+UMask=0077
+MemoryHigh=2500M
+MemorySwapMax=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=couch-tv

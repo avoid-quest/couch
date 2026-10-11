@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+[ "$(id -u)" = 0 ] || { echo 'Run with sudo from the administrator account.' >&2; exit 1; }
+uid=$(id -u couch-tv)
+user_systemctl() {
+    runuser -u couch-tv -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user "$@"
+}
+case "${1:-status}" in
+    autostart) [ "$#" = 2 ] || exit 2; /usr/lib/couch-appliance/set-autostart "$2"; echo "Saved for the next graphical session. Inspect lightdm --show-config before restarting LightDM." ;;
+    status) user_systemctl status couch-tv.service --no-pager ;;
+    restart) user_systemctl reset-failed couch-tv.service || true; user_systemctl restart couch-tv.service ;;
+    stop) user_systemctl stop couch-tv.service ;;
+    recover-admin)
+        # Serialize replacement and restart. Only the runtime user can read the
+        # boot-scoped file; the code never enters argv or the systemd journal.
+        exec 9>/run/couch-session-recovery.lock
+        flock -x 9
+        install -d -o root -g couch-tv -m 0750 /run/couch-appliance
+        temporary=$(mktemp /run/couch-appliance/recovery.XXXXXX)
+        trap 'rm -f "$temporary"' EXIT HUP INT TERM
+        code=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+        printf 'COUCH_ADMIN_RECOVERY_CODE=%s\n' "$code" > "$temporary"
+        chown root:couch-tv "$temporary"
+        chmod 0640 "$temporary"
+        mv -f "$temporary" /run/couch-appliance/recovery.env
+        user_systemctl reset-failed couch-tv.service || true
+        user_systemctl restart couch-tv.service
+        printf 'Pair your replacement browser, then use this administrator code within 10 minutes:\n%s\n' "$code"
+        ;;
+    logs) journalctl "_UID=$uid" --no-pager -n 200 ;;
+    *) echo 'Usage: couch-session {status|restart|stop|logs|recover-admin|autostart enable|autostart disable}' >&2; exit 2 ;;
+esac

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.data/
+.DS_Store
+.artifacts/
+.astro/
+.wrangler/
+
+# Local configuration and scratch evidence
+.env
+.env.*
+!.env.example
+.scratch/

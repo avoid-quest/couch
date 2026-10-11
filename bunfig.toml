@@ -1,0 +1,3 @@
+[install]
+# Skip package versions younger than 3 days, so a compromised release has time to be pulled.
+minimumReleaseAge = 259200
