@@ -24,6 +24,19 @@ Couch runs as one Electron app where every client is a full Device.
 **This computer** hosts Couch in the app; **Another Couch** shows a paired host's
 own page in the app window. Browser remotes connect on your local network.
 
+## Install
+
+Download the macOS `.dmg`, Windows `.exe`, or Linux `.AppImage` / `.deb` from
+[Releases](https://github.com/avoid-quest/couch/releases). Until the first
+release here, use the [earlier installers](https://github.com/avoid-quest/couch-releases/releases).
+See the [installation notes](docs/usage.md#install) for macOS's first-launch
+command and Windows's SmartScreen prompt.
+
+Existing installations still check the earlier release repository. A final
+update published there can move them to this repository without reinstalling
+or resetting their data; this [release transition](docs/ci.md#moving-existing-installations)
+has not been published yet.
+
 On Linux Mint, Ubuntu and Debian, install the `.deb` with APT so its sound
 dependencies are installed too: `sudo apt install ./couch_<version>_amd64.deb`.
 Couch needs `pulseaudio-utils` and either PulseAudio or `pipewire-pulse`; an
@@ -72,9 +85,6 @@ publishes it to Cloudflare Workers at `couch.avoid.quest`. The download page
 finds the newest release and preview on
 [this repository's releases](https://github.com/avoid-quest/couch/releases) through
 GitHub's API, with `apps/web/src/releases.json` as fallback.
-
-Earlier installers remain available in the
-[release archive](https://github.com/avoid-quest/couch-releases/releases).
 
 - [Usage and development](docs/usage.md)
 - [Checks and releases](docs/ci.md)
