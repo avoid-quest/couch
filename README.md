@@ -27,15 +27,9 @@ own page in the app window. Browser remotes connect on your local network.
 ## Install
 
 Download the macOS `.dmg`, Windows `.exe`, or Linux `.AppImage` / `.deb` from
-[Releases](https://github.com/avoid-quest/couch/releases). Until the first
-release here, use the [earlier installers](https://github.com/avoid-quest/couch-releases/releases).
+[Releases](https://github.com/avoid-quest/couch/releases).
 See the [installation notes](docs/usage.md#install) for macOS's first-launch
 command and Windows's SmartScreen prompt.
-
-Existing installations still check the earlier release repository. A final
-update published there can move them to this repository without reinstalling
-or resetting their data; this [release transition](docs/ci.md#moving-existing-installations)
-has not been published yet.
 
 On Linux Mint, Ubuntu and Debian, install the `.deb` with APT so its sound
 dependencies are installed too: `sudo apt install ./couch_<version>_amd64.deb`.

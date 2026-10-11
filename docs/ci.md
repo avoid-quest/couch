@@ -97,34 +97,6 @@ visibility. Keep the Blacksmith GitHub App enabled for this repository.
 The website's fallback catalog should list only installers that have actually
 been published here.
 
-### Moving existing installations
-
-Existing Electron builds still read
-[couch-releases](https://github.com/avoid-quest/couch-releases/releases).
-Changing this repository's configuration does not change already installed
-apps. A one-time copy of the first new release to that repository can deliver
-the new updater location through their normal update process. This transition
-has not been published yet; both source repositories remain private.
-
-After the owner authorizes publication:
-
-1. Make this repository public and publish a newer release here. The archived
-   Electron releases are previews; the new base version, `0.3.1`, is newer
-   than their `0.3.0-preview.N` versions.
-2. Create a draft in `couch-releases` with the same tag and prerelease status.
-   Copy **all** assets unchanged, including installers, the Mac zip, blockmaps
-   and channel `.yml` files. Verify matching checksums before publishing that
-   draft. Older Mac and TV updaters construct download URLs in `couch-releases`,
-   so copying only the update files is insufficient.
-3. Verify the update from an older installation on each supported platform.
-   The downloaded build reads future releases from `couch`; its app identity
-   and data directory are unchanged. A preview serves the Preview channel;
-   installations following Stable need a production release on that channel.
-
-Keep the old archive and the transition release available for installations
-that update later. Future releases need only be published here. Installing a
-new build manually is also possible without clearing the existing app data.
-
 ## Workflow changes
 
 Prove workflow and packaging edits with [`act`](https://nektosact.com) before
