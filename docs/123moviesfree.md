@@ -45,8 +45,8 @@ Subtitle discovery is optional, capped at 64 KiB with a five-second deadline,
 and supports cancellation. An unavailable or malformed index does not prevent
 video playback. The files use Couch's existing signed subtitle endpoint and
 playback controls; they are fetched only when selected, with the existing
-2 MiB subtitle limit. Profile preferences continue to control language and
-whether subtitles are shown.
+2 MiB subtitle limit and redirects rejected. Profile preferences continue to
+control language and whether subtitles are shown.
 
 ## Verification on 12 October 2026
 
