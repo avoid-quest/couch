@@ -12,6 +12,9 @@ and paired remotes.
   search), SoundCloud track search, and pasted links from other sites yt-dlp supports.
 - **StreamingCommunity** catalogue browsing, search, seasons and episodes. An
   administrator sets its current origin in **Settings > Sources**.
+- **123MoviesFree** film and TV-season browsing, search, saved items and episode
+  selection. Its direct player integration is experimental: live manifests
+  returned HTTP 502 during verification. See [source details](123moviesfree.md).
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites.
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
@@ -35,6 +38,7 @@ a Mac.
 | RaiPlay live and replays | Yes | Yes | Yes | Yes | Not tested | Yes |
 | Bandcamp | Yes | Yes | Yes | Yes | Not tested | Not tested |
 | StreamingCommunity | Yes | Not tested | Yes | Not tested | Not tested | Not tested |
+| 123MoviesFree | Not verified | Not verified | Not verified | Not verified | Not verified | Not verified |
 | Radio | Yes | Yes | Yes | Yes | Not tested | Yes |
 | Other yt-dlp sites (Dailymotion, SoundCloud) | Yes | Yes | Yes | Yes | Not tested | Yes |
 | Vimeo | Depends on item | Not tested | Depends on item | Not tested | Not tested | Not tested |
@@ -75,8 +79,8 @@ a Mac.
 3. Search in **Find**, or paste a link. Searches wait one second after you stop
    typing; Enter searches immediately. The **Music** filter shows Bandcamp and
    SoundCloud results. **Play** starts an item now; **Queue** in
-   its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp or
-   StreamingCommunity link opens its page.
+   its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,
+   StreamingCommunity or 123MoviesFree link opens its page.
 
 **Settings > Playback > Video quality** saves this browser's default online video
 quality (Auto is up to 1080p).

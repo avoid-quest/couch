@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { CollectionHeader, HitList, SourceProblems } from "./SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
 import { providerForUrl, type ProviderId } from "../../../shared/providers";
+import { movies123Origin } from "../../../shared/movies123";
 
 export function ProviderPage() {
   const { search } = useLocation();
@@ -41,7 +42,9 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const collection = summary?.collection ?? { title: providerNames[provider], source: providerNames[provider], description: summary?.page?.description };
   const page = summary?.page;
   // Use the provider's canonical catalogue route; title and season pages keep their rows.
-  const posterCatalogue = provider === "streamingcommunity" && (!url || /^\/(?:[a-z]{2}\/)?(?:archive|browse\/genre)\/?$/.test(new URL(page?.item?.url ?? url).pathname));
+  const path = url ? new URL(page?.item?.url ?? url).pathname : "";
+  const posterCatalogue = provider === "streamingcommunity" && (!url || /^\/(?:[a-z]{2}\/)?(?:archive|browse\/genre)\/?$/.test(path))
+    || provider === "movies123" && (!url || path === "/" || /^\/(?:(?:movies|tv-series)(?:\/{1,2}[1-9]\d{0,3})?|home)\/?$/.test(path));
   useEffect(() => {
     // Back can restore focus while the cached results are still mounting; scroll once they settle.
     if (!posterCatalogue) return;
@@ -56,7 +59,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
   const currentId = hits.find(hit => hit.url === source)?.id;
   const emptyRoot = !url && connected && !!summary && !summary.loading && !summary.error && !summary.hits?.length;
-  const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : /\/season-\d+|\/ContentSet-/.test(url) || provider === "streamingcommunity" && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media") ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
+  const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path) || /\/season-\d+|\/ContentSet-/.test(url) || provider === "streamingcommunity" && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media") ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
   const href = (direction: "previous" | "next") => collectionLocation({ provider, url }, { ...search,
     ...(paging.remote ? { cursors: direction === "previous" ? search.cursors.slice(0, -1) : [...search.cursors, page!.nextCursor!], page: 1 } : { page: paging.page + (direction === "previous" ? -1 : 1) }) });
   const goToPage = (href: string) => {
@@ -84,6 +87,10 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
         <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading ? <><Spinner className="size-3.5" /><span role="status">Loading items…</span></> : <>{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</>}</h2>
         <div className="flex flex-wrap items-center gap-4">
           {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: "https://www.twitch.tv/directory" })}>Categories</Link></Button>}
+          {provider === "movies123" && posterCatalogue && <>
+            <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` })}>Movies</Link></Button>
+            <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` })}>TV series</Link></Button>
+          </>}
           <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={search.filter}
             onChange={event => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: event.target.value }), replace: true, resetScroll: false })} />
           {(paging.remote || (paging.pages ?? 1) > 1) && pager}

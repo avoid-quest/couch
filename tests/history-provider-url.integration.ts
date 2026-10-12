@@ -25,6 +25,8 @@ for (const url of [
   "https://artist.bandcamp.com/track/song",
   "https://soundcloud.com/arsiderprod/track",
   "https://www.twitch.tv/videos/12345",
+  "https://ww8.123moviesfree.net/movie/example-123/",
+  "https://ww8.123moviesfree.net/season/example-season-1-123/?episode=2",
 ]) test(`history exposes only the public provider page: ${url}`, async () => {
   const item = await history(`web:${url}`);
   assert.equal(item.url, url);
@@ -43,6 +45,10 @@ for (const source of [
   "web:https://artist.bandcamp.com/track/song?token=PRIVATE",
   "web:https://soundcloud.com/arsiderprod/track?secret_token=PRIVATE",
   "web:https://www.twitch.tv/videos/12345?token=PRIVATE",
+  "web:https://ww8.123moviesfree.net/season/example-season-1-123/",
+  "web:https://ww8.123moviesfree.net/season/example-season-1-123/?episode=2&token=PRIVATE",
+  "web:https://ww8.123moviesfree.net/movie/example-123/?token=PRIVATE",
+  "web:https://ww8.123moviesfree.net/hls/PRIVATE/master.m3u8",
   "web:https://user:password@www.youtube.com/watch?v=abcdefghijk",
   "web:https://www.youtube.com:444/watch?v=abcdefghijk",
   "web:https://www.youtube.com/watch?v=abcdefghijk#PRIVATE",

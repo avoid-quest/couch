@@ -6,7 +6,7 @@ export function savedSourceLabel(item: ForLaterItem) {
   if (!item.url) return "";
   try {
     const provider = providerForUrl(item.url);
-    return provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity" }[provider] : new URL(item.url).hostname.replace(/^www\./, "");
+    return provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" }[provider] : new URL(item.url).hostname.replace(/^www\./, "");
   } catch { return ""; }
 }
 
