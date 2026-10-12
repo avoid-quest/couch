@@ -32,13 +32,13 @@ async function playerText(url: string, maximum: number, accept: string, signal: 
   } catch (error) { cancellation.throwIfAborted(); throw error; }
 }
 
-async function playerSubtitles(id: string, episode: number, preferred: string, signal: AbortSignal, request: typeof fetch): Promise<ExternalSubtitle[]> {
+async function playerSubtitles(id: string, episode: number, preferred: string, signal: AbortSignal | undefined, request: typeof fetch): Promise<ExternalSubtitle[]> {
   // The public player XORs each byte of "id-episode" with the bytes of "player".
   const mask = Buffer.from("player").reduce((mask, byte) => mask ^ byte, 0);
   const token = Buffer.from(Buffer.from(`${id}-${episode}`).map(byte => byte ^ mask)).toString("hex");
   const path = `/sub/${token}/`, base = `${player}${path}`;
   try {
-    const text = await playerText(`${base}index.json`, 64 * 1024, "application/json", AbortSignal.any([signal, AbortSignal.timeout(5000)]), request);
+    const text = await playerText(`${base}index.json`, 64 * 1024, "application/json", AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]), request);
     const rows: unknown = JSON.parse(text);
     if (!Array.isArray(rows)) return [];
     const seen = new Set<string>(), labels = new Map<string, number>();
@@ -58,7 +58,7 @@ async function playerSubtitles(id: string, episode: number, preferred: string, s
     }
     const rank = (track: ExternalSubtitle) => preferred && track.language?.toLowerCase().startsWith(preferred.toLowerCase().slice(0, 2)) ? 0 : 1;
     return subtitles.sort((a, b) => rank(a) - rank(b)).slice(0, 16);
-  } catch { signal.throwIfAborted(); return []; }
+  } catch { signal?.throwIfAborted(); return []; }
 }
 
 export async function resolveMovies123Link(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch, subtitleLanguage = ""): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
@@ -84,8 +84,9 @@ export async function resolveMovies123Link(value: string, signal?: AbortSignal, 
     const master = `${player}/hls/${data.info}/master.m3u8`;
     const manifest = await playerText(master, 512 * 1024, "application/vnd.apple.mpegurl, application/x-mpegURL, text/plain", cancellation, request);
     if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) throw unavailable();
-    const subtitles = await playerSubtitles(title.id, episode, subtitleLanguage, cancellation, request);
     cancellation.throwIfAborted();
+    const subtitles = await playerSubtitles(title.id, episode, subtitleLanguage, signal, request);
+    signal?.throwIfAborted();
     const { title: name, thumbnail, duration } = title.item;
     return { url: master, headers: { ...requestHeaders }, metadata: { title: name, ...(thumbnail ? { thumbnail } : {}), ...(duration !== undefined ? { duration } : {}) }, subtitles };
   } catch (error) {

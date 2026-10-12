@@ -35,6 +35,10 @@ test("public source references keep distinct film, season and episode identities
   assert.equal(publicProviderMediaUrl(movie), movie);
   assert.equal(publicProviderMediaUrl(`${season}?episode=2`), `${season}?episode=2`);
   assert.equal(publicProviderMediaUrl(season), undefined);
+  for (const host of ["ww9.123moviesfree.net", "www.123moviesfree.net", "123moviesfree.net"]) {
+    assert.equal(publicProviderMediaUrl(movie.replace("ww8.123moviesfree.net", host)), movie);
+    assert.equal(publicProviderMediaUrl(`${season.replace("ww8.123moviesfree.net", host)}?episode=2`), `${season}?episode=2`);
+  }
   for (const value of [movie.replace("ww8.", "cdn."), movie.replace("123moviesfree.net", "123moviesfree.net.evil.example"), `${movie}?token=secret`, `${season}?episode=0`, `${season}?episode=501`, `${season}?episode=1&episode=2`, `${season}?episode=2&token=secret`, `${movie}#fragment`, movie.replace("https://", "https://user:secret@"), movie.replace(".net/", ".net:444/")]) {
     assert.equal(movies123PageUrl(value), undefined, value);
     assert.equal(publicProviderMediaUrl(value), undefined, value);

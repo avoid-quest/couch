@@ -105,6 +105,26 @@ test("123MoviesFree still plays video when the optional subtitle index is unavai
   }
 });
 
+test("123MoviesFree keeps validated video when the video deadline expires during subtitle discovery", async context => {
+  const videoDeadline = new AbortController(), subtitleDeadline = new AbortController();
+  const timeout = AbortSignal.timeout;
+  context.mock.method(AbortSignal, "timeout", (milliseconds: number) => milliseconds === 25_000 ? videoDeadline.signal : milliseconds === 5000 ? subtitleDeadline.signal : timeout(milliseconds));
+  let cancelled = false, started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const { request } = fixture({ subtitles: () => {
+    started();
+    return new Response(new ReadableStream({ cancel() { cancelled = true; } }));
+  } });
+  const pending = resolveMovies123Link(movie, undefined, request);
+  await ready;
+  videoDeadline.abort(new DOMException("Video deadline expired", "TimeoutError"));
+  subtitleDeadline.abort(new DOMException("Subtitle deadline expired", "TimeoutError"));
+  const result = await pending;
+  assert.equal(result.url, master);
+  assert.deepEqual(result.subtitles, []);
+  assert.equal(cancelled, true);
+});
+
 test("123MoviesFree bounds the subtitle index and cancels its body without preventing video", async () => {
   let cancelled = false;
   const { request } = fixture({ subtitles: () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(64 * 1024 + 1)); }, cancel() { cancelled = true; } })) });

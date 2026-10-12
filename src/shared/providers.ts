@@ -1,6 +1,6 @@
 import type { CollectionLink, MediaCollection, MediaShape } from "./media";
 import { isStreamingCommunityHost } from "./streamingcommunity";
-import { isMovies123Host, movies123PageUrl } from "./movies123";
+import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123";
 
 export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity" | "movies123";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
@@ -68,7 +68,7 @@ export function publicProviderMediaUrl(value: string): string | undefined {
     const path = url.pathname.replace(/\/$/, "");
     if (provider === "movies123") {
       const page = movies123PageUrl(value);
-      return page && (page.pathname.startsWith("/movie/") || page.searchParams.has("episode")) ? page.href : undefined;
+      return page && (page.pathname.startsWith("/movie/") || page.searchParams.has("episode")) ? `${movies123Origin}${page.pathname}${page.search}` : undefined;
     }
     if (provider === "streamingcommunity" && /^\/(?:[a-z]{2}\/)?(?:titles\/\d+(?:-[\w-]+)?|watch\/\d+)$/.test(path)
       && (!url.search || /^\?e=\d+$/.test(url.search) && /\/watch\/\d+$/.test(path))) return url.href;

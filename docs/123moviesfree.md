@@ -6,6 +6,8 @@ the site's advertised direct playback server. Film pages are
 `/season/<slug>-<id>/`. The website selects episodes with buttons without
 changing the page URL. Couch records the selected number as `?episode=N` and
 removes that marker before fetching the season page.
+Public history and progress references use the catalogue origin so accepted
+alternate hostnames share the same film or episode progress.
 
 ## Public contracts
 
@@ -41,8 +43,9 @@ the complete catalogue-to-manifest resolution has a 25-second deadline and
 supports cancellation. A manifest must be valid-looking HLS before it is
 passed to Couch's existing media resolver.
 
-Subtitle discovery is optional, capped at 64 KiB with a five-second deadline,
-and supports cancellation. An unavailable or malformed index does not prevent
+Subtitle discovery is optional, capped at 64 KiB with its own five-second
+deadline after the video manifest succeeds, and supports caller cancellation.
+An unavailable, timed-out or malformed index does not prevent
 video playback. The files use Couch's existing signed subtitle endpoint and
 playback controls; they are fetched only when selected, with the existing
 2 MiB subtitle limit and redirects rejected. Profile preferences continue to
