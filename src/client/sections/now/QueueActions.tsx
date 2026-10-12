@@ -28,14 +28,14 @@ export function QueueActions({ entry, index, queue, connected, run, credentials,
   return <DropdownMenu modal={false} onOpenChange={open => { if (open) trigger.current?.focus(); }}>
     <DropdownMenuTrigger asChild><Button ref={trigger} data-queue-menu variant="ghost" size="icon" aria-label={`Options for ${entry.title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" onCloseAutoFocus={event => { if (!trigger.current?.isConnected) event.preventDefault(); }}>
-      <DropdownMenuItem asChild><Link to={queueItemLocation(entry)}>Details</Link></DropdownMenuItem>
+      {!entry.liveSourceId && <DropdownMenuItem asChild><Link to={queueItemLocation(entry)}>Details</Link></DropdownMenuItem>}
       {index >= firstUpcomingIndex && firstUpcomingIndex < lastUpcomingIndex && <>
       {index > firstUpcomingIndex && <><DropdownMenuItem disabled={!connected} onSelect={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[firstUpcomingIndex]?.id ?? null })}>Play next</DropdownMenuItem>
       <DropdownMenuItem disabled={!connected} onSelect={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index - 1]!.id })}>Earlier</DropdownMenuItem></>}
       {index < lastUpcomingIndex && <DropdownMenuItem disabled={!connected} onSelect={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index + 2]?.id ?? null })}>Later</DropdownMenuItem>}
       <DropdownMenuSeparator />
       </>}
-      <DropdownMenuItem disabled={!connected || save.isPending} onSelect={() => save.mutate()}>Save for later</DropdownMenuItem>
+      {!entry.liveSourceId && <DropdownMenuItem disabled={!connected || save.isPending} onSelect={() => save.mutate()}>Save for later</DropdownMenuItem>}
       <DropdownMenuItem disabled={!connected} onSelect={() => void run({ type: "remove", entryId: entry.id })}>Remove</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>;

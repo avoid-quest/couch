@@ -17,7 +17,8 @@ import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality }
 import { createSession, type MediaSource } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
-import { parseCommand, parsePlayer } from "./validation";
+import { parseCommand, parseLiveSignal, parsePlayer } from "./validation";
+import { createLiveInputs } from "./live-input";
 import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
 import { createRadioProgramme } from "./radio-programme";
@@ -171,7 +172,7 @@ export async function createHub(options: HubOptions) {
   // screens: while Synced, the tabs showing the picture and the item each loaded; heard and seen:
   // the group's last report and a screen's, whose subtitles join it. delivery: as couch.log last said.
   // Private speakers keep their effective trim when another Device sets All. Output consent is live.
-  type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
+  type Playback = { id: string; liveSourceId?: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
     synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
@@ -184,6 +185,8 @@ export async function createHub(options: HubOptions) {
   const deviceOf = (socket: Socket<SocketData>) => socket.data.deviceId ?? hostId();
   const newest = (deviceId: string) => [...sockets].findLast(socket => deviceOf(socket) === deviceId);
   const nameOf = (deviceId: string) => playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
+  const live = createLiveInputs<Socket<SocketData>>({ deviceOf, nameOf, send: (socket, message) => { if (sockets.has(socket)) send(socket, JSON.stringify(message)); },
+    ended: sourceId => { for (const playback of all()) if (playback.liveSourceId === sourceId) { clearTimeout(playback.undoable); playback.undoable = undefined; void playback.session.command({ type: "stop" }); settle(playback); } }, changed: () => broadcast() });
   // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
   const failures = new WeakMap<Socket<SocketData>, Set<string>>();
@@ -272,6 +275,12 @@ export async function createHub(options: HubOptions) {
     }
   };
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
+    if (playback.liveSourceId) {
+      if (command.type === "load") { playback.loaded = command; reconcile(playback); }
+      else if (command.type === "stop") { playback.loaded = undefined; live.closePlayback(playback.id); }
+      else if (command.type === "volume") reconcile(playback);
+      return;
+    }
     if (command.type === "load") {
       // A remote HEVC load retains the Linux host's policy, including cached reloads and joins.
       if (playback.hostMpv?.has(command.playbackId) && playback.outputs.some(output => output.deviceId === hostId())) command = { ...command, mpv: true, source: playback.media?.playbackId === command.playbackId ? playback.media.source : command.source };
@@ -340,6 +349,7 @@ export async function createHub(options: HubOptions) {
   // The newest tab of an output Device plays (#644 Tabs); an output back online resumes, paused.
   // In a synced Playback the picture Devices' newest tabs show the picture.
   const handOver = (playback: Playback, socket: Socket<SocketData>) => {
+    if (playback.liveSourceId) { reconcile(playback); return; }
     if (playback.synced) return show(playback);
     if (playback.renderer && playback.renderer !== socket && sockets.has(playback.renderer)) send(playback.renderer, playerCommand({ type: "stop" }));
     playback.renderer = socket;
@@ -394,6 +404,15 @@ export async function createHub(options: HubOptions) {
   // Devices are Synced, and the Playback's Sendspin group takes over its sound where it is.
   const reconcile = (playback: Playback) => {
     refreshTrims(playback);
+    if (playback.liveSourceId) {
+      const source = live.source(playback.liveSourceId);
+      // An output mix must never recapture Couch's received sound on its publishing computer.
+      playback.outputs = playback.outputs.map(output => ({ ...output, picture: output.picture && !!source?.video, sound: output.sound && !!source?.audio && !(source?.kind !== "microphone" && source?.deviceId === output.deviceId) })).filter(output => output.picture || output.sound);
+      const receivers = playback.outputs.flatMap(output => { const socket = newest(output.deviceId); return socket ? [{ socket, deviceId: output.deviceId, picture: output.picture, sound: output.sound, volume: rendered(playback, output) }] : []; });
+      playback.renderer = receivers[0]?.socket ?? null;
+      live.route(playback.id, playback.liveSourceId, playback.loaded, receivers);
+      return;
+    }
     if (spans(playback)) {
       const fresh = !playback.synced;
       playback.synced ??= sendspin.group(playback.id, player => { playback.heard = player; observeSynced(playback); });
@@ -435,20 +454,28 @@ export async function createHub(options: HubOptions) {
   // A Playback plays on while one of its outputs is online, and pauses and waits when none is,
   // however the last one left: its tab closed, or its Device moved to another Playback (#644 Offline).
   const offline = (playback: Playback, deviceId = playback.outputs[0]?.deviceId) => {
+    if (playback.liveSourceId) { reconcile(playback); return; }
     if (!deviceId || mpvPlayback === playback || playback.outputs.some(output => newest(output.deviceId))) return;
     const { playbackId } = stateOf(playback).player;
     if (playback.synced && playbackId) playback.synced.send({ type: "pause", playbackId, paused: true });
     playback.session.wait(`${nameOf(deviceId)} is offline.`);
   };
-  const createPlayback = (id: string = crypto.randomUUID()) => {
-    const saved = store.playback(id);
-    const playback = { id, outputs: [], mixTrim: saved.mixTrim(), privateTrims: new Map(), renderer: null, screens: new Map() } as unknown as Playback;
+  const createPlayback = (id: string = crypto.randomUUID(), liveSourceId?: string) => {
+    // A publication is not a resumable URL: its queue and mix exist only in this Core run.
+    const saved = liveSourceId ? { queue: [] as QueueEntry[], queueCursorEntryId: () => null, playbackContinuation: () => null, mixTrim: () => 100,
+      saveMixTrim: () => {}, saveQueue: () => {}, savePlaybackContinuation: () => {}, saveQueueCursor: (_entryId: string, beforeCommit?: () => void) => beforeCommit?.() } : store.playback(id);
+    const playback = { id, liveSourceId, outputs: [], mixTrim: saved.mixTrim(), privateTrims: new Map(), renderer: null, screens: new Map() } as unknown as Playback;
     playback.session = createSession({ ...store, ...saved }, command => sendPlayer(playback, command), (state, clock) => publish(playback, state, clock), {
       systemAudio,
       invalidate: (...domains) => invalidate(...domains),
-      resolveContinuation: (entry, signal) => continuation(entry, signal),
+      resolveContinuation: (entry, signal) => entry.liveSourceId ? null : continuation(entry, signal),
       ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
       resolveSource: async (entry, playbackId, signal) => {
+        if (entry.liveSourceId) {
+          const source = live.source(entry.liveSourceId);
+          if (!source) throw new Error("That live source has ended.");
+          return { source: entry.source, liveSourceId: source.id, audioOnly: !source.video };
+        }
         // Solo resolves for the Device it moves to: its engine and origin choose formats and Pass-through.
         const tab = playback.next ?? playback.renderer;
         const resolving = resolveEntry(entry, playbackId, signal, tab, playback);
@@ -457,11 +484,11 @@ export async function createHub(options: HubOptions) {
         // Only the Device that runs Core has mpv; a Playback elsewhere doesn't move there unasked.
         if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
         // Core's own FFmpeg reads the sound as resolved, before Pass-through, with its headers.
-        const live = !!(entry.live || media.metadata?.live);
-        playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers, live, audioOnly: media.audioOnly };
+        const isLiveMedia = !!(entry.live || media.metadata?.live);
+        playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers, live: isLiveMedia, audioOnly: media.audioOnly };
         // A live master's link can expire within minutes (RaiPlay: 403 after about 150 s) while its
         // renditions keep working, so the sound's rendition is picked now for a later Synced start.
-        if (live && !media.radio) void audioRendition(media.audioSource ?? media.source, headers, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
+        if (isLiveMedia && !media.radio) void audioRendition(media.audioSource ?? media.source, headers, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
         return passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal);
       },
       observe: player => subtitles.observe(player),
@@ -479,7 +506,18 @@ export async function createHub(options: HubOptions) {
     const deviceId = on ?? selected(actorId);
     requireControl(deviceId, actorId);
     let playback = servedBy(deviceId);
-    if (!playback || on && playback.outputs.length > 1) { playback = createPlayback(); assign(playback, [outputFor(deviceId, actorId)]); }
+    if (!playback || playback.liveSourceId || on && playback.outputs.length > 1) {
+      const outputs = playback?.liveSourceId && !on ? [...playback.outputs] : [outputFor(deviceId, actorId)];
+      if (playback) requirePlayback(playback, actorId);
+      const previous = playback;
+      playback = createPlayback();
+      if (previous?.liveSourceId && !on) {
+        playback.mixTrim = previous.mixTrim; playback.trimActor = previous.trimActor; playback.privateTrims = new Map(previous.privateTrims);
+        store.playback(playback.id).saveMixTrim(playback.mixTrim);
+      }
+      assign(playback, outputs);
+      if (spans(playback)) reconcile(playback);
+    }
     else requirePlayback(playback, actorId);
     if (on) { remoteControllers.delete(actorId); targets.set(actorId, on); }
     playback.outputs = playback.outputs.map(output => ({ ...output, local: output.local || output.deviceId === actorId }));
@@ -487,6 +525,11 @@ export async function createHub(options: HubOptions) {
   };
   // Queue and control act on the looked-at Playback; with none, the selected Device starts one.
   const viewed = (actor: PlaybackActor | undefined) => { const playback = lookedAt(actor?.deviceId ?? hostId()) ?? own(actor); requirePlayback(playback, actor?.deviceId ?? hostId()); return playback; };
+  const mediaPlayback = (actor: PlaybackActor | undefined, playNow: boolean) => {
+    const playback = playNow ? own(actor) : viewed(actor);
+    if (playback.liveSourceId) throw new ControllerError("A live source has no saved queue. Play media separately.", 400);
+    return playback;
+  };
   // A saved Playback with no outputs starts where ordinary Play would: on the selected Device's
   // whole mix, moved at once so none of it reloads on the way, or on that Device alone.
   const present = (playback: Playback, actor: PlaybackActor | undefined) => {
@@ -568,7 +611,8 @@ export async function createHub(options: HubOptions) {
     }
     store.saveDeviceSound(deviceId, change);
     const playback = servedBy(deviceId);
-    if (playback?.synced) playback.synced.members(members(playback));
+    if (playback?.liveSourceId) reconcile(playback);
+    else if (playback?.synced) playback.synced.members(members(playback));
     else if (playback) deliver(playback, { type: "volume", volume: levelOf(playback) });
     broadcast();
   };
@@ -587,8 +631,9 @@ export async function createHub(options: HubOptions) {
     }
     playback.mixTrim = level;
     playback.trimActor = actor;
-    store.playback(playback.id).saveMixTrim(level);
-    if (playback.synced) playback.synced.members(members(playback));
+    if (!playback.liveSourceId) store.playback(playback.id).saveMixTrim(level);
+    if (playback.liveSourceId) reconcile(playback);
+    else if (playback.synced) playback.synced.members(members(playback));
     else deliver(playback, { type: "volume", volume: levelOf(playback) });
     broadcast();
   };
@@ -610,7 +655,7 @@ export async function createHub(options: HubOptions) {
       const trimChanged = refreshTrims(playback);
       if (changed || trimChanged) {
         reconcile(playback);
-        if (changed && !playback.synced && playback.outputs.length && mpvPlayback !== playback) playback.session.reload();
+        if (changed && !playback.liveSourceId && !playback.synced && playback.outputs.length && mpvPlayback !== playback) playback.session.reload();
         else if (trimChanged && !playback.synced) deliver(playback, { type: "volume", volume: levelOf(playback) });
       }
     }
@@ -633,7 +678,7 @@ export async function createHub(options: HubOptions) {
     pending = false;
     if (closed || !sockets.size) return;
     for (const playback of all()) {
-      const delivery = `${playback.synced ? "Synced" : "Direct"} on ${playback.outputs.map(output => nameOf(output.deviceId)).join(", ")}`;
+      const delivery = `${playback.liveSourceId ? "Live" : playback.synced ? "Synced" : "Direct"} on ${playback.outputs.map(output => nameOf(output.deviceId)).join(", ")}`;
       if (playback.outputs.length && playback.delivery !== delivery) log(`playback ${playback.id.slice(0, 8)} ${delivery}`);
       playback.delivery = delivery;
     }
@@ -644,9 +689,10 @@ export async function createHub(options: HubOptions) {
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
-          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
+          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...playback.liveSourceId ? { liveSourceId: playback.liveSourceId, audioOnly: !live.source(playback.liveSourceId)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
+      liveSources: live.sources(),
     };
     const views = new Map<string, string>();
     // A speaker's delay is its player's own; it shows once the speaker is connected.
@@ -683,6 +729,7 @@ export async function createHub(options: HubOptions) {
     for (const output of [...playback.outputs]) release(playback, output.deviceId, false);
     if (radioPlayback === playback) radioPlayback = null;
     playback.synced?.close();
+    live.closePlayback(playback.id);
     hide(playback);
     playback.session.close();
     try { store.forgetPlayback(playback.id); } catch { /* A stale row is dropped at the next start. */ }
@@ -757,7 +804,7 @@ export async function createHub(options: HubOptions) {
       store.restoreSharedProgress(removed, expected);
       invalidate("progress");
     },
-    loadQueue: (entries, mode, authorize, playedBy) => { const playback = mode === "play" ? own(playedBy) : viewed(playedBy); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId()), playedBy); },
+    loadQueue: (entries, mode, authorize, playedBy) => { const playback = mediaPlayback(playedBy, mode === "play"); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId()), playedBy); },
     playHistory: (mediaId, fromStart, authorize, playedBy) => {
       // Checked before Play on moves its Device; the Session checks the rest.
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
@@ -803,7 +850,7 @@ export async function createHub(options: HubOptions) {
       const cursor = current >= 0 ? current : queue.findIndex(entry => entry.id === queueCursorEntryId);
       return queue.slice(cursor + 1);
     },
-    loadQueue: (entries, mode, authorize, playedBy, title) => { const playback = mode === "play" ? own(playedBy) : viewed(playedBy); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize ?? (() => {}), playedBy?.deviceId ?? hostId()), playedBy, undefined, title); },
+    loadQueue: (entries, mode, authorize, playedBy, title) => { const playback = mediaPlayback(playedBy, mode === "play"); playback.session.loadQueue(entries, mode, authorizePlayback(playback, authorize ?? (() => {}), playedBy?.deviceId ?? hostId()), playedBy, undefined, title); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
       return { name: page.title ?? "Playlist", entries: providerListEntries(page) };
@@ -821,7 +868,7 @@ export async function createHub(options: HubOptions) {
       }
     },
     enqueue: (channel, playNow, authorize, playedBy) => {
-      const playback = playNow ? own(playedBy) : viewed(playedBy);
+      const playback = mediaPlayback(playedBy, !!playNow);
       const permitted = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
       const existing = stateOf(playback).queue.find(entry => entry.source === `iptv:${channel.id}`);
       if (existing) { if (playNow) playback.session.command({ type: "play", entryId: existing.id, fromStart: true }, permitted, playedBy); }
@@ -835,6 +882,7 @@ export async function createHub(options: HubOptions) {
     lookup: async reference => {
       const entry = holding(reference.id) && stateOf(holding(reference.id)!).queue.find(item => item.id === reference.id);
       if (!entry) throw new ControllerError("This item is no longer in the queue.", 404);
+      if (entry.liveSourceId) throw new ControllerError("Live inputs cannot be saved for later.", 400);
       return entry;
     },
     prepare: async entry => {
@@ -842,7 +890,7 @@ export async function createHub(options: HubOptions) {
     },
     reservePlay: playedBy => own(playedBy).session.reservePlay(),
     enqueue: (entry, intent, authorize, playedBy) => {
-      const playback = intent !== undefined ? own(playedBy) : viewed(playedBy), permitted = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
+      const playback = mediaPlayback(playedBy, intent !== undefined), permitted = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
       if (intent !== undefined) playback.session.playNewEntries([entry], { intent, authorize: permitted, playedBy });
       else playback.session.command({ type: "enqueue", entry }, permitted, playedBy);
     },
@@ -945,7 +993,7 @@ export async function createHub(options: HubOptions) {
       if (pending instanceof Promise && playedBy && playOn.has(playedBy)) { pending = await pending; if (!authorized()) return; }
       if (pending instanceof Promise) pending.catch(() => {}); // Awaited below, unless Play is refused first.
       // Play starts on the selected Device; Queue adds to the looked-at Playback (#644 ticket 9).
-      const playback = action.playNow ? own(playedBy) : viewed(playedBy), { session } = playback;
+      const playback = mediaPlayback(playedBy, !!action.playNow), { session } = playback;
       authorize = authorizePlayback(playback, authorize, playedBy?.deviceId ?? hostId());
       const intent = action.playNow ? session.reservePlay() : undefined;
       // Do not yield for synchronous intake: a following Stop must not overtake
@@ -1144,7 +1192,7 @@ export async function createHub(options: HubOptions) {
       return page ?? api(request, upgrade);
     },
     websocket: {
-      maxPayload: 8192,
+      maxPayload: 65_536, // Bounded WebRTC SDP shares the authenticated control connection.
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
@@ -1166,6 +1214,7 @@ export async function createHub(options: HubOptions) {
         clientUpdates.get(socket)?.close();
         clientUpdates.delete(socket);
         if (closed) return;
+        live.disconnect(socket);
         for (const playback of all()) if (playback.renderer === socket) {
           const tab = newest(deviceOf(socket));
           if (tab) handOver(playback, tab);
@@ -1188,6 +1237,11 @@ export async function createHub(options: HubOptions) {
           } catch { /* The normal command parser rejects invalid JSON. */ }
         }
         if (remote.receive(socket, message)) return;
+        const signal = parseLiveSignal(message);
+        if (signal) {
+          try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
+          return;
+        }
         const player = parsePlayer(message);
         if (player) {
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
@@ -1235,6 +1289,23 @@ export async function createHub(options: HubOptions) {
             await enqueued;
             if (closed) return;
             playback = lookedAt(deviceId);
+          } else if (action.type === "publishLive") {
+            live.publish(socket, action);
+          } else if (action.type === "endLive") {
+            live.end(socket, action.sourceId);
+          } else if (action.type === "playLive") {
+            const source = live.source(action.sourceId);
+            if (!source) throw new Error("That live source has ended.");
+            const target = action.deviceId ?? selected(deviceId);
+            requireControl(target, deviceId); requireReplacement(target, deviceId);
+            if (!newest(target)) throw new Error(`${nameOf(target)} is offline.`);
+            const allowed = outputFor(target, deviceId);
+            const output = { ...allowed, picture: allowed.picture && source.video, sound: allowed.sound && source.audio && !(source.kind !== "microphone" && source.deviceId === target) };
+            if (!output.picture && !output.sound) throw new Error(source.deviceId === target ? "Choose another device to hear this source without capturing its playback again." : `${nameOf(target)} is not sharing an output this source uses.`);
+            playback = createPlayback(crypto.randomUUID(), source.id);
+            assign(playback, [output]);
+            remoteControllers.delete(deviceId); targets.set(deviceId, target);
+            await playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow: true }, authorizePlayback(playback, authorize, deviceId), playedBy);
           } else if (action.type === "sharing") {
             if (socket.data.deviceId) { shared.set(socket.data.deviceId, { audio: action.sharing.audio, video: action.sharing.video }); applyConsent(); }
           } else if (action.type === "control") {
@@ -1256,6 +1327,7 @@ export async function createHub(options: HubOptions) {
             if (!target) throw new Error("Play something first.");
             const permitted = authorizePlayback(target, authorize, deviceId);
             permitted();
+            if (target.liveSourceId && action.type === "output" && action.delay !== undefined) throw new Error("Live sources do not support speaker delay.");
             if (action.type === "solo") {
               // Only this Device keeps the Playback: its picture, when it shows one, and its sound.
               requireControl(action.deviceId, deviceId);
@@ -1305,6 +1377,8 @@ export async function createHub(options: HubOptions) {
             if (remoteTarget && action.type !== "enqueue" && !servedBy(remoteTarget)) throw new Error("The TV's queue or playing item changed. Try again.");
             playback = "playbackId" in action && action.playbackId ? playing(action.playbackId) : "entryId" in action ? holding(action.entryId) : undefined;
             playback ??= action.type === "enqueue" && action.playNow ? own(playedBy) : viewed(playedBy);
+            if (playback.liveSourceId && ["enqueue", "enqueueProvider", "enqueueWeb", "enqueueRadio", "preferences", "remove", "restoreRemoved", "move"].includes(action.type)) throw new Error("A live source has no saved queue. Play media separately.");
+            if (playback.liveSourceId && ["pause", "seek", "speed", "audioDelay", "subtitleDelay", "track", "videoQuality", "savePlaybackDefault"].includes(action.type)) throw new Error("This control is unavailable for live sources.");
             // Queue entries can outlive their TV assignment. Recheck the resolved Playback at
             // dispatch (and async authorization), even for an older client without an envelope guard.
             const permitted = authorizePlayback(playback, () => {
@@ -1399,6 +1473,7 @@ export async function createHub(options: HubOptions) {
   const close = () => closing ??= (async () => {
     closed = true;
     remote.close();
+    live.close();
     shutdown.abort();
     for (const controller of inspections.values()) controller.abort();
     let progressError: unknown;

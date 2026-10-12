@@ -16,6 +16,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
+import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { cn } from "@/lib/utils";
@@ -36,7 +37,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const fullscreen = usePlayerFullscreen();
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
-  const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget } = useSessionGate();
+  const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget, localLiveSourceId } = useSessionGate();
   useCouchHotkeys([{ hotkey: "F", enabled: !tvPresentation && fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -63,7 +64,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const playing = player?.status === "playing";
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
-  const audioOnly = isRadio(current) || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const liveSource = state?.liveSources?.find(source => source.id === current?.liveSourceId);
+  const audioOnly = liveSource ? !liveSource.video : isRadio(current) || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
   const at = playsOn(state);
   const elsewhere = !!at?.elsewhere;
@@ -72,7 +74,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const picture = showsPicture(state) && !separate;
   const artworkStage = audioOnly || !picture;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
-  const autoHide = playing && !artworkStage;
+  const sharing = !!localLiveSourceId;
+  const autoHide = playing && !artworkStage && !sharing;
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
@@ -155,7 +158,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
   const radio = isRadio(current);
-  const detailHref = current ? queueItemLocation(current) : undefined;
+  const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
   const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!detailHref || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); detailNavigation.open(detailHref, panel === "settings" ? '.player-page button[aria-label="Playback"]' : undefined);
@@ -183,7 +186,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       <div className="min-w-0 bg-background">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb compact title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
       {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
       {playerTarget && bufferingStatus}
-      <div className={cn("ml-auto flex shrink-0 bg-background", !playerTarget && "max-w-2/5")}><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
+      <div className={cn("ml-auto flex shrink-0 items-center gap-2 bg-background", !playerTarget && !sharing && "max-w-2/5")}><LiveSharingStatus /><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
     </div>}
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
@@ -236,7 +239,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
             {state && <WhereItPlays state={state} run={run} className="size-11" />}
             <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
-            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
+            {!current?.liveSourceId && <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>}
             {!tvPresentation && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>

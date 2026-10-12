@@ -2,6 +2,7 @@ import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from 
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
 import { safePlaybackError } from "./playback-log";
+import type { LiveSignalMessage } from "../shared/live-input";
 
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
@@ -33,6 +34,12 @@ function validEntry(value: unknown): value is QueueEntry {
 function validAction(value: unknown): value is Action {
   if (!object(value)) return false;
   switch (value.type) {
+    case "publishLive": return id(value.sourceId) && typeof value.kind === "string" && ["microphone", "system-audio", "screen"].includes(value.kind)
+      && typeof value.audio === "boolean" && typeof value.video === "boolean"
+      && (value.kind === "screen" ? value.video === true : value.audio === true && value.video === false)
+      && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
+    case "endLive": return id(value.sourceId);
+    case "playLive": return id(value.sourceId) && (value.deviceId === undefined || id(value.deviceId));
     case "control": return id(value.deviceId);
     case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
     case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
@@ -78,6 +85,23 @@ function validAction(value: unknown): value is Action {
       && (value.picture !== undefined || value.level !== undefined || value.delay !== undefined);
     default: return false;
   }
+}
+
+export function parseLiveSignal(message: string): LiveSignalMessage | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "liveSignal" || !id(value.peerId) || !object(value.signal)) return null;
+  const { description, candidate } = value.signal;
+  if ((description === undefined) === (candidate === undefined)) return null;
+  if (description !== undefined && (!object(description) || typeof description.type !== "string" || !["offer", "answer"].includes(description.type) || typeof description.sdp !== "string" || description.sdp.length > 32_768)) return null;
+  if (candidate !== undefined && candidate !== null && (!object(candidate) || typeof candidate.candidate !== "string" || candidate.candidate.length > 4096
+    || candidate.sdpMid !== undefined && candidate.sdpMid !== null && (typeof candidate.sdpMid !== "string" || candidate.sdpMid.length > 256)
+    || candidate.sdpMLineIndex !== undefined && candidate.sdpMLineIndex !== null && (!number(candidate.sdpMLineIndex, 255) || !Number.isInteger(candidate.sdpMLineIndex))
+    || candidate.usernameFragment !== undefined && candidate.usernameFragment !== null && (typeof candidate.usernameFragment !== "string" || candidate.usernameFragment.length > 256))) return null;
+  // Rebuild the envelope so unvalidated sibling fields are never forwarded.
+  const signal = description !== undefined ? { description: { type: description.type as "offer" | "answer", sdp: description.sdp as string } }
+    : { candidate: candidate === null ? null : { candidate: candidate!.candidate as string, ...(candidate!.sdpMid !== undefined ? { sdpMid: candidate!.sdpMid as string | null } : {}), ...(candidate!.sdpMLineIndex !== undefined ? { sdpMLineIndex: candidate!.sdpMLineIndex as number | null } : {}), ...(candidate!.usernameFragment !== undefined ? { usernameFragment: candidate!.usernameFragment as string | null } : {}) } };
+  return { type: "liveSignal", peerId: value.peerId, signal };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);

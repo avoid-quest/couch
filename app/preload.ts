@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("couchApp", {
   setTvPresentation: enabled => call("tv-presentation", enabled),
   deviceName: name => call("device-name", name),
   deviceSharing: sharing => call("device-sharing", sharing),
+  captureSources: () => call("capture-sources"),
+  prepareCapture: selection => call("prepare-capture", selection),
   mode: () => call("mode"),
   choose: (mode, address, confirm) => call("choose", mode, address, confirm),
   forget: address => call("forget", address),

@@ -33,6 +33,7 @@ import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 import { PairForm } from "./PairForm";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
+import { LiveSharingStatus } from "./LiveSharingStatus";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { hear, onBlocked } from "@/session/renderer";
@@ -322,6 +323,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
+              <LiveSharingStatus />
               {tvPresentation ? <span className="max-w-64 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
               <span role="status" className="sr-only">{statusLabel}</span>
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}

@@ -14,6 +14,7 @@ import { startUpdates } from "./update";
 import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
 import { diagnosticHost, logAppError } from "./diagnostics";
+import { createCapture } from "./capture";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -58,6 +59,7 @@ const save = (next: Choice) => {
 };
 
 let window: BrowserWindow | null = null;
+const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin);
 let tray: Tray | null = null;
 let quitting = false;
 let stopped = false;
@@ -299,6 +301,7 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  contents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => { if (mainFrame) capture.clear(); });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
   contents.on("console-message", details => {
@@ -333,6 +336,8 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
   });
 }
 handle("mode", () => choice);
+handle("capture-sources", () => capture.sources());
+handle("prepare-capture", (_event, selection) => capture.prepare(selection));
 let restarting = false;
 handle("tv-presentation", (event, enabled) => {
   if (choice.mode !== "local" || new URL(event.senderFrame!.url).origin !== localOrigin) throw new Error("Change TV mode on this computer's Couch.");
@@ -463,9 +468,8 @@ else {
     // playback speed and bounded ones at full speed, so ask for 10 MB at a time. It allows
     // only youtube.com's origin, and Chromium's opaque response blocking drops some of its
     // no-cors media responses, so the window fetches it in CORS mode and Couch allows it.
-    // Couch's pages only use fullscreen; Electron would grant any permission a page asks for.
-    session.defaultSession.setPermissionRequestHandler((_contents, permission, allow) => allow(permission === "fullscreen"));
-    session.defaultSession.setPermissionCheckHandler((_contents, permission) => permission === "fullscreen");
+    // Keep fullscreen available; capture is prepared by this computer's owner for one request.
+    capture.install();
     session.defaultSession.setCertificateVerifyProc(({ hostname, certificate }, callback) => {
       const pin = choice.pins?.[hostname];
       callback(pin && pin === spki(new X509Certificate(certificate.data)) ? 0 : -3);

@@ -10,6 +10,8 @@ import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceId
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
+import { createLiveSession } from "./live";
+import type { LiveSelection } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
@@ -41,6 +43,31 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const ready = useRef(false);
   const pending = useRef(new Map<string, Pending>());
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const live = useRef<ReturnType<typeof createLiveSession> | null>(null);
+  const [localLiveSourceId, setLocalLiveSourceId] = useState<string | null>(null);
+
+  const command = useCallback((action: Action, targetDeviceId?: string) => {
+    const connection = socket.current;
+    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error("Reconnecting. Try again in a moment."));
+    }
+    return new Promise<void>((resolve, reject) => {
+      const requestId = createId();
+      const timer = setTimeout(() => {
+        pending.current.delete(requestId);
+        reject(new Error("No reply from Couch. Check before retrying."));
+      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
+      pending.current.set(requestId, { resolve, reject, timer });
+      const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
+      try {
+        connection.send(JSON.stringify(message));
+      } catch (error) {
+        clearTimeout(timer);
+        pending.current.delete(requestId);
+        reject(error);
+      }
+    });
+  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
   useEffect(() => {
     setState(null);
@@ -73,7 +100,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { textInput?.close(); textInput = undefined; stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -168,6 +195,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
+        live.current = createLiveSession({ command: action => command(action), send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, failed: state => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -184,6 +212,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
+          live.current?.observe(message.state.liveSources ?? []);
           syncedStatus = message.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === deviceId() && output.sound))?.status ?? "idle";
           reportPlayback();
           const { position, duration, ...player } = message.state.player;
@@ -206,7 +235,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
           void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
-          play(message.command);
+          if (!live.current?.play(message.command)) play(message.command);
+        } else if (message.type === "livePeers" || message.type === "liveSignal") {
+          live.current?.receive(message);
         } else if (message.type === "sendspin") {
           listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "text") {
@@ -315,28 +346,13 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     setReconnectAttempt(attempt => attempt + 1);
   }, []);
 
-  const command = useCallback((action: Action, targetDeviceId?: string) => {
-    const connection = socket.current;
-    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("Reconnecting. Try again in a moment."));
-    }
-    return new Promise<void>((resolve, reject) => {
-      const requestId = createId();
-      const timer = setTimeout(() => {
-        pending.current.delete(requestId);
-        reject(new Error("No reply from Couch. Check before retrying."));
-      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
-      pending.current.set(requestId, { resolve, reject, timer });
-      const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
-      try {
-        connection.send(JSON.stringify(message));
-      } catch (error) {
-        clearTimeout(timer);
-        pending.current.delete(requestId);
-        reject(error);
-      }
-    });
-  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  const startLive = useCallback((selection: LiveSelection) => {
+    if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before sharing a live input."));
+    return live.current.start(selection);
+  }, []);
+  const endLive = useCallback(() => live.current?.end() ?? Promise.resolve(), []);
 
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+
+
+  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, localLiveSourceId: current ? localLiveSourceId : null };
 }

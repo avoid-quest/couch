@@ -49,6 +49,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   const devices = (state.devices ?? []).filter(device => output(device.id) || device.online && (device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
   const trim = state.mixTrim ?? 100;
   const playback = state.playbacks?.find(item => item.id === state.playback);
+  const source = state.liveSources?.find(item => item.id === playback?.liveSourceId);
   // An mpv channel plays only on the server's own Device, its one output.
   const host = playback?.hostOnly ? state.devices?.find(device => device.id === outputs[0]?.deviceId)?.name ?? deviceName(state.installationName) : undefined;
   return <Sheet>
@@ -56,7 +57,8 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] scroll-py-6 gap-4 overflow-y-auto px-(--gutter) pb-6 [&_[data-slot=slider]]:min-h-11 [&_[data-slot=toggle]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
       <SheetHeader className="shrink-0 gap-0.5 px-0 pr-12 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="[overflow-wrap:anywhere]">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
-      <p className="shrink-0 text-sm text-muted-foreground">{host ? `This channel plays only on ${host}.` : <>Raise a device level to add its sound; at 0 its sound is off. All trims selected sound you can control and keeps device levels.{isTvPresentation() && " Press OK to adjust a level, then OK or Back to finish."}</>}</p>
+      <p className="shrink-0 text-sm text-muted-foreground">{host ? `This channel plays only on ${host}.` : source?.audio === false ? "This source has no sound. Enable Picture on devices to watch it." : <>Raise a device level to add its sound; at 0 its sound is off. All trims selected sound you can control and keeps device levels.{isTvPresentation() && " Press OK to adjust a level, then OK or Back to finish."}</>}</p>
+      {playback?.liveSourceId && <p className="shrink-0 text-sm text-muted-foreground">Live sound and picture arrive together on each device. Devices may play at slightly different times.</p>}
       <ItemGroup className="shrink-0 gap-0 border-y">
       {/* The same All command and stored trim; this row never recruits devices. */}
       <Item role="listitem" className="grid grid-cols-1 gap-2 rounded-none border-0 px-0 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] md:gap-x-6">
@@ -70,7 +72,8 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
           const current = output(device.id);
           // Ownership permits local controls even while viewing another playback.
           const mine = device.id === here;
-          const audio = mine || device.sharing?.audio === true, video = mine || device.sharing?.video === true;
+          const feedback = source?.deviceId === device.id && source.kind !== "microphone";
+          const audio = source?.audio !== false && !feedback && (mine || device.sharing?.audio === true), video = mine || device.sharing?.video === true;
           const sound = !!current?.sound, locked = !device.online || !!host && !current;
           const occupied = served(state, device.id), channel = occupied?.outputs.find(item => item.deviceId === device.id);
           const privatePicture = !!channel?.picture && device.sharing?.video !== true;
@@ -85,6 +88,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
             <div className="min-w-0">
               <p className="flex items-start gap-2 text-base font-medium"><DeviceIcon {...signalOf(state, device.id)} className="mt-1" /><span data-output-name className="min-w-0 [overflow-wrap:anywhere]">{device.name}</span></p>
               <p data-output-status className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{status}</p>
+              {feedback && <p className="text-sm text-muted-foreground">Sound is off on the sharing device to prevent feedback.</p>}
               {privateOutput && <p className="text-sm text-muted-foreground">{privatePicture && privateSound ? "Private" : privatePicture ? "Private picture" : "Private sound"}. {mine ? "Only you can change it." : "Only this device can change it."}</p>}
             </div>
             <Toggle variant="outline" pressed={only} disabled={!canSolo} aria-label={`Solo ${device.name}`} onPressedChange={() => { if (!only) void run({ type: "solo", deviceId: device.id }); }} className={cn("md:col-start-3 md:row-start-1", inverts)}>Solo</Toggle>
@@ -97,7 +101,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
                 </div>
                 <Toggle variant="outline" pressed={device.muted} disabled={!audio || locked} aria-label={`Mute ${device.name}`} onPressedChange={muted => void run({ type: "mute", deviceId: device.id, muted })} className={cn("shrink-0", inverts)}>Mute</Toggle>
               </div>
-              {audio && sound && current?.delay !== undefined && !locked && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+              {audio && sound && current?.delay !== undefined && !locked && !playback?.liveSourceId && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
             </div>
           </Item></Fragment>;
         })}

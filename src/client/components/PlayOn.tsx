@@ -28,9 +28,9 @@ export function usePlayOn() {
 /** Play on for a REST play request: Core isolates that Device when it reserves the play. */
 export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}` : "";
 
-function Devices({ onPlay, disabled }: { onPlay: (deviceId: string) => void; disabled?: boolean }) {
+function Devices({ onPlay, disabled, excludeDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; excludeDeviceId?: string }) {
   const { devices, here } = usePlayOn();
-  return devices.map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
+  return devices.filter(device => device.id !== excludeDeviceId).map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
     <span className="w-full break-words">{device.name}</span>{device.id === here && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">This device</span>}
   </DropdownMenuItem>);
 }
@@ -42,9 +42,9 @@ export function PlayOnGroup({ onPlay, disabled }: { onPlay: (deviceId: string) =
 }
 
 /** "Play on" beside a row's inline verbs. */
-export function PlayOnMenu({ title, onPlay, disabled }: { title: string; onPlay: (deviceId: string) => void; disabled?: boolean }) {
-  if (!usePlayOn().devices.length) return null;
+export function PlayOnMenu({ title, onPlay, disabled, excludeDeviceId }: { title: string; onPlay: (deviceId: string) => void; disabled?: boolean; excludeDeviceId?: string }) {
+  if (!usePlayOn().devices.some(device => device.id !== excludeDeviceId)) return null;
   return <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" disabled={disabled} aria-label={`Play ${title} on`}>Play on</Button></DropdownMenuTrigger>
-    <DropdownMenuContent align="end"><Devices onPlay={onPlay} /></DropdownMenuContent>
+    <DropdownMenuContent align="end"><Devices onPlay={onPlay} excludeDeviceId={excludeDeviceId} /></DropdownMenuContent>
   </DropdownMenu>;
 }

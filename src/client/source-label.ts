@@ -7,6 +7,7 @@ export function sourceLabel(source: string) {
     const url = new URL(source.replace(/^web:/, ""));
     if (url.protocol === "iptv:") return "Live TV";
     if (url.protocol === "radio:") return "Radio";
+    if (url.protocol === "live:") return "Live device";
     const provider = providerForUrl(url.href);
     return provider ? providerNames[provider] : url.hostname.replace(/^www\./, "") || "Media";
   } catch { return "Media"; }

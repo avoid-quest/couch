@@ -151,7 +151,14 @@ playlists go through Core and segments stay direct when the Device may read
 them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
-When a Playback's outputs span Devices, its sound is Synced
+Live device inputs are captured in the publishing window and exist only while
+that capture is active. Core authenticates publications and signaling over the
+existing Device WebSocket and grants peers to selected Outputs with their consent.
+WebRTC sends audio and video directly from the publisher to each selected Device's
+newest renderer. For publishing, receiving and capture checks, see
+[Share a live device](live-inputs.md).
+
+When a Playback of URL media has outputs on several Devices, its sound is Synced
 (`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
 `/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
 BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
@@ -202,8 +209,9 @@ can't decode, play in an mpv process on the Device that runs Core
 starts. mpv comes from `PATH` or, on macOS and Windows, from mpv's GitHub
 releases (SHA-256 checked); Linux uses the system's package.
 
-Sources are external internet media only: yt-dlp sites (YouTube, Twitch,
-RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.
+Sources include live device inputs and external internet media: yt-dlp sites
+(YouTube, Twitch, RaiPlay, Bandcamp and others), StreamingCommunity, radio and
+IPTV playlists.
 Couch serves no local files.
 
 ## Helpers

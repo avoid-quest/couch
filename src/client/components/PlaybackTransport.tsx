@@ -29,7 +29,7 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
     nextReady: available && !!player?.playbackId && ["playing", "paused", "ended"].includes(player.status),
     seekable: !!player?.seekable,
     // Paused live media resumes, so it offers Play rather than a disabled Pause.
-    pausable: !live || !!player?.seekable || player?.status === "paused",
+    pausable: !current?.liveSourceId && (!live || !!player?.seekable || player?.status === "paused"),
     hasNext: currentIndex >= 0 && (currentIndex < (state?.queue.length ?? 0) - 1 || !!state?.autoplay?.enabled && (!!state.autoplay.next || !!state.autoplay.pending)),
   };
 }
@@ -75,17 +75,17 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, pr
   const ended = player.status === "ended" && !!current, failed = player.status === "error" && !!current;
   const pause = playing || !pausable;
   const label = ended ? "Replay" : failed ? "Try again" : pause ? "Pause" : "Play";
-  const enabled = [ended || failed ? available : transportReady && pausable, stoppable, nextReady && hasNext];
+  const enabled = [!current?.liveSourceId && (ended || failed ? available : transportReady && pausable), stoppable, nextReady && hasNext];
   const first = (slot: number) => pageFirst && enabled.indexOf(true) === slot || undefined;
   const size = prominent ? "size-11 [&_svg]:size-5" : undefined;
   return <div className={cn("flex shrink-0 items-center gap-0.5", prominent && "player-transport")} role="group" aria-label="Playback controls">
-    <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={label} title={label} disabled={!enabled[0]}
+    {!current?.liveSourceId && <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={label} title={label} disabled={!enabled[0]}
       onClick={() => { if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {ended ? <RotateCcw aria-hidden="true" /> : pause ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}
-    </Button>
+    </Button>}
     <Button data-page-first={first(1)} variant="ghost" size="icon-lg" className={size} aria-label="Stop" title="Stop" disabled={!enabled[1]} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
-    <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={size} aria-label="Next" title="Next" disabled={!enabled[2]}
-      onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>
+    {!current?.liveSourceId && <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={size} aria-label="Next" title="Next" disabled={!enabled[2]}
+      onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>}
   </div>;
 }
 
