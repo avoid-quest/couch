@@ -1,6 +1,6 @@
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { isMovies123Host, movies123Origin, movies123PageUrl } from "../../shared/movies123";
-import { ProviderError, providerItemId, providerJson } from "./http";
+import { ProviderError, providerItemId, providerJson, readProviderText } from "./http";
 
 const pageSize = 24;
 const changed = () => new ProviderError("123MoviesFree changed this page or it is unavailable. Try again shortly.");
@@ -29,26 +29,7 @@ export async function movies123Text(url: string, signal?: AbortSignal, request: 
     await response.body?.cancel();
     throw new ProviderError(response.status === 404 ? "123MoviesFree does not have this page." : "123MoviesFree did not load this page. Try again shortly.", response.status === 404 ? 404 : 502);
   }
-  const maximum = 2 * 1024 * 1024;
-  if (Number(response.headers.get("Content-Length")) > maximum) { await response.body?.cancel(); throw changed(); }
-  const reader = response.body?.getReader();
-  if (!reader) throw changed();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  const abort = () => { void reader.cancel().catch(() => {}); };
-  cancellation.addEventListener("abort", abort, { once: true });
-  try {
-    cancellation.throwIfAborted();
-    for (;;) {
-      const { value, done } = await reader.read();
-      cancellation.throwIfAborted();
-      if (done) break;
-      size += value.length;
-      if (size > maximum) throw changed();
-      chunks.push(value);
-    }
-    return Buffer.concat(chunks).toString("utf8");
-  } finally { cancellation.removeEventListener("abort", abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  return readProviderText(response, 2 * 1024 * 1024, cancellation, changed());
 }
 
 function item(url: URL, title: string, metadata: Partial<ProviderItem> = {}): ProviderItem {

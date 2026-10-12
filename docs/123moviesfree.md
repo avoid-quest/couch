@@ -24,6 +24,13 @@ removes that marker before fetching the season page.
   Its `info` value is used unchanged in `/hls/<info>/master.m3u8`. Couch only
   tries Server 1 when the public detail page lists it. An `embed` response
   requires another player and produces a clear unsupported-source message.
+- Direct-player subtitles are listed at `/sub/<token>/index.json`, with
+  `file`, `label`, `lang` and `default` fields. This token is the hex encoding
+  of `id-episode` after XORing each byte with the XOR of the bytes of `player`.
+  Couch accepts WebVTT files only within that title and episode's subtitle
+  directory on the fixed player origin. Alternate, SDH and forced labels are
+  preserved; duplicate labels are numbered. As with other external subtitles,
+  the profile's language comes first and at most 16 tracks are offered.
 
 Couch implements that published metadata protocol with Node's cryptography
 library. It does not download or execute the website's scripts, load its
@@ -34,6 +41,13 @@ the complete catalogue-to-manifest resolution has a 25-second deadline and
 supports cancellation. A manifest must be valid-looking HLS before it is
 passed to Couch's existing media resolver.
 
+Subtitle discovery is optional, capped at 64 KiB with a five-second deadline,
+and supports cancellation. An unavailable or malformed index does not prevent
+video playback. The files use Couch's existing signed subtitle endpoint and
+playback controls; they are fetched only when selected, with the existing
+2 MiB subtitle limit. Profile preferences continue to control language and
+whether subtitles are shown.
+
 ## Verification on 12 October 2026
 
 Live [catalogue](https://ww8.123moviesfree.net/movies/), search,
@@ -43,14 +57,32 @@ requests returned HTTP 200. The public
 metadata protocol also returned HTTP 200 and `mode: "direct"` for **7500**,
 **Inception**, and **Animal Control, season 2, episode 2**.
 
-The corresponding direct master manifests returned **HTTP 502** during these
-checks, including fresh requests with the same User-Agent and Referer used by
-the resolver. Successful media playback has therefore **not been verified**.
-This is an observed upstream response from this environment, not proof that
-the source fails for every user. The resolver reports the unavailable stream
-and asks the user to retry or choose another source.
+The corresponding direct master manifests initially returned **HTTP 502**,
+including fresh requests with the same User-Agent and Referer used by the
+resolver. A later Salvation request recovered without a resolver change:
+the manifest returned HTTP 200 and a media segment returned HTTP 206 with
+MPEG-TS data. In the isolated macOS build, **Salvation**, **Almost Dead**, and
+**Get Jiro, season 1, episode 2** then played video with advancing timelines.
+Almost Dead recovered using the existing **Try again** action. These checks
+establish live playback at that time, but the observed upstream failures can
+still recur; the resolver reports an unavailable stream and asks the user to
+retry or choose another source.
 
 The focused integration tests use fixtures to verify the encrypted request,
 film and episode selection, HLS validation, response limits, safe errors, and
-cancellation. Those tests do not establish live playback availability. Verify
-a fresh film and episode master before promoting playback support from draft.
+cancellation. Those tests do not establish live playback availability.
+
+Live subtitle indexes listed three English tracks for Almost Dead (including
+SDH), English SDH for Get Jiro episode 2, and Norwegian forced subtitles for
+Salvation. These WebVTT files returned HTTP 200 with subtitle cues. Subtitle
+selection and on-screen SDH rendering were verified in the rebuilt isolated
+macOS app. Availability is title-specific; a rich language list is not guaranteed.
+
+The reference extension
+[123movies-downloader at 69ce900](https://github.com/serpapps/123movies-downloader/tree/69ce9001382073930eec797dd6769dd0027a80e7)
+was inspected as source text only. Its background worker observes media
+responses, and its content script scans page markup and video elements for
+stream URLs. HLS downloads reuse the page's Referer and Origin. This captures
+streams loaded by a website player rather than implementing the site's
+metadata protocol. No extension code was installed, executed, or incorporated
+into Couch.

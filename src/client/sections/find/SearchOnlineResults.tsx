@@ -41,6 +41,14 @@ export type SearchPlaybackProps = {
 };
 export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" };
 export const searchError = (reason: unknown) => reason instanceof Error ? reason.message : "Didn't respond.";
+function collectionLabel(item: ProviderItem): SearchHit["collection"] {
+  if (item.kind === "media") return;
+  if (item.kind === "channel") return "Channel";
+  const path = new URL(item.url).pathname;
+  if (item.provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path)) return "Season";
+  if (item.provider === "streamingcommunity") return /\/season-\d+$/.test(path) ? "Season" : "Series";
+  return "List";
+}
 function webThumbnail(value?: string) {
   if (!value || value.length > 2048) return undefined;
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password ? value : undefined; }
@@ -142,7 +150,7 @@ function OnlineResults(props: Props) {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
       const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
-      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: item.kind === "media" ? undefined : item.kind === "channel" ? "Channel" : provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(new URL(item.url).pathname) ? "Season" : provider === "streamingcommunity" ? /\/season-\d+$/.test(new URL(item.url).pathname) ? "Season" : "Series" : "List", thumbnail: item.thumbnail,
+      return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: collectionLabel(item), thumbnail: item.thumbnail,
         primary: { label: "Open", href: collectionLocation(item), run: () => props.onOpenCollection?.(item) },
         actions: item.kind === "media" ? [
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(item, true) },

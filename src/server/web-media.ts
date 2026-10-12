@@ -137,7 +137,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
-    const movies123 = isMovies123Host(host) ? await resolveMovies123Link(source, signal) : undefined;
+    const movies123 = isMovies123Host(host) ? await resolveMovies123Link(source, signal, globalThis.fetch, subtitleLanguage) : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
     const sourceHeaders = Object.entries(movies123?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
@@ -145,7 +145,10 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const info = parseInfo(output);
     if (info._has_drm === true) await rejectDrm(info, signal);
     const media = parseMedia(info, subtitleLanguage);
-    if (movies123) media.metadata = { ...media.metadata, ...movies123.metadata };
+    if (movies123) {
+      media.metadata = { ...media.metadata, ...movies123.metadata };
+      if (movies123.subtitles.length) media.subtitles = movies123.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
+    }
     try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
     if (movies123) media.headers = { ...media.headers, ...headers(movies123.headers) };
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai

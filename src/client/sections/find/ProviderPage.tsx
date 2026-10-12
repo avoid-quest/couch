@@ -59,7 +59,13 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const paging = collectionPagination(hits.length, search.page, search.cursors, page?.nextCursor);
   const currentId = hits.find(hit => hit.url === source)?.id;
   const emptyRoot = !url && connected && !!summary && !summary.loading && !summary.error && !summary.hits?.length;
-  const noun = provider === "bandcamp" ? url ? "Tracks" : "Albums" : provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path) || /\/season-\d+|\/ContentSet-/.test(url) || provider === "streamingcommunity" && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media") ? "Episodes" : provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection") ? "Seasons" : "Items";
+  const episodeList = provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path) || /\/season-\d+|\/ContentSet-/.test(url)
+    || provider === "streamingcommunity" && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media");
+  const seasonList = provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection");
+  let noun = "Items";
+  if (provider === "bandcamp") noun = url ? "Tracks" : "Albums";
+  else if (episodeList) noun = "Episodes";
+  else if (seasonList) noun = "Seasons";
   const href = (direction: "previous" | "next") => collectionLocation({ provider, url }, { ...search,
     ...(paging.remote ? { cursors: direction === "previous" ? search.cursors.slice(0, -1) : [...search.cursors, page!.nextCursor!], page: 1 } : { page: paging.page + (direction === "previous" ? -1 : 1) }) });
   const goToPage = (href: string) => {

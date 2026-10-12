@@ -1,9 +1,10 @@
 import { createCipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
 import { movies123PageUrl } from "../shared/movies123";
 import { movies123Title } from "./providers/movies123";
-import { ProviderError } from "./providers/http";
+import { ProviderError, readProviderText } from "./providers/http";
 import { ExtractionError } from "./yt-dlp";
 import type { WebMediaMetadata } from "./web-media";
+import type { ExternalSubtitle } from "../shared/protocol";
 
 const player = "https://ployan.me";
 const requestHeaders = { "User-Agent": "Mozilla/5.0", Referer: `${player}/watch/` };
@@ -27,29 +28,40 @@ async function playerText(url: string, maximum: number, accept: string, signal: 
     cancellation.throwIfAborted();
     const response = await request(url, { signal: cancellation, redirect: "error", credentials: "omit", headers: { ...requestHeaders, Accept: accept } });
     if (!response.ok) { await response.body?.cancel().catch(() => {}); throw unavailable(); }
-    if (Number(response.headers.get("Content-Length")) > maximum) { await response.body?.cancel().catch(() => {}); throw changed(); }
-    const reader = response.body?.getReader();
-    if (!reader) throw changed();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    const abort = () => { void reader.cancel().catch(() => {}); };
-    cancellation.addEventListener("abort", abort, { once: true });
-    try {
-      cancellation.throwIfAborted();
-      for (;;) {
-        const { value, done } = await reader.read();
-        cancellation.throwIfAborted();
-        if (done) break;
-        size += value.length;
-        if (size > maximum) throw changed();
-        chunks.push(value);
-      }
-      return Buffer.concat(chunks).toString("utf8");
-    } finally { cancellation.removeEventListener("abort", abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    return await readProviderText(response, maximum, cancellation, changed());
   } catch (error) { cancellation.throwIfAborted(); throw error; }
 }
 
-export async function resolveMovies123Link(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata }> {
+async function playerSubtitles(id: string, episode: number, preferred: string, signal: AbortSignal, request: typeof fetch): Promise<ExternalSubtitle[]> {
+  // The public player XORs each byte of "id-episode" with the bytes of "player".
+  const mask = Buffer.from("player").reduce((mask, byte) => mask ^ byte, 0);
+  const token = Buffer.from(Buffer.from(`${id}-${episode}`).map(byte => byte ^ mask)).toString("hex");
+  const path = `/sub/${token}/`, base = `${player}${path}`;
+  try {
+    const text = await playerText(`${base}index.json`, 64 * 1024, "application/json", AbortSignal.any([signal, AbortSignal.timeout(5000)]), request);
+    const rows: unknown = JSON.parse(text);
+    if (!Array.isArray(rows)) return [];
+    const seen = new Set<string>(), labels = new Map<string, number>();
+    const subtitles: ExternalSubtitle[] = [];
+    for (const row of rows) {
+      if (!row || typeof row !== "object" || typeof row.file !== "string" || typeof row.label !== "string" || /[\u0000-\u0020\u007f\\]/.test(row.file)) continue;
+      let url: URL;
+      try { url = new URL(row.file, base); } catch { continue; }
+      if (!url.href.startsWith(base) || url.username || url.password || url.search || url.hash || !/^[\w-]+\.vtt$/.test(url.pathname.slice(path.length)) || seen.has(url.href)) continue;
+      const label = row.label.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 100);
+      if (!label) continue;
+      seen.add(url.href);
+      const count = (labels.get(label) ?? 0) + 1;
+      labels.set(label, count);
+      const language = typeof row.lang === "string" && row.lang.length <= 35 && /^[a-z]{2,3}(?:-[a-z\d]{2,8})*$/i.test(row.lang) ? row.lang : undefined;
+      subtitles.push({ source: url.href, title: count > 1 ? `${label} ${count}` : label, ...(language ? { language } : {}) });
+    }
+    const rank = (track: ExternalSubtitle) => preferred && track.language?.toLowerCase().startsWith(preferred.toLowerCase().slice(0, 2)) ? 0 : 1;
+    return subtitles.sort((a, b) => rank(a) - rank(b)).slice(0, 16);
+  } catch { signal.throwIfAborted(); return []; }
+}
+
+export async function resolveMovies123Link(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch, subtitleLanguage = ""): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
   signal?.throwIfAborted();
   const url = movies123PageUrl(value);
   if (!url) throw new ProviderError("Choose a 123MoviesFree film or episode link.", 400);
@@ -72,9 +84,10 @@ export async function resolveMovies123Link(value: string, signal?: AbortSignal, 
     const master = `${player}/hls/${data.info}/master.m3u8`;
     const manifest = await playerText(master, 512 * 1024, "application/vnd.apple.mpegurl, application/x-mpegURL, text/plain", cancellation, request);
     if (!/^\uFEFF?#EXTM3U\r?\n/.test(manifest) || !/^#EXT-X-(?:STREAM-INF|TARGETDURATION):/m.test(manifest)) throw unavailable();
+    const subtitles = await playerSubtitles(title.id, episode, subtitleLanguage, cancellation, request);
     cancellation.throwIfAborted();
     const { title: name, thumbnail, duration } = title.item;
-    return { url: master, headers: { ...requestHeaders }, metadata: { title: name, ...(thumbnail ? { thumbnail } : {}), ...(duration !== undefined ? { duration } : {}) } };
+    return { url: master, headers: { ...requestHeaders }, metadata: { title: name, ...(thumbnail ? { thumbnail } : {}), ...(duration !== undefined ? { duration } : {}) }, subtitles };
   } catch (error) {
     signal?.throwIfAborted();
     if (deadline.aborted || error instanceof DOMException && error.name === "TimeoutError") throw new ExtractionError("123MoviesFree took too long to prepare this title. Try again shortly.");
