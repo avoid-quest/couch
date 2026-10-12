@@ -11,6 +11,7 @@ const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
   { title: "SoundCloud", meta: "Tracks", provider: "soundcloud" },
   { title: "RaiPlay", meta: "Programmes and live TV", provider: "raiplay" },
   { title: "StreamingCommunity", meta: "Films and series", provider: "streamingcommunity" },
+  { title: "123MoviesFree", meta: "Films and series", provider: "movies123" },
   { title: "YouTube", meta: "Channels and playlists", provider: "youtube" },
   { title: "Twitch", meta: "Live streams and past broadcasts", provider: "twitch" },
 ];

@@ -4,7 +4,7 @@ import type { CollectionLink, MediaCollection } from "../shared/media";
 export const collectionPageSize = 24;
 export function readCollectionSearch(search: Record<string, unknown>) {
   const url = typeof search.url === "string" && search.url.length <= 4096 ? search.url : undefined;
-  const provider = ["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity"].includes(String(search.provider)) && (search.url === undefined || search.url === "" || !!url && providerForUrl(url) === search.provider) ? search.provider as ProviderId : undefined;
+  const provider = ["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123"].includes(String(search.provider)) && (search.url === undefined || search.url === "" || !!url && providerForUrl(url) === search.provider) ? search.provider as ProviderId : undefined;
   const cursors = Array.isArray(search.cursors) && search.cursors.length <= 100 && search.cursors.every(cursor => typeof cursor === "string" && cursor.length > 0 && cursor.length <= 4096) ? search.cursors as string[] : [];
   const page = typeof search.page === "number" && Number.isSafeInteger(search.page) && search.page > 0 && search.page <= 10000 ? search.page : 1;
   const filter = typeof search.filter === "string" ? search.filter.slice(0, 200) : "";

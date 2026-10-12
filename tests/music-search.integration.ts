@@ -30,16 +30,16 @@ test("music search routes serve results, reuse cached searches and retain action
   } finally { providers.close(); }
 });
 
-test("all six search providers and RaiPlay live can be in flight together", async () => {
+test("all seven search providers and RaiPlay live can be in flight together", async () => {
   const release = Promise.withResolvers<void>();
-  const ids: ProviderId[] = ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity"];
+  const ids: ProviderId[] = ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123"];
   let calls = 0;
   const browse = Object.fromEntries(ids.map(id => [id, async () => { calls++; await release.promise; return { items: [] }; }])) as Parameters<typeof createProviders>[0]["browse"];
   const providers = createProviders({ databasePath: ":memory:", browse });
   try {
     const requests = [...ids.map(id => `/api/providers/${id}/items?q=arsider`), "/api/providers/raiplay/items?url=https%3A%2F%2Fwww.raiplay.it%2Fdirette"];
     const pending = requests.map(path => providers.handle(new Request(`http://localhost${path}`)));
-    assert.equal(calls, 7);
+    assert.equal(calls, 8);
     release.resolve();
     assert.deepEqual((await Promise.all(pending)).map(response => response.status), requests.map(() => 200));
   } finally { release.resolve(); providers.close(); }

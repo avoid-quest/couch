@@ -40,7 +40,7 @@ export type Props = {
 type Entry = [source: string, summary: SearchResultSummary];
 
 // Sources in the order their results interleave; the rest are searched too.
-const sourceOrder = ["YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity"];
+const sourceOrder = ["YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "123MoviesFree"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 const isLink = (value: string) => {
   try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
@@ -101,7 +101,7 @@ export function SearchPanel(props: Props) {
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(search.query) ? search.query : undefined;
-  const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity"] as ProviderId[];
+  const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123"] as ProviderId[];
   const inScope = (source: string) => filter === "All" || filter === source;
   const asking = sourceOrder.filter(source => !summaries[source] || summaries[source].loading);
   const total = Object.values(summaries).reduce((sum, summary) => sum + summary.count, 0);
@@ -172,7 +172,7 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
     {timeline && hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
     <MediaList aria-label={label}>{hits.map(hit => {
       const play = tv && hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
-      return <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" ? "contain" : "cover"}
+      return <MediaRow key={hit.id} compact={!timeline} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" || hit.source === "123MoviesFree" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       tvSecondaryActions={!hit.primary.href || hit.kind === "Radio" || hit.actions.some(action => action.label === "Play next")}

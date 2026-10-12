@@ -6,7 +6,7 @@ import { safePlaybackError } from "./playback-log";
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity"]);
+const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123"]);
 const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) => value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
 const playOptions = (value: Record<string, unknown>) => (value.playNow === undefined || typeof value.playNow === "boolean")
