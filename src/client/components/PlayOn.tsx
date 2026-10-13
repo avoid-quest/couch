@@ -36,9 +36,9 @@ function Devices({ onPlay, disabled, excludeDeviceId }: { onPlay: (deviceId: str
 }
 
 /** "Play on" inside an item's menu; nothing when only this Device is online. */
-export function PlayOnGroup({ onPlay, disabled }: { onPlay: (deviceId: string) => void; disabled?: boolean }) {
-  if (!usePlayOn().devices.length) return null;
-  return <><DropdownMenuSeparator /><DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} /></DropdownMenuGroup></>;
+export function PlayOnGroup({ onPlay, disabled, excludeDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; excludeDeviceId?: string }) {
+  if (!usePlayOn().devices.some(device => device.id !== excludeDeviceId)) return null;
+  return <><DropdownMenuSeparator /><DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} excludeDeviceId={excludeDeviceId} /></DropdownMenuGroup></>;
 }
 
 /** "Play on" beside a row's inline verbs. */

@@ -31,6 +31,7 @@ import { Route as SettingsTvRouteImport } from './routes/settings/tv'
 import { Route as SettingsTvAppearanceRouteImport } from './routes/settings/tv-appearance'
 import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
 import { Route as SettingsSourcesIndexRouteImport } from './routes/settings/sources/index'
+import { Route as SettingsSourcesDeviceInputsRouteImport } from './routes/settings/sources/device-inputs'
 import { Route as SettingsSourcesLiveTvRouteImport } from './routes/settings/sources/live-tv'
 import { Route as SettingsSourcesRadioRouteImport } from './routes/settings/sources/radio'
 import { Route as SettingsSourcesStreamingCommunityRouteImport } from './routes/settings/sources/streaming-community'
@@ -145,6 +146,12 @@ const SettingsSourcesIndexRoute = SettingsSourcesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsSourcesRoute,
 } as any)
+const SettingsSourcesDeviceInputsRoute =
+  SettingsSourcesDeviceInputsRouteImport.update({
+    id: '/device-inputs',
+    path: '/device-inputs',
+    getParentRoute: () => SettingsSourcesRoute,
+  } as any)
 const SettingsSourcesLiveTvRoute = SettingsSourcesLiveTvRouteImport.update({
   id: '/live-tv',
   path: '/live-tv',
@@ -184,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
   '/settings/updates': typeof SettingsUpdatesRoute
   '/settings/': typeof SettingsIndexRoute
+  '/settings/sources/device-inputs': typeof SettingsSourcesDeviceInputsRoute
   '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -209,6 +217,7 @@ export interface FileRoutesByTo {
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
   '/settings/updates': typeof SettingsUpdatesRoute
   '/settings': typeof SettingsIndexRoute
+  '/settings/sources/device-inputs': typeof SettingsSourcesDeviceInputsRoute
   '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -237,6 +246,7 @@ export interface FileRoutesById {
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
   '/settings/updates': typeof SettingsUpdatesRoute
   '/settings/': typeof SettingsIndexRoute
+  '/settings/sources/device-inputs': typeof SettingsSourcesDeviceInputsRoute
   '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/settings/tv-appearance'
     | '/settings/updates'
     | '/settings/'
+    | '/settings/sources/device-inputs'
     | '/settings/sources/live-tv'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/settings/tv-appearance'
     | '/settings/updates'
     | '/settings'
+    | '/settings/sources/device-inputs'
     | '/settings/sources/live-tv'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -318,6 +330,7 @@ export interface FileRouteTypes {
     | '/settings/tv-appearance'
     | '/settings/updates'
     | '/settings/'
+    | '/settings/sources/device-inputs'
     | '/settings/sources/live-tv'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -492,6 +505,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsSourcesIndexRouteImport
       parentRoute: typeof SettingsSourcesRoute
     }
+    '/settings/sources/device-inputs': {
+      id: '/settings/sources/device-inputs'
+      path: '/device-inputs'
+      fullPath: '/settings/sources/device-inputs'
+      preLoaderRoute: typeof SettingsSourcesDeviceInputsRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
     '/settings/sources/live-tv': {
       id: '/settings/sources/live-tv'
       path: '/live-tv'
@@ -517,6 +537,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface SettingsSourcesRouteChildren {
+  SettingsSourcesDeviceInputsRoute: typeof SettingsSourcesDeviceInputsRoute
   SettingsSourcesLiveTvRoute: typeof SettingsSourcesLiveTvRoute
   SettingsSourcesRadioRoute: typeof SettingsSourcesRadioRoute
   SettingsSourcesStreamingCommunityRoute: typeof SettingsSourcesStreamingCommunityRoute
@@ -524,6 +545,7 @@ interface SettingsSourcesRouteChildren {
 }
 
 const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
+  SettingsSourcesDeviceInputsRoute: SettingsSourcesDeviceInputsRoute,
   SettingsSourcesLiveTvRoute: SettingsSourcesLiveTvRoute,
   SettingsSourcesRadioRoute: SettingsSourcesRadioRoute,
   SettingsSourcesStreamingCommunityRoute:

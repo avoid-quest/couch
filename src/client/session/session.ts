@@ -357,9 +357,13 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before sharing a live input."));
     return live.current.start(selection);
   }, []);
+  const liveAudioInputs = useCallback(() => {
+    if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before choosing an audio input."));
+    return live.current.audioInputs();
+  }, []);
   const endLive = useCallback(() => live.current?.end() ?? Promise.resolve(), []);
 
 
 
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, localLiveSourceId: current ? localLiveSourceId : null };
+  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId: current ? localLiveSourceId : null };
 }

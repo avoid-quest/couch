@@ -9,13 +9,13 @@ import { providerNames } from "@/sections/find/SearchOnlineResults";
 
 const linkClassName = "inline-flex min-h-11 items-center px-1";
 
-export function ContentBreadcrumb({ title, collection, provider, radio = false, compact = false }: { title: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean; compact?: boolean }) {
+export function ContentBreadcrumb({ title, collection, provider, radio = false, liveInput = false, compact = false }: { title: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean; liveInput?: boolean; compact?: boolean }) {
   const source = provider ?? (collection ? providerForUrl(collection.url) : undefined);
   const collections = collectionLinks(collection);
   // The player already shows the title; keep its containing destinations beside the Couch switch.
   if (compact) {
     const path = collections.length ? collections.map(item => ({ title: item.title, href: collectionLocation(item) }))
-      : [{ title: radio ? "Radio" : source ? providerNames[source] : "Find", href: radio ? "/find?browse=radio" : source ? collectionLocation({ provider: source, url: "" }) : "/find" }];
+      : [{ title: liveInput ? "Device inputs" : radio ? "Radio" : source ? providerNames[source] : "Find", href: liveInput ? "/find?browse=device-inputs" : radio ? "/find?browse=radio" : source ? collectionLocation({ provider: source, url: "" }) : "/find" }];
     return <Breadcrumb aria-label="Content path">
       <BreadcrumbList className="flex-nowrap gap-1 text-sm">
         {path.map((item, index) => <Fragment key={item.href}>

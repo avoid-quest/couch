@@ -73,6 +73,21 @@ group is picked. Play plays the channel; the menu offers Play on and Queue.
 The group Select, Filter and page live in the route (`/find?browse=live-tv`),
 so history restores them. A source without a guide still lists its channels.
 
+## Device inputs
+
+Device inputs use the same Sources setup, Browse rows, search results and Play on
+menu as other media. Configure capture in Settings → Sources → Device inputs,
+or open Add source from Find → Device inputs. Capture always belongs to the
+device running that form, including for paired users without administrator access.
+The source picker uses two columns so its four tabs fit narrow dialogs without
+overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.
+
+Active inputs participate in Find's Device inputs and Live filters. Their player
+breadcrumb returns to `/find?browse=device-inputs`. A small Stop sharing action
+stays available throughout browsing while local capture is active. There is no
+separate capture panel on the Find landing page. See [live inputs](live-inputs.md)
+for capture options and playback limits.
+
 ## Stack
 
 1. Retain programme and series hierarchy in provider results and playback metadata.

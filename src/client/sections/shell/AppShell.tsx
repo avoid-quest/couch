@@ -10,6 +10,7 @@ import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
+import type { SourceKind } from "@/components/sourceTypes";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { MiniPlayer } from "./MiniPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
@@ -68,7 +69,7 @@ function useShellValue() {
     if (section === "Now" && !playerTarget && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
   }, [section, playerTarget?.id, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [setupSource, setSetupSource] = useState<"radio" | "iptv" | "streaming-community">("iptv");
+  const [setupSource, setSetupSource] = useState<SourceKind>("iptv");
   const openSources = (source: typeof setupSource = "iptv") => { setSetupSource(source); setSourcesOpen(true); };
   const installationId = credentials?.installationId ?? details?.installationId;
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });

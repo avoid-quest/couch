@@ -86,6 +86,25 @@ export function createLiveSession(options: { iceServers?: RTCIceServer[]; comman
     if (sourceId) await options.command({ type: "endLive", sourceId });
   };
   return {
+    async audioInputs(): Promise<MediaDeviceInfo[]> {
+      if (closed || starting || publication) throw new Error("Stop sharing before choosing another audio input.");
+      starting = true;
+      const attempt = ++generation;
+      let probe: MediaStream | undefined;
+      try {
+        await couchApp?.prepareCapture?.({ kind: "microphone" });
+        if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
+        // Browsers expose input names only after microphone access is granted.
+        probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const inputs = await navigator.mediaDevices.enumerateDevices();
+        if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
+        return inputs.filter(input => input.kind === "audioinput" && input.deviceId);
+      } finally {
+        if (probe) stopTracks(probe);
+        if (!closed) await couchApp?.prepareCapture?.(null).catch(() => {});
+        starting = false;
+      }
+    },
     async start(selection: LiveSelection): Promise<LiveSource> {
       if (closed) throw new Error("Reconnect before sharing a live input.");
       if (publication) throw new Error("End the current source before sharing another input.");
@@ -97,16 +116,23 @@ export function createLiveSession(options: { iceServers?: RTCIceServer[]; comman
       try {
         if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
+        const quality = selection.videoQuality ?? "1080p";
+        const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+        // Bound capture before encoding for each receiver. Audio-only display capture
+        // still needs a video track, but none of those pixels are transmitted.
+        const video: MediaTrackConstraints = selection.kind === "system-audio"
+          ? { width: { max: 320 }, height: { max: 180 }, frameRate: { max: 1 } }
+          : { ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: 30, max: 30 } };
         capture = selection.kind === "microphone"
-          ? await navigator.mediaDevices.getUserMedia({ audio: { ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}), echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false })
-          : await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 } }, audio: true });
+          ? await navigator.mediaDevices.getUserMedia({ audio: { ...audio, ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}) }, video: false })
+          : await navigator.mediaDevices.getDisplayMedia({ video, audio: selection.kind === "screen" && selection.includeAudio === false ? false : audio });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
-        const audio = capture.getAudioTracks(), video = selection.kind === "screen" ? capture.getVideoTracks() : [];
-        if (selection.kind !== "screen" && !audio.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
-        if (selection.kind === "screen" && !video.length) throw new Error("The selected capture did not provide a screen.");
+        const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
+        if (selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
+        if (selection.kind === "screen" && !videoTracks.length) throw new Error("The selected capture did not provide a screen.");
         const label = selection.kind === "microphone" ? "Microphone" : selection.kind === "system-audio" ? "System audio" : "Screen";
-        const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audio.length, video: !!video.length };
-        const current: Publication = { source, capture, stream: new MediaStream([...audio, ...video]), published: false };
+        const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length };
+        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), published: false };
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
@@ -122,7 +148,7 @@ export function createLiveSession(options: { iceServers?: RTCIceServer[]; comman
         // Core may have accepted Publish even when its reply was lost.
         if (sourceId && !closed) void options.command({ type: "endLive", sourceId }).catch(() => {});
         throw reason;
-      } finally { starting = false; if (couchApp?.prepareCapture) await couchApp.prepareCapture(null).catch(() => {}); }
+      } finally { if (!closed) await couchApp?.prepareCapture?.(null).catch(() => {}); starting = false; }
     },
     end,
     observe(sources: LiveSource[]) {

@@ -22,17 +22,36 @@ const check = (source: string) => {
       }
       now = target;
     };
-    const peers = [], failures = [];
+    const peers = [], failures = [], commands = [];
     globalThis.RTCPeerConnection = class {
       connectionState = "new";
       signalingState = "stable";
       constructor(configuration) { this.configuration = configuration; peers.push(this); }
+      addTrack(track) { (this.tracks ??= []).push(track); }
+      async createOffer() { return { type: "offer", sdp: "fixture" }; }
+      async setLocalDescription(description) { this.localDescription = description; }
       close() { this.connectionState = this.signalingState = "closed"; this.onconnectionstatechange?.(); }
     };
-    globalThis.MediaStream = class { getTracks() { return []; } };
+    globalThis.MediaStream = class {
+      constructor(tracks = []) { this.tracks = tracks; }
+      getTracks() { return this.tracks; }
+      getAudioTracks() { return this.tracks.filter(track => track.kind === "audio"); }
+      getVideoTracks() { return this.tracks.filter(track => track.kind === "video"); }
+    };
+    const track = kind => ({ kind, stopped: false, stop() { this.stopped = true; }, addEventListener() {} });
+    const captureRequests = [], captures = [];
+    const capture = async request => {
+      captureRequests.push(request);
+      const stream = new MediaStream([...(request.audio ? [track("audio")] : []), ...(request.video ? [track("video")] : [])]);
+      captures.push(stream);
+      return stream;
+    };
+    Object.defineProperty(globalThis, "navigator", { value: { mediaDevices: { getDisplayMedia: capture, getUserMedia: capture, enumerateDevices: async () => [
+      { kind: "audioinput", deviceId: "interface", label: "USB interface" }, { kind: "videoinput", deviceId: "camera" }
+    ] } }, configurable: true });
     const { createLiveSession } = await import("./src/client/session/live.ts");
     const iceServers = [{ urls: "turn:relay.example:3478?transport=tcp", username: "fixture", credential: "fixture-credential" }];
-    const session = createLiveSession({ iceServers, command: async () => {}, send() {}, failed: state => failures.push(state), published() {} });
+    const session = createLiveSession({ iceServers, command: async action => { commands.push(action); }, send() {}, failed: state => failures.push(state), published() {} });
     const load = playbackId => ({ type: "load", id: playbackId, playbackId, liveSourceId: "screen", livePeerId: playbackId, liveOutput: { picture: true, sound: true, volume: 80 } });
     ${source}
     session.close();
@@ -74,4 +93,59 @@ test("connected receivers and replaced or stopped loads never report a stale tim
   session.play({ type: "stop" });
   advance(30000);
   assert.equal(failures.length, 0);
+`));
+
+test("screen capture defaults to bounded video and unprocessed audio, with explicit quality and audio choices", () => check(`
+  const screen = await session.start({ kind: "screen" });
+  assert.equal(screen.audio, true);
+  assert.equal(screen.video, true);
+  assert.equal(captureRequests[0].video.width.max, 1920);
+  assert.equal(captureRequests[0].video.height.max, 1080);
+  assert.equal(captureRequests[0].video.frameRate.max, 30);
+  assert.deepEqual(captureRequests[0].audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: false });
+  await session.end();
+  const picture = await session.start({ kind: "screen", videoQuality: "720p", includeAudio: false });
+  assert.equal(picture.audio, false);
+  assert.equal(captureRequests[1].audio, false);
+  assert.equal(captureRequests[1].video.height.max, 720);
+  await session.end();
+  await session.start({ kind: "screen", videoQuality: "original" });
+  assert.equal(captureRequests[2].video.width, undefined);
+  assert.equal(captureRequests[2].video.height, undefined);
+`));
+
+test("system audio retains only a small idle picture and never sends its video track", () => check(`
+  const source = await session.start({ kind: "system-audio" });
+  assert.equal(source.audio, true);
+  assert.equal(source.video, false);
+  assert.equal(captureRequests[0].video.frameRate.max, 1);
+  assert.equal(captureRequests[0].video.height.max, 180);
+  assert.equal(captures[0].getVideoTracks()[0].stopped, false);
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "listener", deviceId: "other", sound: true, picture: true }] });
+  assert.deepEqual(peers[0].tracks.map(track => track.kind), ["audio"]);
+  await session.end();
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+`));
+
+test("choosing an audio input releases its permission probe and captures the selected device", () => check(`
+  assert.deepEqual(await session.audioInputs(), [{ kind: "audioinput", deviceId: "interface", label: "USB interface" }]);
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  assert.equal(commands.length, 0, "listing devices must not publish capture");
+  await session.start({ kind: "microphone", audioDeviceId: "interface" });
+  assert.deepEqual(captureRequests[1].audio.deviceId, { exact: "interface" });
+  await assert.rejects(session.audioInputs(), /Stop sharing/);
+`));
+
+test("closing while audio input permission is pending releases the eventual capture", () => check(`
+  let finish;
+  navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { finish = resolve; });
+  const selecting = session.audioInputs();
+  await Promise.resolve();
+  await assert.rejects(session.start({ kind: "screen" }), /already starting/);
+  session.close();
+  const microphone = track("audio");
+  finish(new MediaStream([microphone]));
+  await assert.rejects(selecting, /canceled/);
+  assert.equal(microphone.stopped, true);
+  assert.equal(commands.length, 0);
 `));

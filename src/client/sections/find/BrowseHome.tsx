@@ -17,9 +17,9 @@ const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
 
 // Find with an empty query: where to browse. What to continue and what was
 // saved for later live on Home.
-export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-tv") => void }) {
+export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-tv" | "device-inputs") => void }) {
   const navigation = useDetailNavigation();
-  const { connected } = useSessionGate();
+  const { connected, state } = useSessionGate();
   // Live TV appears once a source has channels.
   const iptv = useQuery({ ...iptvSourcesQuery(useShell().credentials), enabled: connected });
   const liveTv = !!iptv.data?.sources.some(source => source.channelCount);
@@ -27,6 +27,7 @@ export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-t
     {onBrowse && <section aria-label="Browse">
       <h2 className="mb-2 text-base font-medium">Browse</h2>
       <MediaList>
+        <MediaRow title="Device inputs" meta={state?.liveSources?.length ? `${state.liveSources.length} live · Screens, audio and microphones` : "Screens, audio and microphones"} primary={{ label: "Open", onClick: () => onBrowse("device-inputs") }} />
         <MediaRow title="Radio" meta="Stations and playlists" primary={{ label: "Open", onClick: () => onBrowse("radio") }} />
         {liveTv && <MediaRow title="Live TV" meta="Channels and what's on" primary={{ label: "Open", onClick: () => onBrowse("live-tv") }} />}
         {catalogues.map(item => {
