@@ -79,16 +79,20 @@ async function playlist(url: string, headers: Record<string, string>, signal: Ab
 
 // An HLS master's audio-only rendition when it has one (a separate audio playlist, or an
 // audio-only variant like Twitch's), else its smallest variant. Other sources are read as they are.
-export async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
+async function audioInput(url: string, headers: Record<string, string>, signal: AbortSignal) {
   const master = await playlist(url, headers, signal);
-  if (!master?.lines.some(line => line.startsWith("#EXT-X-STREAM-INF:"))) return url;
+  if (!master?.lines.some(line => line.startsWith("#EXT-X-STREAM-INF:"))) return { source: url, hls: !!master };
   const { lines } = master;
   const audio = lines.find(line => line.startsWith("#EXT-X-MEDIA:") && /TYPE=AUDIO/.test(line))?.match(/URI="([^"]+)"/)?.[1];
   const variants = lines.flatMap((line, index) => line.startsWith("#EXT-X-STREAM-INF:") && lines[index + 1] && !lines[index + 1]!.startsWith("#") ? [{ info: line, uri: lines[index + 1]!.trim() }] : []);
   const only = variants.find(variant => /CODECS="/.test(variant.info) && !/avc1|avc3|hvc1|hev1|vp09|av01|mp4v/.test(variant.info));
   const bandwidth = (info: string) => Number(/BANDWIDTH=(\d+)/.exec(info)?.[1] ?? Infinity);
   const smallest = variants.sort((a, b) => bandwidth(a.info) - bandwidth(b.info))[0]?.uri;
-  return new URL(audio ?? only?.uri ?? smallest ?? url, master.url).href;
+  return { source: new URL(audio ?? only?.uri ?? smallest ?? url, master.url).href, hls: true };
+}
+
+export async function audioRendition(url: string, headers: Record<string, string>, signal: AbortSignal) {
+  return (await audioInput(url, headers, signal)).source;
 }
 
 // A direct link has no metadata to say it is live, so an HLS playlist is live while it has no
@@ -126,7 +130,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
     let members: Member[] = [];
     let screens: string[] = [];
     let load: SyncedLoad | undefined;
-    let input: Promise<string> | undefined;
+    let input: ReturnType<typeof audioInput> | undefined;
     let run: Run | undefined;
     let generation = 0;
     let reportedAt = 0;
@@ -181,8 +185,8 @@ export function createSendspin(options: { identity: string; name: string; admit:
       const signal = AbortSignal.timeout(15_000);
       const headers = current.headers ?? {};
       try {
-        input ??= audioRendition(current.audioSource ?? current.source, headers, signal);
-        const [source, ffmpeg] = await Promise.all([input, options.ffmpeg()]).catch(error => { input = undefined; throw error; });
+        input ??= audioInput(current.audioSource ?? current.source, headers, signal);
+        const [{ source, hls }, ffmpeg] = await Promise.all([input, options.ffmpeg()]).catch(error => { input = undefined; throw error; });
         if (attempt !== generation) return;
         const wires = new Set<Wire>(members.flatMap(member => { const session = listening(member.deviceId), wire = session && wireOf(session); return wire ? [wire] : []; }));
         if (!wires.size) wires.add("opus");
@@ -196,6 +200,9 @@ export function createSendspin(options: { identity: string; name: string; admit:
         // Network protocols only, and a 10 s timeout on every read (#644 FFmpeg safety).
         const child = spawn(ffmpeg, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto", "-rw_timeout", "10000000",
           ...Object.keys(headers).length ? ["-headers", Object.entries(headers).map(([name, value]) => `${name}: ${value}\r\n`).join("")] : [],
+          // Start live HLS at its newest complete segment and avoid probing ahead
+          // through several seconds before anchoring the shared playback clock.
+          ...live && hls ? ["-live_start_index", "-1", "-probesize", "32768", "-analyzeduration", "100000"] : [],
           ...live ? ["-copyts"] : [], ...seek ? ["-ss", String(start)] : [], "-i", source,
           ...wires.has("opus") ? [...shape(true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
           ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"] });

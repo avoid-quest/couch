@@ -136,8 +136,11 @@ chose. A Playback renders on its output Device; the newest tab of that Device
 takes over and reloads the item where it was, and when that tab closes the next
 newest one does. The Device fetches the source itself (Direct delivery, no bytes
 through Core): URLs play in `<video>`, YouTube's separate audio in an `<audio>`
-that follows the video, HLS through hls.js where the engine has no native HLS, and
-raw MPEG-TS through mpegts.js. Chromium Devices get YouTube's VP9 and Opus,
+that follows the video, Couch-hosted HLS through hls.js where supported with
+native HLS as the fallback, and raw MPEG-TS through mpegts.js. Direct cross-origin
+HLS retains native playback with hls.js as the fallback because a provider's
+segments may not permit CORS. Synced live pictures use hls.js to map source
+timestamps where supported. Chromium Devices get YouTube's VP9 and Opus,
 others H.264 and AAC. Uploaded SRT/VTT subtitles are served to the `<track>` as
 WebVTT from memory. A browser that needs a gesture before sound plays the picture
 muted and shows "Tap to hear". In the app, Main caps googlevideo's open-ended
