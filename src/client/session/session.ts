@@ -120,6 +120,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? location.origin;
+      let iceServers: RTCIceServer[] = [];
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
@@ -160,6 +161,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (disposed) return;
           setIdentity(caller);
           setCredentialRejected(false);
+          const ice = await fetch(`${origin}/api/live/ice-servers`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+          if (disposed) return;
+          if (ice.status === 401) { pairingRequired(); return; }
+          if (ice.status === 403) { setStatus("connection-rejected"); return; }
+          if (!ice.ok) throw new Error("Server unavailable");
+          iceServers = await ice.json() as RTCIceServer[];
         }
       } catch {
         if (!disposed) { setStatus("server-unavailable"); retryLater(); }
@@ -195,7 +202,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
-        live.current = createLiveSession({ command: action => command(action), send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, failed: state => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
+        live.current = createLiveSession({ iceServers, command: action => command(action), send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, failed: state => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;

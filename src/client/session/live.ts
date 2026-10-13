@@ -7,11 +7,11 @@ import { attachLive, detachLive, play } from "./renderer";
 type Load = Extract<PlaybackCommand, { type: "load" }>;
 type Peer = { connection: RTCPeerConnection; candidates: (RTCIceCandidateInit | null)[]; work: Promise<void> };
 type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; published: boolean };
-type Receiver = Peer & { peerId: string; load: Load; stream: MediaStream; local: boolean };
+type Receiver = Peer & { peerId: string; load: Load; stream: MediaStream; local: boolean; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 
 // Owned by the authenticated session, so changing UI routes never ends capture.
-export function createLiveSession(options: { command: (action: Action) => Promise<void>; send: (message: LiveSignalMessage) => void; failed: (state: PlayerState) => void; published: (source: LiveSource | null) => void }) {
+export function createLiveSession(options: { iceServers?: RTCIceServer[]; command: (action: Action) => Promise<void>; send: (message: LiveSignalMessage) => void; failed: (state: PlayerState) => void; published: (source: LiveSource | null) => void }) {
   let generation = 0;
   let closed = false;
   let starting = false;
@@ -20,6 +20,7 @@ export function createLiveSession(options: { command: (action: Action) => Promis
   const publishers = new Map<string, Peer>();
   const closeReceiver = () => {
     if (!receiver) return;
+    clearTimeout(receiver.timeout);
     receiver.connection.close();
     if (!receiver.local) stopTracks(receiver.stream);
     receiver = undefined;
@@ -36,11 +37,12 @@ export function createLiveSession(options: { command: (action: Action) => Promis
   };
   const failure = (load: Load, reason: unknown) => {
     if (receiver?.load !== load || closed) return;
+    clearTimeout(receiver.timeout);
+    receiver.connection.close();
     options.failed({ playbackId: load.playbackId, status: "error", buffering: false, position: 0, duration: null, volume: load.liveOutput?.volume ?? 100, seekable: false, speed: 1, audioDelay: 0, subtitleDelay: 0, tracks: [], error: reason instanceof Error ? reason.message : "The live connection failed." });
   };
   const makePeer = (peerId: string): Peer => {
-    // LAN candidates go through Core; media goes directly between selected devices.
-    const connection = new RTCPeerConnection({ iceServers: [] });
+    const connection = new RTCPeerConnection({ iceServers: options.iceServers ?? [] });
     const peer: Peer = { connection, candidates: [], work: Promise.resolve() };
     connection.onicecandidate = event => { if (!closed && connection.signalingState !== "closed") options.send({ type: "liveSignal", peerId, signal: { candidate: event.candidate ? { ...event.candidate.toJSON(), candidate: event.candidate.candidate } : null } }); };
     return peer;
@@ -153,7 +155,11 @@ export function createLiveSession(options: { command: (action: Action) => Promis
           if (!current.stream.getTracks().includes(event.track)) current.stream.addTrack(event.track);
           attach(current);
         };
-        current.connection.onconnectionstatechange = () => { if (current.connection.connectionState === "failed") failure(command, new Error("The live connection failed. Stop and play this source again.")); };
+        current.connection.onconnectionstatechange = () => {
+          if (current.connection.connectionState === "connected") clearTimeout(current.timeout);
+          if (current.connection.connectionState === "failed") failure(command, new Error("The live connection failed. Stop and play this source again."));
+        };
+        if (!local) current.timeout = setTimeout(() => failure(command, new Error("Couldn't connect to this live source. Check network access or try another browser.")), 30_000);
         if (local) attach(current);
         return true;
       }

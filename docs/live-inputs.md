@@ -10,7 +10,11 @@ Choose **Play on** beside the new live source to select the first receiver. Open
 
 System audio on macOS requires **14.2 or later**. Screen capture on older supported macOS versions can provide picture without audio; Couch displays the actual captured capability. Screen & audio sends the selected picture and the computer's system audio mix, including when the picture is one window. It does not isolate that window's application audio. If permission was just changed in **System Settings → Privacy & Security → Screen & System Audio Recording** or **Microphone**, reopen the test app when macOS asks.
 
-This first implementation sends WebRTC directly from the publisher to each selected device and is intended for a small group of two or three receivers on the same LAN. Sound and picture travel together per receiver. Independent devices can play at different times; this is not synchronized room audio or a synchronized video wall. Live inputs have no seek, pause backlog, playback speed, or subtitle controls.
+This first implementation sends WebRTC from the publisher to each selected device and is intended for a small group of two or three receivers on the same LAN. Sound and picture travel together per receiver. Independent devices can play at different times; this is not synchronized room audio or a synchronized video wall. Live inputs have no seek, pause backlog, playback speed, or subtitle controls.
+
+Couch answers IPv4 STUN Binding discovery on UDP at its selected LAN address and port. This lets receive-only browsers gather a LAN address without capture permission. It starts and stops with LAN sharing and admits only peers on that subnet. By default, discovery and media stay on the LAN.
+
+Browsers that disable direct UDP need a TURN relay over TCP. Configure an existing authenticated relay with `COUCH_LIVE_TURN_URL` (for example, `turn:192.168.1.10:3478?transport=tcp`), `COUCH_LIVE_TURN_USERNAME`, and `COUCH_LIVE_TURN_CREDENTIAL` before starting Couch. Couch supplies its LAN STUN address and the configured TURN server through authenticated `/api/live/ice-servers`; public discovery never includes relay credentials. A relay on the LAN keeps media local; an external relay carries media through that server. This setting connects to an existing TURN service. A receiver that cannot connect reports an error after 30 seconds; stopping or replacing playback cancels that deadline.
 
 ## Packaged Mac check
 
@@ -27,7 +31,7 @@ COUCH_DATA_DIR="$couch_live_data" COUCH_PORT=4510 \
 couch_live_pid=$!
 ```
 
-For Intel, use `--x64` and `mac` in the bundle path. Run the bundle executable directly. The separate data directory also gives Chromium a separate profile and instance lock, so the installed Couch and its data remain untouched. Pair the receivers with this scratch Couch's address and code. Its application log is `$couch_live_data/logs/couch.log`.
+For Intel, use `--x64` and `mac` in the bundle path. If macOS attributes capture to the terminal or source enumeration fails, launch the bundle through LaunchServices with `open -n` and the same scratch environment. The separate data directory also gives Chromium a separate profile and instance lock, so the installed Couch and its data remain untouched. Pair the receivers with this scratch Couch's address and code. Its application log is `$couch_live_data/logs/couch.log`.
 
 Check system audio with music playing, screen & audio with a changing picture and sound, and microphone with speech or an audio interface signal. Confirm both receivers play, volumes and picture selection work, and Stop reception leaves capture active. Confirm Stop sharing, the OS stop-sharing control, and publisher disconnect each clear every receiver and release capture. Stop this scratch app by its recorded PID:
 

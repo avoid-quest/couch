@@ -19,6 +19,7 @@ import { createAppearance } from "./appearance";
 import { openStore } from "./store";
 import { parseCommand, parseLiveSignal, parsePlayer } from "./validation";
 import { createLiveInputs } from "./live-input";
+import { serveLiveStun } from "./live-stun";
 import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
 import { createRadioProgramme } from "./radio-programme";
@@ -72,6 +73,7 @@ type HubOptions = {
   nativeUpdates?: (action: UpdateAction) => Promise<UpdateState>;
   native?: boolean;
   advertisedUrls?: string[];
+  liveTurn?: RTCIceServer;
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -1100,6 +1102,9 @@ export async function createHub(options: HubOptions) {
     if (websocket && store.identify(trusted ? null : token, url.searchParams.get("device"))) invalidate("devices");
     const caller = identity();
     if (!caller) return cors(request, json({ error: "Pair this device first." }, 401));
+    if (url.pathname === "/api/live/ice-servers") return cors(request, request.method === "GET"
+      ? json([...(lan?.server && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(options.liveTurn ? [options.liveTurn] : [])])
+      : new Response(null, { status: 405, headers: { Allow: "GET" } }));
     if (url.pathname === "/api/settings/sharing") {
       if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
@@ -1453,7 +1458,14 @@ export async function createHub(options: HubOptions) {
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
-      start: async (network, listenPort) => serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: options.allowLanHttp && listenPort === port } }),
+      start: async (network, listenPort) => {
+        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: options.allowLanHttp && listenPort === port } });
+        if (listenPort !== port) return listener;
+        try {
+          const stun = await serveLiveStun(network, port);
+          return { port: listener.port, stop: async () => { await Promise.all([listener.stop(), stun.stop()]); } };
+        } catch (error) { await listener.stop(); throw error; }
+      },
       changed: (next, error, suggested) => {
         lanError = error;
         suggestedDomain = suggested ? `http://${new URL(suggested).hostname}:${port}` : "";
