@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { openStore } from "../src/server/store";
 import { parseCommand, parsePlayer } from "../src/server/validation";
+import type { ServerMessage } from "../src/shared/protocol";
 import { liveFixture, until } from "./live-input.fixture";
 
 const rejectedUpload = (url: string, origin: string) => new Promise<number>((resolve, reject) => {
@@ -53,6 +54,129 @@ test("grouped live pictures use normal HLS URLs whose grants end with their tran
     assert.equal((await fetch(load.source)).status, 404);
     assert.equal(f.publisher.state.liveSources?.length, 1, "Stop playback leaves capture running");
   } finally { await f.close(); }
+});
+
+// A live link's playlist status, its newest segment and that segment's status.
+const newest = async (link: string) => {
+  const response = await fetch(link), segment = (response.ok ? await response.text() : "").match(/segment-\d{9}\.ts/g)?.at(-1);
+  return { playlist: response.status, segment, status: segment ? (await fetch(new URL(segment, link))).status : 0 };
+};
+// The newest segment once the capture has written one after `segment`.
+const after = async (link: string, segment = "") => {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const current = await newest(link);
+    if (current.segment && current.segment > segment) return current;
+    if (Date.now() > deadline) throw new Error("The capture wrote no new segment.");
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+};
+const loadCount = (client: { messages: ServerMessage[] }) => client.messages.filter(message => message.type === "player" && message.command.type === "load").length;
+const coreLink = /\/api\/live\/media\/[^"]*\/core\//;
+
+test("each screen's live link names its Device and stops serving it once unpaired, while the others play on", { timeout: 20_000 }, async () => {
+  const f = await liveFixture({ local: true });
+  // Core's own decoder reads its link through the same endpoint, from this machine.
+  const core: number[] = [], fetchHub = globalThis.fetch;
+  globalThis.fetch = (async (input, init) => { const response = await fetchHub(input, init); if (coreLink.test(String(input))) core.push(response.status); return response; }) as typeof fetch;
+  let feeding: ReturnType<typeof setInterval> | undefined;
+  try {
+    const upload = await f.publish("screen");
+    feeding = setInterval(() => upload.send(Buffer.from("fixture capture")), 100);
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+    const other = await f.connect(2, "&audio=1&video=1"), removed = await f.connect(3, "&audio=1&video=1");
+    await f.speaker(1);
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: removed.id })).ok, true);
+    await until(() => !!removed.load());
+    // Direct receives over WebRTC: its load carries no HLS link.
+    const direct = removed.load()!;
+    assert.ok(direct.livePeerId);
+    assert.equal(direct.source, "");
+    assert.equal(direct.hls, undefined);
+    removed.report();
+    for (const client of [f.receiver, other]) assert.equal((await f.publisher.command({ type: "output", deviceId: client.id, level: 50, picture: true })).ok, true);
+    const screens = [removed, f.receiver, other];
+    await until(() => screens.every(client => client.load()?.hls === true && !!client.load()?.follow));
+    for (const client of screens) client.report();
+    await until(() => f.heard(1) > 0);
+    const links = screens.map(client => client.load()!.source), [saved, receiving, watching] = links as [string, string, string];
+    assert.equal(new Set(links).size, 3, "each screen has its own link");
+    screens.forEach((client, index) => assert.ok(links[index]!.includes(`/${client.id}/`)));
+    for (const link of links) assert.deepEqual(await newest(link).then(({ playlist, status }) => [playlist, status]), [200, 200]);
+    assert.ok(core.length && core.every(status => status === 200), "Core's decoder reads its own link");
+    // A link's Device and signature go together, and Core's name opens nothing for a Device.
+    assert.equal((await fetch(saved.replace(`/${removed.id}/`, `/${f.receiver.id}/`))).status, 404);
+    assert.equal((await fetch(receiving.replace(`/${f.receiver.id}/`, "/core/"))).status, 404);
+    const before = await newest(saved), loads = screens.slice(1).map(loadCount), { playbackId } = f.receiver.state.player;
+
+    const removal = await fetch(`${f.hub.origin}/api/devices/${removed.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${"h".repeat(64)}`, Origin: f.hub.origin } });
+    assert.equal(removal.status, 200);
+    await until(() => !f.receiver.state.outputs?.some(output => output.deviceId === removed.id));
+    // Its saved link serves neither the playlist nor a segment written since; the others' links still do.
+    const fresh = await after(receiving, before.segment);
+    assert.equal((await fetch(saved)).status, 404);
+    assert.equal((await fetch(new URL(fresh.segment!, saved))).status, 404);
+    assert.equal(fresh.status, 200);
+    assert.equal((await after(watching, before.segment)).status, 200);
+    const heard = f.heard(1);
+    await until(() => f.heard(1) > heard);
+    assert.deepEqual(screens.slice(1).map(loadCount), loads, "the others play on without a new load");
+    assert.equal(f.receiver.state.player.playbackId, playbackId);
+    for (const client of [f.publisher, f.receiver, other, removed]) assert.equal(coreLink.test(JSON.stringify(client.messages)), false, "Core's link never reaches a Device");
+
+    clearInterval(feeding);
+    assert.equal((await f.publisher.command({ type: "endLive", sourceId: "screen" })).ok, true);
+    assert.equal((await fetch(receiving)).status, 404);
+  } finally { clearInterval(feeding); await f.close(); }
+});
+
+test("a screen's live link ends with its picture or its output, lasts through a pause and a new tab, and ends when the item is replaced", { timeout: 20_000 }, async () => {
+  const f = await liveFixture();
+  let feeding: ReturnType<typeof setInterval> | undefined;
+  try {
+    const upload = await f.publish("screen");
+    feeding = setInterval(() => upload.send(Buffer.from("fixture capture")), 100);
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+    const other = await f.connect(2, "&audio=1&video=1"), host = await f.connect(-1);
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
+    await until(() => !!f.receiver.load());
+    f.receiver.report();
+    for (const client of [other, host]) assert.equal((await f.publisher.command({ type: "output", deviceId: client.id, level: 50, picture: true })).ok, true);
+    const screens = [f.receiver, other, host];
+    await until(() => screens.every(client => client.load()?.hls === true && !!client.load()?.follow));
+    const [receiving, watching, hosting] = screens.map(client => client.load()!.source) as [string, string, string];
+    for (const link of [receiving, watching, hosting]) assert.equal((await newest(link)).status, 200);
+    const { playbackId } = f.receiver.state.player;
+
+    // Picture off, sound kept: that screen's link ends; the others play on.
+    assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, picture: false })).ok, true);
+    await until(() => !!f.receiver.state.outputs?.some(output => output.deviceId === other.id && !output.picture));
+    let fresh = await after(receiving);
+    assert.equal((await fetch(watching)).status, 404);
+    assert.equal((await fetch(new URL(fresh.segment!, watching))).status, 404);
+    assert.equal((await newest(hosting)).status, 200);
+
+    // Out of Where it plays: the same.
+    assert.equal((await f.publisher.command({ type: "output", deviceId: host.id, level: 0, picture: false })).ok, true);
+    await until(() => !f.receiver.state.outputs?.some(output => output.deviceId === host.id));
+    fresh = await after(receiving, fresh.segment);
+    assert.equal((await fetch(hosting)).status, 404);
+    assert.equal(fresh.status, 200);
+    assert.equal(f.receiver.state.player.playbackId, playbackId);
+
+    // Paused, and in a new tab, a screen keeps its own link.
+    assert.equal((await f.publisher.command({ type: "pause", playbackId, paused: true })).ok, true);
+    assert.equal((await newest(receiving)).status, 200);
+    const tab = await f.connect(1, "&audio=1&video=1");
+    await until(() => tab.load()?.hls === true);
+    assert.equal(tab.load()!.source, receiving);
+    assert.equal((await newest(receiving)).status, 200);
+
+    // Another item replaces the load, and the link with it.
+    assert.equal((await f.publisher.command({ type: "enqueue", entry: { id: "normal", title: "Normal", source: `${f.hub.origin}/api/health` }, playNow: true })).ok, true);
+    await until(() => f.receiver.state.player.playbackId !== playbackId);
+    assert.equal((await fetch(receiving)).status, 404);
+  } finally { clearInterval(feeding); await f.close(); }
 });
 
 test("live playback uses ordinary controls and queue without persisting its ephemeral entry", { timeout: 15_000 }, async () => {

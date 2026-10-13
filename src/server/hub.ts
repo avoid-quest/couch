@@ -207,8 +207,10 @@ export async function createHub(options: HubOptions) {
       }
     }, changed: () => broadcast() });
   const liveKey = randomBytes(32);
-  const liveSignature = (sourceId: string, playbackId: string) => createHmac("sha256", liveKey).update(`${sourceId}\n${playbackId}`).digest("base64url");
-  const liveUrl = (sourceId: string, playbackId: string, target = origin) => `${target}/api/live/media/${sourceId}/${playbackId}/${liveSignature(sourceId, playbackId)}/stream.m3u8`;
+  // A live media link names who it was made for: a Device's screen, or "core", Core's own decoder,
+  // which no Device ID can equal and no Device is sent. The endpoint checks that one's current right.
+  const liveSignature = (sourceId: string, playbackId: string, principal: string) => createHmac("sha256", liveKey).update(`${sourceId}\n${playbackId}\n${principal}`).digest("base64url");
+  const liveUrl = (sourceId: string, playbackId: string, principal: string, target = origin) => `${target}/api/live/media/${sourceId}/${playbackId}/${principal}/${liveSignature(sourceId, playbackId, principal)}/stream.m3u8`;
   // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
   const failures = new WeakMap<Socket<SocketData>, Set<string>>();
@@ -477,7 +479,7 @@ export async function createHub(options: HubOptions) {
     // A live link can expire within minutes, so a live screen resolves its own.
     const reuse = playback.resolved?.playbackId === loaded.playbackId && playback.resolved.vp9 === tab.data.vp9 && !playback.media?.live ? playback.resolved.media : undefined;
     const { headers = {}, ...media } = await (reuse ?? resolveEntry(entry, loaded.playbackId, signal, tab, playback));
-    const fresh = entry.liveSourceId ? { ...media, source: liveUrl(entry.liveSourceId, loaded.playbackId, tab.data.origin) }
+    const fresh = entry.liveSourceId ? { ...media, source: liveUrl(entry.liveSourceId, loaded.playbackId, deviceOf(tab), tab.data.origin) }
       : await passThrough.prepare(loaded.playbackId, media, headers, { origin: tab.data.origin, userAgent: tab.data.userAgent }, signal);
     const { player } = stateOf(playback);
     return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, mpv: fresh.mpv, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
@@ -598,7 +600,8 @@ export async function createHub(options: HubOptions) {
         // A live master's link can expire within minutes (RaiPlay: 403 after about 150 s) while its
         // renditions keep working, so the sound's rendition is picked now for a later Synced start.
         if (isLiveMedia && !media.radio && !entry.liveSourceId) void audioRendition(media.audioSource ?? media.source, headers, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
-        return entry.liveSourceId ? { ...media, source: liveUrl(entry.liveSourceId, playbackId, tab?.data.origin || origin) }
+        // A live item reaches its Device over WebRTC, its group through Core, and a screen by its own link.
+        return entry.liveSourceId ? media
           : passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal);
       },
       observe: player => subtitles.observe(player),
@@ -943,7 +946,7 @@ export async function createHub(options: HubOptions) {
       const source = live.source(entry.liveSourceId);
       if (!source) throw new Error("That live source has ended.");
       if (spans(playback) && !playback.joining) await liveStreams.ready(source.id, signal);
-      return { source: liveUrl(source.id, playbackId), hls: true, audioOnly: !source.video, metadata: { live: true } };
+      return { source: liveUrl(source.id, playbackId, "core"), hls: true, audioOnly: !source.video, metadata: { live: true } };
     }
     if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage);
     if (entry.source.startsWith("iptv:")) {
@@ -1333,10 +1336,12 @@ export async function createHub(options: HubOptions) {
       if (request.method === "GET" && pathname.startsWith("/api/relay/")) return allowed(request, false) ? passThrough.serve(request) : new Response(null, { status: 403 });
       if (request.method === "GET" && pathname.startsWith("/api/live/media/")) {
         if (!allowed(request, false)) return new Response(null, { status: 403 });
-        const [sourceId = "", playbackId = "", signature = "", file = "", ...extra] = pathname.slice("/api/live/media/".length).split("/");
-        const expected = Buffer.from(liveSignature(sourceId, playbackId)), supplied = Buffer.from(signature);
-        const playback = playing(playbackId);
-        if (extra.length || !playback || sourceOf(playback) !== sourceId || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return new Response(null, { status: 404 });
+        const [sourceId = "", playbackId = "", principal = "", signature = "", file = "", ...extra] = pathname.slice("/api/live/media/".length).split("/");
+        const expected = Buffer.from(liveSignature(sourceId, playbackId, principal)), supplied = Buffer.from(signature);
+        const playback = playing(playbackId), peer = requestPeer(request).replace(/^::ffff:/, "");
+        // Core's decoder reads from this machine; a Device only while its output shows this Playback's picture.
+        const entitled = principal === "core" ? loopbackPeer(peer) || peer === hostname : !!playback?.outputs.some(output => output.deviceId === principal && output.picture);
+        if (extra.length || !playback || sourceOf(playback) !== sourceId || expected.length !== supplied.length || !timingSafeEqual(expected, supplied) || !entitled) return new Response(null, { status: 404 });
         return cors(request, await liveStreams.response(sourceId, file));
       }
       const page = ["GET", "HEAD"].includes(request.method) && !pathname.startsWith("/api/") ? await frontend(pathname) : null;

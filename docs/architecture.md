@@ -176,9 +176,12 @@ connections. ICE configuration, including optional authenticated TURN, is return
 only after pairing and never appears in public discovery.
 One MediaRecorder also uploads the capture over a separate WebSocket using a
 publication-scoped upload token. Core converts it into rolling HLS with FFmpeg
-(`src/server/live-stream.ts`) for Synced playback; media addresses are signed for
-the current Playback. Moving between Direct and Synced replaces the renderer's
-media while preserving the ordinary queue, output selection and capture ownership.
+(`src/server/live-stream.ts`) for Synced playback. Each screen's media address is
+signed for the current Playback and its Device, and works only while that Device's
+output shows the picture; Core's own decoder reads one that no Device receives, from
+this machine. Direct receivers get no media address. Moving between Direct and
+Synced replaces the renderer's media while preserving the ordinary queue, output
+selection and capture ownership.
 The short-lived capture entry can share an ordinary queue with other media, but
 is excluded from persistent queues and removed when its publication ends. Capture
 cleanup closes the upload, stops its encoder and removes its temporary segments.

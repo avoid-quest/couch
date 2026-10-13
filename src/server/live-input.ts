@@ -73,7 +73,8 @@ export function createLiveInputs<Socket>(options: {
         if (existing) { options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } }); continue; }
         const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId };
         peers.set(peer.peerId, peer);
-        options.send(receiver.socket, { type: "player", command: { ...load, liveSourceId: sourceId, livePeerId: peer.peerId, liveOutput: { picture: peer.picture, sound: peer.sound, volume: receiver.volume }, paused: load.paused ?? false } });
+        // The peer carries the media: no HLS link reaches a Direct receiver.
+        options.send(receiver.socket, { type: "player", command: { ...load, source: "", hls: undefined, liveSourceId: sourceId, livePeerId: peer.peerId, liveOutput: { picture: peer.picture, sound: peer.sound, volume: receiver.volume }, paused: load.paused ?? false } });
         changed.add(sourceId);
       }
       for (const id of changed) announce(id);
