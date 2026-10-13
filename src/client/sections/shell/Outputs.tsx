@@ -38,14 +38,23 @@ export function outputStatus(state: State, device: DeviceSummary, current?: stri
 export const chooserRequest = (state: ClientSessionState) => { const playback = state.playbacks?.find(item => item.id === state.playback); return playback?.choosing ? `${playback.id}:${playback.choosing}` : null; };
 /** Where it plays opens for each new request and otherwise stays as the user left it. */
 export const reopens = (dismissed: string | null, request: string | null) => !!request && request !== dismissed;
+/**
+ * Play on a source's publisher, explicit or as primary Play's destination, while the source already plays:
+ * Core keeps that playback, and only the requesting window opens its Where it plays. A waiting one asks Core.
+ */
+export const choosesHere = (action: Action, before: ClientSessionState | null, after: ClientSessionState | null) => action.type === "playLive" && action.playNow !== false && !!after && !chooserRequest(after)
+  && after.playbacks?.find(item => item.id === after.playback)?.liveSourceId === action.sourceId
+  && after.liveSources?.find(source => source.id === action.sourceId)?.deviceId === (action.deviceId ?? before?.controlling);
 
 // Radix Dialog's controlled open state: a changed defaultOpen would not open a mounted Sheet. The
 // session remembers the closed request, so the mini player and Now Playing each open it at most once.
-function ChooserSheet({ request, children }: { request: string | null; children: ReactNode }) {
+// Core's request opens every window viewing the playback; this window's own request opens only here.
+function ChooserSheet({ request, playback, children }: { request: string | null; playback: string | null; children: ReactNode }) {
   const gate = useContext(SessionGateContext);
   const [opened, setOpened] = useState(false);
-  const open = opened || reopens(gate?.dismissedChooser ?? null, request);
-  return <Sheet open={open} onOpenChange={next => { setOpened(next); if (!next && request) gate?.dismissChooser(request); }}>{children}</Sheet>;
+  const requested = request ?? (playback && gate?.requestedChooser?.startsWith(`${playback}:`) ? gate.requestedChooser : null);
+  const open = opened || reopens(gate?.dismissedChooser ?? null, requested);
+  return <Sheet open={open} onOpenChange={next => { setOpened(next); if (!next && requested) gate?.dismissChooser(requested); }}>{children}</Sheet>;
 }
 
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
@@ -76,7 +85,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   const waiting = !!source && !outputs.length;
   // An mpv channel plays only on the server's own Device, its one output.
   const host = playback?.hostOnly ? state.devices?.find(device => device.id === outputs[0]?.deviceId)?.name ?? deviceName(state.installationName) : undefined;
-  return <ChooserSheet key={state.playback} request={chooserRequest(state)}>
+  return <ChooserSheet key={state.playback} request={chooserRequest(state)} playback={state.playback ?? null}>
     {/* Device icons stand for individual devices; the mixer opens all output rows. */}
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] scroll-py-6 gap-4 overflow-y-auto px-(--gutter) pb-6 [&_[data-slot=slider]]:min-h-11 [&_[data-slot=toggle]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
@@ -99,7 +108,8 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
           const speakers = mine || device.sharing?.audio === true;
           const audio = source?.audio !== false && !capturing && speakers, video = !capturing && (mine || device.sharing?.video === true);
           const sound = !!current?.sound, locked = !device.online || !!host && !current;
-          const occupied = served(state, device.id), channel = occupied?.outputs.find(item => item.deviceId === device.id) ?? (playback?.held?.deviceId === device.id ? playback.held : undefined);
+          // A held publisher's output is its place in that playback, here or elsewhere, as Core's replacement check counts it.
+          const occupied = served(state, device.id) ?? state.playbacks?.find(item => item.held?.deviceId === device.id), channel = occupied?.outputs.find(item => item.deviceId === device.id) ?? occupied?.held;
           const privatePicture = !!channel?.picture && device.sharing?.video !== true;
           const privateSound = !!channel?.sound && device.sharing?.audio !== true;
           const privateOutput = privatePicture || privateSound;

@@ -44,3 +44,52 @@ test("a closed Where it plays stays closed when Now Playing replaces the mini pl
   again.onOpenChange!(false);
   expect(mount(waiting(2)).open).toBe(false);
 });
+
+test("Play on a playing source's publisher opens only this window's Where it plays, once per request, and keeps the playback", () => {
+  // This window's own request (SessionGate's requestedChooser); closing it answers the request.
+  let gate = { dismissedChooser: null as string | null, requestedChooser: null as string | null, dismissChooser: (request: string) => { gate = { ...gate, dismissedChooser: request, requestedChooser: null }; } };
+  const playing = { ...waiting(0), outputs: [{ deviceId: "tv", picture: true, sound: true }], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [{ deviceId: "tv", picture: true, sound: true }], liveSourceId: "s", held: { deviceId: "mac", picture: true, sound: true, local: true } }] } as unknown as ClientSessionState;
+  const run = mock(async () => true);
+  const mount = (state: ClientSessionState) => {
+    sheets.length = 0;
+    renderToStaticMarkup(<SessionGateContext.Provider value={gate as unknown as SessionGateValue}><WhereItPlays state={state} run={run} /></SessionGateContext.Provider>);
+    return sheets[0]!;
+  };
+  // Another window, and this one before asking, stay closed: Core broadcasts no request.
+  expect(mount(playing).open).toBe(false);
+  gate = { ...gate, requestedChooser: "p:here:1" };
+  // A request for a playback this window no longer views does not open it.
+  expect(mount({ ...playing, playback: "other" } as ClientSessionState).open).toBe(false);
+  const mini = mount(playing);
+  expect(mini.open).toBe(true);
+  // Now Playing replaces the mini player while it is open: it stays open there.
+  expect(mount(playing).open).toBe(true);
+  mount(playing).onOpenChange!(false);
+  expect(gate.requestedChooser).toBe(null);
+  expect(mount(playing).open).toBe(false);
+  // A repeated Play is a new request; nothing it opens sends a command.
+  gate = { ...gate, requestedChooser: "p:here:2" };
+  expect(mount(playing).open).toBe(true);
+  expect(run).not.toHaveBeenCalled();
+  // While Core asks every window (the source waits again), its request decides, and closing it answers both.
+  const asked = mount(waiting(3));
+  expect(asked.open).toBe(true);
+  asked.onOpenChange!(false);
+  expect(gate).toMatchObject({ dismissedChooser: "p:3", requestedChooser: null });
+  expect(mount(playing).open).toBe(false);
+});
+
+test("only a successful Play whose destination is the playing source's publisher asks this window to choose", async () => {
+  const { choosesHere } = await import("../src/client/sections/shell/Outputs");
+  const playing = { playback: "p", controlling: "tv", playbacks: [{ id: "p", status: "playing", outputs: [{ deviceId: "tv", picture: true, sound: true }], liveSourceId: "s" }], liveSources: waiting(0).liveSources } as unknown as ClientSessionState;
+  const before = { ...playing, controlling: "mac" } as ClientSessionState;
+  const play = { type: "playLive", sourceId: "s" } as const;
+  expect(choosesHere({ ...play, deviceId: "mac" }, playing, playing)).toBe(true);
+  expect(choosesHere(play, before, playing)).toBe(true);
+  expect(choosesHere(play, playing, playing)).toBe(false);
+  expect(choosesHere({ ...play, deviceId: "tv" }, before, playing)).toBe(false);
+  expect(choosesHere({ ...play, deviceId: "mac", playNow: false }, before, playing)).toBe(false);
+  expect(choosesHere({ ...play, deviceId: "mac" }, before, waiting(4))).toBe(false);
+  expect(choosesHere({ ...play, deviceId: "mac" }, before, { ...playing, playback: "q" } as ClientSessionState)).toBe(false);
+  expect(choosesHere({ ...play, deviceId: "mac" }, before, null)).toBe(false);
+});

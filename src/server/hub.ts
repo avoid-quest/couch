@@ -270,8 +270,8 @@ export async function createHub(options: HubOptions) {
   const requireOutput = (output: Output, actor: string) => {
     if (!allows(output, actor)) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !outputFor(output.deviceId, actor).picture ? "video" : "audio"}.`, 403);
   };
-  // What a Device plays changes only with its consent: whatever it serves now must be shared with the actor.
-  const requireReplacement = (deviceId: string, actor: string) => { const output = servedBy(deviceId)?.outputs.find(output => output.deviceId === deviceId); if (output) requireOutput(output, actor); };
+  // What a Device plays changes only with its consent: its place in a mix, served or held, must be shared with the actor.
+  const requireReplacement = (deviceId: string, actor: string) => { const member = memberOf(deviceId), output = member && mixOf(member).find(output => output.deviceId === deviceId); if (output) requireOutput(output, actor); };
   const requireControl = (id: string, actor: string) => { const output = outputFor(id, actor); if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(id)} is not sharing its outputs.`, 403); };
   // A held publisher output keeps the control it established; capture alone gives none over another Playback.
   const controls = (playback: Playback, actor: string) => !playback.outputs.length || mixOf(playback).some(output => allows(output, actor));
@@ -319,10 +319,8 @@ export async function createHub(options: HubOptions) {
     if (command.type === "stop") playback.loaded = undefined;
     if (command.type === "load") {
       const source = sourceId ? live.source(sourceId) : undefined;
-      // Another publisher's held output returns first; then this source's publisher is held.
-      if (playback.held && playback.held.deviceId !== source?.deviceId) restore(playback);
-      if (source) assign(playback, playback.outputs, source);
-      else playback.choosing = undefined;
+      transition(playback, source);
+      if (!source) playback.choosing = undefined;
       // With only its publisher selected, a shared source waits for Where it plays instead of failing.
       if (source && !playback.outputs.length) {
         playback.loaded = command;
@@ -392,12 +390,18 @@ export async function createHub(options: HubOptions) {
   const claim = (playback: Playback, deviceId: string) => { for (const other of all()) if (other !== playback && other.held?.deviceId === deviceId) other.held = undefined; };
   // Once the publisher's capture is no longer current, its output returns, unless it went elsewhere or lost consent.
   // The load that follows plays a single output; outputs that span Devices form their group first.
-  const restore = (playback: Playback) => {
+  const restore = (playback: Playback, source = live.source(sourceOf(playback) ?? "")) => {
     const held = playback.held!;
     playback.held = undefined;
     if (servedBy(held.deviceId) || !allows(held, held.local ? held.deviceId : "")) return;
-    assign(playback, [...playback.outputs, held]);
+    assign(playback, [...playback.outputs, held], source);
     if (spans(playback)) reconcile(playback);
+  };
+  // The selected mix moves to an item of `source`, however it was played: another publisher's held output
+  // returns first; then this source's publisher is held.
+  const transition = (playback: Playback, source: ReturnType<typeof live.source>) => {
+    if (playback.held && playback.held.deviceId !== source?.deviceId) restore(playback, source);
+    if (source) assign(playback, playback.outputs, source);
   };
   const release = (playback: Playback, deviceId: string, wait = true) => {
     if (playback.renderer && deviceOf(playback.renderer) === deviceId) live.closePlayback(playback.id);
@@ -1454,7 +1458,7 @@ export async function createHub(options: HubOptions) {
               playback = mediaPlayback(playingOn(playedBy, action.deviceId ?? null), true);
             } else { fresh = true; playback = mediaPlayback(playedBy, false); }
             if (playNow) { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); broadcast(); }
-            if (fresh && playNow) assign(playback, action.deviceId ? [output] : playback.outputs, source);
+            if (fresh && playNow) { if (action.deviceId) assign(playback, [output], source); else transition(playback, source); }
             if (fresh) await playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow, ...(action.placement ? { placement: action.placement } : {}) }, authorizePlayback(playback, authorize, deviceId), playedBy);
             if (fresh && playNow) reconcile(playback);
           } else if (action.type === "sharing") {

@@ -4,7 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { isValidElement, type ReactNode } from "react";
 import WebSocket from "ws";
 import type { PlaybackCommand } from "../src/shared/protocol";
-import { chooserRequest, outputStatus, reopens, WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { chooserRequest, choosesHere, outputStatus, reopens, WhereItPlays } from "../src/client/sections/shell/Outputs";
 import { liveFixture, until } from "./live-input.fixture";
 
 type Fixture = Awaited<ReturnType<typeof liveFixture>>;
@@ -18,7 +18,7 @@ const consent = (client: Client, id: string) => client.state.devices?.find(devic
 const sound = (client: Client, id: string) => { const device = client.state.devices?.find(device => device.id === id); return { volume: device?.volume, muted: device?.muted }; };
 const lastCommand = (client: Client) => client.messages.flatMap(message => message.type === "player" && message.command.type !== "volume" ? [message.command.type] : []).at(-1);
 // The production Where it plays rows, inspected without a DOM (as in output-controls).
-type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNode; disabled?: boolean; pressed?: boolean; onPressedChange?: (pressed: boolean) => void };
+type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNode; disabled?: boolean; pressed?: boolean; onPressedChange?: (pressed: boolean) => void; onCommit?: (value: number) => void };
 function control(node: ReactNode, label: string): ControlProps | undefined {
   if (Array.isArray(node)) return node.map(child => control(child, label)).find(Boolean);
   if (!isValidElement<ControlProps>(node)) return;
@@ -47,6 +47,7 @@ test("Play on the publisher waits in Where it plays, opens it on each request, a
     assert.equal(self.ok, true, self.error);
     await until(() => f.publisher.state.player.error === "Publisher is sharing this source. Choose where it plays.");
     assert.equal(sheet.observe(), 1, "the transition to waiting opens Where it plays");
+    assert.equal(choosesHere({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id }, null, f.publisher.state), false, "Core's request opens it, not another of this window's");
     assert.equal(f.publisher.state.player.status, "paused");
     assert.deepEqual(f.publisher.state.outputs, []);
     assert.equal(loads(f.publisher).some(load => "livePeerId" in load || load.source.includes("/api/live/")), false, "the publisher never loads its own capture");
@@ -846,17 +847,28 @@ test("Play on the publisher again shows the playback it established, keeping its
   try {
     const playback = await establishedPrivate(f);
     const load = f.receiver.load(), { playbackId } = f.receiver.state.player;
-    const repeat = await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id });
+    const action = { type: "playLive", sourceId: "screen", deviceId: f.publisher.id } as const, before = f.publisher.state;
+    const repeat = await f.publisher.command(action);
     assert.equal(repeat.ok, true, repeat.error);
     await new Promise(resolve => setTimeout(resolve, 50));
     assert.equal(f.publisher.state.playback, playback);
     assert.equal(sharedPlaybacks(f.publisher).length, 1, "no outputless playback is forked");
     assert.equal(f.receiver.load(), load);
+    // It leads to output selection in the requesting window only: Core asks no window, so the receiver plays on.
+    assert.equal(choosesHere(action, before, f.publisher.state), true);
+    assert.equal(chooserRequest(f.publisher.state), null);
+    assert.equal(chooserRequest(f.receiver.state), null);
+    assert.equal(f.receiver.state.player.status, "playing");
     const pause = await f.publisher.command({ type: "pause", playbackId: playbackId!, paused: true });
     assert.equal(pause.ok, true, pause.error);
     // Primary Play while viewing it is the same request.
-    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen" })).ok, true);
+    const primary = { type: "playLive", sourceId: "screen" } as const, viewing = f.publisher.state;
+    assert.equal((await f.publisher.command(primary)).ok, true);
     assert.equal(f.publisher.state.playback, playback);
+    assert.equal(choosesHere(primary, viewing, f.publisher.state), true);
+    // Play on the receiver joins rather than choosing, and Queue only queues.
+    assert.equal(choosesHere({ ...action, deviceId: f.receiver.id }, before, f.publisher.state), false);
+    assert.equal(choosesHere({ ...primary, playNow: false }, viewing, f.publisher.state), false);
     assert.equal(sharedPlaybacks(f.publisher).length, 1);
     assert.equal((await f.publisher.command({ type: "stop", playbackId: playbackId! })).ok, true);
   } finally { await f.close(); }
@@ -936,5 +948,129 @@ for (const revoked of ["video", "audio"] as const) test(`a held remote output ke
     await until(() => playingNow(f.receiver) === "after" && receivers(f.receiver)?.length === 2);
     const returned = f.receiver.state.outputs?.find(output => output.deviceId === f.publisher.id);
     assert.deepEqual({ picture: returned?.picture, sound: returned?.sound, local: returned?.local }, { picture: revoked !== "video", sound: revoked !== "audio", local: false });
+  } finally { await f.close(); }
+});
+
+test("primary Play of another publisher's source keeps the held publisher in the mix; explicit Play on still isolates", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await f.publisher.command({ type: "sharing", sharing: { audio: true, video: true } });
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+    await f.publish("publisher-screen");
+    const upload = await publishOn(f, f.receiver, 1, "receiver-screen");
+    try {
+      await f.publisher.command({ type: "enqueue", entry: ordinary(f, "movie"), playNow: true, deviceId: f.publisher.id });
+      await until(() => !!f.publisher.load());
+      await f.publisher.command({ type: "output", deviceId: f.receiver.id, picture: true, level: 50 });
+      await f.publisher.command({ type: "playLive", sourceId: "publisher-screen", playNow: false });
+      assert.equal((await f.publisher.command({ type: "next", playbackId: f.publisher.state.player.playbackId! })).ok, true);
+      await until(() => f.receiver.load()?.liveSourceId === "publisher-screen" && direct(f.receiver.load()));
+      f.receiver.report();
+      await until(() => f.publisher.state.player.status === "playing");
+      const playback = f.publisher.state.playback, held = () => f.publisher.state.playbacks?.find(item => item.id === playback)?.held?.deviceId;
+      assert.deepEqual({ outputs: receivers(f.publisher), held: held() }, { outputs: [f.receiver.id], held: f.publisher.id });
+      // Primary Play of the receiver's capture: the selected mix moves with it, so each publisher swaps places.
+      const play = await f.publisher.command({ type: "playLive", sourceId: "receiver-screen" });
+      assert.equal(play.ok, true, play.error);
+      await until(() => playingNow(f.publisher) === "Receiver · Screen" && direct(f.publisher.load()) && f.publisher.load()?.liveSourceId === "receiver-screen");
+      assert.equal(f.publisher.state.playback, playback);
+      assert.deepEqual({ outputs: receivers(f.publisher), held: held() }, { outputs: [f.publisher.id], held: f.receiver.id });
+      assert.equal(chooserRequest(f.publisher.state), null, "a receiver remains, so nothing waits in Where it plays");
+      assert.deepEqual(titles(f.publisher), ["movie", "Publisher · Screen", "Receiver · Screen"]);
+      // The next ordinary Play restores both.
+      assert.equal((await f.publisher.command({ type: "enqueue", entry: ordinary(f, "after"), playNow: true })).ok, true);
+      await until(() => playingNow(f.publisher) === "after" && receivers(f.publisher)?.length === 2);
+      assert.equal(f.publisher.state.playback, playback);
+      assert.deepEqual(receivers(f.publisher)?.sort(), [f.publisher.id, f.receiver.id].sort());
+      // Explicit Play on still isolates: back on the publisher's capture, Play on Publisher takes it out of the mix.
+      assert.equal((await f.publisher.command({ type: "play", entryId: f.publisher.state.queue.find(entry => entry.liveSourceId === "publisher-screen")!.id })).ok, true);
+      await until(() => playingNow(f.publisher) === "Publisher · Screen" && receivers(f.publisher)?.join() === f.receiver.id);
+      assert.equal((await f.publisher.command({ type: "playLive", sourceId: "receiver-screen", deviceId: f.publisher.id })).ok, true);
+      await until(() => f.publisher.state.playback !== playback && direct(f.publisher.load()) && f.publisher.load()?.liveSourceId === "receiver-screen");
+      assert.deepEqual(receivers(f.publisher), [f.publisher.id]);
+      assert.equal(f.receiver.state.playback, playback);
+      // It moved, so it does not return.
+      await until(() => !!f.receiver.state.playbacks?.some(item => item.id === playback && !item.held));
+    } finally { upload.terminate(); }
+  } finally { await f.close(); }
+});
+
+// Publisher's own ordinary output holds its picture privately; it then plays its own screen, held out of it.
+async function heldPrivately(f: Fixture, sharing: { audio: boolean; video: boolean }) {
+  await f.publisher.command({ type: "sharing", sharing });
+  await f.publish("screen");
+  const local = await f.connect(3);
+  await f.publisher.command({ type: "enqueue", entry: ordinary(f, "publisher-movie"), playNow: true, deviceId: f.publisher.id });
+  await until(() => !!f.publisher.load());
+  await local.command({ type: "enqueue", entry: ordinary(f, "local-movie"), playNow: true, deviceId: local.id });
+  await until(() => !!local.load());
+  return local;
+}
+async function holdPublisher(f: Fixture, local: Client) {
+  assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id })).ok, true);
+  assert.equal((await f.receiver.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
+  await until(() => direct(f.receiver.load()));
+  await f.publisher.command({ type: "enqueue", entry: ordinary(f, "after") });
+  const playback = f.publisher.state.playback!;
+  await until(() => !!local.state.playbacks?.some(item => item.id === playback && item.held?.deviceId === f.publisher.id));
+  return playback;
+}
+
+test("replacing a held publisher needs the consent its held private picture would need while active", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ local: true });
+  try {
+    const local = await heldPrivately(f, { audio: true, video: false });
+    const rows = () => WhereItPlays({ state: local.state, run: async () => true });
+    const refusal = "Publisher is not sharing video.";
+    // Active: the speakers alone do not let Local take the publisher's private picture output.
+    assert.equal(control(rows(), "Publisher volume")?.disabled, true);
+    assert.equal((await local.command({ type: "output", deviceId: f.publisher.id, level: 50 })).error, refusal);
+    const playback = await holdPublisher(f, local);
+    const localOutputs = local.state.outputs, localLoad = local.load(), queue = f.publisher.state.queue;
+    // Held, the same: Where it plays, Play on, and Only here are each refused, and the picker agrees.
+    assert.deepEqual([control(rows(), "Publisher volume")?.disabled, control(rows(), "Publisher picture")?.disabled, control(rows(), "Only on Publisher")?.disabled], [true, true, true]);
+    assert.equal((await local.command({ type: "output", deviceId: f.publisher.id, level: 50 })).error, refusal);
+    assert.equal((await local.command({ type: "enqueue", entry: ordinary(f, "taken"), playNow: true, deviceId: f.publisher.id })).error, refusal);
+    assert.equal((await local.command({ type: "solo", deviceId: f.publisher.id })).error, refusal);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // Nothing changed: both playbacks, the queue, consent, and the publisher's control of its playback.
+    assert.equal(f.publisher.state.playback, playback);
+    assert.equal(f.publisher.state.playbacks?.find(item => item.id === playback)?.held?.deviceId, f.publisher.id);
+    assert.deepEqual(f.publisher.state.queue, queue);
+    assert.deepEqual(local.state.outputs, localOutputs);
+    assert.equal(local.load(), localLoad);
+    assert.deepEqual(consent(local, f.publisher.id), { audio: true, video: false });
+    assert.equal((await f.publisher.command({ type: "pause", playbackId: f.receiver.state.player.playbackId!, paused: true })).ok, true);
+    // Its held picture returns at Next.
+    assert.equal((await f.receiver.command({ type: "next", playbackId: f.receiver.state.player.playbackId! })).ok, true);
+    await until(() => playingNow(f.receiver) === "after" && receivers(f.receiver)?.length === 2);
+    assert.deepEqual(f.receiver.state.outputs?.find(output => output.deviceId === f.publisher.id), { deviceId: f.publisher.id, picture: true, sound: true, local: true });
+    // The owner still moves itself: back on its source, Play on Publisher leaves the held place for good.
+    assert.equal((await f.publisher.command({ type: "play", entryId: f.publisher.state.queue.find(entry => entry.liveSourceId)!.id })).ok, true);
+    await until(() => f.receiver.state.playbacks?.find(item => item.id === playback)?.held?.deviceId === f.publisher.id);
+    assert.equal((await f.publisher.command({ type: "enqueue", entry: ordinary(f, "mine"), playNow: true, deviceId: f.publisher.id })).ok, true);
+    await until(() => playingNow(f.publisher) === "mine");
+    assert.notEqual(f.publisher.state.playback, playback);
+    await until(() => !!f.receiver.state.playbacks?.some(item => item.id === playback && !item.held));
+  } finally { await f.close(); }
+});
+
+test("a held publisher that shares every channel it holds can be moved to another playback, which retires its place", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ local: true });
+  try {
+    const local = await heldPrivately(f, { audio: true, video: true });
+    const playback = await holdPublisher(f, local);
+    const results: boolean[] = [];
+    const volume = control(WhereItPlays({ state: local.state, run: async action => { const result = await local.command(action); results.push(result.ok); return result.ok; } }), "Publisher volume")!;
+    assert.equal(volume.disabled, false);
+    volume.onCommit!(50);
+    await until(() => results.length === 1);
+    assert.deepEqual(results, [true]);
+    await until(() => receivers(local)?.length === 2);
+    assert.equal(f.receiver.state.playbacks?.find(item => item.id === playback)?.held, undefined);
+    assert.equal((await f.receiver.command({ type: "next", playbackId: f.receiver.state.player.playbackId! })).ok, true);
+    await until(() => playingNow(f.receiver) === "after");
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.deepEqual(receivers(f.receiver), [f.receiver.id], "it moved, so it does not return");
   } finally { await f.close(); }
 });

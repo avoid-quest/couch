@@ -59,8 +59,9 @@ devices, and joining one is refused. A publisher's output held out of its own
 source (`held`) is part of that Playback's mix: it counts for control, joining,
 what the publisher looks at and what its ordinary Play keeps, so a private device
 joining the publisher's playback does not take it over. Consent applies to it per
-channel as to an output. It is retired when the device is unpaired or plays
-elsewhere, and returns when another item becomes current. The last Sendspin delay each speaker reported
+channel as to an output, and moving it to another Playback needs the same consent
+as moving an active output. It is retired when the device is unpaired or plays
+elsewhere, and returns when another item becomes current, whether by Next or Play. The last Sendspin delay each speaker reported
 is kept in `device_sync_delay`, so its row shows it after a restart until the
 speaker reports again; the speaker's own player keeps the value it applies.
 Revoking sharing removes remote output channels and stops their renderer or
