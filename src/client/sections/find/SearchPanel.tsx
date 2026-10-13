@@ -41,7 +41,7 @@ export type Props = {
 type Entry = [source: string, summary: SearchResultSummary];
 
 // Sources in the order their results interleave; the rest are searched too.
-const sourceOrder = ["Device inputs", "YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity"];
+const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 const isLink = (value: string) => {
   try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
@@ -72,7 +72,7 @@ export function SearchPanel(props: Props) {
   const search = { ...localSearch, query: props.searchState?.query ?? localSearch.query };
   const [remoteSummaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
   const liveHits = useLiveSourceHits(search.query);
-  const summaries = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Device inputs": { count: liveHits.length, hits: liveHits, facets: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
+  const summaries = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Shared sources": { count: liveHits.length, hits: liveHits, facets: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
   const resultsKey = JSON.stringify([search.query, props.origin, props.token]);
   const [seenResults, setSeenResults] = useState(resultsKey);
   if (resultsKey !== seenResults) { setSeenResults(resultsKey); setSummaries({}); }

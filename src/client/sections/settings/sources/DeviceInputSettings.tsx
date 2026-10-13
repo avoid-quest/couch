@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Square } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { PlayOnMenu } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,9 +14,10 @@ import type { LiveVideoQuality } from "../../../../shared/live-input";
 
 const labels: Record<CaptureKind, string> = { "system-audio": "System audio", screen: "Screen", microphone: "Microphone or audio input" };
 
-export function DeviceInputSettings() {
-  const { state, connected, startLive, endLive, liveAudioInputs, localLiveSourceId, run } = useSessionGate();
-  const [kind, setKind] = useState<CaptureKind>("system-audio");
+export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
+  const { state, connected, startLive, endLive, liveAudioInputs, localLiveSourceId } = useSessionGate();
+  const navigate = useNavigate();
+  const [kind, setKind] = useState<CaptureKind>("screen");
   const [sources, setSources] = useState<CaptureSource[] | null>(null);
   const [sourceId, setSourceId] = useState("");
   const [inputs, setInputs] = useState<MediaDeviceInfo[] | null>(null);
@@ -57,7 +58,11 @@ export function DeviceInputSettings() {
   const share = async () => {
     if (!available) return;
     setPending(true); setError(null);
-    try { await startLive({ kind, videoQuality, includeAudio, ...(choosesSource ? { sourceId } : {}), ...(kind === "microphone" && audioDeviceId !== "default" ? { audioDeviceId } : {}) }); }
+    try {
+      await startLive({ kind, videoQuality, includeAudio, ...(choosesSource ? { sourceId } : {}), ...(kind === "microphone" && audioDeviceId !== "default" ? { audioDeviceId } : {}) });
+      onAdded?.();
+      void navigate({ to: "/find" });
+    }
     catch (reason) { setError(errorText(reason)); }
     finally { setPending(false); }
   };
@@ -69,9 +74,8 @@ export function DeviceInputSettings() {
     finally { setPending(false); }
   };
 
-  return <SettingsSection title="Share this device" description="Play this device's screen or sound on Couch.">
-    {mine ? <SettingsRow label={mine.name} description={mine.video && !mine.audio ? "Sharing picture without audio." : "Ready to play."}>
-      <PlayOnMenu title={mine.name} disabled={!connected} excludeDeviceId={mine.kind !== "microphone" ? mine.deviceId : undefined} onPlay={deviceId => void run({ type: "playLive", sourceId: mine.id, deviceId })} />
+  return <SettingsSection description="Add this device's screen or sound as a source for everyone on this Couch.">
+    {mine ? <SettingsRow label={mine.name} description="Available in Find while this device is sharing.">
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
       <SettingsRow label="Input">
@@ -102,8 +106,8 @@ export function DeviceInputSettings() {
           <Switch id="live-include-audio" checked={includeAudio} disabled={!available} onCheckedChange={setIncludeAudio} />
         </SettingsRow>
       </>}
-      <SettingsRow label="Start sharing" description="Then choose where it plays.">
-        <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
+      <SettingsRow label="Share with Couch" description="Available in Find until you stop sharing.">
+        <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Adding…</> : "Add source"}</Button>
         {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>
     </>}

@@ -230,17 +230,18 @@ export function SessionGate({ children }: PropsWithChildren) {
     const attempt = ++commandAttempt.current;
     setError(null);
     try {
-      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && !action.playNow) {
+      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && !action.playNow || action.type === "playLive" && action.playNow === false) {
         await queue(() => {
           const entries = readObservation()?.queue ?? [];
           if (action.type === "enqueue") return entries.find(entry => entry.id === action.entry.id)?.title ?? action.entry.title;
           if (action.type === "enqueueRadio" || action.type === "enqueueWeb") return entries.find(entry => entry.id === action.entryId)?.title;
+          if (action.type === "playLive") return entries.find(entry => entry.liveSourceId === action.sourceId)?.title;
           const matching = entries.filter(entry => entry.source === `web:${action.url}` && !before?.queue.some(previous => previous.id === entry.id));
           return action.title ?? (matching.length === 1 ? matching[0]?.title : undefined);
         }, () => command(action, targetDeviceId), attempt, targetDeviceId);
       } else {
         await command(action, targetDeviceId);
-        if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow && current()) announcePlay(readObservation(), action.deviceId);
+        if (current() && ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow || action.type === "playLive" && action.playNow !== false)) announcePlay(readObservation(), action.deviceId);
       }
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";

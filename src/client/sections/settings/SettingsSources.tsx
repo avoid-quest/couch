@@ -20,8 +20,8 @@ import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 const sourcePages: SourceKind[] = ["device-inputs", "iptv", "radio", "streaming-community"];
 const plural = (count: number, one: string) => `${count.toLocaleString()} ${one}${count === 1 ? "" : "s"}`;
 
-export function SettingsSources({ source, ...props }: SourceSettingsProps & { source?: SourceKind }) {
-  if (source === "device-inputs") return <DeviceInputSettings />;
+export function SettingsSources({ source, onAdded, ...props }: SourceSettingsProps & { source?: SourceKind; onAdded?: () => void }) {
+  if (source === "device-inputs") return <DeviceInputSettings onAdded={onAdded} />;
   if (source === "radio") return <RadioSettings {...props} />;
   if (source === "streaming-community") return <StreamingCommunitySettings {...props} />;
   if (source === "iptv") return <IptvSettings {...props} />;
@@ -29,7 +29,7 @@ export function SettingsSources({ source, ...props }: SourceSettingsProps & { so
 }
 
 function SourcesOverview({ credentials, connected, canManage }: SourceSettingsProps) {
-  const { state } = useSessionGate();
+  const { state, localLiveSourceId } = useSessionGate();
   const available = connected && !!credentials;
   const empty = { origin: "", token: "" };
   const iptv = useQuery({ ...iptvSourcesQuery(credentials ?? empty), enabled: available });
@@ -39,7 +39,7 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
   const queries = [iptv, ...(canManage ? [radio, streaming] : [])];
   const failed = queries.filter(query => query.isError);
   const status: Record<SourceKind, string | undefined> = {
-    "device-inputs": state?.liveSources?.length ? `${plural(state.liveSources.length, "live input")} · Screens, system audio and microphones` : "Screens, system audio and microphones",
+    "device-inputs": state?.liveSources?.find(source => source.id === localLiveSourceId)?.name ?? "Screen, system audio or microphone",
     iptv: iptv.data && (iptv.data.sources.length ? `${plural(iptv.data.sources.length, "list")} · ${plural(iptv.data.sources.reduce((total, item) => total + item.channelCount, 0), "channel")}` : "Not set up"),
     radio: !canManage ? "Admin only" : radioSources && (radioSources.length ? plural(radioSources.length, "playlist") : "Built in only"),
     "streaming-community": !canManage ? "Admin only" : streaming.data?.origin,

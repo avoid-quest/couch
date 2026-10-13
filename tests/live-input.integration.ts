@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { openStore } from "../src/server/store";
-import { parseCommand } from "../src/server/validation";
+import { parseCommand, parsePlayer } from "../src/server/validation";
 import { liveFixture, until } from "./live-input.fixture";
 
 const rejectedUpload = (url: string, origin: string) => new Promise<number>((resolve, reject) => {
@@ -32,13 +32,16 @@ test("capture upload is paired, secret-bound and owned by the exact publishing w
   } finally { await f.close(); }
 });
 
-test("live loads use normal HLS URLs whose grants end with their transport", { timeout: 15_000 }, async () => {
+test("grouped live pictures use normal HLS URLs whose grants end with their transport", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("screen");
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
     await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
     await until(() => !!f.receiver.load());
+    const other = await f.connect(2, "&audio=1&video=1");
+    await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true });
+    await until(() => !!f.receiver.load()?.follow);
     const load = f.receiver.load()!;
     assert.equal(load.hls, true);
     assert.equal("livePeerId" in load, false);
@@ -61,7 +64,10 @@ test("live playback uses ordinary controls and queue without persisting its ephe
     await until(() => !!f.receiver.load());
     const load = f.receiver.load()!;
     assert.equal((await f.publisher.command({ type: "pause", playbackId: load.playbackId, paused: true })).ok, true);
-    assert.equal((await f.publisher.command({ type: "audioDelay", playbackId: load.playbackId, delay: 0.08 })).ok, true);
+    const preferences = f.publisher.state.preferences;
+    assert.equal((await f.publisher.command({ type: "audioDelay", playbackId: load.playbackId, delay: 0.08 })).ok, false);
+    assert.equal((await f.publisher.command({ type: "speed", playbackId: load.playbackId, speed: 2 })).ok, false);
+    assert.deepEqual(f.publisher.state.preferences, preferences, "unsupported Direct RTC controls must not change saved preferences");
     const result = await f.publisher.command({ type: "enqueue", entry: { id: "normal", title: "Normal", source: `${f.hub.origin}/api/health` } });
     assert.equal(result.ok, true, result.error);
     assert.deepEqual(f.publisher.state.queue.map(entry => entry.id), [f.publisher.state.currentEntryId, "normal"]);
@@ -74,6 +80,33 @@ test("live playback uses ordinary controls and queue without persisting its ephe
     assert.deepEqual(f.publisher.state.queue.map(entry => entry.id), ["normal"]);
     assert.equal(f.publisher.state.currentEntryId, null);
     assert.ok(f.receiver.messages.some(message => message.type === "player" && message.command.type === "stop"));
+  } finally { await f.close(); }
+});
+
+test("a live input can queue next without interrupting the current item and plays through the normal Next action", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+    await f.publisher.command({ type: "enqueue", entry: { id: "before", title: "Before", source: `${f.hub.origin}/api/health` }, playNow: true, deviceId: f.receiver.id });
+    await until(() => !!f.receiver.load());
+    f.receiver.report();
+    await until(() => f.publisher.state.player.status === "playing");
+    await f.publisher.command({ type: "enqueue", entry: { id: "after", title: "After", source: `${f.hub.origin}/api/health` } });
+    await f.publish("screen");
+    const original = f.receiver.load()!, group = f.publisher.state.playback;
+    const result = await f.publisher.command({ type: "playLive", sourceId: "screen", playNow: false, placement: "next" });
+    assert.equal(result.ok, true, result.error);
+    const queued = f.publisher.state.queue.find(entry => entry.liveSourceId === "screen");
+    assert.ok(queued);
+    assert.deepEqual(f.publisher.state.queue.map(entry => entry.id), ["before", queued.id, "after"]);
+    assert.equal(f.publisher.state.currentEntryId, "before");
+    assert.equal(f.publisher.state.playback, group);
+    assert.equal(f.receiver.load(), original, "queueing must not replace the current transport");
+    assert.equal((await f.publisher.command({ type: "next", playbackId: original.playbackId })).ok, true);
+    await until(() => !!f.receiver.load() && "livePeerId" in f.receiver.load()!);
+    assert.equal(f.publisher.state.currentEntryId, queued.id);
+    assert.equal(f.publisher.state.playback, group);
+    assert.deepEqual(f.publisher.state.queue.map(entry => entry.id), ["before", queued.id, "after"]);
   } finally { await f.close(); }
 });
 
@@ -100,22 +133,28 @@ test("ordinary Play replaces a live item in the same playback and preserves its 
   } finally { await f.close(); }
 });
 
-test("moving a live stream uses the receiver's HTTPS origin and never feeds system capture into itself", { timeout: 15_000 }, async () => {
+test("grouped live pictures use the receiver's HTTPS origin and Solo never feeds system capture into itself", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("screen");
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
     await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
     await until(() => !!f.receiver.load());
-    const original = f.receiver.load()!;
+    assert.ok("livePeerId" in f.receiver.load()!);
     f.receiver.report();
     await until(() => f.publisher.state.player.status === "playing");
+    await f.speaker(1);
     const other = await f.connect(2, "&audio=1&video=1", true);
-    assert.equal((await f.publisher.command({ type: "solo", deviceId: other.id })).ok, true);
+    assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => !!other.load());
-    const moved = other.load()!;
-    assert.equal(new URL(moved.source).origin, "https://receiver.example");
-    assert.equal((await fetch(new URL(new URL(moved.source).pathname, f.hub.origin))).status, 200);
+    const original = f.receiver.load()!, grouped = other.load()!;
+    assert.equal(new URL(grouped.source).origin, "https://receiver.example");
+    assert.equal((await fetch(new URL(new URL(grouped.source).pathname, f.hub.origin))).status, 200);
+    await until(() => f.publisher.state.player.playbackId === grouped.playbackId && f.publisher.state.player.status === "playing" && f.publisher.state.player.position > 0);
+    const solo = await f.publisher.command({ type: "solo", deviceId: other.id });
+    assert.equal(solo.ok, true, solo.error);
+    await until(() => !!other.load() && "livePeerId" in other.load()!);
+    assert.equal(other.load()!.follow, undefined);
     assert.equal((await fetch(original.source)).status, 404);
     other.report();
     await until(() => f.publisher.state.player.status === "playing");
@@ -137,6 +176,26 @@ test("Solo rejects a system-audio input on the same capturing device", { timeout
     assert.equal(result.ok, false);
     assert.match(result.error!, /without capturing its playback/);
     assert.equal(f.publisher.state.outputs?.[0]?.deviceId, f.receiver.id);
+  } finally { await f.close(); }
+});
+
+test("a system-audio input uses the selected normal mix while excluding its capturing speaker", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
+    await f.publisher.command({ type: "enqueue", entry: { id: "normal", title: "Normal", source: `${f.hub.origin}/api/health` }, playNow: true, deviceId: f.publisher.id });
+    await until(() => !!f.publisher.load());
+    f.publisher.report();
+    await until(() => f.publisher.state.player.status === "playing");
+    await f.publisher.command({ type: "output", deviceId: f.publisher.id, level: 0 });
+    await f.publisher.command({ type: "output", deviceId: f.receiver.id, level: 50 });
+    const group = f.publisher.state.playback;
+    await f.publish("system", "system-audio");
+    const play = await f.publisher.command({ type: "playLive", sourceId: "system" });
+    assert.equal(play.ok, true, play.error);
+    assert.equal(f.publisher.state.playback, group);
+    assert.equal(f.publisher.state.queue.find(entry => entry.id === f.publisher.state.currentEntryId)?.liveSourceId, "system");
+    assert.deepEqual(f.publisher.state.outputs?.map(({ deviceId, sound }) => ({ deviceId, sound })), [{ deviceId: f.publisher.id, sound: false }, { deviceId: f.receiver.id, sound: true }]);
   } finally { await f.close(); }
 });
 
@@ -262,4 +321,16 @@ test("controller input cannot forge a live reference or expose malformed upload 
   const command = (action: unknown) => JSON.stringify({ type: "command", requestId: "1", action });
   assert.throws(() => parseCommand(command({ type: "enqueue", entry: { id: "forged", title: "Forged", source: "https://example.com/media", liveSourceId: "screen" } })));
   for (const uploadToken of [undefined, "", "short", "z".repeat(64)]) assert.throws(() => parseCommand(command({ type: "publishLive", sourceId: "screen", uploadToken, kind: "screen", audio: true, video: true })));
+});
+
+test("player reports preserve an unavailable audio delay without accepting malformed supplied delays", () => {
+  const state = { playbackId: "rtc", status: "playing", buffering: false, position: 0, duration: null, volume: 100, seekable: false, error: null, speed: 1 };
+  const report = (audioDelay?: unknown) => JSON.stringify({ type: "player", state: { ...state, audioDelay } });
+  const unsupported = parsePlayer(report());
+  assert.ok(unsupported);
+  assert.equal(unsupported.audioDelay, undefined);
+  assert.equal(parsePlayer(report(0))?.audioDelay, 0);
+  assert.equal(parsePlayer(report(0.08))?.audioDelay, 0.08);
+  assert.equal(parsePlayer(report("later")), null);
+  assert.equal(parsePlayer(report(Infinity)), null);
 });

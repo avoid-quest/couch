@@ -3,6 +3,9 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
+import { Button } from "@/components/ui/button";
+import { BrowseActions } from "./SearchPanel";
+import { useLiveSourceHits } from "./useLiveSourceHits";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
 import type { ProviderId } from "../../../shared/providers";
 
@@ -17,17 +20,24 @@ const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
 
 // Find with an empty query: where to browse. What to continue and what was
 // saved for later live on Home.
-export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-tv" | "device-inputs") => void }) {
+export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-tv") => void }) {
   const navigation = useDetailNavigation();
-  const { connected, state } = useSessionGate();
+  const { connected, tvPresentation } = useSessionGate();
+  const { credentials, openSources } = useShell();
+  const shared = useLiveSourceHits("");
   // Live TV appears once a source has channels.
-  const iptv = useQuery({ ...iptvSourcesQuery(useShell().credentials), enabled: connected });
+  const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected });
   const liveTv = !!iptv.data?.sources.some(source => source.channelCount);
   return <div className="space-y-6">
     {onBrowse && <section aria-label="Browse">
-      <h2 className="mb-2 text-base font-medium">Browse</h2>
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <h2 className="text-base font-medium">Browse</h2>
+        <Button variant="ghost" disabled={!connected} onClick={() => openSources()}>Add source</Button>
+      </div>
       <MediaList>
-        <MediaRow title="Device inputs" meta={state?.liveSources?.length ? `${state.liveSources.length} live · Screens, audio and microphones` : "Screens, audio and microphones"} primary={{ label: "Open", onClick: () => onBrowse("device-inputs") }} />
+        {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} tvSecondaryActions
+          primary={{ label: hit.primary.label, disabled: hit.primary.disabled, onClick: hit.primary.run }}
+          actions={<BrowseActions title={hit.title} actions={tvPresentation ? hit.actions.filter(action => action.label !== "Play") : hit.actions} />} />)}
         <MediaRow title="Radio" meta="Stations and playlists" primary={{ label: "Open", onClick: () => onBrowse("radio") }} />
         {liveTv && <MediaRow title="Live TV" meta="Channels and what's on" primary={{ label: "Open", onClick: () => onBrowse("live-tv") }} />}
         {catalogues.map(item => {

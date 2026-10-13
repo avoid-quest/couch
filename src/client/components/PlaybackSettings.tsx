@@ -224,9 +224,9 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
           options={speeds.map(speed => ({ value: String(speed), label: `${speed}×` }))} />{saveDefault("speed", "speed")}</SettingsSection>}
         {showQuality && <SettingsSection title="Quality"><ChoiceGroup label="Quality" orientation="vertical" disabled={idle || !qualityAvailable} value={entry?.quality ?? "auto"} onValueChange={quality => { if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }); }}
           options={(Object.entries(videoQualityLabels) as [NonNullable<QueueEntry["quality"]>, string][]).map(([value, label]) => ({ value, label }))} /></SettingsSection>}
-        <SettingsSection title="Sound">
+        {player.audioDelay !== undefined && <SettingsSection title="Sound">
           <PanelStepper label="Audio delay" value={seconds(player.audioDelay ?? 0)} disabled={idle} onStep={direction => adjustDelay("audioDelay", player.audioDelay ?? 0, direction)} />
-        </SettingsSection>
+        </SettingsSection>}
       </>}
       {messages}
     </div>;
@@ -239,7 +239,7 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
       <SelectContent>{options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
     </Select>
   </div>;
-  const audioDelay = <DelayControl key={player.playbackId} id="playback-audio-delay" label="Audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />;
+  const audioDelay = player.audioDelay !== undefined && <DelayControl key={player.playbackId} id="playback-audio-delay" label="Audio delay" value={player.audioDelay} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />;
   return (
     <Dialog onOpenChange={open => { if (!open) focusRequest.current?.cancel(); }}>
       <DialogTrigger asChild><Button variant="ghost" size="icon-lg" aria-label="Playback settings" title="Playback settings"><Settings aria-hidden="true" /></Button></DialogTrigger>

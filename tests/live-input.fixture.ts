@@ -6,15 +6,15 @@ import WebSocket from "ws";
 import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
-import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../src/shared/protocol";
+import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
 
 export async function until(predicate: () => boolean) {
   const deadline = Date.now() + 5_000;
   while (!predicate()) { if (Date.now() > deadline) throw new Error("Expected live playback state was not published."); await new Promise(resolve => setTimeout(resolve, 10)); }
 }
 
-// Real hub, HTTP, WebSockets, ownership and output routing. Only the encoder process
-// is replaced: media encoding/timestamps are covered by live-stream and live-clock.
+// Real hub, HTTP, WebSockets, ownership and output routing. FFmpeg is replaced;
+// paced PCM advances the group's state, while live-stream/live-clock test real media.
 export async function liveFixture() {
   const fetchLocal = globalThis.fetch;
   globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(String(input)) ? fetchLocal(input, init) : Promise.resolve(new Response(""))) as typeof fetch;
@@ -29,6 +29,10 @@ if (process.argv.includes('pipe:0')) process.stdin.once('data', () => {
   fs.writeFileSync(path.join(path.dirname(playlist), 'segment-000000000.ts'), 'fixture segment');
   fs.writeFileSync(playlist, '#EXTM3U\\n#EXT-X-TARGETDURATION:1\\n#EXT-X-MEDIA-SEQUENCE:0\\n#EXTINF:1,\\nsegment-000000000.ts\\n');
 });
+else if (process.argv.includes('s16le')) {
+  process.stderr.write('[Parsed_ashowinfo_0] n:0 pts:0 pts_time:0\\n');
+  setInterval(() => fs.writeSync(3, Buffer.alloc(19200)), 100);
+}
 process.stdin.resume();
 setInterval(() => {}, 1000);
 `, { mode: 0o755 });
@@ -54,7 +58,7 @@ setInterval(() => {}, 1000);
         if (message.type === "result") { pending.get(message.requestId)?.(message); pending.delete(message.requestId); }
       };
     });
-    return { socket, messages, id: identity.id, report: () => socket.send(JSON.stringify({ type: "player", state: { ...state!.player, status: "playing", speed: 1, buffering: false } })), get state() { return state!; }, command: (action: Action) => new Promise<Extract<ServerMessage, { type: "result" }>>(resolve => {
+    return { socket, messages, id: identity.id, report: (player: Partial<PlayerState> = {}) => socket.send(JSON.stringify({ type: "player", state: { ...state!.player, status: "playing", speed: 1, buffering: false, ...player } })), get state() { return state!; }, command: (action: Action) => new Promise<Extract<ServerMessage, { type: "result" }>>(resolve => {
       const requestId = String(++sequence); pending.set(requestId, resolve); socket.send(JSON.stringify({ type: "command", requestId, action }));
     }), load: () => {
       const message = messages.findLast(message => message.type === "player" && message.command.type === "load");
@@ -81,11 +85,18 @@ setInterval(() => {}, 1000);
       const speaker = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], { encryption: { identity: identity.key },
         playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.SET_STATIC_DELAY] } });
       speakers.push(speaker);
-      speaker.addServerCommandListener(command => { if (command.player?.command === PlayerCommand.SET_STATIC_DELAY) delays.push(command.player.static_delay_ms!); });
+      speaker.addServerCommandListener(command => {
+        if (command.player?.command !== PlayerCommand.SET_STATIC_DELAY) return;
+        const delay = command.player.static_delay_ms!;
+        delays.push(delay);
+        speaker.setStaticDelayMs(delay);
+        void speaker.sendPlayerState({ static_delay_ms: delay });
+      });
       await speaker.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
       return delays;
     },
     api: (path: string, body?: unknown) => fetch(`${hub.origin}${path}`, { headers: { Authorization: `Bearer ${identities[0]!.token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }) }),
+    subtitle: (playbackId: string) => fetch(`${hub.origin}/api/subtitles?${new URLSearchParams({ playbackId, name: "captions.vtt" })}`, { method: "POST", headers: { Authorization: `Bearer ${identities[0]!.token}`, "Content-Type": "application/octet-stream" }, body: "WEBVTT\n\n00:00.000 --> 00:01.000\nHello" }),
     close: async () => {
       await Promise.all(speakers.map(speaker => speaker.disconnect()));
       await hub.close();

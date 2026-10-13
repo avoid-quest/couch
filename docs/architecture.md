@@ -156,12 +156,16 @@ them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
 Live device inputs are captured in the publishing window and exist only while
-that capture is active. The authenticated Device session owns each publication;
-one MediaRecorder uploads its encoded capture over a separate WebSocket using
-a publication-scoped upload token. Core converts that continuous upload into
-rolling HLS with FFmpeg (`src/server/live-stream.ts`). Media addresses are signed
-for the current Playback, and the same URL renderer consumes them as any other
-live stream. There are no peer-to-peer receiver connections or TURN requirement.
+that capture is active. The authenticated Device session owns each publication.
+Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
+element. Core grants signaling only between the exact publishing and receiving
+connections. ICE configuration, including optional authenticated TURN, is returned
+only after pairing and never appears in public discovery.
+One MediaRecorder also uploads the capture over a separate WebSocket using a
+publication-scoped upload token. Core converts it into rolling HLS with FFmpeg
+(`src/server/live-stream.ts`) for Synced playback; media addresses are signed for
+the current Playback. Moving between Direct and Synced replaces the renderer's
+media while preserving the ordinary queue, output selection and capture ownership.
 The short-lived capture entry can share an ordinary queue with other media, but
 is excluded from persistent queues and removed when its publication ends. Capture
 cleanup closes the upload, stops its encoder and removes its temporary segments.
@@ -193,11 +197,12 @@ picture that joins the stream anywhere lines up with the sound. A screen's repor
 adds its picture and subtitle tracks to the Playback's only when it has a video
 track: a screen still loading, or a tab that just reconnected, has none yet.
 
-Captured inputs use that same sound and picture clock. Encoding and the HLS and
+Grouped captured inputs use that same sound and picture clock. Encoding and the HLS and
 Sendspin buffers add capture-to-output delay so devices can schedule shared
 playback. Clock agreement does not measure physical output alignment; test the
 actual speakers and screens, and use the existing per-device timing adjustment
-where their hardware introduces extra delay.
+where their hardware introduces extra delay. Direct capture bypasses that buffered
+pipeline; a single MediaStream maintains its own audio/video synchronization.
 
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline

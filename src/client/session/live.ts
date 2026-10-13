@@ -1,22 +1,91 @@
-import type { Action } from "../../shared/protocol";
-import type { LiveSelection, LiveSource } from "../../shared/live-input";
+import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
+import type { LivePeer, LiveSelection, LiveSignalMessage, LiveSource } from "../../shared/live-input";
 import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
+import { attachStream, streamChanged } from "./renderer";
 
 type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; published: boolean; recorder?: MediaRecorder; socket?: WebSocket; cancel?: () => void };
+type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
+type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; local: boolean; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 
-// Capture belongs to the authenticated session. Core turns this one upload into
-// an ordinary live media source; receivers use the same player and clocks as TV.
-export function createLiveSession(options: { command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
+// Capture belongs to the authenticated session. A single output receives it directly;
+// the warm upload lets Core switch multiple outputs to the ordinary synced player.
+export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
   let generation = 0;
   let closed = false;
   let starting = false;
   let publication: Publication | undefined;
+  let receiver: Receiver | undefined;
+  const publishers = new Map<string, Peer>();
+  const closeReceiver = () => {
+    const current = receiver;
+    receiver = undefined;
+    if (!current) return;
+    clearTimeout(current.timeout);
+    current.peer?.connection.close();
+    if (!current.local) stopTracks(current.stream);
+  };
+  const failReceiver = (current: Receiver, reason: unknown) => {
+    if (receiver !== current) return;
+    closeReceiver();
+    streamChanged(current.load.playbackId, current.stream, reason instanceof Error ? reason.message : "The live input couldn't connect. Start it again.");
+  };
+  const makePeer = (peerId: string): Peer => {
+    const connection = new RTCPeerConnection({ iceServers: options.iceServers });
+    const peer: Peer = { connection, candidates: [], work: Promise.resolve() };
+    connection.onicecandidate = event => {
+      if (!closed && (receiver?.peer === peer || publishers.get(peerId) === peer)) options.send({ type: "liveSignal", peerId, signal: { candidate: event.candidate ? { ...event.candidate.toJSON(), candidate: event.candidate.candidate } : null } });
+    };
+    return peer;
+  };
+  const receiveSignal = (message: LiveSignalMessage) => {
+    const current = receiver?.peerId === message.peerId ? receiver : undefined;
+    const peer = current?.peer ?? publishers.get(message.peerId);
+    if (!peer) return;
+    const active = () => !closed && (receiver?.peer === peer || publishers.get(message.peerId) === peer);
+    peer.work = peer.work.then(async () => {
+      if (!active()) return;
+      const { description, candidate } = message.signal;
+      if (description) {
+        await peer.connection.setRemoteDescription(description);
+        if (!active()) return;
+        for (const queued of peer.candidates.splice(0)) { await peer.connection.addIceCandidate(queued); if (!active()) return; }
+        if (description.type === "offer") {
+          const answer = await peer.connection.createAnswer();
+          if (!active()) return;
+          await peer.connection.setLocalDescription(answer);
+          if (active()) options.send({ type: "liveSignal", peerId: message.peerId, signal: { description: { type: "answer", sdp: peer.connection.localDescription!.sdp } } });
+        }
+      } else if (candidate) {
+        if (peer.connection.remoteDescription) await peer.connection.addIceCandidate(candidate);
+        else if (peer.candidates.length < 64) peer.candidates.push(candidate);
+      }
+    }).catch(reason => { if (current) failReceiver(current, reason); });
+  };
+  const startPublisher = async (target: LivePeer) => {
+    const current = publication;
+    if (!current || publishers.has(target.peerId) || receiver?.local && receiver.peerId === target.peerId) return;
+    let peer: Peer;
+    try { peer = makePeer(target.peerId); } catch { return; }
+    publishers.set(target.peerId, peer);
+    const active = () => publication === current && publishers.get(target.peerId) === peer;
+    try {
+      for (const track of current.stream.getTracks()) if (track.kind === "video" ? target.picture : target.sound) peer.connection.addTrack(track, current.stream);
+      const offer = await peer.connection.createOffer();
+      if (!active()) return;
+      await peer.connection.setLocalDescription(offer);
+      if (active()) options.send({ type: "liveSignal", peerId: target.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
+    } catch {
+      if (active()) { publishers.delete(target.peerId); peer.connection.close(); }
+    }
+  };
   const closePublication = () => {
     generation++;
     const current = publication;
     publication = undefined;
+    for (const peer of publishers.values()) peer.connection.close();
+    publishers.clear();
     current?.cancel?.();
     if (current?.recorder?.state !== "inactive") current?.recorder?.stop();
     current?.socket?.close();
@@ -72,6 +141,42 @@ export function createLiveSession(options: { command: (action: Action) => Promis
     } catch (reason) { fail(reason instanceof Error ? reason : new Error("The live input could not start.")); }
   });
   return {
+    receive(message: Extract<ServerMessage, { type: "livePeers" | "liveSignal" }>) {
+      if (closed) return;
+      if (message.type === "liveSignal") { receiveSignal(message); return; }
+      if (message.sourceId !== publication?.source.id) return;
+      const wanted = new Set(message.peers.map(peer => peer.peerId));
+      for (const [id, peer] of publishers) if (!wanted.has(id)) { publishers.delete(id); peer.connection.close(); }
+      for (const target of message.peers) void startPublisher(target);
+    },
+    play(command: PlaybackCommand): boolean {
+      if (closed) return false;
+      if (command.type === "stop") closeReceiver();
+      if (command.type !== "load") return false;
+      closeReceiver();
+      if (!command.liveSourceId || !command.livePeerId || !command.liveOutput) return false;
+      const local = publication?.source.id === command.liveSourceId;
+      const stream = new MediaStream(local ? publication!.stream.getTracks().filter(track => track.kind === "video" ? command.liveOutput!.picture : command.liveOutput!.sound) : []);
+      const current: Receiver = { peerId: command.livePeerId, load: command, stream, local };
+      receiver = current;
+      attachStream(command, stream);
+      if (local) return true;
+      try {
+        const peer = current.peer = makePeer(current.peerId);
+        peer.connection.ontrack = event => {
+          if (receiver !== current) return;
+          if (!stream.getTracks().includes(event.track)) stream.addTrack(event.track);
+          streamChanged(command.playbackId, stream);
+        };
+        peer.connection.onconnectionstatechange = () => {
+          if (receiver !== current) return;
+          if (peer.connection.connectionState === "connected") clearTimeout(current.timeout);
+          if (peer.connection.connectionState === "failed") failReceiver(current, new Error("The live input lost its connection. Start it again."));
+        };
+        current.timeout = setTimeout(() => failReceiver(current, new Error("The live input didn't connect. Check the network and start it again.")), 30_000);
+      } catch (reason) { failReceiver(current, reason); }
+      return true;
+    },
     async audioInputs(): Promise<MediaDeviceInfo[]> {
       if (closed || starting || publication) throw new Error("Stop sharing before choosing another audio input.");
       starting = true;
@@ -148,6 +253,6 @@ export function createLiveSession(options: { command: (action: Action) => Promis
         closePublication();
       }
     },
-    close() { closed = true; closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
+    close() { closed = true; closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
   };
 }

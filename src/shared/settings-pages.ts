@@ -5,7 +5,7 @@ export const settingsPages = {
   home: { label: "Home", path: "/settings/home", manage: "always" },
   appearance: { label: "Text size", path: "/settings/appearance", manage: "always" },
   sources: { label: "Sources", path: "/settings/sources", manage: "always" },
-  "source-device-inputs": { label: "Device inputs", path: "/settings/sources/device-inputs", manage: "always" },
+  "source-device-inputs": { label: "This device", path: "/settings/sources/device-inputs", manage: "always" },
   "source-iptv": { label: "Live TV", path: "/settings/sources/live-tv", manage: "always" },
   "source-radio": { label: "Radio playlists", path: "/settings/sources/radio", manage: "always" },
   "source-streaming-community": { label: "StreamingCommunity", path: "/settings/sources/streaming-community", manage: "always" },

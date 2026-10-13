@@ -5,7 +5,7 @@ import { ADMIN_ONLY } from "@/copy";
 import { SettingsSources } from "@/sections/settings/SettingsSources";
 import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
-const sources = { "device-inputs": "Device inputs", iptv: "Live TV", radio: "Radio playlists", "streaming-community": "StreamingCommunity" } as const;
+const sources = { "device-inputs": "This device", iptv: "Live TV", radio: "Radio playlists", "streaming-community": "StreamingCommunity" } as const;
 export type SourceSetupKind = keyof typeof sources;
 type Props = SourceSettingsProps & { localOnly?: boolean; open: boolean; onOpenChange: (open: boolean) => void; source?: SourceKind };
 
@@ -26,7 +26,7 @@ export function SourceSetupDialog({ open, onOpenChange, localOnly, source: initi
           </TabsList>
           {Object.keys(sources).map(source => (
             <TabsContent key={source} className="pt-4" value={source}>
-              {props.canManage || source === "device-inputs" ? <SettingsSources {...props} source={source as SourceKind} /> : <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
+              {props.canManage || source === "device-inputs" ? <SettingsSources {...props} source={source as SourceKind} onAdded={() => onOpenChange(false)} /> : <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
             </TabsContent>
           ))}
         </Tabs>

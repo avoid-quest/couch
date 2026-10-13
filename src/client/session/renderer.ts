@@ -20,6 +20,7 @@ holder.append(video, audio);
 
 let playbackId: string | null = null;
 let loading: Extract<PlaybackCommand, { type: "load" }> | null = null;
+let mediaStream: MediaStream | null = null;
 let hls: Hls | null = null;
 let mpegts: Mpegts.Player | null = null;
 let ready = false;
@@ -48,6 +49,7 @@ const preferredSubtitle = (command: NonNullable<typeof loading>) => command.subt
   : [...(hls?.subtitleTracks.map(track => track.lang) ?? []), ...external().map(track => track.language)].findIndex(language => matchesLanguage(language, command.preferences?.subtitleLanguage)));
 const tracks = (): MediaTrack[] => {
   if (!playbackId || !ready) return [];
+  const captured = mediaStream?.getTracks().map((track, index): MediaTrack => ({ id: track.id || `${track.kind}-${index}`, index, kind: track.kind as "audio" | "video", label: track.label || (track.kind === "audio" ? "Audio" : "Video"), language: "", selected: true }));
   const picture: MediaTrack[] = video.videoWidth ? [{ id: "video", index: 0, kind: "video", label: "Video", language: "", selected: true }] : [];
   const sound: MediaTrack[] = hls?.audioTracks.length ? hls.audioTracks.map((track, index) => ({ id: `audio-${index}`, index, kind: "audio", label: track.name, language: track.lang ?? "", selected: index === hls!.audioTrack }))
     : [{ id: "audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }];
@@ -56,20 +58,20 @@ const tracks = (): MediaTrack[] => {
     ...embedded.map((track, index): MediaTrack => ({ id: `subtitle-${index}`, index, kind: "subtitle", label: track.name, language: track.lang ?? "", selected: index === hls!.subtitleTrack })),
     ...external().map((track, index): MediaTrack => ({ id: `external-${index}`, index: embedded.length + index, kind: "subtitle", label: track.label, language: track.language, selected: track.mode === "showing" })),
   ];
-  return [...picture, ...sound, ...subtitles];
+  return [...(captured ?? [...picture, ...sound]), ...subtitles];
 };
 const state = (): PlayerState => ({
   playbackId,
   status: !playbackId ? "idle" : failure ? "error" : video.ended ? "ended" : !ready || waiting() ? "loading" : video.paused ? "paused" : "playing",
   buffering: waiting(),
   position: video.currentTime,
-  duration: Number.isFinite(video.duration) && !loading?.radio && !mpegts ? video.duration : null,
+  duration: Number.isFinite(video.duration) && !loading?.radio && !mpegts && !mediaStream ? video.duration : null,
   volume: Math.round(volume * 100),
-  seekable: Number.isFinite(video.duration) && !mpegts,
+  seekable: Number.isFinite(video.duration) && !mpegts && !mediaStream,
   error: failure,
-  speed: video.playbackRate,
+  speed: mediaStream ? 1 : video.playbackRate,
   tracks: tracks(),
-  audioDelay,
+  audioDelay: mediaStream ? undefined : audioDelay,
   subtitleDelay,
 });
 const send = () => { reportedAt = performance.now(); report?.(state()); };
@@ -86,11 +88,14 @@ export function waitForTap(unlock: (() => void) | null) {
   notify();
 }
 // A browser that wants a gesture before sound plays the picture muted and asks for a tap.
-const start = (element: HTMLMediaElement) => element.play().catch((error: unknown) => {
-  if (!(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
-  setBlocked(true);
-  if (element === video && !video.muted) { video.muted = true; void video.play().catch(() => {}); }
-});
+const start = (element: HTMLMediaElement) => {
+  const id = playbackId, source = loading, stream = mediaStream;
+  return element.play().catch((error: unknown) => {
+    if (playbackId !== id || loading !== source || mediaStream !== stream || !(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
+    setBlocked(true);
+    if (element === video && !video.muted) { video.muted = true; void video.play().catch(() => {}); }
+  });
+};
 
 const follow = (resync = true) => {
   if (!split()) return;
@@ -208,6 +213,7 @@ const reset = () => {
   for (const track of Array.from(video.textTracks)) track.mode = "disabled";
   playbackId = null;
   loading = null;
+  mediaStream = null;
   setFollow(null);
   ptsOffset = undefined;
   hls?.destroy();
@@ -223,6 +229,28 @@ const reset = () => {
   for (const element of [video, audio]) { element.srcObject = null; element.removeAttribute("src"); element.load(); }
   apply();
 };
+
+// Direct capture uses the same element, controls and PlayerState as URL playback.
+// The session owns the tracks; replacing this renderer must not stop its capture.
+export function attachStream(command: Extract<PlaybackCommand, { type: "load" }>, stream: MediaStream) {
+  reset();
+  playbackId = command.playbackId;
+  mediaStream = stream;
+  volume = (command.liveOutput?.volume ?? volume * 100) / 100;
+  video.defaultPlaybackRate = video.playbackRate = 1;
+  video.srcObject = stream;
+  for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
+  selectSubtitle(preferredSubtitle(command));
+  subtitleDelay = command.subtitleDelay ?? 0;
+  apply();
+  if (!command.paused) void start(video);
+  send();
+}
+
+export function streamChanged(id: string, stream: MediaStream, error?: string) {
+  if (playbackId !== id || mediaStream !== stream) return;
+  if (error) fail(error); else send();
+}
 
 // Subtitle delay moves every cue, including those hls.js adds while it plays.
 const shifted = new WeakMap<TextTrackCue, number>();
@@ -286,8 +314,8 @@ export function play(command: PlaybackCommand) {
     case "addSubtitle": addTrack(command.source, command.title, command.language, true); break;
     case "pause": if (command.paused) video.pause(); else void start(video); break;
     case "audioPause": video.pause(); break;
-    case "seek": video.currentTime = command.position; break;
-    case "speed": video.defaultPlaybackRate = video.playbackRate = command.speed; break;
+    case "seek": if (!mediaStream) video.currentTime = command.position; break;
+    case "speed": if (!mediaStream) video.defaultPlaybackRate = video.playbackRate = command.speed; break;
     case "volume": volume = command.volume / 100; apply(); break;
     case "track":
       if (command.kind === "audio" && hls?.audioTracks[command.index]) hls.audioTrack = command.index;
