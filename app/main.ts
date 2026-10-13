@@ -297,6 +297,9 @@ function createWindow() {
     if (quitting || tv) return;
     // Couch keeps hosting in the background; the tray, dock or a second launch shows it again.
     event.preventDefault();
+    // Closing still ends this window's sharing, and any capture it is starting, as unloading would.
+    void capture.prepare(null).catch(() => {});
+    window?.webContents.send("couch:window-closed");
     if (process.platform === "linux") window?.minimize(); else window?.hide();
   });
   window.on("closed", () => { window = null; });

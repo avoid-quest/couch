@@ -31,6 +31,8 @@ export type CouchApp = {
   connection(): Promise<ConnectionInfo>;
   interfaceSize(size?: InterfaceSize): Promise<InterfaceSize>;
   onAddresses(listener: (urls: string[]) => void): () => void;
+  /** Closing hides the window, which keeps hosting and playing; the page ends its sharing. Older apps lack it. */
+  onWindowClosed?(listener: () => void): () => void;
   updates(): Promise<UpdateState>;
   update?(action: UpdateAction): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateState>;

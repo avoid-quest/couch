@@ -97,6 +97,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     closePublication();
     if (sourceId) await options.command({ type: "endLive", sourceId });
   };
+  // The desktop window hides on Close to keep Couch hosting; Close still ends sharing.
+  const unsubscribeWindowClosed = couchApp?.onWindowClosed?.(() => void end().catch(() => {}));
   const upload = (current: Publication, key: string) => new Promise<void>((resolve, reject) => {
     let ready = false;
     const deadline = setTimeout(() => fail(new Error("The live input didn't start. Check the connection and try again.")), 30_000);
@@ -255,6 +257,6 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         closePublication();
       }
     },
-    close() { closed = true; closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
+    close() { closed = true; unsubscribeWindowClosed?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
   };
 }

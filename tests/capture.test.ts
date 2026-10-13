@@ -183,3 +183,29 @@ test("the actual preload sends capture selections and cancellation to Main", asy
     ["couch:capture-sources"], ["couch:prepare-capture", { kind: "screen", sourceId: screen.id }], ["couch:prepare-capture", null],
   ]);
 });
+
+test("the actual preload tells the page when Main closes its window, once per subscription", async () => {
+  const built = await Bun.build({ entrypoints: ["app/preload.ts"], target: "node", format: "cjs", external: ["electron"] });
+  expect(built.success).toBe(true);
+  let app!: CouchApp;
+  const listeners = new Map<string, Set<() => void>>();
+  runInNewContext(await built.outputs[0]!.text(), {
+    process: { platform: "linux", argv: [] },
+    require: () => ({
+      contextBridge: { exposeInMainWorld(_name: string, bridge: CouchApp) { app = bridge; } },
+      ipcRenderer: {
+        on(channel: string, listener: () => void) { listeners.set(channel, (listeners.get(channel) ?? new Set()).add(listener)); },
+        off(channel: string, listener: () => void) { listeners.get(channel)?.delete(listener); },
+      },
+    }),
+  });
+  let closes = 0;
+  const unsubscribe = app.onWindowClosed!(() => { closes++; });
+  const close = () => { for (const listener of listeners.get("couch:window-closed") ?? []) listener(); };
+  close(); close();
+  expect(closes).toBe(2);
+  unsubscribe();
+  close();
+  expect(closes).toBe(2);
+  expect(listeners.get("couch:window-closed")?.size).toBe(0);
+});

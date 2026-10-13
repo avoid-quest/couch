@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld("couchApp", {
     ipcRenderer.on("couch:addresses", handler);
     return () => { ipcRenderer.off("couch:addresses", handler); };
   },
+  onWindowClosed: listener => {
+    const handler = () => listener();
+    ipcRenderer.on("couch:window-closed", handler);
+    return () => { ipcRenderer.off("couch:window-closed", handler); };
+  },
   updates: () => update({ op: "read" }),
   update,
   checkForUpdates: () => update({ op: "check" }),

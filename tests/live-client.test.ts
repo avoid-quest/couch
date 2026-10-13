@@ -2,11 +2,19 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
 // Each browser session gets its own module globals and clock.
-const check = (source: string) => {
+// The desktop app's bridge, as its preload exposes it: Close notifies the page, and Main grants one capture.
+const desktop = `{
+  onWindowClosed(listener) { windowClosed.add(listener); return () => windowClosed.delete(listener); },
+  async prepareCapture(selection) { prepared.push(selection); if (selection && preparing) await preparing.promise; },
+}`;
+const check = (source: string, couchApp = "undefined") => {
   const result = spawnSync(process.execPath, ["-e", `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
-    mock.module("./src/client/session/native-context.ts", () => ({ couchApp: undefined }));
+    const windowClosed = new Set(), prepared = [];
+    let preparing;
+    const closeWindow = () => { for (const listener of [...windowClosed]) listener(); };
+    mock.module("./src/client/session/native-context.ts", () => ({ couchApp: ${couchApp} }));
     mock.module("./src/client/session/device-id.ts", () => ({ deviceId: () => "receiver", localDeviceName: () => "Receiver" }));
     let now = 0, nextTimer = 0;
     const timers = new Map();
@@ -81,6 +89,7 @@ const check = (source: string) => {
     ${source}
     session.close();
     assert.equal(timers.size, 0, "closing a session retires its connection deadline");
+    assert.equal(windowClosed.size, 0, "a closed session stops following the window");
   `], { cwd: new URL("../", import.meta.url), encoding: "utf8" });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
@@ -361,3 +370,67 @@ test("closing while audio input permission is pending releases the eventual capt
   assert.equal(microphone.stopped, true);
   assert.equal(commands.length, 0);
 `));
+
+test("closing the desktop window ends this device's sharing, while its playback and Couch continue", () => check(`
+  session.play(direct());
+  const receiving = peers[0];
+  const source = await session.start({ kind: "screen" });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
+  await flush();
+  const publisher = peers[1];
+  closeWindow();
+  await flush();
+  assert.equal(recorders[0].state, "inactive");
+  assert.equal(uploads[0].readyState, 3);
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  assert.equal(publisher.connectionState, "closed");
+  assert.deepEqual(commands.filter(action => action.type === "endLive"), [{ type: "endLive", sourceId: source.id }]);
+  assert.notEqual(receiving.connectionState, "closed", "the hidden window keeps playing what it receives");
+  assert.equal(failures.length, 0, "Close is a deliberate stop, not a failure");
+  // Closing again while nothing is shared sends nothing; sharing after reopening ends on the next Close.
+  closeWindow();
+  await flush();
+  assert.equal(commands.filter(action => action.type === "endLive").length, 1);
+  const again = await session.start({ kind: "microphone" });
+  assert.equal(windowClosed.size, 1, "one listener however often the window closes and reopens");
+  closeWindow();
+  await flush();
+  assert.deepEqual(commands.filter(action => action.type === "endLive").map(action => action.sourceId), [source.id, again.id]);
+  assert.ok(captures[1].getTracks().every(track => track.stopped));
+  assert.equal(prepared.at(-1), null, "no capture grant stays armed");
+`, desktop));
+
+test("closing the desktop window cancels sharing at each step of starting it", () => check(`
+  const display = navigator.mediaDevices.getDisplayMedia;
+  for (const step of ["prepare", "capture", "publish", "upload"]) {
+    const before = { captures: captures.length, commands: commands.length, recorders: recorders.length };
+    let release = () => {};
+    if (step === "prepare") { preparing = Promise.withResolvers(); release = preparing.resolve; }
+    if (step === "capture") navigator.mediaDevices.getDisplayMedia = request => new Promise(resolve => { release = () => resolve(display(request)); });
+    if (step === "publish") { publishing = Promise.withResolvers(); release = publishing.resolve; }
+    if (step === "upload") autoReady = false;
+    const starting = session.start({ kind: "screen" });
+    const rejected = assert.rejects(starting, /canceled/);
+    await flush(); await flush();
+    const published = commands.slice(before.commands).filter(action => action.type === "publishLive").length;
+    assert.equal(published, ["publish", "upload"].includes(step) ? 1 : 0, step);
+    assert.equal(recorders.length - before.recorders, step === "upload" ? 1 : 0, step);
+    closeWindow();
+    release();
+    await rejected;
+    await flush();
+    preparing = publishing = undefined; autoReady = true; navigator.mediaDevices.getDisplayMedia = display;
+    assert.equal(captures.length - before.captures, step === "prepare" ? 0 : 1, step);
+    assert.ok(captures.slice(before.captures).flatMap(stream => stream.getTracks()).every(track => track.stopped), step);
+    assert.ok(recorders.every(recorder => recorder.state === "inactive"), step);
+    assert.ok(uploads.every(upload => upload.readyState === 3), step);
+    // Core may already hold the published source; nothing else is ended.
+    assert.equal(commands.slice(before.commands).filter(action => action.type === "endLive").length, published, step);
+    assert.equal(prepared.at(-1), null, step);
+  }
+  assert.equal(failures.length, 0);
+  assert.equal(timers.size, 0);
+  // The session still shares after each canceled start.
+  await session.start({ kind: "screen" });
+  assert.equal(recorders.at(-1).state, "recording");
+`, desktop));
