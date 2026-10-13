@@ -1,16 +1,19 @@
-import { desktopCapturer, session, systemPreferences, type WebContents, type WebFrameMain } from "electron";
+import { BrowserWindow, desktopCapturer, dialog, session, systemPreferences, type WebContents, type WebFrameMain } from "electron";
 import type { CaptureSelection, CaptureSource } from "../src/shared/capture";
 
 const originOf = (url: string | null) => { try { const { origin } = new URL(url!); return origin === "null" ? null : origin; } catch { return null; } };
 
 // Capture belongs to this app's current Couch page, including in Client mode.
 // Preparing a source grants one display request, never a persistent screen permission.
-export function createCapture(contents: () => WebContents | null, address: () => string | null) {
+// Another Couch's page (Client mode) gets the microphone only after this computer's owner
+// allows it in a native prompt, each time; this computer's own Couch (`localOrigin`) doesn't ask.
+export function createCapture(contents: () => WebContents | null, address: () => string | null, localOrigin: string) {
   // A saved address may differ from its window's origin, such as by a trailing slash.
   const origin = () => originOf(address());
   let sources: CaptureSource[] = [];
   let pending: { frame: WebFrameMain; origin: string; selection: CaptureSelection; expires: number; issued: boolean } | null = null;
   let generation = 0;
+  let asking: AbortController | null = null;
   const trusted = (requester: WebContents | null, requestingOrigin: string, mainFrame: boolean) => !!origin() && !!requester && requester === contents()
     && mainFrame && originOf(requestingOrigin) === origin() && originOf(requester.mainFrame.url) === origin();
   const owner = () => {
@@ -24,7 +27,9 @@ export function createCapture(contents: () => WebContents | null, address: () =>
     const [major = 0, minor = 0] = process.getSystemVersion().split(".").map(Number);
     return major > 14 || major === 14 && minor >= 2;
   })();
-  const clear = () => { generation++; pending = null; sources = []; };
+  // Cancelling, replacing, navigating or closing also closes an open microphone prompt.
+  const revoke = () => { generation++; pending = null; asking?.abort(); asking = null; };
+  const clear = () => { revoke(); sources = []; };
 
   return {
     clear,
@@ -37,8 +42,8 @@ export function createCapture(contents: () => WebContents | null, address: () =>
       return sources;
     },
     async prepare(selection: unknown): Promise<void> {
-      pending = null;
-      const request = ++generation;
+      revoke();
+      const request = generation;
       const frame = owner();
       if (selection === null) return;
       if (!selection || typeof selection !== "object" || !("kind" in selection) || typeof selection.kind !== "string"
@@ -47,12 +52,24 @@ export function createCapture(contents: () => WebContents | null, address: () =>
       if (choice.kind === "system-audio" && !systemAudio()) throw new Error(process.platform === "darwin"
         ? "PC audio sharing requires macOS 14.2 or later. You can still share a screen or an audio input."
         : "PC audio capture is not available on this system. Choose an audio input instead.");
+      const requesting = origin()!;
+      if (choice.kind === "microphone" && requesting !== localOrigin) {
+        asking = new AbortController();
+        const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(contents()!)!, {
+          type: "question", message: `Allow ${requesting} to use this computer's microphone?`,
+          detail: "This window shows that Couch's own page. Allow only if you just chose a microphone or audio input to share there.",
+          buttons: ["Don't Allow", "Allow"], defaultId: 0, cancelId: 0, signal: asking.signal,
+        });
+        if (request !== generation || frame !== owner()) throw new Error("Couch changed while requesting capture. Start sharing again.");
+        asking = null;
+        if (response !== 1) throw new Error("Microphone sharing wasn't allowed on this computer.");
+      }
       if (choice.kind !== "microphone" && !sources.some(source => source.id === choice.sourceId)) throw new Error("Choose a screen or window before sharing.");
       if (choice.kind === "microphone" && process.platform === "darwin" && !await systemPreferences.askForMediaAccess("microphone")) {
         throw new Error("Allow Couch to use the microphone in System Settings → Privacy & Security → Microphone, then restart Couch.");
       }
       if (request !== generation || frame !== owner()) throw new Error("Couch changed while requesting capture. Start sharing again.");
-      pending = { frame, origin: origin()!, selection: { kind: choice.kind, sourceId: choice.sourceId }, expires: Date.now() + 30_000, issued: false };
+      pending = { frame, origin: requesting, selection: { kind: choice.kind, sourceId: choice.sourceId }, expires: Date.now() + 30_000, issued: false };
     },
     install() {
       session.defaultSession.setPermissionRequestHandler((requester, permission, allow, details) => {

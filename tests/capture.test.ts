@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
-import type { Session, WebContents } from "electron";
+import type { MessageBoxOptions, Session, WebContents } from "electron";
 import type { CouchApp } from "../src/shared/app-bridge";
 
 const bundle = await Bun.build({ entrypoints: ["app/capture.ts"], target: "node", format: "cjs", external: ["electron"] });
@@ -11,16 +11,22 @@ type Request = NonNullable<Parameters<Session["setPermissionRequestHandler"]>[0]
 type Display = NonNullable<Parameters<Session["setDisplayMediaRequestHandler"]>[0]>;
 const screen = { id: "screen:1:0", name: "Studio display", kind: "screen" };
 
-function harness(platform = "darwin", version = "14.2", microphone: () => Promise<boolean> = async () => true) {
+type Prompt = (options: MessageBoxOptions) => Promise<{ response: number }>;
+
+function harness(platform = "darwin", version = "14.2", microphone: () => Promise<boolean> = async () => true, prompt: Prompt = async () => ({ response: 1 })) {
   let now = 1000;
   let check!: Check, request!: Request, display!: Display;
   let url = "http://localhost:4100";
   const contents = { mainFrame: { url } } as unknown as WebContents;
+  const window = { id: 1 };
+  const prompts: { parent: unknown; options: MessageBoxOptions }[] = [];
   const module = { exports: {} as typeof import("../app/capture") };
   runInNewContext(code, {
-    module, exports: module.exports, URL, Date: { now: () => now },
+    module, exports: module.exports, URL, AbortController, Date: { now: () => now },
     process: { platform, getSystemVersion: () => version },
     require: () => ({
+      BrowserWindow: { fromWebContents: (from: unknown) => from === contents ? window : null },
+      dialog: { showMessageBox(parent: unknown, options: MessageBoxOptions) { prompts.push({ parent, options }); return prompt(options); } },
       desktopCapturer: { getSources: async () => [screen, { id: "window:2:0", name: "Music app" }] },
       systemPreferences: { askForMediaAccess: microphone },
       session: { defaultSession: {
@@ -30,10 +36,10 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
       } },
     }),
   });
-  const capture = module.exports.createCapture(() => contents, () => url);
+  const capture = module.exports.createCapture(() => contents, () => url, "http://localhost:4100");
   capture.install();
   return {
-    capture, contents,
+    capture, contents, window, prompts,
     expire() { now += 30_001; },
     navigate(next: string) { contents.mainFrame.url = next; },
     selectCouch(next: string) { url = next; },
@@ -132,6 +138,67 @@ test("a saved Couch address grants its window's origin and nothing else", async 
     expect(h.check("display-capture", {}, h.contents, "https://couch.local:4100")).toBe(false);
     h.navigate("data:text/html,couch");
     await expect(h.capture.sources()).rejects.toThrow("this computer's Couch");
+  }
+});
+
+test("another Couch's page gets the microphone only after this computer's owner allows it, each time", async () => {
+  let answer = 0;
+  const h = harness("darwin", "14.2", async () => true, async () => ({ response: answer }));
+  // This computer's own Couch shares as before, without a prompt.
+  await h.capture.prepare({ kind: "microphone" });
+  expect(h.request("media", ["audio"])).toBe(true);
+  expect(h.prompts).toEqual([]);
+  h.selectCouch("https://couch.local:4100/");
+  h.navigate("https://couch.local:4100/settings");
+  await expect(h.capture.prepare({ kind: "microphone" })).rejects.toThrow("wasn't allowed");
+  expect(h.prompts).toHaveLength(1);
+  const [{ parent, options }] = h.prompts as [{ parent: unknown; options: MessageBoxOptions }];
+  expect(parent).toBe(h.window);
+  expect(options.message).toBe("Allow https://couch.local:4100 to use this computer's microphone?");
+  expect(options.buttons).toEqual(["Don't Allow", "Allow"]);
+  expect([options.defaultId, options.cancelId]).toEqual([0, 0]);
+  expect(h.check("media", { mediaType: "audio" })).toBe(false);
+  expect(h.request("media", ["audio"])).toBe(false);
+  answer = 1;
+  await h.capture.prepare({ kind: "microphone" });
+  expect(h.check("media", { mediaType: "audio" })).toBe(true);
+  expect(h.request("media", ["audio"])).toBe(true);
+  expect(h.request("media", ["video"])).toBe(false);
+  expect(h.request("media", ["audio"], false)).toBe(false);
+  expect(h.check("media", { mediaType: "audio" }, h.contents, "https://foreign.example")).toBe(false);
+  await h.capture.prepare(null);
+  expect(h.request("media", ["audio"])).toBe(false);
+  await h.capture.prepare({ kind: "microphone" });
+  expect(h.prompts).toHaveLength(3);
+  // Screens still need a source chosen in this window and a click to open it.
+  await h.capture.sources();
+  await h.capture.prepare({ kind: "screen", sourceId: screen.id });
+  expect(h.prompts).toHaveLength(3);
+});
+
+test("a microphone prompt answered after cancel, close, navigation, a new request or another Couch grants nothing", async () => {
+  type Harness = ReturnType<typeof harness>;
+  const revocations: [string, (h: Harness) => unknown, boolean][] = [
+    ["cancel or Close", h => h.capture.prepare(null), true],
+    ["navigation", h => h.capture.clear(), true],
+    ["a new request", h => { replacing = h.capture.prepare({ kind: "microphone" }).catch(() => {}); }, true],
+    ["the page leaving that Couch", h => h.navigate("https://foreign.example/"), false],
+    ["another Couch", h => h.selectCouch("https://other-couch.local:4100"), false],
+  ];
+  let replacing: Promise<void> | undefined;
+  for (const [name, revoke, closesPrompt] of revocations) {
+    const answers: ((answer: { response: number }) => void)[] = [];
+    const h = harness("darwin", "14.2", async () => true, () => new Promise(resolve => { answers.push(resolve); }));
+    h.selectCouch("https://couch.local:4100");
+    h.navigate("https://couch.local:4100/");
+    const preparing = h.capture.prepare({ kind: "microphone" });
+    await revoke(h);
+    expect([name, h.prompts[0]!.options.signal!.aborted]).toEqual([name, closesPrompt]);
+    // The stale prompt is allowed anyway; the request that replaced it is not.
+    answers.forEach((answer, index) => answer({ response: index ? 0 : 1 }));
+    await expect(preparing).rejects.toThrow();
+    await replacing;
+    expect([name, h.check("media", { mediaType: "audio" }), h.request("media", ["audio"])]).toEqual([name, false, false]);
   }
 });
 

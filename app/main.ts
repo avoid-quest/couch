@@ -59,7 +59,7 @@ const save = (next: Choice) => {
 };
 
 let window: BrowserWindow | null = null;
-const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin);
+const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin, localOrigin);
 let tray: Tray | null = null;
 let quitting = false;
 let stopped = false;
