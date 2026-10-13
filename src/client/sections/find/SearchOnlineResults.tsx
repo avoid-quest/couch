@@ -26,7 +26,7 @@ export type SearchHit = SearchFacet & {
   thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   /** playOn makes the action "Play on", a menu of the online Devices. */
-  actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; excludeDeviceId?: string }>;
+  actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; sharingDeviceId?: string }>;
 };
 export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };

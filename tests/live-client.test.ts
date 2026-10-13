@@ -137,9 +137,11 @@ test("switching direct playback to a synced URL keeps capture and the warm uploa
   await flush();
   assert.equal(peers[0].tracks.length, 2);
   assert.equal(signals[0].signal.description.type, "offer");
-  session.play(direct({ liveSourceId: source.id }));
-  assert.equal(attachments.at(-1).stream.getTracks().length, 2);
+  // A capturing window can receive another source; Core never routes its own capture back to it.
+  session.play(direct());
+  assert.equal(peers.length, 2);
   assert.equal(session.play({ type: "load", playbackId: "playing", source: "https://couch.example/stream.m3u8", follow: { group: "group", pts: true } }), false);
+  assert.equal(peers[1].connectionState, "closed");
   session.receive({ type: "livePeers", sourceId: source.id, peers: [] });
   assert.equal(peers[0].connectionState, "closed");
   assert.equal(recorders[0].state, "recording");
@@ -147,7 +149,7 @@ test("switching direct playback to a synced URL keeps capture and the warm uploa
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
   advance(60000);
   assert.equal(failures.length, 0);
-  session.play(direct({ liveSourceId: source.id, livePeerId: "returned" }));
+  session.play(direct({ livePeerId: "returned" }));
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
 `));
 

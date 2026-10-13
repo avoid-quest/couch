@@ -358,7 +358,7 @@ Messages:
   Private speakers keep their own attenuation; new private sound and revoked
   foreign influence return to their own level. Sharing audio again joins All. It
   shows its own trim, preserves Device levels and mute, and keeps outputs
-  selected at zero so raising it restores their sound; it has no Picture, Solo
+  selected at zero so raising it restores their sound; it has no Picture, Only here
   or Mute. Its label is "Selected sound you can control": shared sound and this
   Device's own private sound. Then one row per Device:
   the Playback's Devices first (offline ones
@@ -369,7 +369,7 @@ Messages:
   part to start playback; Play on → This device still plays on it. A row reads
   the Device's icon, name and what it is doing, then Picture (pressed toggles
   invert, because Toggle's muted pressed state barely shows on black), the
-  fader with its number, Mute and Solo (pressed, they invert too). What a
+  fader with its number, Mute and Only here (pressed, they invert too). What a
   Device is doing includes another Playback, with its status ("Paused
   {title}"): moving a Device that is busy elsewhere interrupts that Playback,
   so the row says so before you press. Joined outputs keep the current
@@ -377,18 +377,22 @@ Messages:
   Private picture/sound names the consent boundary and disables changes to
   that channel for other devices; shared sound can still be muted beside a
   private picture. This Device retains local controls even while viewing
-  another Playback; Solo still requires consent to replace the destination's
+  another Playback; Only here still requires consent to replace the destination's
   whole output. These statuses describe playback and consent, never whether
   sound can be heard.
-  On phones controls wrap below name/status and Solo. Names and busy titles
+  On phones controls wrap below name/status and Only here. Names and busy titles
   wrap without ellipses; the Sheet scrolls vertically. On wider screens the
-  name/status, Picture, horizontal fader, number, Mute and Solo align in a row.
+  name/status, Picture, horizontal fader, number, Mute and Only here align in a row.
   Its controls and slider tracks have at least a 44px target at the base scale.
   The fader is the Device's one volume while its sound is in, else 0: 0 turns
   its sound off and raising it turns it on. Rows show saved levels
-  independently of All's trim. A row's "Earlier" slider, shown under its fader
-  while its sound is in, plays a late speaker sooner (Sendspin's static delay);
-  "Delay" read as the opposite. Solo keeps the Playback only on that Device,
+  independently of All's trim. A row's "Sync … ms earlier" slider, shown under
+  its fader while its sound plays in sync with other devices, plays a late
+  speaker sooner (Sendspin's static delay); "Delay" read as the opposite, and
+  "Sync" keeps it apart from Playback's audio delay against the picture. With
+  one receiver there is nothing to align, so the row shows the saved value and
+  when it applies instead of a control that would do nothing. Only here
+  (formerly Solo) keeps the Playback only on that Device,
   with its picture when the Playback has one, so moving a Playback is one
   press. The band and mini player volume shows the loudest in-sound Device's,
   or 0 while All is at 0, and moves them all together (from All's 0, raising it
@@ -423,7 +427,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | --- | --- |
 | the device's name, or Couch | host, playback host/computer/device, coordinator, installation |
 | This computer, This device | this installation, this app |
-| Where it plays, Picture, Solo, Mute, All | Mixer, Speakers panel, look at, host |
+| Where it plays, Picture, Only here, Mute, All | Mixer, Speakers panel, look at, host |
 | Play on {name}, Playing on {name} | Send to, Cast to |
 | device (a phone, browser, app window or TV) | remote (for a device), controller, client |
 | Remote (the section that drives a TV) | TV remote, remote control |

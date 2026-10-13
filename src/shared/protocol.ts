@@ -40,9 +40,9 @@ export type PlayerState = {
 };
 
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
-// volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds,
-// present while it is connected (ticket 10).
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; local?: boolean };
+// volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds as it
+// last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.

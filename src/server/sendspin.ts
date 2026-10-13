@@ -379,8 +379,9 @@ export function createSendspin(options: { identity: string; name: string; admit:
       });
     },
     group,
-    // A speaker's own delay, which its player applies (Sendspin static delay).
-    delay: (clientId: string) => sessions.has(clientId) ? delays.get(clientId) ?? 0 : undefined,
+    // A speaker's own delay, which its player applies and keeps (Sendspin static delay): its last report survives disconnects.
+    delay: (clientId: string) => delays.get(clientId) ?? (sessions.has(clientId) ? 0 : undefined),
+    connected: (clientId: string) => sessions.has(clientId),
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
     drop(clientId: string) { for (const socket of sockets) if (core.getSessionBySocket(socket)?.getClientId() === clientId) socket.terminate(); },
     close() { for (const socket of sockets) socket.terminate(); },

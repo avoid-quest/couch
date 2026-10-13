@@ -6,7 +6,7 @@ import { attachStream, streamChanged } from "./renderer";
 
 type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; published: boolean; recorder?: MediaRecorder; socket?: WebSocket; cancel?: () => void };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
-type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; local: boolean; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
+type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 
 // Capture belongs to the authenticated session. A single output receives it directly;
@@ -24,7 +24,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     if (!current) return;
     clearTimeout(current.timeout);
     current.peer?.connection.close();
-    if (!current.local) stopTracks(current.stream);
+    stopTracks(current.stream);
   };
   const failReceiver = (current: Receiver, reason: unknown) => {
     if (receiver !== current) return;
@@ -65,7 +65,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
   };
   const startPublisher = async (target: LivePeer) => {
     const current = publication;
-    if (!current || publishers.has(target.peerId) || receiver?.local && receiver.peerId === target.peerId) return;
+    if (!current || publishers.has(target.peerId)) return;
     let peer: Peer;
     try { peer = makePeer(target.peerId); } catch { return; }
     publishers.set(target.peerId, peer);
@@ -155,12 +155,11 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (command.type !== "load") return false;
       closeReceiver();
       if (!command.liveSourceId || !command.livePeerId || !command.liveOutput) return false;
-      const local = publication?.source.id === command.liveSourceId;
-      const stream = new MediaStream(local ? publication!.stream.getTracks().filter(track => track.kind === "video" ? command.liveOutput!.picture : command.liveOutput!.sound) : []);
-      const current: Receiver = { peerId: command.livePeerId, load: command, stream, local };
+      // Core never routes a capture back to its publisher, so every receiver connects to it.
+      const stream = new MediaStream();
+      const current: Receiver = { peerId: command.livePeerId, load: command, stream };
       receiver = current;
       attachStream(command, stream);
-      if (local) return true;
       try {
         const peer = current.peer = makePeer(current.peerId);
         peer.connection.ontrack = event => {

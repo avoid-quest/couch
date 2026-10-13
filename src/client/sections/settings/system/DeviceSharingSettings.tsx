@@ -9,10 +9,10 @@ export function DeviceSharingSettings() {
   const sharing = useLocalDeviceSharing();
   const saving = useMutation({ mutationFn: ({ capability, enabled }: { capability: keyof DeviceSharing; enabled: boolean }) => saveLocalDeviceSharing({ ...localDeviceSharing(), [capability]: enabled }) });
   const choices: Array<{ capability: keyof DeviceSharing; label: string; description: string }> = [
-    { capability: "audio", label: "Share audio", description: "Let other devices play through this device's speakers and control their volume." },
-    { capability: "video", label: "Share video", description: "Let other devices play video on this device's screen." },
+    { capability: "audio", label: "Let other devices use speakers", description: "Other devices can play through this device's speakers and set their volume." },
+    { capability: "video", label: "Let other devices use screen", description: "Other devices can show video on this device's screen." },
   ];
-  return <SettingsSection title="Sharing this device" description="Off by default when you join another server. You can always play on your own device.">
+  return <SettingsSection title="Other devices" description="Off by default when you join another server. Playing here yourself and sharing a source from this device don't need these.">
     {choices.map(({ capability, label, description }) => <SettingsRow key={capability} label={label} description={description}>
       <Switch aria-label={label} checked={sharing[capability]} disabled={saving.isPending} onCheckedChange={enabled => saving.mutate({ capability: capability, enabled })} />
     </SettingsRow>)}

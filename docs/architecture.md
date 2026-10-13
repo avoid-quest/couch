@@ -40,15 +40,15 @@ pairing discards it. Submitting pairing saves the chosen name; an existing
 saved name survives reload and Forget, which removes a server connection.
 Pairing credentials and keys remain in their original storage.
 
-Client devices opt into sharing audio and video independently in General; both
-start off. Like the name, the choice belongs to the device: the Couch app keeps one
+Client devices opt into letting other devices use their speakers and screen
+independently in General; both start off. Like the name, the choice belongs to the device: the Couch app keeps one
 in `<data>/device-sharing.json` for every Couch it joins, and a browser keeps it in
 the origin's storage. The authenticated WebSocket advertises it. Core accepts
 changes only from that device's own connection, keeps the last choice while the
 device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
-self-join, which Solo keeps. Joining a shared Playback accepts its group transport
+self-join, which Only here keeps. Joining a shared Playback accepts its group transport
 and queue controls; direct output changes still require that device's sharing
 consent. A fully private Playback can only be controlled by its output devices.
 Revoking sharing removes remote output channels and stops their renderer or

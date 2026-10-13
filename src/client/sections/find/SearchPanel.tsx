@@ -192,11 +192,11 @@ export function BrowseActions({ title, actions }: { title: string; actions: Sear
   const { devices, on } = usePlayOn();
   const play = actions.find(action => action.label === "Play" || action.label === "Resume");
   // Play on waits for a second online Device, so it alone doesn't open an empty menu.
-  const more = actions.filter(action => action !== play && (!action.playOn || devices.some(device => device.id !== action.excludeDeviceId)));
+  const more = actions.filter(action => action !== play && (!action.playOn || devices.some(device => device.id !== action.sharingDeviceId)));
   return <>
     {play && <Button variant="ghost" size="icon" aria-label={on(`${play.label} ${title}`)} title={on(play.label)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4 fill-current" /></Button>}
     {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} excludeDeviceId={action.excludeDeviceId} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
+      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>}
   </>;
 }

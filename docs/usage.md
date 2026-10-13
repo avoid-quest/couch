@@ -48,8 +48,8 @@ a Mac.
   host and no H.264 alternative is available. Remote-only HEVC tries that
   browser's decoder; a decoding failure never adds or starts the host.
   Adding the Linux host to HEVC-only playback takes the same native fallback,
-  leaving only the host. Turning off both channels of a pending Solo destination
-  cancels that move; the original device keeps playing and Solo can be tried again.
+  leaving only the host. Turning off both channels of a pending Only here destination
+  cancels that move; the original device keeps playing and Only here can be tried again.
   Actual HEVC support depends on the browser build and device.
 - Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
   or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV

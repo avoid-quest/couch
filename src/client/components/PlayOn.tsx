@@ -28,23 +28,24 @@ export function usePlayOn() {
 /** Play on for a REST play request: Core isolates that Device when it reserves the play. */
 export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}` : "";
 
-function Devices({ onPlay, disabled, excludeDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; excludeDeviceId?: string }) {
+// sharingDeviceId: a shared source's publisher, listed with its status because it never plays its own capture.
+function Devices({ onPlay, disabled, sharingDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
   const { devices, here } = usePlayOn();
-  return devices.filter(device => device.id !== excludeDeviceId).map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
-    <span className="w-full break-words">{device.name}</span>{device.id === here && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">This device</span>}
+  return devices.map(device => <DropdownMenuItem key={device.id} disabled={disabled || device.id === sharingDeviceId} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
+    <span className="w-full break-words">{device.name}</span>{(device.id === here || device.id === sharingDeviceId) && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">{[device.id === here && "This device", device.id === sharingDeviceId && "Sharing this source"].filter(Boolean).join(" · ")}</span>}
   </DropdownMenuItem>);
 }
 
 /** "Play on" inside an item's menu; nothing when only this Device is online. */
-export function PlayOnGroup({ onPlay, disabled, excludeDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; excludeDeviceId?: string }) {
-  if (!usePlayOn().devices.some(device => device.id !== excludeDeviceId)) return null;
-  return <><DropdownMenuSeparator /><DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} excludeDeviceId={excludeDeviceId} /></DropdownMenuGroup></>;
+export function PlayOnGroup({ onPlay, disabled, sharingDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
+  if (!usePlayOn().devices.some(device => device.id !== sharingDeviceId)) return null;
+  return <><DropdownMenuSeparator /><DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} /></DropdownMenuGroup></>;
 }
 
 /** "Play on" beside a row's inline verbs. */
-export function PlayOnMenu({ title, onPlay, disabled, excludeDeviceId }: { title: string; onPlay: (deviceId: string) => void; disabled?: boolean; excludeDeviceId?: string }) {
-  if (!usePlayOn().devices.some(device => device.id !== excludeDeviceId)) return null;
+export function PlayOnMenu({ title, onPlay, disabled, sharingDeviceId }: { title: string; onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
+  if (!usePlayOn().devices.some(device => device.id !== sharingDeviceId)) return null;
   return <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" disabled={disabled} aria-label={`Play ${title} on`}>Play on</Button></DropdownMenuTrigger>
-    <DropdownMenuContent align="end"><Devices onPlay={onPlay} excludeDeviceId={excludeDeviceId} /></DropdownMenuContent>
+    <DropdownMenuContent align="end"><Devices onPlay={onPlay} sharingDeviceId={sharingDeviceId} /></DropdownMenuContent>
   </DropdownMenu>;
 }

@@ -114,7 +114,6 @@ test("ordinary Play replaces a live item in the same playback and preserves its 
   const f = await liveFixture();
   try {
     await f.publish("system", "system-audio");
-    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "system", deviceId: f.publisher.id })).ok, false);
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.publisher.command({ type: "playLive", sourceId: "system", deviceId: f.receiver.id });
     await until(() => !!f.receiver.load());
@@ -133,7 +132,7 @@ test("ordinary Play replaces a live item in the same playback and preserves its 
   } finally { await f.close(); }
 });
 
-test("grouped live pictures use the receiver's HTTPS origin and Solo never feeds system capture into itself", { timeout: 15_000 }, async () => {
+test("grouped live pictures use the receiver's HTTPS origin and Only here never plays a capture on its publisher", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("screen");
@@ -158,12 +157,14 @@ test("grouped live pictures use the receiver's HTTPS origin and Solo never feeds
     assert.equal((await fetch(original.source)).status, 404);
     other.report();
     await until(() => f.publisher.state.player.status === "playing");
-    assert.equal((await f.publisher.command({ type: "solo", deviceId: f.publisher.id })).ok, true);
-    assert.deepEqual(f.publisher.state.outputs?.map(output => ({ deviceId: output.deviceId, picture: output.picture, sound: output.sound })), [{ deviceId: f.publisher.id, picture: true, sound: false }]);
+    const self = await f.publisher.command({ type: "solo", deviceId: f.publisher.id });
+    assert.equal(self.ok, false);
+    assert.match(self.error!, /Publisher is sharing this source/);
+    assert.deepEqual(f.publisher.state.outputs?.map(output => output.deviceId), [other.id]);
   } finally { await f.close(); }
 });
 
-test("Solo rejects a system-audio input on the same capturing device", { timeout: 15_000 }, async () => {
+test("Only here rejects a system-audio input on the same capturing device", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.publish("system", "system-audio");
@@ -174,12 +175,12 @@ test("Solo rejects a system-audio input on the same capturing device", { timeout
     await until(() => f.publisher.state.player.status === "playing");
     const result = await f.publisher.command({ type: "solo", deviceId: f.publisher.id });
     assert.equal(result.ok, false);
-    assert.match(result.error!, /without capturing its playback/);
+    assert.match(result.error!, /Publisher is sharing this source/);
     assert.equal(f.publisher.state.outputs?.[0]?.deviceId, f.receiver.id);
   } finally { await f.close(); }
 });
 
-test("a system-audio input uses the selected normal mix while excluding its capturing speaker", { timeout: 15_000 }, async () => {
+test("a system-audio input uses the selected normal mix without its publisher, which keeps controlling it", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
@@ -195,7 +196,7 @@ test("a system-audio input uses the selected normal mix while excluding its capt
     assert.equal(play.ok, true, play.error);
     assert.equal(f.publisher.state.playback, group);
     assert.equal(f.publisher.state.queue.find(entry => entry.id === f.publisher.state.currentEntryId)?.liveSourceId, "system");
-    assert.deepEqual(f.publisher.state.outputs?.map(({ deviceId, sound }) => ({ deviceId, sound })), [{ deviceId: f.publisher.id, sound: false }, { deviceId: f.receiver.id, sound: true }]);
+    assert.deepEqual(f.publisher.state.outputs?.map(({ deviceId, sound }) => ({ deviceId, sound })), [{ deviceId: f.receiver.id, sound: true }]);
   } finally { await f.close(); }
 });
 
