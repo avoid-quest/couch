@@ -11,6 +11,7 @@ import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useInterfaceSize } from "../interface-size";
 import { useVideoQualityPreference } from "../video-quality";
+import { playingOnDevice, useScreenWakeLock } from "../screen-wake-lock";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
@@ -73,6 +74,7 @@ export type SessionGateValue = SessionBag & {
   savePairing: (credentials: Required<Credentials>) => void;
   unpair: () => void;
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
+  screenWakeLock: ReturnType<typeof useScreenWakeLock>;
   remoteControlEnabled: boolean;
   playerTarget?: { id: string; status: string };
 };
@@ -109,6 +111,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   }
 
   const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
+  const screenWakeLock = useScreenWakeLock(!nativeHost && connected && playingOnDevice(state?.playbacks, deviceId()));
   const localName = useLocalDeviceName();
   const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
   useEffect(() => {
@@ -292,7 +295,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect,
-    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled,
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }
