@@ -28,7 +28,7 @@ Episode artwork   Name and length       Play  …
 ```
 
 Playback keeps named series, season, album or radio destinations visible once.
-Every item opens a full detail page, including inspection from playback and
+Library items open a full detail page, including inspection from playback and
 Up next. Details offer the same breadcrumb; there is no item-detail dialog or
 separate related-content sheet. Nearby items use four divided rows and a small
 heading that links to the full list. Hide this section when there are no nearby
@@ -83,10 +83,23 @@ The source picker uses two columns so its four tabs fit narrow dialogs without
 overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.
 
 Active inputs participate in Find's Device inputs and Live filters. Their player
-breadcrumb returns to `/find?browse=device-inputs`. A small Stop sharing action
-stays available throughout browsing while local capture is active. There is no
-separate capture panel on the Find landing page. See [live inputs](live-inputs.md)
-for capture options and playback limits.
+breadcrumb returns to `/find?browse=device-inputs`. Playback uses the same Now
+Playing page, mini player, Playback settings, Up next and Where it plays controls
+as TV and radio. The usual picture stage displays video; audio-only inputs use
+the usual artwork stage. There is no separate live player or visualizer.
+
+Transport controls depend on media capabilities. A live stream without a seek
+window shows Live and disables Pause, while retry and Next use the ordinary
+player actions. Captured entries are temporary, so they have no persistent
+details page or Save for later action. Other items can still be queued, played
+and saved while capture is active.
+
+A small Stop sharing action stays available throughout browsing while local
+capture is active. There is no separate capture panel on the Find landing page.
+The input reaches the normal player as HLS; multi-device sound uses the existing
+Sendspin clock and pictures follow it. The shared delivery buffer adds delay
+between capture and output. See [live inputs](live-inputs.md) for capture options,
+playback limits and physical synchronization checks.
 
 ## Stack
 

@@ -197,8 +197,6 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
     {player.subtitleError && <Alert variant="destructive"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}
   </>;
 
-  if (entry?.liveSourceId) return null;
-
   if (panel !== "all") {
     const seconds = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1)} s`;
     const adjustDelay = (type: "audioDelay" | "subtitleDelay", value: number, direction: -1 | 1) => {

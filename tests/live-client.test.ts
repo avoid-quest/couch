@@ -8,7 +8,6 @@ const check = (source: string) => {
     import { mock } from "bun:test";
     mock.module("./src/client/session/native-context.ts", () => ({ couchApp: undefined }));
     mock.module("./src/client/session/device-id.ts", () => ({ deviceId: () => "receiver", localDeviceName: () => "Receiver" }));
-    mock.module("./src/client/session/renderer.ts", () => ({ attachLive() {}, detachLive() {}, play() {} }));
     let now = 0, nextTimer = 0;
     const timers = new Map();
     globalThis.setTimeout = (callback, delay) => { const id = ++nextTimer; timers.set(id, { callback, at: now + delay }); return id; };
@@ -22,15 +21,23 @@ const check = (source: string) => {
       }
       now = target;
     };
-    const peers = [], failures = [], commands = [];
-    globalThis.RTCPeerConnection = class {
-      connectionState = "new";
-      signalingState = "stable";
-      constructor(configuration) { this.configuration = configuration; peers.push(this); }
-      addTrack(track) { (this.tracks ??= []).push(track); }
-      async createOffer() { return { type: "offer", sdp: "fixture" }; }
-      async setLocalDescription(description) { this.localDescription = description; }
-      close() { this.connectionState = this.signalingState = "closed"; this.onconnectionstatechange?.(); }
+    const uploads = [], recorders = [], failures = [], commands = [];
+    let autoReady = true;
+    globalThis.WebSocket = class {
+      static OPEN = 1;
+      readyState = 0;
+      bufferedAmount = 0;
+      sent = [];
+      constructor() { uploads.push(this); queueMicrotask(() => { this.readyState = 1; this.onopen?.(); }); }
+      send(data) { this.sent.push(data); }
+      close() { this.readyState = 3; this.onclose?.(); }
+    };
+    globalThis.MediaRecorder = class {
+      static isTypeSupported(type) { return type.includes("webm"); }
+      state = "inactive";
+      constructor(stream, options) { this.stream = stream; this.options = options; recorders.push(this); }
+      start(timeslice) { this.state = "recording"; this.timeslice = timeslice; if (autoReady) queueMicrotask(() => uploads.at(-1).onmessage({ data: JSON.stringify({ type: "ready" }) })); }
+      stop() { this.state = "inactive"; }
     };
     globalThis.MediaStream = class {
       constructor(tracks = []) { this.tracks = tracks; }
@@ -50,9 +57,8 @@ const check = (source: string) => {
       { kind: "audioinput", deviceId: "interface", label: "USB interface" }, { kind: "videoinput", deviceId: "camera" }
     ] } }, configurable: true });
     const { createLiveSession } = await import("./src/client/session/live.ts");
-    const iceServers = [{ urls: "turn:relay.example:3478?transport=tcp", username: "fixture", credential: "fixture-credential" }];
-    const session = createLiveSession({ iceServers, command: async action => { commands.push(action); }, send() {}, failed: state => failures.push(state), published() {} });
-    const load = playbackId => ({ type: "load", id: playbackId, playbackId, liveSourceId: "screen", livePeerId: playbackId, liveOutput: { picture: true, sound: true, volume: 80 } });
+    const session = createLiveSession({ command: async action => { commands.push(action); }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {} });
+    const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     ${source}
     session.close();
     assert.equal(timers.size, 0, "closing a session retires its connection deadline");
@@ -61,38 +67,77 @@ const check = (source: string) => {
   expect(result.status).toBe(0);
 };
 
-test("live peers use the authenticated standard ICE configuration", () => check(`
-  session.play(load("one"));
-  assert.deepEqual(peers[0].configuration.iceServers, iceServers);
+test("capture uploads one ordered recording and waits for Core's playable source", () => check(`
+  const source = await session.start({ kind: "screen" });
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].sourceId, source.id);
+  assert.match(uploads[0].key, /^[a-f0-9]{64}$/);
+  assert.equal(commands[0].uploadToken, uploads[0].key);
+  assert.equal(recorders[0].timeslice, 250);
+  const bytes = new Uint8Array(150_000).map((_, i) => i % 251);
+  recorders[0].ondataavailable({ data: new Blob([bytes]) });
+  assert.ok(uploads[0].sent.every(blob => blob.size <= 65_536));
+  assert.deepEqual(new Uint8Array(await new Blob(uploads[0].sent).arrayBuffer()), bytes);
+  advance(60000);
+  assert.equal(failures.length, 0, "ready clears the startup deadline");
 `));
 
-test("a live receiver with no network connection stops buffering after 30 seconds", () => check(`
-  session.play(load("one"));
+test("a stalled upload fails after 30 seconds and releases capture", () => check(`
+  autoReady = false;
+  const starting = session.start({ kind: "screen" });
+  const rejected = assert.rejects(starting, /didn't start/);
+  await flush();
   advance(29999);
-  assert.equal(failures.length, 0);
+  assert.equal(captures[0].getTracks()[0].stopped, false);
   advance(1);
-  assert.equal(failures.length, 1);
-  assert.equal(failures[0].playbackId, "one");
-  assert.equal(failures[0].status, "error");
-  assert.equal(failures[0].buffering, false);
-  assert.match(failures[0].error, /connect/i);
-  assert.equal(peers[0].connectionState, "closed");
+  await rejected;
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  assert.equal(uploads[0].readyState, 3);
+  assert.equal(recorders[0].state, "inactive");
+  assert.equal(commands.at(-1).type, "endLive");
 `));
 
-test("connected receivers and replaced or stopped loads never report a stale timeout", () => check(`
-  session.play(load("old"));
-  advance(20000);
-  session.play(load("current"));
-  advance(10000);
-  assert.equal(failures.length, 0);
-  peers[1].connectionState = "connected";
-  peers[1].onconnectionstatechange();
+test("stopping or closing a pending upload cancels its deadline", () => check(`
+  autoReady = false;
+  const starting = session.start({ kind: "screen" });
+  const rejected = assert.rejects(starting, /canceled/);
+  await flush();
+  await session.end();
+  await rejected;
   advance(60000);
   assert.equal(failures.length, 0);
-  session.play(load("stopped"));
-  session.play({ type: "stop" });
-  advance(30000);
-  assert.equal(failures.length, 0);
+  assert.equal(timers.size, 0);
+  const next = session.start({ kind: "screen" });
+  const nextRejected = assert.rejects(next, /canceled/);
+  await flush();
+  session.close();
+  await nextRejected;
+  assert.ok(captures.flatMap(stream => stream.getTracks()).every(track => track.stopped));
+`));
+
+test("upload backpressure ends sharing instead of growing an unbounded queue", () => check(`
+  await session.start({ kind: "screen" });
+  uploads[0].bufferedAmount = 4 * 1024 * 1024;
+  recorders[0].ondataavailable({ data: new Blob(["next frame"]) });
+  await flush();
+  assert.equal(failures.length, 1);
+  assert.match(failures[0].message, /cannot keep up/);
+  assert.equal(uploads[0].sent.length, 0);
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  assert.equal(commands.at(-1).type, "endLive");
+`));
+
+test("a removed source reports failure even when its state arrives before the upload error", () => check(`
+  await session.start({ kind: "screen" });
+  session.observe([]);
+  uploads[0].onmessage({ data: JSON.stringify({ type: "error", error: "encoder failed" }) });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0].message, /stopped/);
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  await session.start({ kind: "screen" });
+  await session.end();
+  session.observe([]);
+  assert.equal(failures.length, 1, "an explicit Stop sharing is not a failure");
 `));
 
 test("screen capture defaults to bounded video and unprocessed audio, with explicit quality and audio choices", () => check(`
@@ -121,8 +166,7 @@ test("system audio retains only a small idle picture and never sends its video t
   assert.equal(captureRequests[0].video.frameRate.max, 1);
   assert.equal(captureRequests[0].video.height.max, 180);
   assert.equal(captures[0].getVideoTracks()[0].stopped, false);
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "listener", deviceId: "other", sound: true, picture: true }] });
-  assert.deepEqual(peers[0].tracks.map(track => track.kind), ["audio"]);
+  assert.deepEqual(recorders[0].stream.getTracks().map(track => track.kind), ["audio"]);
   await session.end();
   assert.ok(captures[0].getTracks().every(track => track.stopped));
 `));

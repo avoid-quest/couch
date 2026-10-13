@@ -19,7 +19,6 @@ holder.append(video, audio);
 
 let playbackId: string | null = null;
 let loading: Extract<PlaybackCommand, { type: "load" }> | null = null;
-let live: { stream: MediaStream; sound: boolean } | null = null;
 let hls: Hls | null = null;
 let mpegts: Mpegts.Player | null = null;
 let ready = false;
@@ -47,7 +46,6 @@ const matchesLanguage = (language = "", wanted = "") => !!wanted && language.toL
 const preferredSubtitle = (command: NonNullable<typeof loading>) => command.subtitleTrack ?? (command.preferences?.subtitles === "off" ? -1
   : [...(hls?.subtitleTracks.map(track => track.lang) ?? []), ...external().map(track => track.language)].findIndex(language => matchesLanguage(language, command.preferences?.subtitleLanguage)));
 const tracks = (): MediaTrack[] => {
-  if (live) return live.stream.getTracks().map((track, index) => ({ id: track.id, index, kind: track.kind as "audio" | "video", label: track.label || (track.kind === "video" ? "Picture" : "Sound"), language: "", selected: true }));
   if (!playbackId || !ready) return [];
   const picture: MediaTrack[] = video.videoWidth ? [{ id: "video", index: 0, kind: "video", label: "Video", language: "", selected: true }] : [];
   const sound: MediaTrack[] = hls?.audioTracks.length ? hls.audioTracks.map((track, index) => ({ id: `audio-${index}`, index, kind: "audio", label: track.name, language: track.lang ?? "", selected: index === hls!.audioTrack }))
@@ -63,12 +61,12 @@ const state = (): PlayerState => ({
   playbackId,
   status: !playbackId ? "idle" : failure ? "error" : video.ended ? "ended" : !ready || waiting() ? "loading" : video.paused ? "paused" : "playing",
   buffering: waiting(),
-  position: live ? 0 : video.currentTime,
-  duration: !live && Number.isFinite(video.duration) && !loading?.radio && !mpegts ? video.duration : null,
+  position: video.currentTime,
+  duration: Number.isFinite(video.duration) && !loading?.radio && !mpegts ? video.duration : null,
   volume: Math.round(volume * 100),
-  seekable: !live && Number.isFinite(video.duration) && !mpegts,
+  seekable: Number.isFinite(video.duration) && !mpegts,
   error: failure,
-  speed: live ? 1 : video.playbackRate,
+  speed: video.playbackRate,
   tracks: tracks(),
   audioDelay,
   subtitleDelay,
@@ -94,7 +92,6 @@ const start = (element: HTMLMediaElement) => element.play().catch((error: unknow
 });
 
 const follow = (resync = true) => {
-  if (live) return;
   if (!split()) return;
   // Small drift is corrected by playing the audio 5% faster or slower, large drift by seeking.
   // A positive audio delay plays the sound later.
@@ -135,7 +132,7 @@ video.textTracks.addEventListener("change", send);
 const fixedVolume = (() => { video.volume = 0.5; const fixed = video.volume !== 0.5; video.volume = 1; return fixed; })();
 const apply = () => {
   const silent = fixedVolume && volume === 0;
-  video.muted = split() || blocked || !!following || silent || live?.sound === false;
+  video.muted = split() || blocked || !!following || silent;
   audio.muted = !!following || silent;
   video.volume = audio.volume = volume;
 };
@@ -167,7 +164,8 @@ const begin = (command: NonNullable<typeof loading>) => command.startPosition ||
 const playlist = async (command: NonNullable<typeof loading>) => {
   const { default: Hls } = await import("hls.js");
   if (command !== loading || !Hls.isSupported()) return fail(video.error?.message || "This media couldn't play here.");
-  hls = new Hls({ startPosition: begin(command) ?? -1 });
+  // A sliding live window is not a finite, zero-based movie timeline.
+  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true });
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
   hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
@@ -201,7 +199,6 @@ const reset = () => {
   for (const track of Array.from(video.textTracks)) track.mode = "disabled";
   playbackId = null;
   loading = null;
-  live = null;
   setFollow(null);
   ptsOffset = undefined;
   hls?.destroy();
@@ -218,26 +215,6 @@ const reset = () => {
   apply();
 };
 
-// WebRTC's tracks share their own live timeline. URL seeking and Sendspin following do not apply.
-export function attachLive(id: string, stream: MediaStream, options: { picture: boolean; sound: boolean; volume: number; paused?: boolean }) {
-  const selected = stream.getTracks().filter(track => track.kind === "video" ? options.picture : options.sound);
-  const attached = live?.stream.getTracks();
-  const same = playbackId === id && live?.sound === options.sound && selected.length === attached?.length && selected.every(track => attached.includes(track));
-  if (!same) {
-    reset();
-    playbackId = id;
-    live = { stream: new MediaStream(selected), sound: options.sound };
-    video.srcObject = live.stream;
-    video.defaultPlaybackRate = video.playbackRate = 1;
-    audioDelay = 0;
-  }
-  volume = options.volume / 100;
-  apply();
-  if (options.paused) video.pause(); else void start(video);
-  send();
-}
-
-export function detachLive() { if (live) { reset(); send(); } }
 // Subtitle delay moves every cue, including those hls.js adds while it plays.
 const shifted = new WeakMap<TextTrackCue, number>();
 const shiftCues = () => {
@@ -260,7 +237,6 @@ const selectSubtitle = (index: number) => {
 
 export function play(command: PlaybackCommand) {
   if ("playbackId" in command && command.type !== "load" && command.playbackId !== playbackId) return;
-  if (live && ["follow", "pause", "audioPause", "seek", "speed", "track", "audioDelay", "subtitleDelay", "addSubtitle"].includes(command.type)) return;
   switch (command.type) {
     case "load":
       reset();

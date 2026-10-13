@@ -132,6 +132,83 @@ test("Remote target binds playback and device commands without changing output s
 });
 
 
+test("a receiving device with no explicit target shows its own playback instead of the host's", { timeout: 10000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.phone.command({ type: "sharing", sharing: { audio: true, video: true } });
+    await f.host.command({ type: "enqueue", entry: { id: "host-item", title: "Host", source: f.source }, playNow: true });
+    await f.tv.command({ type: "enqueue", entry: { id: "received-item", title: "Received", source: f.source }, playNow: true, deviceId: tvId });
+    assert.equal((await f.tv.command({ type: "output", deviceId: phoneId, picture: true, level: 50 })).ok, true);
+    await until(() => f.phone.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === phoneId)) === true);
+    assert.equal(f.phone.state.controlling, phoneId);
+    assert.equal(f.phone.state.currentEntryId, "received-item");
+    assert.equal(f.phone.state.playback, f.tv.state.playback);
+    assert.deepEqual(f.phone.state.outputs, f.tv.state.outputs);
+    assert.equal(f.host.state.currentEntryId, "host-item");
+  } finally { await f.close(); }
+});
+
+for (const selection of ["Remote", "Play on"] as const) test(`receiving another playback does not replace an explicit ${selection} target`, { timeout: 10000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.phone.command({ type: "sharing", sharing: { audio: true, video: true } });
+    if (selection === "Remote") assert.equal((await f.phone.command({ type: "control", deviceId: tvId })).ok, true);
+    else assert.equal((await f.phone.command({ type: "enqueue", entry: { id: "chosen-item", title: "Chosen", source: f.source }, playNow: true, deviceId: tvId })).ok, true);
+    await f.host.command({ type: "enqueue", entry: { id: "received-item", title: "Received", source: f.source }, playNow: true });
+    assert.equal((await f.host.command({ type: "output", deviceId: phoneId, picture: true, level: 50 })).ok, true);
+    await until(() => f.phone.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === phoneId)) === true);
+    assert.equal(f.phone.state.controlling, tvId);
+    assert.equal(f.phone.state.currentEntryId, selection === "Remote" ? null : "chosen-item");
+    assert.equal(f.phone.state.outputs?.some(output => output.deviceId === phoneId), false);
+  } finally { await f.close(); }
+});
+
+test("moving the host playback leaves an implicit receiver looking at its separate playback", { timeout: 10000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.phone.command({ type: "sharing", sharing: { audio: true, video: true } });
+    await f.host.command({ type: "enqueue", entry: { id: "host-item", title: "Host", source: f.source }, playNow: true });
+    await f.tv.command({ type: "enqueue", entry: { id: "received-item", title: "Received", source: f.source }, playNow: true, deviceId: phoneId });
+    await until(() => f.phone.state.currentEntryId === "received-item");
+    const received = f.phone.state.playback;
+    f.host.socket.send(JSON.stringify({ type: "player", state: { ...f.host.state.player, status: "playing", duration: 100, seekable: true, speed: 1, buffering: false } }));
+    await until(() => f.host.state.player.status === "playing");
+    assert.equal((await f.host.command({ type: "solo", deviceId: tvId })).ok, true);
+    await until(() => f.phone.state.playbacks?.some(playback => playback.id !== received && playback.outputs.some(output => output.deviceId === tvId)) === true);
+    assert.equal(f.host.state.controlling, tvId);
+    assert.equal(f.phone.state.controlling, phoneId);
+    assert.equal(f.phone.state.currentEntryId, "received-item");
+    assert.equal(f.phone.state.playback, received);
+    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [phoneId]);
+  } finally { await f.close(); }
+});
+
+for (const departure of ["Solo", "output removal"] as const) test(`an implicit receiver follows its playback after ${departure}`, { timeout: 10000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.phone.command({ type: "sharing", sharing: { audio: true, video: true } });
+    await f.host.command({ type: "enqueue", entry: { id: "host-item", title: "Host", source: f.source }, playNow: true });
+    await f.tv.command({ type: "enqueue", entry: { id: "received-item", title: "Received", source: f.source }, playNow: true, deviceId: phoneId });
+    await until(() => f.phone.state.currentEntryId === "received-item");
+    assert.equal(f.phone.state.controlling, phoneId);
+    const received = f.phone.state.playback;
+    if (departure === "Solo") {
+      f.phone.socket.send(JSON.stringify({ type: "player", state: { ...f.phone.state.player, status: "playing", duration: 100, seekable: true, speed: 1, buffering: false } }));
+      await until(() => f.phone.state.player.status === "playing");
+      assert.equal((await f.phone.command({ type: "solo", deviceId: tvId })).ok, true);
+    } else {
+      assert.equal((await f.tv.command({ type: "output", deviceId: tvId, picture: true, level: 50 })).ok, true);
+      assert.equal((await f.tv.command({ type: "output", deviceId: phoneId, picture: false, level: 0 })).ok, true);
+    }
+    await until(() => f.phone.state.playbacks?.some(playback => playback.id === received && playback.outputs.length === 1 && playback.outputs[0]?.deviceId === tvId) === true);
+    assert.equal(f.phone.state.controlling, tvId);
+    assert.equal(f.phone.state.currentEntryId, "received-item");
+    assert.equal(f.phone.state.playback, received);
+    assert.deepEqual(f.phone.state.outputs?.map(output => output.deviceId), [tvId]);
+    assert.equal(f.host.state.currentEntryId, "host-item");
+  } finally { await f.close(); }
+});
+
 // #711 is a separate owner/base dependency; parent integration runs these with its final Stop Core.
 const stopIntegration = { skip: process.env.COUCH_TEST_STOP !== "1", timeout: 20000 };
 test("Remote Stop Undo stays on its TV across reconnect and rejects playback reassigned to the other TV", stopIntegration, async () => {

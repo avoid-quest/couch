@@ -10,7 +10,7 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
-export type MediaSource = { liveSourceId?: string; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
   observe?: (player: PlayerState) => void;
@@ -101,7 +101,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     }
   };
   const finishProgress = (nearEnd = false, required = false) => persistProgress(() => progress.finish(nearEnd), required);
-  const saveQueue = (queue: SessionState["queue"]) => {
+  const saveQueue = (queue: SessionState["queue"], cancelRecovery = true) => {
     // If the cursor was removed, keep the boundary at its nearest retained predecessor.
     const cursor = state.queue.findIndex(entry => entry.id === state.queueCursorEntryId);
     const retained = new Set(queue.map(entry => entry.id));
@@ -111,7 +111,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     state.queueRemoval = undefined;
     state.queueCursorEntryId = cursorEntryId;
     state.queueError = null;
-    cancelWebRecovery();
+    if (cancelRecovery) cancelWebRecovery();
   };
   const saveQueueCursor = (entryId: string, required = true, beforeCommit?: () => void, queue = state.queue, context = continuation) => {
     let completingProgress = false;
@@ -198,7 +198,11 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   };
   let loaded: Extract<PlaybackCommand, { type: "load" }> | null = null;
   const send = (command: PlaybackCommand) => {
-    if (command.type === "load") loaded = command;
+    if (command.type === "load") {
+      const entry = state.queue.find(item => item.id === state.currentEntryId);
+      if (entry?.live || isRadio(entry) || command.radio) command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
+      loaded = command;
+    }
     try { sendPlayer(command); } catch (error) {
       playIntent++;
       cancelContinuation();
@@ -590,6 +594,18 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     notice(actor: PlaybackActor, text: string) {
       state.activity = { id: crypto.randomUUID(), actor, text };
       try { broadcast(); } finally { state.activity = undefined; }
+    },
+    // Ephemeral inputs disappear from Up next when capture ends, including removed-entry Undo.
+    endSource(sourceId: string) {
+      let changed = false;
+      for (const [token, removed] of removedEntries) if (removed.entry.liveSourceId === sourceId) {
+        clearTimeout(removed.timer); removedEntries.delete(token);
+        if (state.queueRemoval?.token === token) { state.queueRemoval = undefined; changed = true; }
+      }
+      if (!state.queue.some(entry => entry.liveSourceId === sourceId)) { if (changed) broadcast(); return; }
+      const current = state.queue.find(entry => entry.id === state.currentEntryId)?.liveSourceId === sourceId;
+      saveQueue(state.queue.filter(entry => entry.liveSourceId !== sourceId), current);
+      if (current) stop(); else broadcast();
     },
     get state() { return structuredClone(state); },
     enrichEntry,

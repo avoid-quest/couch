@@ -103,11 +103,12 @@ them all proportionally, and its mute mutes them all.
 
 The header selects a server. Within that server, each controller looks at the
 Playback its selected output Device serves. Core keeps that choice in memory
-while it runs: a connection restores it while it still serves a Playback,
-otherwise the controller selects the server's own Device. A choice no longer
-shared also falls back to the server's own Device, and while that Device is
-offline and idle Play and the view use the controller's own Device without
-changing the choice. Outputs stay with the live Playback; a server restart restores queues
+while it runs: an explicit choice stays selected while it is shared, and Remote
+keeps its selected TV through idle and disconnects. Without a valid explicit
+choice, a Device receiving a Playback shows that Playback; an idle controller
+selects the server's own Device. While that Device is offline and idle, Play and
+the view use the controller's own Device without changing the choice. Outputs
+stay with the live Playback; a server restart restores queues
 without outputs. Ordinary Play keeps the current mix, and playing a waiting
 Playback moves that whole mix to it. Explicit Play on a Device (`deviceId` on
 WebSocket Play now, `?on=` on REST play requests; the item menus' "Play on" and
@@ -152,13 +153,18 @@ them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
 Live device inputs are captured in the publishing window and exist only while
-that capture is active. Core authenticates publications and signaling over the
-existing Device WebSocket and grants peers to selected Outputs with their consent.
-WebRTC sends audio and video directly from the publisher to each selected Device's
-newest renderer. For publishing, receiving and capture checks, see
-[Share a live device](live-inputs.md).
+that capture is active. The authenticated Device session owns each publication;
+one MediaRecorder uploads its encoded capture over a separate WebSocket using
+a publication-scoped upload token. Core converts that continuous upload into
+rolling HLS with FFmpeg (`src/server/live-stream.ts`). Media addresses are signed
+for the current Playback, and the same URL renderer consumes them as any other
+live stream. There are no peer-to-peer receiver connections or TURN requirement.
+The short-lived capture entry can share an ordinary queue with other media, but
+is excluded from persistent queues and removed when its publication ends. Capture
+cleanup closes the upload, stops its encoder and removes its temporary segments.
+For publishing, receiving and capture checks, see [Share a live device](live-inputs.md).
 
-When a Playback of URL media has outputs on several Devices, its sound is Synced
+When a Playback has outputs on several Devices, its sound is Synced
 (`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
 `/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
 BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
@@ -183,6 +189,12 @@ reports the first one, and hls.js maps it to its own timeline (`INIT_PTS_FOUND`)
 picture that joins the stream anywhere lines up with the sound. A screen's report
 adds its picture and subtitle tracks to the Playback's only when it has a video
 track: a screen still loading, or a tab that just reconnected, has none yet.
+
+Captured inputs use that same sound and picture clock. Encoding and the HLS and
+Sendspin buffers add capture-to-output delay so devices can schedule shared
+playback. Clock agreement does not measure physical output alignment; test the
+actual speakers and screens, and use the existing per-device timing adjustment
+where their hardware introduces extra delay.
 
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline

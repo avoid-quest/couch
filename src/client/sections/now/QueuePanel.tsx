@@ -103,7 +103,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
   }}>
     <div className="flex items-center justify-between gap-4">
       <h2 id="queue-title" tabIndex={-1} className={cn("text-base font-medium", !titled && "sr-only")}>Up next</h2>
-      {!current?.liveSourceId && <DialogTrigger asChild><Button variant="ghost" className="ml-auto" disabled={!connected || !upNext.length} onClick={() => { keep.reset(); setListName(""); }}>Save as list</Button></DialogTrigger>}
+      <DialogTrigger asChild><Button variant="ghost" className="ml-auto" disabled={!connected || !upNext.length} onClick={() => { keep.reset(); setListName(""); }}>Save as list</Button></DialogTrigger>
     </div>
       <DialogContent aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Save as list</DialogTitle></DialogHeader>
@@ -124,8 +124,8 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           actions={<QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />;
       })}</ul>
-    </section> : current?.liveSourceId ? <p className="text-sm text-muted-foreground">This device is live. Stop playback before choosing something else in Find.</p> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
-    {state?.autoplay && !current?.liveSourceId && <section aria-label="Autoplay" className="grid gap-2">
+    </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
+    {state?.autoplay && <section aria-label="Autoplay" className="grid gap-2">
       <div className="flex items-center justify-between gap-4"><h3><Label htmlFor={autoplayId} className="touch:min-h-11 text-base font-medium">Autoplay</Label></h3><Switch id={autoplayId} checked={state.autoplay.enabled} disabled={!connected || autoplaySave.isPending} onCheckedChange={value => autoplaySave.mutate(value)} /></div>
       {state.autoplay.enabled && state.autoplay.next ? <>
         <p className="text-sm text-muted-foreground">{state.autoplay.contextTitle}{upNext.length > 0 && " · after Up next"}</p>

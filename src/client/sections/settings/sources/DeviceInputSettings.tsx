@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { Square } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { PlayOnMenu } from "@/components/PlayOn";
@@ -70,11 +69,10 @@ export function DeviceInputSettings() {
     finally { setPending(false); }
   };
 
-  return <SettingsSection title="Share this device" description="Add this device's screen or sound as a live source. Start capture on the device you want to share.">
-    {mine ? <SettingsRow label={mine.name} description={mine.video && !mine.audio ? "Sharing picture without audio." : "Sharing is active. Choose where it plays, or stop to change inputs."}>
+  return <SettingsSection title="Share this device" description="Play this device's screen or sound on Couch.">
+    {mine ? <SettingsRow label={mine.name} description={mine.video && !mine.audio ? "Sharing picture without audio." : "Ready to play."}>
       <PlayOnMenu title={mine.name} disabled={!connected} excludeDeviceId={mine.kind !== "microphone" ? mine.deviceId : undefined} onPlay={deviceId => void run({ type: "playLive", sourceId: mine.id, deviceId })} />
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
-      <Button variant="ghost" asChild><Link to="/find" search={{ browse: "device-inputs" }}>Browse inputs</Link></Button>
     </SettingsRow> : <>
       <SettingsRow label="Input">
         <ChoiceGroup label="What to share" value={kind} disabled={!available || !supported} onValueChange={value => { setKind(value); setError(null); }} options={Object.entries(labels).map(([value, label]) => ({ value: value as CaptureKind, label, disabled: value !== "microphone" && !displaySupported }))} />
@@ -104,8 +102,9 @@ export function DeviceInputSettings() {
           <Switch id="live-include-audio" checked={includeAudio} disabled={!available} onCheckedChange={setIncludeAudio} />
         </SettingsRow>
       </>}
-      <SettingsRow label="Start sharing" description="The input appears in Find → Device inputs. Choose Play on to send it to a receiving device.">
+      <SettingsRow label="Start sharing" description="Then choose where it plays.">
         <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
+        {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>
     </>}
     {!supported && <p className="text-sm text-muted-foreground">Open Couch over HTTPS or on localhost to share this device.</p>}

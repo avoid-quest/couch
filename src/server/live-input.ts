@@ -1,35 +1,19 @@
-import type { LivePeer, LiveSignalMessage, LiveSource } from "../shared/live-input";
-import type { Action, PlaybackCommand, ServerMessage } from "../shared/protocol";
+import { timingSafeEqual } from "node:crypto";
+import type { LiveSource } from "../shared/live-input";
+import type { Action } from "../shared/protocol";
 
-type Load = Extract<PlaybackCommand, { type: "load" }>;
-type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; sound: boolean; volume: number };
-type Publication<Socket> = { source: LiveSource; owner: Socket };
-type Peer<Socket> = LivePeer & { publisher: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string };
+type Publication<Socket> = { source: LiveSource; owner: Socket; uploadToken: string };
 
-// Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
+// Capture ownership ends with its exact publishing connection. Playback is ordinary media.
 export function createLiveInputs<Socket>(options: {
   deviceOf: (socket: Socket) => string;
   nameOf: (id: string) => string;
-  send: (socket: Socket, message: ServerMessage) => void;
   ended: (sourceId: string) => void;
   changed: () => void;
 }) {
   const sources = new Map<string, Publication<Socket>>();
-  const peers = new Map<string, Peer<Socket>>();
-  const announce = (sourceId: string) => {
-    const publication = sources.get(sourceId);
-    if (publication) options.send(publication.owner, { type: "livePeers", sourceId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
-  };
-  const removePeer = (peer: Peer<Socket>) => {
-    peers.delete(peer.peerId);
-    options.send(peer.receiver, { type: "player", command: { type: "stop" } });
-  };
   const end = (sourceId: string) => {
-    const publication = sources.get(sourceId);
-    if (!publication) return;
-    for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
-    options.send(publication.owner, { type: "livePeers", sourceId, peers: [] });
-    sources.delete(sourceId);
+    if (!sources.delete(sourceId)) return;
     options.ended(sourceId);
     options.changed();
   };
@@ -42,9 +26,15 @@ export function createLiveInputs<Socket>(options: {
       const deviceId = options.deviceOf(socket);
       const label = action.kind === "microphone" ? "Microphone" : action.kind === "system-audio" ? "System audio" : "Screen";
       const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video };
-      sources.set(source.id, { source, owner: socket });
+      sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken });
       options.changed();
       return source;
+    },
+    acceptsUpload(sourceId: string, deviceId: string, key: string) {
+      const publication = sources.get(sourceId);
+      if (!publication || publication.source.deviceId !== deviceId) return false;
+      const expected = Buffer.from(publication.uploadToken), supplied = Buffer.from(key);
+      return expected.length === supplied.length && timingSafeEqual(expected, supplied);
     },
     end(socket: Socket, sourceId: string) {
       const source = sources.get(sourceId);
@@ -52,41 +42,8 @@ export function createLiveInputs<Socket>(options: {
       if (source.owner !== socket) throw new Error("Only the capturing window can end this source.");
       end(sourceId);
     },
-    route(playbackId: string, sourceId: string, load: Load | undefined, receivers: Receiver<Socket>[]) {
-      const publication = sources.get(sourceId);
-      const wanted = publication && load ? receivers : [];
-      const changed = new Set<string>();
-      for (const peer of [...peers.values()]) if (peer.playbackId === playbackId && (!wanted.some(receiver => receiver.socket === peer.receiver && receiver.picture === peer.picture && receiver.sound === peer.sound) || peer.loadId !== load?.playbackId || peer.sourceId !== sourceId)) {
-        removePeer(peer);
-        changed.add(peer.sourceId);
-      }
-      if (publication && load) for (const receiver of wanted) {
-        const existing = [...peers.values()].find(peer => peer.playbackId === playbackId && peer.receiver === receiver.socket);
-        if (existing) { options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } }); continue; }
-        const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId };
-        peers.set(peer.peerId, peer);
-        options.send(receiver.socket, { type: "player", command: { ...load, liveSourceId: sourceId, livePeerId: peer.peerId, liveOutput: { picture: peer.picture, sound: peer.sound, volume: receiver.volume }, paused: false } });
-        changed.add(sourceId);
-      }
-      for (const id of changed) announce(id);
-    },
-    receive(socket: Socket, message: LiveSignalMessage) {
-      const peer = peers.get(message.peerId);
-      if (!peer) return; // ICE may arrive after an output was stopped or replaced.
-      if (peer.publisher !== socket && peer.receiver !== socket) throw new Error("This connection has no live peer permission.");
-      options.send(peer.publisher === socket ? peer.receiver : peer.publisher, message);
-    },
-    closePlayback(playbackId: string) {
-      const changed = new Set<string>();
-      for (const peer of [...peers.values()]) if (peer.playbackId === playbackId) { removePeer(peer); changed.add(peer.sourceId); }
-      for (const sourceId of changed) announce(sourceId);
-    },
-    disconnect(socket: Socket) {
-      for (const [sourceId, publication] of [...sources]) if (publication.owner === socket) end(sourceId);
-      const changed = new Set<string>();
-      for (const peer of [...peers.values()]) if (peer.receiver === socket) { peers.delete(peer.peerId); changed.add(peer.sourceId); }
-      for (const sourceId of changed) announce(sourceId);
-    },
-    close() { for (const sourceId of [...sources.keys()]) end(sourceId); },
+    failed: end,
+    disconnect(socket: Socket) { for (const [sourceId, publication] of sources) if (publication.owner === socket) end(sourceId); },
+    close() { for (const sourceId of sources.keys()) end(sourceId); },
   };
 }

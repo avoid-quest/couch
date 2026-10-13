@@ -1,90 +1,76 @@
-import type { Action, PlaybackCommand, PlayerState, ServerMessage } from "../../shared/protocol";
-import type { LivePeer, LiveSelection, LiveSignal, LiveSignalMessage, LiveSource } from "../../shared/live-input";
+import type { Action } from "../../shared/protocol";
+import type { LiveSelection, LiveSource } from "../../shared/live-input";
 import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
-import { attachLive, detachLive, play } from "./renderer";
 
-type Load = Extract<PlaybackCommand, { type: "load" }>;
-type Peer = { connection: RTCPeerConnection; candidates: (RTCIceCandidateInit | null)[]; work: Promise<void> };
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; published: boolean };
-type Receiver = Peer & { peerId: string; load: Load; stream: MediaStream; local: boolean; timeout?: ReturnType<typeof setTimeout> };
+type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; published: boolean; recorder?: MediaRecorder; socket?: WebSocket; cancel?: () => void };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 
-// Owned by the authenticated session, so changing UI routes never ends capture.
-export function createLiveSession(options: { iceServers?: RTCIceServer[]; command: (action: Action) => Promise<void>; send: (message: LiveSignalMessage) => void; failed: (state: PlayerState) => void; published: (source: LiveSource | null) => void }) {
+// Capture belongs to the authenticated session. Core turns this one upload into
+// an ordinary live media source; receivers use the same player and clocks as TV.
+export function createLiveSession(options: { command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
   let generation = 0;
   let closed = false;
   let starting = false;
   let publication: Publication | undefined;
-  let receiver: Receiver | undefined;
-  const publishers = new Map<string, Peer>();
-  const closeReceiver = () => {
-    if (!receiver) return;
-    clearTimeout(receiver.timeout);
-    receiver.connection.close();
-    if (!receiver.local) stopTracks(receiver.stream);
-    receiver = undefined;
-    detachLive();
-  };
   const closePublication = () => {
     generation++;
     const current = publication;
     publication = undefined;
-    for (const peer of publishers.values()) peer.connection.close();
-    publishers.clear();
+    current?.cancel?.();
+    if (current?.recorder?.state !== "inactive") current?.recorder?.stop();
+    current?.socket?.close();
     if (current) stopTracks(current.capture);
     options.published(null);
-  };
-  const failure = (load: Load, reason: unknown) => {
-    if (receiver?.load !== load || closed) return;
-    clearTimeout(receiver.timeout);
-    receiver.connection.close();
-    options.failed({ playbackId: load.playbackId, status: "error", buffering: false, position: 0, duration: null, volume: load.liveOutput?.volume ?? 100, seekable: false, speed: 1, audioDelay: 0, subtitleDelay: 0, tracks: [], error: reason instanceof Error ? reason.message : "The live connection failed." });
-  };
-  const makePeer = (peerId: string): Peer => {
-    const connection = new RTCPeerConnection({ iceServers: options.iceServers ?? [] });
-    const peer: Peer = { connection, candidates: [], work: Promise.resolve() };
-    connection.onicecandidate = event => { if (!closed && connection.signalingState !== "closed") options.send({ type: "liveSignal", peerId, signal: { candidate: event.candidate ? { ...event.candidate.toJSON(), candidate: event.candidate.candidate } : null } }); };
-    return peer;
-  };
-  const receiveSignal = (peer: Peer, signal: LiveSignal, peerId: string, load?: Load) => {
-    peer.work = peer.work.then(async () => {
-      if (peer.connection.signalingState === "closed") return;
-      if (signal.description) {
-        await peer.connection.setRemoteDescription(signal.description);
-        for (const candidate of peer.candidates.splice(0)) await peer.connection.addIceCandidate(candidate ?? undefined);
-        if (signal.description.type === "offer") {
-          await peer.connection.setLocalDescription(await peer.connection.createAnswer());
-          const description = peer.connection.localDescription!;
-          if (peer.connection.connectionState !== "closed") options.send({ type: "liveSignal", peerId, signal: { description: { type: "answer", sdp: description.sdp } } });
-        }
-      } else if (signal.candidate !== undefined) {
-        if (peer.connection.remoteDescription) await peer.connection.addIceCandidate(signal.candidate ?? undefined);
-        else if (peer.candidates.length < 64) peer.candidates.push(signal.candidate);
-      }
-    }).catch(reason => { if (load) failure(load, reason); });
-  };
-  const attach = (current: Receiver) => {
-    if (receiver !== current || !current.load.liveOutput || closed) return;
-    attachLive(current.load.playbackId, current.stream, current.load.liveOutput);
-  };
-  const startPublisher = (description: LivePeer) => {
-    const current = publication;
-    if (!current || publishers.has(description.peerId) || receiver?.local && receiver.peerId === description.peerId) return;
-    const peer = makePeer(description.peerId);
-    publishers.set(description.peerId, peer);
-    for (const track of current.stream.getTracks()) if (track.kind === "audio" ? description.sound : description.picture) peer.connection.addTrack(track, current.stream);
-    peer.work = (async () => {
-      await peer.connection.setLocalDescription(await peer.connection.createOffer());
-      if (closed || publication !== current || publishers.get(description.peerId) !== peer || peer.connection.signalingState === "closed") return;
-      options.send({ type: "liveSignal", peerId: description.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
-    })().catch(() => {});
   };
   const end = async () => {
     const sourceId = publication?.source.id;
     closePublication();
     if (sourceId) await options.command({ type: "endLive", sourceId });
   };
+  const upload = (current: Publication, key: string) => new Promise<void>((resolve, reject) => {
+    let ready = false;
+    const deadline = setTimeout(() => fail(new Error("The live input didn't start. Check the connection and try again.")), 30_000);
+    const fail = (error: Error) => {
+      if (publication !== current) return;
+      clearTimeout(deadline);
+      if (ready) { options.failed(error); void end().catch(() => {}); }
+      else reject(error);
+    };
+    current.cancel = () => { clearTimeout(deadline); if (!ready) reject(new Error("Capture was canceled.")); };
+    try {
+      if (typeof MediaRecorder === "undefined") throw new Error("This browser cannot share a live input.");
+      const types = current.source.video
+        ? ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
+        : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = types.find(type => MediaRecorder.isTypeSupported(type));
+      if (!mimeType) throw new Error("This browser cannot encode this live input.");
+      // The recording standard supports keyframe intervals; older engines ignore
+      // this option, and TypeScript's DOM declarations don't include it yet.
+      const recording = { mimeType, audioBitsPerSecond: 192_000, videoBitsPerSecond: 5_000_000, videoKeyFrameIntervalDuration: 1000 };
+      const recorder = current.recorder = new MediaRecorder(current.stream, recording);
+      const socket = current.socket = options.upload(current.source.id, key);
+      recorder.ondataavailable = event => {
+        if (!event.data.size || publication !== current || socket.readyState !== WebSocket.OPEN) return;
+        if (socket.bufferedAmount + event.data.size > 4 * 1024 * 1024) { fail(new Error("The connection cannot keep up with this live input. Try a lower capture quality.")); return; }
+        // Timeslices form ONE continuous recording. Keep their byte order and fit
+        // each message within Core's existing WebSocket frame limit.
+        for (let at = 0; at < event.data.size; at += 64 * 1024) socket.send(event.data.slice(at, at + 64 * 1024));
+      };
+      recorder.onerror = () => fail(new Error("The live input stopped recording. Start sharing again."));
+      socket.onopen = () => { if (publication === current) { try { recorder.start(250); } catch { fail(new Error("The live input could not start recording.")); } } };
+      socket.onmessage = event => {
+        if (publication !== current) return;
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === "ready") { ready = true; clearTimeout(deadline); resolve(); }
+          else if (message.type === "error") fail(new Error(typeof message.error === "string" ? message.error : "The live input failed."));
+        } catch { fail(new Error("Couch sent an invalid live input response.")); }
+      };
+      socket.onerror = () => fail(new Error("The live input lost its connection to Couch."));
+      socket.onclose = () => fail(new Error("The live input lost its connection to Couch."));
+    } catch (reason) { fail(reason instanceof Error ? reason : new Error("The live input could not start.")); }
+  });
   return {
     async audioInputs(): Promise<MediaDeviceInfo[]> {
       if (closed || starting || publication) throw new Error("Stop sharing before choosing another audio input.");
@@ -118,7 +104,7 @@ export function createLiveSession(options: { iceServers?: RTCIceServer[]; comman
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const quality = selection.videoQuality ?? "1080p";
         const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
-        // Bound capture before encoding for each receiver. Audio-only display capture
+        // Bound capture before encoding its single upload. Audio-only display capture
         // still needs a video track, but none of those pixels are transmitted.
         const video: MediaTrackConstraints = selection.kind === "system-audio"
           ? { width: { max: 320 }, height: { max: 180 }, frameRate: { max: 1 } }
@@ -136,9 +122,12 @@ export function createLiveSession(options: { iceServers?: RTCIceServer[]; comman
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
-        await options.command({ type: "publishLive", sourceId: source.id, kind: source.kind, name: source.name, audio: source.audio, video: source.video });
+        const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
+        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: source.kind, name: source.name, audio: source.audio, video: source.video });
         if (closed || attempt !== generation || publication !== current) throw new Error("Capture was canceled.");
         current.published = true;
+        await upload(current, uploadToken);
+        if (closed || attempt !== generation || publication !== current) throw new Error("Capture was canceled.");
         options.published(source);
         return source;
       } catch (reason) {
@@ -152,47 +141,13 @@ export function createLiveSession(options: { iceServers?: RTCIceServer[]; comman
     },
     end,
     observe(sources: LiveSource[]) {
-      if (publication?.published && !sources.some(source => source.id === publication!.source.id)) closePublication();
-    },
-    receive(message: Extract<ServerMessage, { type: "livePeers" | "liveSignal" }>) {
-      if (message.type === "liveSignal") {
-        const peer = receiver?.peerId === message.peerId && !receiver.local ? receiver : publishers.get(message.peerId);
-        if (peer) receiveSignal(peer, message.signal, message.peerId, receiver === peer ? receiver.load : undefined);
-        return;
+      if (publication?.published && !sources.some(source => source.id === publication!.source.id)) {
+        // State and upload errors use different sockets. Whichever arrives first
+        // must retire capture and tell the publisher why sharing disappeared.
+        if (!starting) options.failed(new Error("Couch stopped this live input. Start sharing again."));
+        closePublication();
       }
-      if (publication?.source.id !== message.sourceId) return;
-      const wanted = new Set(message.peers.map(peer => peer.peerId));
-      for (const [peerId, peer] of publishers) if (!wanted.has(peerId)) { peer.connection.close(); publishers.delete(peerId); }
-      for (const peer of message.peers) startPublisher(peer);
     },
-    play(command: PlaybackCommand): boolean {
-      if (command.type === "load") {
-        closeReceiver();
-        if (!command.liveSourceId || !command.livePeerId || !command.liveOutput) return false;
-        const peer = makePeer(command.livePeerId);
-        const local = publication?.source.id === command.liveSourceId;
-        const stream = local ? new MediaStream(publication!.stream.getTracks().filter(track => track.kind === "audio" ? command.liveOutput!.sound : command.liveOutput!.picture)) : new MediaStream();
-        const current: Receiver = { ...peer, peerId: command.livePeerId, load: command, stream, local };
-        receiver = current;
-        // Retire URL media immediately, while the new peer connects.
-        play({ type: "stop" });
-        current.connection.ontrack = event => {
-          if (receiver !== current) return;
-          if (!current.stream.getTracks().includes(event.track)) current.stream.addTrack(event.track);
-          attach(current);
-        };
-        current.connection.onconnectionstatechange = () => {
-          if (current.connection.connectionState === "connected") clearTimeout(current.timeout);
-          if (current.connection.connectionState === "failed") failure(command, new Error("The live connection failed. Stop and play this source again."));
-        };
-        if (!local) current.timeout = setTimeout(() => failure(command, new Error("Couldn't connect to this live source. Check network access or try another browser.")), 30_000);
-        if (local) attach(current);
-        return true;
-      }
-      if (command.type === "stop") { closeReceiver(); return false; }
-      if (receiver && command.type === "volume") { receiver.load.liveOutput!.volume = command.volume; play(command); return true; }
-      return false;
-    },
-    close() { closed = true; closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
+    close() { closed = true; closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
   };
 }

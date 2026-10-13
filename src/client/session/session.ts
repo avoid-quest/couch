@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
@@ -56,7 +57,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const timer = setTimeout(() => {
         pending.current.delete(requestId);
         reject(new Error("No reply from Couch. Check before retrying."));
-      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
+      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality" || action.type === "publishLive") ? 35_000 : 8_000);
       pending.current.set(requestId, { resolve, reject, timer });
       const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
       try {
@@ -120,7 +121,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? location.origin;
-      let iceServers: RTCIceServer[] = [];
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
@@ -161,12 +161,6 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (disposed) return;
           setIdentity(caller);
           setCredentialRejected(false);
-          const ice = await fetch(`${origin}/api/live/ice-servers`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
-          if (disposed) return;
-          if (ice.status === 401) { pairingRequired(); return; }
-          if (ice.status === 403) { setStatus("connection-rejected"); return; }
-          if (!ice.ok) throw new Error("Server unavailable");
-          iceServers = await ice.json() as RTCIceServer[];
         }
       } catch {
         if (!disposed) { setStatus("server-unavailable"); retryLater(); }
@@ -202,7 +196,14 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
-        live.current = createLiveSession({ iceServers, command: action => command(action), send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, failed: state => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage)); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
+        live.current = createLiveSession({ command: action => command(action), upload: (sourceId, key) => {
+          const upload = new URL("/api/live/upload", origin);
+          upload.protocol = upload.protocol === "https:" ? "wss:" : "ws:";
+          upload.searchParams.set("sourceId", sourceId);
+          upload.searchParams.set("token", credentials.token);
+          upload.searchParams.set("key", key);
+          return new WebSocket(upload);
+        }, failed: error => { if (isCurrent()) toast.error(error.message); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -242,9 +243,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
           void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
-          if (!live.current?.play(message.command)) play(message.command);
-        } else if (message.type === "livePeers" || message.type === "liveSignal") {
-          live.current?.receive(message);
+          play(message.command);
         } else if (message.type === "sendspin") {
           listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "text") {

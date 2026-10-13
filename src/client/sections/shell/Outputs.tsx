@@ -58,7 +58,6 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
     <SheetContent side="bottom" className="max-h-[85dvh] scroll-py-6 gap-4 overflow-y-auto px-(--gutter) pb-6 [&_[data-slot=slider]]:min-h-11 [&_[data-slot=toggle]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
       <SheetHeader className="shrink-0 gap-0.5 px-0 pr-12 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="[overflow-wrap:anywhere]">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
       <p className="shrink-0 text-sm text-muted-foreground">{host ? `This channel plays only on ${host}.` : source?.audio === false ? "This source has no sound. Enable Picture on devices to watch it." : <>Raise a device level to add its sound; at 0 its sound is off. All trims selected sound you can control and keeps device levels.{isTvPresentation() && " Press OK to adjust a level, then OK or Back to finish."}</>}</p>
-      {playback?.liveSourceId && <p className="shrink-0 text-sm text-muted-foreground">Live sound and picture arrive together on each device. Devices may play at slightly different times.</p>}
       <ItemGroup className="shrink-0 gap-0 border-y">
       {/* The same All command and stored trim; this row never recruits devices. */}
       <Item role="listitem" className="grid grid-cols-1 gap-2 rounded-none border-0 px-0 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] md:gap-x-6">
@@ -101,7 +100,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
                 </div>
                 <Toggle variant="outline" pressed={device.muted} disabled={!audio || locked} aria-label={`Mute ${device.name}`} onPressedChange={muted => void run({ type: "mute", deviceId: device.id, muted })} className={cn("shrink-0", inverts)}>Mute</Toggle>
               </div>
-              {audio && sound && current?.delay !== undefined && !locked && !playback?.liveSourceId && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+              {audio && sound && current?.delay !== undefined && !locked && <Delay name={device.name} delay={current.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
             </div>
           </Item></Fragment>;
         })}

@@ -200,8 +200,22 @@ export function openStore(path: string, remoteControlEnabled = false) {
         mixTrim() { return row()?.mixTrim ?? 100; },
         saveMixTrim(level: number) { save("mixTrim", level); },
         savePlaybackContinuation(context: PlaybackContinuation | null) { save("continuation", context ? JSON.stringify(context) : null); },
-        saveQueueCursor(entryId: string, beforeCommit?: () => void) { db.transaction(() => { save("cursor", entryId); beforeCommit?.(); })(); },
-        saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) { db.transaction(() => { save("queue", JSON.stringify(queue)); save("cursor", cursorEntryId); })(); },
+        saveQueueCursor(entryId: string, beforeCommit?: () => void) { db.transaction(() => {
+          const previous = row()?.cursor ?? null;
+          save("cursor", entryId); beforeCommit?.();
+          // A live input is usable only while its capture exists, never after restart.
+          const current = row();
+          if (current?.cursor === entryId) {
+            const queue = JSON.parse(current.queue) as QueueEntry[];
+            if (!queue.some(entry => entry.id === entryId)) save("cursor", queue.some(entry => entry.id === previous) ? previous : null);
+          }
+        })(); },
+        saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) { db.transaction(() => {
+          const retained = queue.filter(entry => !entry.liveSourceId);
+          const cursor = queue.findIndex(entry => entry.id === cursorEntryId);
+          save("queue", JSON.stringify(retained));
+          save("cursor", queue.slice(0, cursor + 1).findLast(entry => !entry.liveSourceId)?.id ?? null);
+        })(); },
       };
     },
     profiles() { return db.query<WatchingProfile & { confirmedName: number }, []>("SELECT id, name, confirmedName FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all().map(profileView); },

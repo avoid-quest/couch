@@ -64,13 +64,13 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const playing = player?.status === "playing";
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
-  const liveSource = state?.liveSources?.find(source => source.id === current?.liveSourceId);
-  const audioOnly = liveSource ? !liveSource.video : isRadio(current) || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const playback = state?.playbacks?.find(playback => playback.id === state.playback);
+  const audioOnly = playback?.audioOnly || isRadio(current) || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
   const at = playsOn(state);
   const elsewhere = !!at?.elsewhere;
   // An mpv channel shows its picture in mpv's own window, so this one shows the artwork.
-  const separate = !!state?.playbacks?.find(playback => playback.id === state.playback)?.hostOnly && showsPicture(state);
+  const separate = !!playback?.hostOnly && showsPicture(state);
   const picture = showsPicture(state) && !separate;
   const artworkStage = audioOnly || !picture;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
@@ -239,7 +239,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
             {state && <WhereItPlays state={state} run={run} className="size-11" />}
             <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
-            {!current?.liveSourceId && <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>}
+            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
             {!tvPresentation && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>

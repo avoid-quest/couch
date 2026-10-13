@@ -4,7 +4,7 @@ import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
 import type { DeviceSharing } from "./device-sharing";
-import type { LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
+import type { LiveSource } from "./live-input";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
@@ -88,7 +88,7 @@ export type SessionState = {
 };
 
 export type Action =
-  | { type: "publishLive"; sourceId: string; kind: LiveSource["kind"]; audio: boolean; video: boolean; name?: string }
+  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: LiveSource["kind"]; audio: boolean; video: boolean; name?: string }
   | { type: "endLive"; sourceId: string }
   | { type: "playLive"; sourceId: string; deviceId?: string }
   | { type: "sharing"; sharing: DeviceSharing }
@@ -134,8 +134,6 @@ export type PlayerMessage = { type: "player"; state: PlayerState };
 export type UpdateReply = { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
-  | { type: "livePeers"; sourceId: string; peers: LivePeer[] }
-  | LiveSignalMessage
   | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
@@ -156,7 +154,7 @@ export type PlaybackCommand =
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
   // hls: Pass-through found an HLS playlist, which hls.js plays where the engine can't.
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; liveSourceId?: string; livePeerId?: string; liveOutput?: { picture: boolean; sound: boolean; volume: number }; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
   | { type: "follow"; playbackId: string; follow: Follow | null }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
