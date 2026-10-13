@@ -395,7 +395,8 @@ Messages:
   (formerly Solo) keeps the Playback only on that Device,
   with its picture when the Playback has one, so moving a Playback is one
   press. It is unavailable while another device's private output plays in it,
-  since that output would stay. A shared source waiting for
+  or a publisher's private output waits to return after its source, since that
+  output would stay; that row says Private. A shared source waiting for
   receivers opens Where it plays for each request to choose; dismissed, it
   stays closed through unrelated updates and when the mini player gives way to
   Now Playing, since the session, not the Sheet, remembers the dismissal. A pressed

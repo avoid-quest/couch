@@ -48,16 +48,19 @@ changes only from that device's own connection, keeps the last choice while the
 device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
-self-join. Only here is exclusive: Core refuses it, changing nothing, while another
-device's private output would stay behind, checking again where the move lands
-after the item resolves. Joining a Playback is allowed only where
+self-join. Only here is exclusive, across the queue too: Core refuses it, changing
+nothing, while another device's private output, or a publisher's private `held`
+output, would stay behind or return, checking again where the move lands after the
+item resolves. Joining a Playback is allowed only where
 the joining device could already control it, because joining brings its group
 transport and queue controls; direct output changes still require that device's
 sharing consent. A fully private Playback can only be controlled by its output
 devices, and joining one is refused. A publisher's output held out of its own
-source (`held`) counts as one of those for control, so a private device joining
-the publisher's playback does not take it over; it is retired when the device is
-unpaired or plays elsewhere, and returns when another item becomes current. The last Sendspin delay each speaker reported
+source (`held`) is part of that Playback's mix: it counts for control, joining,
+what the publisher looks at and what its ordinary Play keeps, so a private device
+joining the publisher's playback does not take it over. Consent applies to it per
+channel as to an output. It is retired when the device is unpaired or plays
+elsewhere, and returns when another item becomes current. The last Sendspin delay each speaker reported
 is kept in `device_sync_delay`, so its row shows it after a restart until the
 speaker reports again; the speaker's own player keeps the value it applies.
 Revoking sharing removes remote output channels and stops their renderer or

@@ -68,9 +68,10 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   // The Playback's Devices first, then this one and the other online ones that share, and a source's
   // publisher; an offline Device only while it is an output.
   const devices = (state.devices ?? []).filter(device => output(device.id) || device.id === source?.deviceId || device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
-  // Only here is exclusive, so another device's private output in this playback makes it unavailable.
+  // Only here is exclusive, so another device's private output in this playback, or a held publisher's
+  // that returns after its source, makes it unavailable.
   const sharingOf = (id: string) => state.devices?.find(device => device.id === id)?.sharing;
-  const privately = outputs.filter(item => item.deviceId !== here && (item.picture && sharingOf(item.deviceId)?.video !== true || item.sound && sharingOf(item.deviceId)?.audio !== true));
+  const privately = [...outputs, ...playback?.held ? [playback.held] : []].filter(item => item.deviceId !== here && (item.picture && sharingOf(item.deviceId)?.video !== true || item.sound && sharingOf(item.deviceId)?.audio !== true));
   const trim = state.mixTrim ?? 100;
   const waiting = !!source && !outputs.length;
   // An mpv channel plays only on the server's own Device, its one output.
@@ -98,11 +99,11 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
           const speakers = mine || device.sharing?.audio === true;
           const audio = source?.audio !== false && !capturing && speakers, video = !capturing && (mine || device.sharing?.video === true);
           const sound = !!current?.sound, locked = !device.online || !!host && !current;
-          const occupied = served(state, device.id), channel = occupied?.outputs.find(item => item.deviceId === device.id);
+          const occupied = served(state, device.id), channel = occupied?.outputs.find(item => item.deviceId === device.id) ?? (playback?.held?.deviceId === device.id ? playback.held : undefined);
           const privatePicture = !!channel?.picture && device.sharing?.video !== true;
           const privateSound = !!channel?.sound && device.sharing?.audio !== true;
           const privateOutput = privatePicture || privateSound;
-          const protectedElsewhere = occupied?.id !== state.playback && privateOutput && !mine;
+          const protectedElsewhere = !!occupied && occupied.id !== state.playback && privateOutput && !mine;
           const canSolo = !locked && (audio || video && !playback?.audioOnly) && (!privateOutput || mine) && !privately.some(item => item.deviceId !== device.id);
           const only = outputs.length > 0 && outputs.every(item => item.deviceId === device.id);
           const status = outputStatus(state, device, state.playback);

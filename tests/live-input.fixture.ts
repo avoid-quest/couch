@@ -70,7 +70,7 @@ setInterval(() => {}, 1000);
     } };
   }
   const publisher = await connect(0), receiver = await connect(1);
-  const uploadUrl = (sourceId: string, key: string, device = 0) => `${hub.origin.replace("http:", "ws:")}/api/live/upload?${new URLSearchParams({ sourceId, key, token: identities[device]!.token })}`;
+  const uploadUrl = (sourceId: string, key: string, device = 0) => `${hub.origin.replace("http:", "ws:")}/api/live/upload?${new URLSearchParams({ sourceId, key, token: device === -1 ? hostIdentity.token : identities[device]!.token })}`;
   const uploadToken = "1".repeat(64);
   return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl,
     // Core restarts on the same database; every socket and speaker reconnects itself.
