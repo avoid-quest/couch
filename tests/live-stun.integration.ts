@@ -7,7 +7,8 @@ import { networkInterfaces } from "node:os";
 import { serveLiveStun } from "../src/server/live-stun";
 import { createHub } from "../src/server/hub";
 import { selectLan } from "../src/server/lan-listener";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { get } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -105,4 +106,45 @@ test("Core advertises LAN STUN only while sharing is listening and closes UDP wi
   } finally {
     client.close();
   }
+});
+
+test("Occupied LAN STUN leaves HTTPS sharing up, unadvertised, and retries on the next listen", { skip: !lan, timeout: 10000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-live-stun-busy-"));
+  const previousInterface = process.env.COUCH_LAN_INTERFACE, previousAddress = process.env.COUCH_LAN_ADDRESS;
+  process.env.COUCH_LAN_INTERFACE = lan!.name;
+  process.env.COUCH_LAN_ADDRESS = lan!.address;
+  const hostToken = "h".repeat(64);
+  const occupied = createSocket("udp4");
+  let hub: Awaited<ReturnType<typeof createHub>> | undefined;
+  t.after(async () => {
+    try { occupied.close(); } catch {}
+    await hub?.close();
+    if (previousInterface === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previousInterface;
+    if (previousAddress === undefined) delete process.env.COUCH_LAN_ADDRESS; else process.env.COUCH_LAN_ADDRESS = previousAddress;
+    await rm(directory, { recursive: true, force: true });
+  });
+  occupied.bind(0, lan!.address);
+  await once(occupied, "listening");
+  const port = occupied.address().port;
+  hub = await createHub({ databasePath: join(directory, "couch.sqlite"), hostToken, hostname: "127.0.0.1", port, managedLan: true, remoteControlEnabled: true });
+  const https = `https://${lan!.address}:${port}`;
+  const deadline = Date.now() + 3000;
+  while (!hub.urls.includes(https)) { assert.ok(Date.now() < deadline, "LAN HTTPS did not start"); await new Promise(resolve => setTimeout(resolve, 10)); }
+  const ca = await readFile(join(directory, "tls/cert.pem"), "utf8");
+  const status = await new Promise<number | undefined>((resolve, reject) => {
+    const request = get(`${https}/api/health`, { ca, allowPartialTrustChain: true, agent: false }, response => { response.resume(); response.on("end", () => resolve(response.statusCode)); });
+    request.on("error", reject); request.setTimeout(1000, () => request.destroy(new Error("TLS request timed out")));
+  });
+  assert.equal(status, 200);
+  const connection = () => fetch(`${hub!.origin}/api/live/ice-servers`, { headers: { Authorization: `Bearer ${hostToken}` } }).then(response => response.json());
+  assert.deepEqual(await connection(), []);
+  const sharing = (enabled: boolean) => fetch(`${hub!.origin}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
+  occupied.close();
+  assert.equal((await sharing(false)).status, 200);
+  assert.equal((await sharing(true)).status, 200);
+  assert.deepEqual(await connection(), [{ urls: `stun:${lan!.address}:${port}` }]);
+  await assert.rejects(serveLiveStun(lan!, port), { code: "EADDRINUSE" });
+  assert.equal((await sharing(false)).status, 200);
+  const replacement = await serveLiveStun(lan!, port);
+  await replacement.stop();
 });

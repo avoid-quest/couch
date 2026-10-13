@@ -164,6 +164,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const peer = current.peer = makePeer(current.peerId);
         peer.connection.ontrack = event => {
           if (receiver !== current) return;
+          // Only the channels Core routed to this output play, whatever the publisher sends.
+          const { picture, sound } = command.liveOutput!;
+          if (!(event.track.kind === "video" ? picture : event.track.kind === "audio" && sound)) { event.track.stop(); return; }
           if (!stream.getTracks().includes(event.track)) stream.addTrack(event.track);
           streamChanged(command.playbackId, stream);
         };

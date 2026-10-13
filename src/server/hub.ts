@@ -109,7 +109,7 @@ export async function createHub(options: HubOptions) {
     savedDelay: id => store.deviceSyncDelay(id), saveDelay: (id, delay) => store.saveDeviceSyncDelay(id, delay),
     admit: (id, loopback) => id === store.hostDevice()?.id ? loopback : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast() });
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
-  let lan: ReturnType<typeof createLanListener<Listener>> | undefined;
+  let lan: ReturnType<typeof createLanListener<Listener & { stun?: boolean }>> | undefined;
   let lanError: string | null = null;
   let suggestedDomain = "";
   const originSettings = () => ({ domain: store.originDomain(), suggested: suggestedDomain });
@@ -266,7 +266,7 @@ export async function createHub(options: HubOptions) {
   const requireReceiver = (playback: Playback, deviceId: string) => { if (capturing(playback, deviceId)) throw new ControllerError(sharingSource(deviceId), 409); };
   // Counted from Core's start time, so a request after a restart is never one a window already dismissed.
   let choices = Date.now();
-  const choose = (playback: Playback, deviceId: string) => { playback.choosing = ++choices; playback.session.wait(sharingSource(deviceId)); };
+  const choose = (playback: Playback, deviceId: string, message = sharingSource(deviceId)) => { playback.choosing = ++choices; playback.session.wait(message); };
   const allows = (output: Output, actor: string) => { const allowed = outputFor(output.deviceId, actor); return (!output.picture || allowed.picture) && (!output.sound || allowed.sound); };
   const requireOutput = (output: Output, actor: string) => {
     if (!allows(output, actor)) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !outputFor(output.deviceId, actor).picture ? "video" : "audio"}.`, 403);
@@ -741,20 +741,30 @@ export async function createHub(options: HubOptions) {
   const applyConsent = () => {
     if (closed) return;
     for (const playback of all()) {
-      let changed = false;
+      let changed: string | undefined;
       if (playback.held) { const held = consented(playback.held); playback.held = held.picture || held.sound ? held : undefined; }
       for (const output of [...playback.outputs]) {
         const next = consented(output);
         if (next.picture === output.picture && next.sound === output.sound) continue;
-        changed = true;
+        changed = output.deviceId;
         if (output.picture && !next.picture) for (const tab of playback.screens.keys()) if (deviceOf(tab) === output.deviceId) { send(tab, playerCommand({ type: "stop" })); playback.screens.delete(tab); }
         if (!next.picture && !next.sound) leave(playback, output.deviceId);
         else playback.outputs = playback.outputs.map(item => item === output ? next : item);
       }
+      // A live source plays only where an output uses it. Once consent leaves none, the shared
+      // outputs it cannot use leave too, and it waits in Where it plays; private ones stay. As when
+      // consent ends entirely, their controllers follow its publisher, where the choice resumes it.
+      const source = changed && live.source(sourceOf(playback) ?? "");
+      if (source && !playback.outputs.some(output => output.picture && source.video || output.sound && source.audio)) {
+        const left = playback.outputs.filter(output => !output.local).map(output => output.deviceId);
+        for (const deviceId of left) leave(playback, deviceId);
+        follow([changed!, ...left], source.deviceId);
+        choose(playback, changed!, `${nameOf(changed!)} is not sharing an output this source uses. Choose where it plays.`);
+      }
       const trimChanged = refreshTrims(playback);
       if (changed || trimChanged) {
         reconcile(playback);
-        if (changed && !playback.synced && playback.outputs.length && mpvPlayback !== playback) playback.session.reload();
+        if (changed && !playback.choosing && !playback.synced && playback.outputs.length && mpvPlayback !== playback) playback.session.reload();
         else if (trimChanged && !playback.synced) deliver(playback, { type: "volume", volume: levelOf(playback) });
       }
     }
@@ -1210,7 +1220,7 @@ export async function createHub(options: HubOptions) {
     const caller = identity();
     if (!caller) return cors(request, json({ error: "Pair this device first." }, 401));
     if (url.pathname === "/api/live/ice-servers") return cors(request, request.method === "GET"
-      ? json([...(lan?.server && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(options.liveTurn ? [options.liveTurn] : [])])
+      ? json([...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(options.liveTurn ? [options.liveTurn] : [])])
       : new Response(null, { status: 405, headers: { Allow: "GET" } }));
     if (upload) {
       const sourceId = url.searchParams.get("sourceId") ?? "", key = url.searchParams.get("key") ?? "";
@@ -1627,10 +1637,9 @@ export async function createHub(options: HubOptions) {
       start: async (network, listenPort) => {
         const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: options.allowLanHttp && listenPort === port } });
         if (listenPort !== port) return listener;
-        try {
-          const stun = await serveLiveStun(network, port);
-          return { port: listener.port, stop: async () => { await Promise.all([listener.stop(), stun.stop()]); } };
-        } catch (error) { await listener.stop(); throw error; }
+        // STUN only adds address candidates; HTTPS sharing and TURN work without it.
+        const stun = await serveLiveStun(network, port).catch(error => { console.error("Couch: live address discovery is unavailable.", error); return null; });
+        return { port: listener.port, stun: !!stun, stop: async () => { await Promise.all([listener.stop(), stun?.stop()]); } };
       },
       changed: (next, error, suggested) => {
         lanError = error;

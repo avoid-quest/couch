@@ -109,7 +109,8 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
         }, 250);
         stream.timer.unref();
       })();
-      try { await stream.setup; }
+      // Ending the input answers at once; a helper lookup still in flight is cleaned up after it.
+      try { await Promise.race([stream.setup, stream.ready]); }
       catch (error) {
         fail(sourceId, stream, "Couch couldn't start the live input encoder.");
         throw error;

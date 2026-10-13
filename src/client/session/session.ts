@@ -12,6 +12,7 @@ import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
 import { createLiveSession } from "./live";
+import { replyDeadline } from "./reply-deadline";
 import type { LiveSelection } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
@@ -19,7 +20,7 @@ export type ClientSessionState = Omit<SessionState, "player"> & { player: Client
 
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
-type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = { resolve: () => void; reject: (error: Error) => void; timer?: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
 // getRandomValues works in any context, secure or not.
@@ -54,10 +55,11 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     }
     return new Promise<void>((resolve, reject) => {
       const requestId = createId();
-      const timer = setTimeout(() => {
+      const deadline = replyDeadline(action);
+      const timer = deadline === undefined ? undefined : setTimeout(() => {
         pending.current.delete(requestId);
         reject(new Error("No reply from Couch. Check before retrying."));
-      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality" || action.type === "publishLive") ? 35_000 : 8_000);
+      }, deadline);
       pending.current.set(requestId, { resolve, reject, timer });
       const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
       try {

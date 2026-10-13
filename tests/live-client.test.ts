@@ -74,7 +74,8 @@ const check = (source: string) => {
     ] } }, configurable: true });
     const { createLiveSession } = await import("./src/client/session/live.ts");
     const iceServers = [{ urls: "turn:relay.example:3478?transport=tcp", username: "test", credential: "test-only" }];
-    const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {} });
+    let publishing;
+    const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); if (action.type === "publishLive" && publishing) await publishing.promise; }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {} });
     const direct = (options = {}) => ({ type: "load", playbackId: "playing", source: "", liveSourceId: "source", livePeerId: "peer", liveOutput: { picture: true, sound: true, volume: 75 }, ...options });
     const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     ${source}
@@ -98,6 +99,30 @@ test("direct playback attaches the received stream to the normal renderer with a
   await flush(); await flush();
   assert.equal(peers[0].candidates.length, 1);
   assert.equal(signals.at(-1).signal.description.type, "answer");
+`));
+
+test("a receiver keeps only the channels Core routed to its output", () => check(`
+  const received = output => {
+    session.play(direct({ liveOutput: { ...output, volume: 75 }, livePeerId: String(peers.length) }));
+    const tracks = { picture: track("video"), sound: track("audio"), data: track("data") };
+    for (const item of Object.values(tracks)) peers.at(-1).ontrack({ track: item });
+    return { tracks, kept: attachments.at(-1).stream.getTracks() };
+  };
+  const picture = received({ picture: true, sound: false });
+  assert.deepEqual(picture.kept, [picture.tracks.picture]);
+  assert.equal(picture.tracks.sound.stopped, true, "an excluded track never plays");
+  const sound = received({ picture: false, sound: true });
+  assert.deepEqual(sound.kept, [sound.tracks.sound]);
+  assert.equal(sound.tracks.picture.stopped, true);
+  const both = received({ picture: true, sound: true });
+  assert.deepEqual(both.kept, [both.tracks.picture, both.tracks.sound]);
+  assert.ok([picture, sound, both].every(item => item.tracks.data.stopped), "an unexpected kind is discarded");
+  // A replaced receiver's late track joins neither stream.
+  const stale = peers.at(-2), late = track("video");
+  stale.ontrack({ track: late });
+  assert.ok(attachments.every(item => !item.stream.getTracks().includes(late)));
+  session.play({ type: "stop" });
+  assert.ok(both.kept.every(item => item.stopped));
 `));
 
 test("stalled direct playback reports its error through the normal renderer after 30 seconds", () => check(`
@@ -232,6 +257,30 @@ test("stopping or closing a pending upload cancels its deadline", () => check(`
   session.close();
   await nextRejected;
   assert.ok(captures.flatMap(stream => stream.getTracks()).every(track => track.stopped));
+`));
+
+test("Publish waits for Core however long its first FFmpeg lookup takes, and Cancel still releases capture", () => check(`
+    const { replyDeadline } = await import("./src/client/session/reply-deadline.ts");
+    assert.equal(replyDeadline({ type: "publishLive" }), undefined, "Core's reply, a lost connection or Cancel ends Publish");
+    assert.equal(replyDeadline({ type: "videoQuality" }), 35_000);
+    publishing = Promise.withResolvers();
+    const slow = session.start({ kind: "screen" });
+    await flush();
+    advance(10 * 60_000);
+    assert.equal(captures[0].getTracks()[0].stopped, false);
+    publishing.resolve();
+    await slow;
+    await session.end();
+    publishing = Promise.withResolvers();
+    const canceled = session.start({ kind: "screen" });
+    const rejected = assert.rejects(canceled, /stopped/);
+    await flush();
+    await session.end();
+    assert.ok(captures[1].getTracks().every(track => track.stopped));
+    assert.equal(commands.at(-1).type, "endLive");
+    publishing.reject(new Error("This input has stopped."));
+    await rejected;
+    assert.equal(uploads.length, 1, "a canceled Publish never uploads");
 `));
 
 test("upload backpressure ends sharing instead of growing an unbounded queue", () => check(`
