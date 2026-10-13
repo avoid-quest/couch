@@ -389,13 +389,14 @@ export async function createHub(options: HubOptions) {
   // A Device that joins another Playback is no longer held for this one: it is never reclaimed.
   const claim = (playback: Playback, deviceId: string) => { for (const other of all()) if (other !== playback && other.held?.deviceId === deviceId) other.held = undefined; };
   // Once the publisher's capture is no longer current, its output returns, unless it went elsewhere or lost consent.
-  // The load that follows plays a single output; outputs that span Devices form their group first.
+  // The load that follows plays a single output; outputs that span Devices form their group first, once
+  // `source` is current: Play reconciles after its item is committed, so it never reconciles against the outgoing one.
   const restore = (playback: Playback, source = live.source(sourceOf(playback) ?? "")) => {
     const held = playback.held!;
     playback.held = undefined;
     if (servedBy(held.deviceId) || !allows(held, held.local ? held.deviceId : "")) return;
     assign(playback, [...playback.outputs, held], source);
-    if (spans(playback)) reconcile(playback);
+    if (spans(playback) && live.source(sourceOf(playback) ?? "") === source) reconcile(playback);
   };
   // The selected mix moves to an item of `source`, however it was played: another publisher's held output
   // returns first; then this source's publisher is held.
