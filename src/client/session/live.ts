@@ -209,7 +209,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       const attempt = ++generation;
       let capture: MediaStream | undefined;
       try {
-        if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId });
+        const sound = selection.kind !== "screen" || selection.includeAudio !== false;
+        if (couchApp?.prepareCapture) await couchApp.prepareCapture({ kind: selection.kind, sourceId: selection.sourceId, audio: sound });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const quality = selection.videoQuality ?? "1080p";
         const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
@@ -220,7 +221,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
           : { ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: 30, max: 30 } };
         capture = selection.kind === "microphone"
           ? await navigator.mediaDevices.getUserMedia({ audio: { ...audio, ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}) }, video: false })
-          : await navigator.mediaDevices.getDisplayMedia({ video, audio: selection.kind === "screen" && selection.includeAudio === false ? false : audio });
+          : await navigator.mediaDevices.getDisplayMedia({ video, audio: sound && audio });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
         if (selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");

@@ -336,6 +336,20 @@ test("screen capture defaults to bounded video and unprocessed audio, with expli
   assert.equal(captureRequests[2].video.height, undefined);
 `));
 
+test("the desktop app is told which source to prepare and whether its sound is included", () => check(`
+  for (const selection of [{ kind: "screen", sourceId: "screen:1:0" }, { kind: "screen", sourceId: "window:2:0", includeAudio: false }, { kind: "system-audio", sourceId: "screen:1:0", includeAudio: false }, { kind: "microphone" }]) {
+    await session.start(selection);
+    await session.end();
+  }
+  assert.deepEqual(prepared.filter(Boolean), [
+    { kind: "screen", sourceId: "screen:1:0", audio: true },
+    { kind: "screen", sourceId: "window:2:0", audio: false },
+    { kind: "system-audio", sourceId: "screen:1:0", audio: true },
+    { kind: "microphone", sourceId: undefined, audio: true },
+  ]);
+  assert.deepEqual(captureRequests.slice(0, 3).map(request => !!request.audio), [true, false, true]);
+`, desktop));
+
 test("system audio retains only a small idle picture and never sends its video track", () => check(`
   const source = await session.start({ kind: "system-audio" });
   assert.equal(source.audio, true);
