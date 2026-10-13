@@ -113,6 +113,28 @@ test("cancel, expiry and navigation revoke display selections", async () => {
   await expect(h.capture.prepare({ kind: "screen", sourceId: "missing" })).rejects.toThrow();
 });
 
+test("a saved Couch address grants its window's origin and nothing else", async () => {
+  const h = harness();
+  h.selectCouch("https://couch.local:4100/");
+  h.navigate("https://couch.local:4100/find");
+  await h.capture.sources();
+  await h.capture.prepare({ kind: "screen", sourceId: screen.id });
+  expect(h.check("display-capture", {}, h.contents, "https://couch.local:4100")).toBe(true);
+  expect(h.check("display-capture", {}, h.contents, "https://foreign.example")).toBe(false);
+  expect(h.check("display-capture", { isMainFrame: false }, h.contents, "https://couch.local:4100")).toBe(false);
+  expect(h.display({ securityOrigin: "https://couch.local:4100" })).toEqual({ video: screen, audio: "loopback" });
+  h.navigate("https://other-couch.local:4100/");
+  await expect(h.capture.prepare({ kind: "microphone" })).rejects.toThrow("this computer's Couch");
+  for (const saved of [null, "", "couch.local:4100", "not an address"]) {
+    h.selectCouch(saved as string);
+    h.navigate("https://couch.local:4100/");
+    await expect(h.capture.sources()).rejects.toThrow("this computer's Couch");
+    expect(h.check("display-capture", {}, h.contents, "https://couch.local:4100")).toBe(false);
+    h.navigate("data:text/html,couch");
+    await expect(h.capture.sources()).rejects.toThrow("this computer's Couch");
+  }
+});
+
 test("macOS 14.0 keeps screen and microphone capture, while PC audio needs 14.2", async () => {
   const h = harness("darwin", "14.0");
   await h.capture.sources();

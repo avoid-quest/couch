@@ -553,7 +553,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status)) return;
       const live = loaded.radio || state.queue.find(entry => entry.id === state.currentEntryId)?.live;
       const { startPosition: _start, ...command } = loaded;
-      send({ ...command, ...(live ? {} : { startPosition: position }), paused: status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
+      send({ ...command, ...(live ? {} : { startPosition: position }), paused: pendingPause ?? status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
     },
     // No output is online: the Playback pauses where it is and waits (#644 Offline).
     wait(message: string) {

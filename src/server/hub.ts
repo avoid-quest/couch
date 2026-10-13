@@ -320,6 +320,16 @@ export async function createHub(options: HubOptions) {
     if (command.type === "stop") playback.loaded = undefined;
     if (command.type === "load") {
       const source = sourceId ? live.source(sourceId) : undefined;
+      // Outputs kept that it cannot use, such as a private picture of an audio-only source, wait with it
+      // in Where it plays when it loads again, as on a reconnect; one already waiting keeps its request.
+      // Another publisher's held output, which returns for this source, counts.
+      const kept = source ? [...playback.outputs, ...playback.held && playback.held.deviceId !== source.deviceId ? [playback.held] : []] : [];
+      if (source && kept.length && !kept.some(output => output.deviceId === source.deviceId || output.picture && source.video || output.sound && source.audio)) {
+        playback.loaded = command;
+        if (playback.choosing) playback.session.wait(stateOf(playback).player.error ?? sharingSource(source.deviceId));
+        else choose(playback, source.deviceId);
+        return;
+      }
       transition(playback, source);
       if (!source) playback.choosing = undefined;
       // With only its publisher selected, a shared source waits for Where it plays instead of failing.
@@ -693,6 +703,9 @@ export async function createHub(options: HubOptions) {
     } else if (!next.picture && !next.sound) leave(playback, deviceId);
     else playback.outputs = playback.outputs.map(output => output === current ? next : output);
     const playbackId = stateOf(playback).player.playbackId;
+    // As in sendTo, an output a waiting shared source uses starts it.
+    const source = live.source(sourceOf(playback) ?? "");
+    if (playback.choosing && source && playbackId && (next.picture && source.video || next.sound && source.audio)) await playback.session.command({ type: "pause", playbackId, paused: false }, authorize);
     if (deviceId === hostId() && (next.picture || next.sound) && playbackId && playback.hostMpv?.has(playbackId) && mpvPlayback !== playback) playback.session.reload();
     // A screen that joins a synced Playback loads the picture for itself and follows the clock.
     reconcile(playback);

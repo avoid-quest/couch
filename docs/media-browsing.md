@@ -73,17 +73,18 @@ group is picked. Play plays the channel; the menu offers Play on and Queue.
 The group Select, Filter and page live in the route (`/find?browse=live-tv`),
 so history restores them. A source without a guide still lists its channels.
 
-## Device inputs
+## Shared sources
 
-Device inputs use the same Sources setup, Browse rows, search results and Play on
-menu as other media. Configure capture in Settings → Sources → Device inputs,
-or open Add source from Find → Device inputs. Capture always belongs to the
+A device's live input uses the same Sources setup, Browse rows, search results
+and Play on menu as other media. Configure capture in Settings → Sources → This
+device, or open Find → Add source → This device. Capture always belongs to the
 device running that form, including for paired users without administrator access.
 The source picker uses two columns so its four tabs fit narrow dialogs without
 overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.
 
-Active inputs participate in Find's Device inputs and Live filters. Their player
-breadcrumb returns to `/find?browse=device-inputs`. Playback uses the same Now
+Active inputs appear as rows in Find's Browse list and in search results, under
+the Shared sources source filter and the Live kind filter. Their player
+breadcrumb returns to Find (`/find`). Playback uses the same Now
 Playing page, mini player, Playback settings, Up next and Where it plays controls
 as TV and radio. The usual picture stage displays video; audio-only inputs use
 the usual artwork stage. There is no separate live player or visualizer.
@@ -96,10 +97,11 @@ and saved while capture is active.
 
 A small Stop sharing action stays available throughout browsing while local
 capture is active. There is no separate capture panel on the Find landing page.
-The input reaches the normal player as HLS; multi-device sound uses the existing
-Sendspin clock and pictures follow it. The shared delivery buffer adds delay
-between capture and output. See [live inputs](live-inputs.md) for capture options,
-playback limits and physical synchronization checks.
+One receiving device gets the input over WebRTC in the normal player. Across
+several devices, the input reaches the normal player as HLS; sound uses the
+existing Sendspin clock and pictures follow it, and that shared delivery buffer
+adds delay between capture and output. See [live inputs](live-inputs.md) for
+capture options, playback limits and physical synchronization checks.
 
 ## Stack
 

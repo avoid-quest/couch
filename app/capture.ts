@@ -1,11 +1,13 @@
 import { desktopCapturer, session, systemPreferences, type WebContents, type WebFrameMain } from "electron";
 import type { CaptureSelection, CaptureSource } from "../src/shared/capture";
 
-const originOf = (url: string) => { try { return new URL(url).origin; } catch { return null; } };
+const originOf = (url: string | null) => { try { const { origin } = new URL(url!); return origin === "null" ? null : origin; } catch { return null; } };
 
 // Capture belongs to this app's current Couch page, including in Client mode.
 // Preparing a source grants one display request, never a persistent screen permission.
-export function createCapture(contents: () => WebContents | null, origin: () => string | null) {
+export function createCapture(contents: () => WebContents | null, address: () => string | null) {
+  // A saved address may differ from its window's origin, such as by a trailing slash.
+  const origin = () => originOf(address());
   let sources: CaptureSource[] = [];
   let pending: { frame: WebFrameMain; origin: string; selection: CaptureSelection; expires: number; issued: boolean } | null = null;
   let generation = 0;
