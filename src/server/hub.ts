@@ -184,7 +184,8 @@ export async function createHub(options: HubOptions) {
     // Its shared source had no receiving output: the first output chosen in Where it plays starts it. Each
     // request to choose counts up, so Where it plays opens again. held: the publisher's own output while its capture plays;
     // it keeps the control that output gave, and it returns when another item becomes current.
-    choosing?: number; held?: Output };
+    // entered: what a Play changes once the Session admits its item, before anything observes it.
+    choosing?: number; held?: Output; entered?: () => void };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
@@ -381,6 +382,8 @@ export async function createHub(options: HubOptions) {
     refreshTrims(playback);
     // Solo hands everything to one Device, which plays it directly.
     if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
+    // A group's speakers follow its outputs at once, so a publisher held out of them stops hearing its capture.
+    playback.synced?.members(members(playback));
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
     if (outputs[0]) playback.choosing = undefined;
     // Controllers of the publisher keep viewing its playback where it continues.
@@ -591,6 +594,7 @@ export async function createHub(options: HubOptions) {
       observe: player => subtitles.observe(player),
       stopped: playbackId => subtitles.stopped(playbackId),
       moved: (from, to) => subtitles.moved(from, to),
+      entered: () => playback.entered?.(),
     });
     playbacks.set(id, playback);
     return playback;
@@ -1458,9 +1462,15 @@ export async function createHub(options: HubOptions) {
               if (outputs.length && !outputs.some(output => usable(output) && newest(output.deviceId))) throw new Error(`${nameOf(target)} is offline.`);
               playback = mediaPlayback(playingOn(playedBy, action.deviceId ?? null), true);
             } else { fresh = true; playback = mediaPlayback(playedBy, false); }
-            if (playNow) { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); broadcast(); }
-            if (fresh && playNow) { if (action.deviceId) assign(playback, [output], source); else transition(playback, source); }
-            if (fresh) await playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow, ...(action.placement ? { placement: action.placement } : {}) }, authorizePlayback(playback, authorize, deviceId), playedBy);
+            const select = () => { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); };
+            if (!fresh && playNow) { select(); broadcast(); }
+            if (fresh) {
+              // A new item's selection and outputs change only once the Session admits it, so a refused Play changes neither.
+              const entering = playback;
+              if (playNow) entering.entered = () => { select(); if (action.deviceId) assign(entering, [output], source); else transition(entering, source); };
+              try { await entering.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow, ...(action.placement ? { placement: action.placement } : {}) }, authorizePlayback(entering, authorize, deviceId), playedBy); }
+              finally { entering.entered = undefined; }
+            }
             if (fresh && playNow) reconcile(playback);
           } else if (action.type === "sharing") {
             if (socket.data.deviceId) { shared.set(socket.data.deviceId, { audio: action.sharing.audio, video: action.sharing.video }); applyConsent(); }

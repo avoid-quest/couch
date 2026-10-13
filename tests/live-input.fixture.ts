@@ -46,7 +46,7 @@ setInterval(() => {}, 1000);
   store.close();
   const hubOptions = { databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0, advertisedUrls: ["https://receiver.example"] };
   let hub = await createHub(hubOptions);
-  const sockets: WebSocket[] = [], speakers: SendspinClient[] = [];
+  const sockets: WebSocket[] = [], speakers: SendspinClient[] = [], chunks: number[] = [];
   async function connect(index: number, sharing = "", secure = false) {
     const identity = index === -1 ? hostIdentity : identities[index]!;
     const socket = new WebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${identity.token}&device=${identity.id}${sharing}`, { headers: { Origin: secure ? "https://receiver.example" : hub.origin } });
@@ -96,6 +96,8 @@ setInterval(() => {}, 1000);
       const speaker = new SendspinClient(identity.id, "Test speaker", [Roles.PLAYER], { encryption: { identity: identity.key },
         playerSupport: { supported_formats: [{ codec: AudioCodec.PCM, channels: 2, sample_rate: 48_000, bit_depth: 16 }], buffer_capacity: 512 * 1024, supported_commands: [PlayerCommand.SET_STATIC_DELAY] } });
       speakers.push(speaker);
+      chunks[index] = 0;
+      speaker.addAudioChunkListener(() => chunks[index]!++);
       speaker.addServerCommandListener(command => {
         if (command.player?.command !== PlayerCommand.SET_STATIC_DELAY) return;
         const delay = command.player.static_delay_ms!;
@@ -106,6 +108,8 @@ setInterval(() => {}, 1000);
       await speaker.connect(`${hub.origin.replace("http:", "ws:")}/sendspin`, { timeoutMs: 3_000 });
       return delays;
     },
+    // PCM chunks the speaker last connected for a Device has received.
+    heard: (index: number) => chunks[index] ?? 0,
     api: (path: string, body?: unknown) => fetch(`${hub.origin}${path}`, { headers: { Authorization: `Bearer ${identities[0]!.token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }) }),
     subtitle: (playbackId: string) => fetch(`${hub.origin}/api/subtitles?${new URLSearchParams({ playbackId, name: "captions.vtt" })}`, { method: "POST", headers: { Authorization: `Bearer ${identities[0]!.token}`, "Content-Type": "application/octet-stream" }, body: "WEBVTT\n\n00:00.000 --> 00:01.000\nHello" }),
     close: async () => {

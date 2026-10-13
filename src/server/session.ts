@@ -19,6 +19,8 @@ type SessionOptions = {
   invalidate?: (...domains: Domain[]) => void;
   // The current item moved to a new transport (another quality, or another Device).
   moved?: (from: string | null, to: string) => void;
+  // A played item is now current, before this Playback publishes or resolves it.
+  entered?: () => void;
   now?: () => number;
   systemAudio?: boolean;
   prepareAudio?: () => string;
@@ -339,6 +341,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     state.currentEntryId = entry.id;
     state.presentationId = reason === "play" ? playbackId : null;
     state.player = { ...state.player, playbackId, status: "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
+    options.entered?.();
     broadcast();
     if (!preserveContext && context === undefined && reason !== "retry") resolveContinuation(entry);
     const failed = (error: unknown) => {
