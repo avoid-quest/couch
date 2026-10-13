@@ -95,6 +95,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
     CREATE TABLE IF NOT EXISTS sendspin_identity (id INTEGER PRIMARY KEY CHECK (id = 1), key TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS device_sync_delay (id TEXT PRIMARY KEY, delay REAL NOT NULL);
   `);
 
   // Playbacks replace the one saved queue; it becomes the first Playback once (#644 ticket 9).
@@ -382,6 +383,9 @@ export function openStore(path: string, remoteControlEnabled = false) {
       if (id === (installation().deviceId ?? "host")) db.query(`UPDATE installation ${sql} WHERE id = 1`).run(volume, muted === null ? null : Number(muted));
       else db.query(`UPDATE devices ${sql} WHERE id = ?`).run(volume, muted === null ? null : Number(muted), id);
     },
+    // A speaker's Sendspin static delay as it last reported it; its player keeps the value itself.
+    deviceSyncDelay: (id: string) => db.query<{ delay: number }, [string]>("SELECT delay FROM device_sync_delay WHERE id = ?").get(id)?.delay,
+    saveDeviceSyncDelay(id: string, delay: number) { db.query("INSERT INTO device_sync_delay VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET delay = excluded.delay").run(id, delay); },
     /** Pairs the Device whose key is `id`, or gives an already paired key a new token. */
     pair(id: unknown, name?: unknown) {
       if (!isDeviceId(id)) throw new ControllerError("Update Couch on this device, then pair again.");
@@ -439,6 +443,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       db.transaction(() => {
         requireDevice(id);
         db.query("DELETE FROM devices WHERE id = ?").run(id);
+        db.query("DELETE FROM device_sync_delay WHERE id = ?").run(id);
       }).immediate();
     },
     deviceForToken,

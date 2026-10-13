@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { Monitor, SlidersVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Item, ItemGroup, ItemSeparator } from "@/components/ui/item";
@@ -33,6 +33,19 @@ export function outputStatus(state: State, device: DeviceSummary, current?: stri
   return current && playback.id !== current ? `${verb} ${playback.title ?? "something else"}` : verb;
 }
 
+/** A request to choose where a shared source plays: its playback and Core's count of requests. */
+export const chooserRequest = (state: ClientSessionState) => { const playback = state.playbacks?.find(item => item.id === state.playback); return playback?.choosing ? `${playback.id}:${playback.choosing}` : null; };
+/** Where it plays opens for each new request and otherwise stays as the user left it. */
+export const reopens = (seen: string | null, request: string | null) => !!request && request !== seen;
+
+// Radix Dialog's controlled open state: a changed defaultOpen would not open a mounted Sheet.
+function ChooserSheet({ request, children }: { request: string | null; children: ReactNode }) {
+  const [open, setOpen] = useState(!!request);
+  const [seen, setSeen] = useState(request);
+  if (request !== seen) { setSeen(request); if (reopens(seen, request)) setOpen(true); }
+  return <Sheet open={open} onOpenChange={setOpen}>{children}</Sheet>;
+}
+
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
 // Pressed toggles invert, like focus: the default muted pressed state is nearly invisible on Clock's black.
 const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
@@ -40,8 +53,8 @@ const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground
 /**
  * Where it plays: one Sheet of divided device rows. The fader is the
  * Device's one volume while its sound is in, else 0; 0 takes the sound out and raising it puts the sound in.
- * Sound on several Devices plays in sync over Sendspin. A shared source waiting for its first
- * receiver opens it, so Play on the publisher leads here.
+ * Sound on several Devices plays in sync over Sendspin. Each request to choose a shared source's
+ * receivers opens it, so Play on the publisher leads here.
  */
 export function WhereItPlays({ state, run, className }: Props & { className?: string }) {
   const outputs = state.outputs ?? [];
@@ -50,14 +63,17 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
   const here = deviceId();
   const playback = state.playbacks?.find(item => item.id === state.playback);
   const source = state.liveSources?.find(item => item.id === playback?.liveSourceId);
-  // The Playback's Devices first, then the other online ones that share, and a source's publisher; an
-  // offline Device, or this one when it shares nothing (a remote), only while it is an output.
-  const devices = (state.devices ?? []).filter(device => output(device.id) || device.id === source?.deviceId || device.online && (device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
+  // The Playback's Devices first, then this one and the other online ones that share, and a source's
+  // publisher; an offline Device only while it is an output.
+  const devices = (state.devices ?? []).filter(device => output(device.id) || device.id === source?.deviceId || device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(!!output(b.id)) - Number(!!output(a.id)));
+  // Only here is exclusive, so another device's private output in this playback makes it unavailable.
+  const sharingOf = (id: string) => state.devices?.find(device => device.id === id)?.sharing;
+  const privately = outputs.filter(item => item.deviceId !== here && (item.picture && sharingOf(item.deviceId)?.video !== true || item.sound && sharingOf(item.deviceId)?.audio !== true));
   const trim = state.mixTrim ?? 100;
   const waiting = !!source && !outputs.length;
   // An mpv channel plays only on the server's own Device, its one output.
   const host = playback?.hostOnly ? state.devices?.find(device => device.id === outputs[0]?.deviceId)?.name ?? deviceName(state.installationName) : undefined;
-  return <Sheet key={state.playback} defaultOpen={waiting}>
+  return <ChooserSheet key={state.playback} request={chooserRequest(state)}>
     {/* Device icons stand for individual devices; the mixer opens all output rows. */}
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     <SheetContent side="bottom" className="max-h-[85dvh] scroll-py-6 gap-4 overflow-y-auto px-(--gutter) pb-6 [&_[data-slot=slider]]:min-h-11 [&_[data-slot=toggle]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
@@ -85,7 +101,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
           const privateSound = !!channel?.sound && device.sharing?.audio !== true;
           const privateOutput = privatePicture || privateSound;
           const protectedElsewhere = occupied?.id !== state.playback && privateOutput && !mine;
-          const canSolo = !locked && (audio || video && !playback?.audioOnly) && (!privateOutput || mine);
+          const canSolo = !locked && (audio || video && !playback?.audioOnly) && (!privateOutput || mine) && !privately.some(item => item.deviceId !== device.id);
           const only = outputs.length > 0 && outputs.every(item => item.deviceId === device.id);
           const status = outputStatus(state, device, state.playback);
           // Unselected shared devices stay operable, unless moving them would replace a private channel.
@@ -114,7 +130,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
         {!devices.length && <p className="py-4 text-sm text-muted-foreground">No outputs selected. Allow other devices to use a device's speakers or screen to add it here, or choose Play on → This device.</p>}
       </ItemGroup>
     </SheetContent>
-  </Sheet>;
+  </ChooserSheet>;
 }
 
 /** "on {name} +N", plain text: where the controlled Playback plays when that isn't only this Device. */

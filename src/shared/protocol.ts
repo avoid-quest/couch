@@ -44,7 +44,8 @@ export type PlayerState = {
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
 export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string };
+// choosing: its shared source waits for Where it plays; it counts up with each request to choose.
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 

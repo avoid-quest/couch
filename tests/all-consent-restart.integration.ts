@@ -154,7 +154,7 @@ test("restored All follows live audio consent in Direct and Synced delivery", { 
   } finally { await f.close(); }
 });
 
-test("private Solo after restored All=0 stays audible and a positive fader still unsilences All", { timeout: 12_000 }, async () => {
+test("private Only here after restored All=0 stays audible and a positive fader still unsilences All", { timeout: 12_000 }, async () => {
   const f = await fixture();
   try {
     await f.devices[0]!.command(f.queue("saved"));
@@ -165,16 +165,14 @@ test("private Solo after restored All=0 stays audible and a positive fader still
     await b!.command({ type: "sharing", sharing: { audio: false, video: false } });
     await b!.command(f.queue("next", a!.id));
     await pause(a!);
+    // Only here is exclusive: Device 70 shares, so it leaves and Device 40 plays Direct at its own level.
     await b!.command({ type: "solo", deviceId: b!.id });
-    const levels = await Promise.all([f.speaker(0), f.speaker(1)]);
-    await until(() => levels.every(wire => wire.length > 0));
-    assert.equal(levels[0]!.at(-1), 0);
-    assert.equal(levels[1]!.at(-1), 40);
+    await until(() => b!.state.outputs?.map(output => output.deviceId).join() === b!.id && directLevel(b!.messages) === 40);
     assert.equal(b!.state.mixTrim, 0);
     await b!.command({ type: "output", deviceId: b!.id, level: 40 });
-    await until(() => levels[0]!.at(-1) === 70 && levels[1]!.at(-1) === 40);
-    assert.equal(b!.state.mixTrim, 100);
-    console.log("RESTART_WIRE", JSON.stringify({ scenario: "zeroUnsilence", shared: levels[0]!.at(-1), private: levels[1]!.at(-1), mixTrim: b!.state.mixTrim }));
+    await until(() => b!.state.mixTrim === 100);
+    assert.equal(directLevel(b!.messages), 40);
+    console.log("RESTART_WIRE", JSON.stringify({ scenario: "zeroUnsilence", private: directLevel(b!.messages), mixTrim: b!.state.mixTrim }));
   } finally { await f.close(); }
 });
 

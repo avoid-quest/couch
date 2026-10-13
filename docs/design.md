@@ -362,11 +362,11 @@ Messages:
   or Mute. Its label is "Selected sound you can control": shared sound and this
   Device's own private sound. Then one row per Device:
   the Playback's Devices first (offline ones
-  dimmed, their controls disabled), then the other online Devices that share
-  audio or video, dimmed but operable when a move would not replace a private
-  channel. A Device that shares neither, this one included, is listed only
-  while it is an output, so it never has to take
-  part to start playback; Play on → This device still plays on it. A row reads
+  dimmed, their controls disabled), then this Device and the other online
+  Devices that share audio or video, dimmed but operable when a move would not
+  replace a private channel. This Device is listed even when it shares neither,
+  so it can add itself here as well as with Play on → This device; another
+  Device that shares neither is listed only while it is an output. A row reads
   the Device's icon, name and what it is doing, then Picture (pressed toggles
   invert, because Toggle's muted pressed state barely shows on black), the
   fader with its number, Mute and Only here (pressed, they invert too). What a
@@ -394,7 +394,10 @@ Messages:
   when it applies instead of a control that would do nothing. Only here
   (formerly Solo) keeps the Playback only on that Device,
   with its picture when the Playback has one, so moving a Playback is one
-  press. The band and mini player volume shows the loudest in-sound Device's,
+  press. It is unavailable while another device's private output plays in it,
+  since that output would stay. A shared source waiting for
+  receivers opens Where it plays for each request to choose; dismissed, it
+  stays closed through unrelated updates. The band and mini player volume shows the loudest in-sound Device's,
   or 0 while All is at 0, and moves them all together (from All's 0, raising it
   only brings All back to 100 and lowering it does nothing); their Mute mutes
   them all, and so does M.

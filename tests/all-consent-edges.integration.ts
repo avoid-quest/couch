@@ -88,7 +88,7 @@ const setupMix = async () => {
   return {...f,levels};
 };
 
-test("private Solo join after All=0 keeps its own level while shared speaker stays at zero", {timeout:15000}, async()=>{
+test("private Only here after All=0 plays there alone at its own level; the shared speaker leaves", {timeout:15000}, async()=>{
   const f=await setupMix();
   try {
     await f.admin.command({type:"output",deviceId:f.adminId,picture:true});
@@ -96,12 +96,14 @@ test("private Solo join after All=0 keeps its own level while shared speaker sta
     await until(()=>f.levels[0]!.at(-1)!==undefined);
     await f.admin.command({type:"allSpeakers",level:0});
     await until(()=>f.levels[0]!.at(-1)===0);
-    assert.equal((await f.device.command({type:"solo",deviceId:f.deviceId})).ok,true);
-    await until(()=>!!f.device.state.outputs?.find(o=>o.deviceId===f.deviceId&&o.sound));
-    await until(()=>f.levels[1]!.at(-1)!==undefined);
+    // Only here is exclusive: Admin shares, so its output leaves rather than staying in a partial mix.
+    const only=await f.device.command({type:"solo",deviceId:f.deviceId});
+    assert.equal(only.ok,true,only.error);
+    await until(()=>f.device.state.outputs?.map(o=>o.deviceId).join()===f.deviceId&&!!f.device.state.outputs[0]!.sound);
     const own=f.device.state.devices!.find(d=>d.id===f.deviceId)!.volume;
-    console.log("WIRE",JSON.stringify({scenario:"joinSoloAfter0",mixTrim:f.admin.state.mixTrim,shared:f.levels[0]!.at(-1),private:f.levels[1]!.at(-1),own,local:f.device.state.outputs?.find(o=>o.deviceId===f.deviceId)?.local}));
-    assert.equal(f.levels[1]!.at(-1),own);
+    const volume=()=>f.device.messages.flatMap(message=>message.type==="player"&&message.command.type==="volume"?[message.command.volume]:[]).at(-1);
+    await until(()=>volume()===own);
+    console.log("WIRE",JSON.stringify({scenario:"onlyHereAfter0",mixTrim:f.admin.state.mixTrim,shared:f.levels[0]!.at(-1),private:volume(),own}));
     assert.equal(f.levels[0]!.at(-1),0);
   } finally {await f.close();}
 });

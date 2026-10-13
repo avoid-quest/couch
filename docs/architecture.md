@@ -48,9 +48,14 @@ changes only from that device's own connection, keeps the last choice while the
 device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
-self-join, which Only here keeps. Joining a shared Playback accepts its group transport
-and queue controls; direct output changes still require that device's sharing
-consent. A fully private Playback can only be controlled by its output devices.
+self-join. Only here is exclusive: Core refuses it, changing nothing, while another
+device's private output would stay behind. Joining a Playback is allowed only where
+the joining device could already control it, because joining brings its group
+transport and queue controls; direct output changes still require that device's
+sharing consent. A fully private Playback can only be controlled by its output
+devices, and joining one is refused. The last Sendspin delay each speaker reported
+is kept in `device_sync_delay`, so its row shows it after a restart until the
+speaker reports again; the speaker's own player keeps the value it applies.
 Revoking sharing removes remote output channels and stops their renderer or
 Sendspin membership at once. Sharing speakers or a screen never grants permission
 to update or restart the app; that stays with administrators. Full-mode host

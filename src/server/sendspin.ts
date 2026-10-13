@@ -104,7 +104,7 @@ export async function liveHls(url: string, signal: AbortSignal) {
   return !!media?.lines.some(line => line.startsWith("#EXTINF:")) && !media.lines.some(line => line.startsWith("#EXT-X-ENDLIST"));
 }
 
-export function createSendspin(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg: () => Promise<string> }) {
+export function createSendspin(options: { identity: string; name: string; admit: (clientId: string, loopback: boolean) => boolean; changed: () => void; ffmpeg: () => Promise<string>; savedDelay?: (clientId: string) => number | undefined; saveDelay?: (clientId: string, delay: number) => void }) {
   const core = new SendspinCore();
   core.configureServer({ name: options.name });
   const sockets = new Set<WebSocket>();
@@ -118,6 +118,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
       onPlayerState: (_session, update) => {
         if (update.staticDelayMs === undefined || delays.get(clientId) === update.staticDelayMs) return;
         delays.set(clientId, update.staticDelayMs);
+        options.saveDelay?.(clientId, update.staticDelayMs);
         options.changed();
       },
       onDisconnected: session => { if (sessions.get(clientId) === session) { sessions.delete(clientId); options.changed(); } },
@@ -379,8 +380,9 @@ export function createSendspin(options: { identity: string; name: string; admit:
       });
     },
     group,
-    // A speaker's own delay, which its player applies and keeps (Sendspin static delay): its last report survives disconnects.
-    delay: (clientId: string) => delays.get(clientId) ?? (sessions.has(clientId) ? 0 : undefined),
+    // A speaker's own delay, which its player applies and keeps (Sendspin static delay). Core saves its last
+    // report, so it shows across disconnects and restarts until the speaker reports again.
+    delay: (clientId: string) => delays.get(clientId) ?? options.savedDelay?.(clientId) ?? (sessions.has(clientId) ? 0 : undefined),
     connected: (clientId: string) => sessions.has(clientId),
     setDelay(clientId: string, delay: number) { sessions.get(clientId)?.sendServerCommand({ player: { command: PlayerCommand.SET_STATIC_DELAY, static_delay_ms: delay } }); },
     drop(clientId: string) { for (const socket of sockets) if (core.getSessionBySocket(socket)?.getClientId() === clientId) socket.terminate(); },

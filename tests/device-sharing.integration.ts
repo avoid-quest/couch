@@ -279,15 +279,19 @@ test("Play from a controller cannot pull a device out of, or replace, its privat
   } finally { await f.close(); }
 });
 
-test("Solo keeps a device that joined on its own", { timeout: 15_000 }, async () => {
+test("Only here is refused, changing nothing, while a device that joined on its own plays privately", { timeout: 15_000 }, async () => {
   const f = await fixture();
   try {
     await f.admin.command({ type: "sharing", sharing: { audio: true, video: true } });
     await f.device.command({ type: "enqueue", entry: { id: "mix", title: "Mix", source: `${f.hub.origin}/api/health` }, playNow: true, deviceId: f.adminId });
     await f.device.command({ type: "output", deviceId: f.deviceId, level: 25 });
     await until(() => f.admin.state.outputs?.length === 2);
-    assert.equal((await f.admin.command({ type: "solo", deviceId: f.adminId })).ok, true);
-    assert.deepEqual(f.admin.state.outputs?.map(output => [output.deviceId, output.local]), [[f.adminId, true], [f.deviceId, true]]);
+    const outputs = f.admin.state.outputs;
+    const only = await f.admin.command({ type: "solo", deviceId: f.adminId });
+    assert.equal(only.ok, false);
+    assert.equal(only.error, "Only here is unavailable while Device plays this privately.");
+    assert.deepEqual(f.admin.state.outputs, outputs);
+    assert.deepEqual(f.admin.state.outputs?.map(output => [output.deviceId, output.local]), [[f.adminId, false], [f.deviceId, true]]);
   } finally { await f.close(); }
 });
 

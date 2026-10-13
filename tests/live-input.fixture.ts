@@ -6,6 +6,7 @@ import WebSocket from "ws";
 import { AudioCodec, Identity, PlayerCommand, Roles, SendspinClient } from "@sonn-audio/node-sendspin";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
+import { deviceId } from "../src/client/session/device-id";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../src/shared/protocol";
 
 export async function until(predicate: () => boolean) {
@@ -15,7 +16,8 @@ export async function until(predicate: () => boolean) {
 
 // Real hub, HTTP, WebSockets, ownership and output routing. FFmpeg is replaced;
 // paced PCM advances the group's state, while live-stream/live-clock test real media.
-export async function liveFixture() {
+// local pairs "Local" with this process's own client device ID, so client components treat it as This device.
+export async function liveFixture({ local = false } = {}) {
   const fetchLocal = globalThis.fetch;
   globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(String(input)) ? fetchLocal(input, init) : Promise.resolve(new Response(""))) as typeof fetch;
   const directory = mkdtempSync(join(tmpdir(), "couch-live-input-")), databasePath = join(directory, "couch.sqlite");
@@ -40,8 +42,10 @@ setInterval(() => {}, 1000);
   const store = openStore(databasePath, true);
   const hostIdentity = { id: Identity.generate().peerId, token: "h".repeat(64) };
   const identities = ["Publisher", "Receiver", "Other"].map(name => { const key = Identity.generate(), id = key.peerId; return { key, id, token: store.pair(id, name) }; });
+  if (local) identities.push({ key: Identity.generate(), id: deviceId(), token: store.pair(deviceId(), "Local") });
   store.close();
-  const hub = await createHub({ databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0, advertisedUrls: ["https://receiver.example"] });
+  const hubOptions = { databasePath, hostToken: "h".repeat(64), hostname: "127.0.0.1", port: 0, advertisedUrls: ["https://receiver.example"] };
+  let hub = await createHub(hubOptions);
   const sockets: WebSocket[] = [], speakers: SendspinClient[] = [];
   async function connect(index: number, sharing = "", secure = false) {
     const identity = index === -1 ? hostIdentity : identities[index]!;
@@ -68,7 +72,14 @@ setInterval(() => {}, 1000);
   const publisher = await connect(0), receiver = await connect(1);
   const uploadUrl = (sourceId: string, key: string, device = 0) => `${hub.origin.replace("http:", "ws:")}/api/live/upload?${new URLSearchParams({ sourceId, key, token: identities[device]!.token })}`;
   const uploadToken = "1".repeat(64);
-  return { hub, publisher, receiver, connect, databasePath, uploadToken, uploadUrl,
+  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl,
+    // Core restarts on the same database; every socket and speaker reconnects itself.
+    restart: async () => {
+      await Promise.all(speakers.splice(0).map(speaker => speaker.disconnect()));
+      await hub.close();
+      for (const socket of sockets.splice(0)) socket.terminate();
+      hub = await createHub(hubOptions);
+    },
     publish: async (sourceId: string, kind: "screen" | "system-audio" | "microphone" = "screen", audio = true) => {
       assert.equal((await publisher.command({ type: "publishLive", sourceId, uploadToken, kind, audio, video: kind === "screen" })).ok, true);
       const upload = new WebSocket(uploadUrl(sourceId, uploadToken), { headers: { Origin: hub.origin } });

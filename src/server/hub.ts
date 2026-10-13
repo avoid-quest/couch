@@ -106,6 +106,7 @@ export async function createHub(options: HubOptions) {
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
   const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
+    savedDelay: id => store.deviceSyncDelay(id), saveDelay: (id, delay) => store.saveDeviceSyncDelay(id, delay),
     admit: (id, loopback) => id === store.hostDevice()?.id ? loopback : !!store.device(id) && store.remoteControlEnabled(), changed: () => broadcast() });
   const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
   let lan: ReturnType<typeof createLanListener<Listener>> | undefined;
@@ -180,8 +181,9 @@ export async function createHub(options: HubOptions) {
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
     undoable?: ReturnType<typeof setTimeout>;
-    // Its shared source had no receiving output: the first output chosen in Where it plays starts it.
-    choosing?: boolean };
+    // Its shared source had no receiving output: the first output chosen in Where it plays starts it. Each
+    // request to choose counts up, so Where it plays opens again. held: the publisher's own output while its capture plays.
+    choosing?: number; held?: Output };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
@@ -257,6 +259,8 @@ export async function createHub(options: HubOptions) {
   const capturing = (playback: Playback, deviceId: string) => live.source(sourceOf(playback) ?? "")?.deviceId === deviceId;
   const sharingSource = (deviceId: string) => `${nameOf(deviceId)} is sharing this source. Choose where it plays.`;
   const requireReceiver = (playback: Playback, deviceId: string) => { if (capturing(playback, deviceId)) throw new ControllerError(sharingSource(deviceId), 409); };
+  let choices = 0;
+  const choose = (playback: Playback, deviceId: string) => { playback.choosing = ++choices; playback.session.wait(sharingSource(deviceId)); };
   const allows = (output: Output, actor: string) => { const allowed = outputFor(output.deviceId, actor); return (!output.picture || allowed.picture) && (!output.sound || allowed.sound); };
   const requireOutput = (output: Output, actor: string) => {
     if (!allows(output, actor)) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !outputFor(output.deviceId, actor).picture ? "video" : "audio"}.`, 403);
@@ -311,11 +315,11 @@ export async function createHub(options: HubOptions) {
     if (command.type === "load") {
       const source = sourceId && live.source(sourceId);
       if (source) assign(playback, playback.outputs, source);
+      else { playback.choosing = undefined; if (playback.held) restore(playback); }
       // With only its publisher selected, a shared source waits for Where it plays instead of failing.
       if (source && !playback.outputs.length) {
         playback.loaded = command;
-        playback.choosing = true;
-        playback.session.wait(sharingSource(source.deviceId));
+        choose(playback, source.deviceId);
         return;
       }
       // A remote HEVC load retains the Linux host's policy, including cached reloads and joins.
@@ -358,10 +362,12 @@ export async function createHub(options: HubOptions) {
     // Its publisher leaves, or was chosen while it waited in Where it plays.
     const left = source && (playback.choosing || playback.outputs.some(output => output.deviceId === source.deviceId));
     if (source) {
+      playback.held = outputs.find(output => output.deviceId === source.deviceId) ?? playback.held;
       outputs = outputs.filter(output => output.deviceId !== source.deviceId);
       if (outputs.length && !outputs.some(output => output.picture && source.video || output.sound && source.audio)) throw new Error("Choose an output this source uses.");
     }
     for (const output of outputs) {
+      claim(playback, output.deviceId);
       const previous = servedBy(output.deviceId);
       if (previous && previous !== playback) { release(previous, output.deviceId); reconcile(previous); }
     }
@@ -371,9 +377,19 @@ export async function createHub(options: HubOptions) {
     // Solo hands everything to one Device, which plays it directly.
     if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
-    if (outputs[0]) playback.choosing = false;
+    if (outputs[0]) playback.choosing = undefined;
     // Controllers of the publisher keep viewing its playback where it continues.
     if (left && outputs[0]) follow([source.deviceId], (outputs.find(output => output.picture) ?? outputs[0]).deviceId);
+  };
+  // A Device that joins another Playback is no longer held for this one: it is never reclaimed.
+  const claim = (playback: Playback, deviceId: string) => { for (const other of all()) if (other !== playback && other.held?.deviceId === deviceId) other.held = undefined; };
+  // Once the publisher's capture is no longer current, its output returns, unless it went elsewhere or lost consent.
+  const restore = (playback: Playback) => {
+    const held = playback.held!;
+    playback.held = undefined;
+    if (servedBy(held.deviceId) || !allows(held, held.local ? held.deviceId : "")) return;
+    assign(playback, [...playback.outputs, held]);
+    reconcile(playback);
   };
   const release = (playback: Playback, deviceId: string, wait = true) => {
     if (playback.renderer && deviceOf(playback.renderer) === deviceId) live.closePlayback(playback.id);
@@ -463,9 +479,11 @@ export async function createHub(options: HubOptions) {
   const reconcile = (playback: Playback) => {
     refreshTrims(playback);
     const sourceId = sourceOf(playback), source = sourceId && live.source(sourceId);
-    if (source && playback.outputs.some(output => output.deviceId === source.deviceId)) {
-      release(playback, source.deviceId, false);
-      if (!playback.outputs.length) { playback.choosing = true; playback.session.wait(sharingSource(source.deviceId)); }
+    const own = source && playback.outputs.find(output => output.deviceId === source.deviceId);
+    if (own) {
+      playback.held = own;
+      release(playback, own.deviceId, false);
+      if (!playback.outputs.length) choose(playback, own.deviceId);
     }
     if (spans(playback)) {
       const fresh = !playback.synced;
@@ -653,6 +671,7 @@ export async function createHub(options: HubOptions) {
       const previous = servedBy(deviceId);
       requireReplacement(deviceId, actor);
       if (previous) { release(previous, deviceId); reconcile(previous); }
+      claim(playback, deviceId);
       playback.outputs = [...playback.outputs, next];
     } else if (!next.picture && !next.sound) leave(playback, deviceId);
     else playback.outputs = playback.outputs.map(output => output === current ? next : output);
@@ -750,7 +769,7 @@ export async function createHub(options: HubOptions) {
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
-          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
+          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...playback.choosing ? { choosing: playback.choosing } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
       liveSources: live.sources(),
@@ -1386,32 +1405,41 @@ export async function createHub(options: HubOptions) {
             const playNow = action.playNow !== false;
             const target = action.deviceId ?? selected(deviceId), output = outputFor(target, deviceId);
             const usable = (output: Output) => output.deviceId !== source.deviceId && (output.picture && source.video || output.sound && source.audio);
-            // Play and Play on converge on Where it plays: a device that receives joins the one Playback
-            // already playing this source, keeping its queue and clock. Only here moves it exclusively.
             const sharedBy = all().filter(item => sourceOf(item) === source.id && active(stateOf(item).player.status));
+            // A playback waiting in Where it plays is a request to choose, not another place it plays.
+            const receiving = sharedBy.filter(item => item.outputs.length), waiting = sharedBy.findLast(item => !item.outputs.length);
             // On its publisher, Play leads to the one playback it may view instead of starting another.
-            const viewable = target === source.deviceId && sharedBy.length === 1 ? sharedBy[0]!.outputs.find(output => shares(output.deviceId, deviceId)) : undefined;
-            const there = sharedBy.find(item => item.outputs.some(output => output.deviceId === (viewable?.deviceId ?? target)));
-            const joins = playNow && !there && target !== source.deviceId && (!!action.deviceId || !servedBy(target)) && sharedBy.length > 0;
+            const viewable = playNow && target === source.deviceId && receiving.length === 1 ? receiving[0]!.outputs.find(output => shares(output.deviceId, deviceId)) : undefined;
+            const there = playNow ? receiving.find(item => item.outputs.some(output => output.deviceId === (viewable?.deviceId ?? target))) : undefined;
+            // Play and Play on converge: a receiver joins the playback of this source, with its queue and clock.
+            const joining = playNow && !there && target !== source.deviceId ? receiving.length ? receiving : waiting ? [waiting] : [] : [];
             if (playNow) requireControl(target, deviceId);
-            if (joins && sharedBy.length > 1) throw new ControllerError(`${source.name} is playing in several places. Open one in Now Playing and add ${nameOf(target)} in Where it plays.`, 409);
-            if (playNow && there) playback = there;
-            else if (joins) {
+            if (joining.length > 1) throw new ControllerError(`${source.name} is playing in several places. Open one in Now Playing and add ${nameOf(target)} in Where it plays.`, 409);
+            let fresh = false;
+            if (there) playback = there;
+            else if (joining[0]) {
+              playback = joining[0];
               if (!usable(output)) throw new ControllerError(`${nameOf(target)} is not sharing an output this source uses.`, 403);
-              playback = sharedBy[0]!;
-              await setOutput(playback, target, { picture: output.picture, sound: output.sound }, authorize, deviceId);
+              // Joining gives control of that playback, so its private outputs keep it their own (#644 Outputs).
+              if (playback.outputs.length && !playback.outputs.some(output => allows(output, deviceId))) throw new ControllerError(`${source.name} is playing privately on ${playback.outputs.map(output => nameOf(output.deviceId)).join(", ")}. It can join when they let other devices use their speakers or screen.`, 403);
+              await setOutput(playback, target, { picture: output.picture, sound: output.sound }, authorizePlayback(playback, authorize, deviceId), deviceId);
+            } else if (playNow && target === source.deviceId && waiting) {
+              playback = waiting;
+              authorizePlayback(playback, authorize, deviceId)();
+              choose(playback, source.deviceId);
             } else if (playNow) {
+              fresh = true;
               // Ordinary Play keeps the selected mix, without its publisher; with nothing left it waits in Where it plays.
               requireReplacement(target, deviceId);
               const outputs = (action.deviceId ? [output] : servedBy(target)?.outputs ?? [output]).filter(output => output.deviceId !== source.deviceId);
               if (outputs.length && !outputs.some(usable)) throw new Error(`${nameOf(target)} is not sharing an output this source uses.`);
               if (outputs.length && !outputs.some(output => usable(output) && newest(output.deviceId))) throw new Error(`${nameOf(target)} is offline.`);
               playback = mediaPlayback(playingOn(playedBy, action.deviceId ?? null), true);
-            } else playback = mediaPlayback(playedBy, false);
+            } else { fresh = true; playback = mediaPlayback(playedBy, false); }
             if (playNow) { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); broadcast(); }
-            if (playNow && !there && !joins) assign(playback, action.deviceId ? [output] : playback.outputs, source);
-            if (!there && !joins) await playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow, ...(action.placement ? { placement: action.placement } : {}) }, authorizePlayback(playback, authorize, deviceId), playedBy);
-            if (playNow && !there && !joins) reconcile(playback);
+            if (fresh && playNow) assign(playback, action.deviceId ? [output] : playback.outputs, source);
+            if (fresh) await playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${source.id}`, live: true, liveSourceId: source.id }, playNow, ...(action.placement ? { placement: action.placement } : {}) }, authorizePlayback(playback, authorize, deviceId), playedBy);
+            if (fresh && playNow) reconcile(playback);
           } else if (action.type === "sharing") {
             if (socket.data.deviceId) { shared.set(socket.data.deviceId, { audio: action.sharing.audio, video: action.sharing.video }); applyConsent(); }
           } else if (action.type === "control") {
@@ -1439,15 +1467,14 @@ export async function createHub(options: HubOptions) {
               const allowed = outputFor(action.deviceId, deviceId);
               const output = { ...allowed, picture: allowed.picture && (!target.outputs.length || target.outputs.some(output => output.picture)) };
               if (!output.picture && !output.sound) throw new ControllerError(`${nameOf(action.deviceId)} is not sharing audio.`, 403);
-              // Devices that joined on their own stay; the rest leave.
-              const kept = target.outputs.filter(item => item.local && item.deviceId !== deviceId && item.deviceId !== action.deviceId);
-              const left = target.outputs.map(item => item.deviceId).filter(id => id !== action.deviceId && !kept.some(item => item.deviceId === id));
-              if (kept.length) {
-                await setOutput(target, action.deviceId, { ...output.picture ? { picture: true } : {}, ...output.sound ? { sound: true } : {} }, permitted, deviceId);
-                for (const id of left) release(target, id, false);
-                reconcile(target);
-              } else if (target.outputs.length && !left.length) { if (output.sound && !target.outputs[0]!.sound) await setOutput(target, action.deviceId, { sound: true }, permitted, deviceId); }
+              // Only here is exclusive: another device's private output stays its own, so it is refused, not partial.
+              const kept = target.outputs.filter(item => item.deviceId !== action.deviceId && !allows(item, deviceId));
+              if (kept.length) throw new ControllerError(`Only here is unavailable while ${kept.map(item => nameOf(item.deviceId)).join(", ")} plays this privately.`, 403);
+              const left = target.outputs.map(item => item.deviceId).filter(id => id !== action.deviceId);
+              if (target.outputs.length && !left.length) { if (output.sound && !target.outputs[0]!.sound) await setOutput(target, action.deviceId, { sound: true }, permitted, deviceId); }
               else await sendTo(target, output, permitted, deviceId);
+              // The publisher's held output does not return after an exclusive move.
+              target.held = undefined;
               follow(left, action.deviceId);
               broadcast();
             } else if (action.type === "allSpeakers") {
