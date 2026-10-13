@@ -75,7 +75,9 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
           // Picture-only inputs still need a silent reference clock for the
           // ordinary multi-device picture follower. This is not shared sound.
           ...source.audio ? [] : ["-re", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"],
-          ...source.video ? ["-map", "0:v:0", "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-threads", "2", "-force_key_frames", "expr:gte(t,n_forced*1)", "-sc_threshold", "0"] : ["-vn"],
+          // MediaRecorder may advertise 1000 fps despite 30 fps capture. Bound
+          // the inferred output rate without duplicating lower-rate inputs.
+          ...source.video ? ["-map", "0:v:0", "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-fpsmax", "30", "-threads", "2", "-force_key_frames", "expr:gte(t,n_forced*1)", "-sc_threshold", "0"] : ["-vn"],
           "-map", source.audio ? "0:a:0" : "1:a:0", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "160k", "-sn", "-dn",
           ...source.audio ? [] : ["-shortest"],
           "-f", "hls", "-hls_time", "1", "-hls_list_size", "8", "-hls_delete_threshold", "2", "-hls_flags", "delete_segments+independent_segments+temp_file",

@@ -12,6 +12,11 @@ const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const hasFfmpeg = spawnSync(ffmpeg, ["-version"], { stdio: "ignore" }).status === 0;
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const run = (args: string[]) => new Promise<Buffer>((resolve, reject) => execFile(ffmpeg, args, { encoding: "buffer", maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+const decodedFrames = (input: Buffer) => {
+  const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-an", "-vf", "scale=2:2", "-pix_fmt", "gray", "-fps_mode", "passthrough", "-f", "rawvideo", "pipe:1"], { input });
+  assert.equal(decoded.status, 0, String(decoded.stderr));
+  return decoded.stdout.length / 4;
+};
 async function until(check: () => Promise<boolean>, timeout = 10_000) {
   const deadline = Date.now() + timeout;
   while (!await check()) { if (Date.now() > deadline) throw new Error("Live input did not reach the expected state."); await new Promise(resolve => setTimeout(resolve, 25)); }
@@ -77,6 +82,7 @@ test("one continuous upload becomes bounded HLS with real audio and video before
   assert.equal(segment.status, 200);
   assert.equal(segment.headers.get("cache-control"), "no-store");
   const bytes = Buffer.from(await segment.arrayBuffer());
+  assert.equal(decodedFrames(bytes), 10, "Lower capture rates must not be raised to the 30 fps maximum");
   const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes });
   assert.equal(decoded.status, 0, String(decoded.stderr));
   assert.deepEqual(f.failures, []);
@@ -100,6 +106,39 @@ test("audio-only input uses the same HLS path without a video track", { skip: !h
   const bytes = Buffer.from(await (await f.streams.response("audio", name)).arrayBuffer());
   assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes }).status, 0);
   assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"], { input: bytes }).status, 0);
+});
+
+test("misleading WebM frame-rate metadata cannot multiply captured frames", { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
+  const f = await fixture(t);
+  const recording = await run(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-g", "30", "-c:a", "libopus", "-f", "webm", "pipe:1"]);
+  // A MediaRecorder WebM can advertise 1000 fps while delivering 30 timestamped
+  // frames per second. Change only the Matroska DefaultDuration element; every
+  // packet and its audio/video timestamps remain those of the real recording.
+  const duration = recording.indexOf(Buffer.from("23e38384", "hex"));
+  assert.ok(duration > 0);
+  assert.equal(recording.readUInt32BE(duration + 4), 33_333_333);
+  recording.writeUInt32BE(1_000_000, duration + 4);
+  assert.equal(decodedFrames(recording), 120);
+  await f.streams.start("misleading-fps", { audio: true, video: true });
+  const uploader = await f.upload("misleading-fps");
+  for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
+  await f.streams.ready("misleading-fps", AbortSignal.timeout(10_000));
+  const playlist = await (await f.streams.response("misleading-fps", "stream.m3u8")).text();
+  const name = playlist.split("\n").find(line => line.endsWith(".ts"))!;
+  const seconds = Number(/#EXTINF:([\d.]+)/.exec(playlist)?.[1]);
+  const segment = Buffer.from(await (await f.streams.response("misleading-fps", name)).arrayBuffer());
+  const frames = decodedFrames(segment);
+  assert.ok(frames >= 29 && frames <= Math.ceil(seconds * 30) + 1, `${frames} encoded frames in a ${seconds}s HLS segment exceeds the capture rate`);
+  const timing = spawnSync(ffmpeg, ["-hide_banner", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-vf", "showinfo", "-af", "ashowinfo", "-fps_mode", "passthrough", "-f", "null", "-"], { input: segment });
+  assert.equal(timing.status, 0, String(timing.stderr));
+  const output = String(timing.stderr);
+  const videoPts = [...output.matchAll(/Parsed_showinfo[^\n]+n:\s*\d+\s+pts:\s*\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
+  const audioPts = [...output.matchAll(/Parsed_ashowinfo[^\n]+n:\d+\s+pts:\d+\s+pts_time:([\d.]+)/g)].map(match => Number(match[1]));
+  assert.ok(videoPts.length > 1 && audioPts.length > 1, "Both encoded tracks must retain timestamps");
+  assert.ok(Math.abs(videoPts[0]! - audioPts[0]!) < 0.05, "Picture and sound must start within 50 ms");
+  assert.ok(Math.abs(videoPts.at(-1)! - audioPts.at(-1)!) < 0.05, "Picture and sound must finish within 50 ms");
+  assert.ok(Math.abs(videoPts.at(-1)! - videoPts[0]! - (seconds - 1 / 30)) < 0.02, "The frame limit must preserve the one-second media timeline");
+  t.diagnostic(`${frames} frames/${seconds}s; video PTS ${videoPts[0]}–${videoPts.at(-1)}, audio PTS ${audioPts[0]}–${audioPts.at(-1)}`);
 });
 
 test("duplicate, textual and disconnected uploads cannot leave a live encoder", { skip: !hasFfmpeg, timeout: 10_000 }, async t => {
