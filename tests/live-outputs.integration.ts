@@ -1363,6 +1363,77 @@ test("private outputs a live source cannot use keep it waiting in Where it plays
   } finally { await g.close(); }
 });
 
+test("two private pictures a live source cannot use keep its group waiting in Where it plays, until one of them uses it", { timeout: 20_000 }, async () => {
+  const f = await liveFixture({ local: true });
+  try {
+    await f.publish("audio", "system-audio", true);
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
+    const local = await f.connect(3), other = await f.connect(2, "&audio=1&video=1");
+    await f.speaker(1);
+    await f.speaker(2);
+    // Receiver and Local play it privately with their pictures kept and sound out; Other's speaker is shared.
+    assert.equal((await f.receiver.command({ type: "playLive", sourceId: "audio", deviceId: f.receiver.id })).ok, true);
+    await until(() => !!f.receiver.load());
+    f.receiver.report();
+    assert.equal((await local.command({ type: "playLive", sourceId: "audio", deviceId: local.id })).ok, true);
+    await until(() => receivers(f.receiver)?.length === 2);
+    assert.equal((await f.receiver.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
+    for (const client of [f.receiver, local]) {
+      assert.equal((await client.command({ type: "output", deviceId: client.id, level: 0 })).ok, true);
+      assert.equal((await client.command({ type: "sharing", sharing: { audio: false, video: false } })).ok, true);
+    }
+    await until(() => f.receiver.state.outputs?.filter(output => output.local && output.picture && !output.sound).length === 2);
+    await until(() => f.heard(2) > 0 && f.receiver.state.player.status === "playing");
+    // Withdrawing a channel it does not use leaves Other's sound playing it.
+    assert.equal((await other.command({ type: "sharing", sharing: { audio: true, video: false } })).ok, true);
+    const heard = f.heard(2);
+    await until(() => f.heard(2) > heard);
+    assert.equal(f.receiver.state.player.status, "playing");
+    assert.equal(chooserRequest(f.receiver.state), null);
+    const playback = f.receiver.state.playback, playbackId = f.receiver.state.player.playbackId, sheet = chooser(f.receiver);
+    // Withdrawing its last sound leaves only the private pictures: the group waits instead of playing to nobody.
+    assert.equal((await other.command({ type: "sharing", sharing: { audio: false, video: true } })).ok, true);
+    await until(() => receivers(f.receiver)?.length === 2);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.deepEqual({ status: f.receiver.state.player.status, error: f.receiver.state.player.error }, { status: "paused", error: "Other is not sharing an output this source uses. Choose where it plays." });
+    assert.deepEqual(f.receiver.state.outputs?.map(output => [output.deviceId, output.picture, output.sound]).sort(), [[f.receiver.id, true, false], [local.id, true, false]].sort(), "the private pictures stay");
+    assert.equal(sheet.observe(), 1);
+    // Receiver's own sound uses it, so raising it resumes the same playback and closes the request.
+    assert.equal((await f.receiver.command({ type: "output", deviceId: f.receiver.id, level: 40 })).ok, true);
+    await until(() => f.receiver.state.player.status === "playing");
+    const resumed = f.heard(1);
+    await until(() => f.heard(1) > resumed);
+    assert.equal(chooserRequest(f.receiver.state), null);
+    assert.equal(f.receiver.state.player.error, null);
+    assert.equal(f.receiver.state.playback, playback);
+    assert.equal(f.receiver.state.player.playbackId, playbackId);
+    assert.equal(loads(f.publisher).some(load => "livePeerId" in load || load.source.includes("/api/live/")), false, "its publisher never receives it");
+  } finally { await f.close(); }
+});
+
+test("an output that goes offline supersedes a Play it never confirmed, while a new tab of it keeps that Play", { timeout: 15_000 }, async () => {
+  for (const [pending, handover] of [[false, false], [true, false], [true, true]]) {
+    const f = await liveFixture();
+    try {
+      assert.equal((await f.receiver.command({ type: "enqueue", entry: ordinary(f, "movie"), deviceId: f.receiver.id, playNow: true })).ok, true);
+      await until(() => !!f.receiver.load());
+      f.receiver.report({ status: "paused", position: 31, duration: 100, seekable: true });
+      await until(() => f.receiver.state.player.status === "paused");
+      const playback = f.receiver.state.playback, playbackId = f.receiver.state.player.playbackId!;
+      // Its renderer never acknowledges the Play.
+      if (pending) assert.equal((await f.receiver.command({ type: "pause", playbackId, paused: false })).ok, true);
+      if (!handover) {
+        f.receiver.socket.close();
+        await until(() => f.publisher.state.devices?.find(device => device.id === f.receiver.id)?.online === false);
+        assert.equal(f.publisher.state.playbacks?.find(item => item.id === playback)?.status, "paused");
+      }
+      const tab = await f.connect(1);
+      await until(() => !!tab.load());
+      assert.deepEqual({ playbackId: tab.load()!.playbackId, paused: tab.load()!.paused, at: tab.load()!.startPosition }, { playbackId, paused: !handover, at: 31 }, `pending=${pending} handover=${handover}`);
+    } finally { await f.close(); }
+  }
+});
+
 test("a held publisher that returns for the next source counts as an output it uses, so that source plays rather than waits", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {

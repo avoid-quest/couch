@@ -555,9 +555,11 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       const { startPosition: _start, ...command } = loaded;
       send({ ...command, ...(live ? {} : { startPosition: position }), paused: pendingPause ?? status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
     },
-    // No output is online: the Playback pauses where it is and waits (#644 Offline).
+    // No output is online: the Playback pauses where it is and waits (#644 Offline). The wait
+    // supersedes a Play its output never confirmed; only a later Play resumes it.
     wait(message: string) {
       if (!["loading", "playing", "paused"].includes(state.player.status)) return;
+      pendingPause = null;
       state.player = { ...state.player, status: "paused", buffering: false, error: message };
       broadcast();
     },

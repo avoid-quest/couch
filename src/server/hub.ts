@@ -268,7 +268,13 @@ export async function createHub(options: HubOptions) {
   const requireReceiver = (playback: Playback, deviceId: string) => { if (capturing(playback, deviceId)) throw new ControllerError(sharingSource(deviceId), 409); };
   // Counted from Core's start time, so a request after a restart is never one a window already dismissed.
   let choices = Date.now();
-  const choose = (playback: Playback, deviceId: string, message = sharingSource(deviceId)) => { playback.choosing = ++choices; playback.session.wait(message); };
+  // A group it keeps for private pictures pauses with the wait, as when its outputs go offline.
+  const choose = (playback: Playback, deviceId: string, message = sharingSource(deviceId)) => {
+    playback.choosing = ++choices;
+    const { playbackId } = stateOf(playback).player;
+    if (playback.synced && playbackId) playback.synced.send({ type: "pause", playbackId, paused: true });
+    playback.session.wait(message);
+  };
   const allows = (output: Output, actor: string) => { const allowed = outputFor(output.deviceId, actor); return (!output.picture || allowed.picture) && (!output.sound || allowed.sound); };
   const requireOutput = (output: Output, actor: string) => {
     if (!allows(output, actor)) throw new ControllerError(`${nameOf(output.deviceId)} is not sharing ${output.picture && !outputFor(output.deviceId, actor).picture ? "video" : "audio"}.`, 403);
@@ -484,12 +490,13 @@ export async function createHub(options: HubOptions) {
     const { player } = stateOf(playback);
     return { ...loaded, source: fresh.source, audioSource: fresh.audioSource, mpegts: fresh.mpegts, hls: fresh.hls, mpv: fresh.mpv, eventStart: fresh.eventStart, startPosition: playback.media?.live ? undefined : player.position, paused: true, follow: followOf(playback) };
   };
-  // The group reports the sound; a screen adds the subtitles it shows.
+  // The group reports the sound; a screen adds the subtitles it shows. Paused in Where it plays, it keeps that message.
   const observeSynced = (playback: Playback) => {
     const { heard, seen } = playback;
     if (!heard) return;
     const picture = seen?.playbackId === heard.playbackId ? seen : undefined;
-    playback.session.observe(picture ? { ...heard, tracks: [...picture.tracks?.filter(track => track.kind !== "audio") ?? [], ...heard.tracks ?? []], subtitleDelay: picture.subtitleDelay } : heard);
+    const waiting = playback.choosing && heard.status === "paused" ? { error: stateOf(playback).player.error } : {};
+    playback.session.observe({ ...heard, ...picture ? { tracks: [...picture.tracks?.filter(track => track.kind !== "audio") ?? [], ...heard.tracks ?? []], subtitleDelay: picture.subtitleDelay } : {}, ...waiting });
   };
   // Direct capture uses the same player and output ownership with a low-latency media transport.
   const routeLive = (playback: Playback, sourceId: string) => {
@@ -708,7 +715,10 @@ export async function createHub(options: HubOptions) {
     const playbackId = stateOf(playback).player.playbackId;
     // As in sendTo, an output a waiting shared source uses starts it.
     const source = live.source(sourceOf(playback) ?? "");
-    if (playback.choosing && source && playbackId && (next.picture && source.video || next.sound && source.audio)) await playback.session.command({ type: "pause", playbackId, paused: false }, authorize);
+    if (playback.choosing && source && playbackId && (next.picture && source.video || next.sound && source.audio)) {
+      await playback.session.command({ type: "pause", playbackId, paused: false }, authorize);
+      playback.choosing = undefined;
+    }
     if (deviceId === hostId() && (next.picture || next.sound) && playbackId && playback.hostMpv?.has(playbackId) && mpvPlayback !== playback) playback.session.reload();
     // A screen that joins a synced Playback loads the picture for itself and follows the clock.
     reconcile(playback);
