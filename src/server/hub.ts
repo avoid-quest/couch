@@ -717,6 +717,8 @@ export async function createHub(options: HubOptions) {
     const source = live.source(sourceOf(playback) ?? "");
     if (playback.choosing && source && playbackId && (next.picture && source.video || next.sound && source.audio)) {
       await playback.session.command({ type: "pause", playbackId, paused: false }, authorize);
+      // A group that waited through Next was never sent the item it held: it loads it now.
+      if (playback.synced && playback.loaded?.playbackId === playbackId && playback.heard?.playbackId !== playbackId) playback.session.reload();
       playback.choosing = undefined;
     }
     if (deviceId === hostId() && (next.picture || next.sound) && playbackId && playback.hostMpv?.has(playbackId) && mpvPlayback !== playback) playback.session.reload();

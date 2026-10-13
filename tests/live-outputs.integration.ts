@@ -1363,7 +1363,8 @@ test("private outputs a live source cannot use keep it waiting in Where it plays
   } finally { await g.close(); }
 });
 
-test("two private pictures a live source cannot use keep its group waiting in Where it plays, until one of them uses it", { timeout: 20_000 }, async () => {
+// Next onto a queued item of the source, directly or after an ordinary item the pictures play, waits unloaded with them.
+for (const via of ["", "a queued item of it", "an ordinary item and a queued item of it"] as const) test(`two private pictures a live source cannot use keep its group waiting in Where it plays, until one of them uses it${via && `, after Next to ${via}`}`, { timeout: 20_000 }, async () => {
   const f = await liveFixture({ local: true });
   try {
     await f.publish("audio", "system-audio", true);
@@ -1398,7 +1399,22 @@ test("two private pictures a live source cannot use keep its group waiting in Wh
     assert.deepEqual({ status: f.receiver.state.player.status, error: f.receiver.state.player.error }, { status: "paused", error: "Other is not sharing an output this source uses. Choose where it plays." });
     assert.deepEqual(f.receiver.state.outputs?.map(output => [output.deviceId, output.picture, output.sound]).sort(), [[f.receiver.id, true, false], [local.id, true, false]].sort(), "the private pictures stay");
     assert.equal(sheet.observe(), 1);
-    // Receiver's own sound uses it, so raising it resumes the same playback and closes the request.
+    if (via) {
+      if (via.startsWith("an ordinary")) assert.equal((await f.receiver.command({ type: "enqueue", entry: ordinary(f, "movie") })).ok, true);
+      assert.equal((await f.receiver.command({ type: "playLive", sourceId: "audio", playNow: false })).ok, true);
+      if (via.startsWith("an ordinary")) {
+        // Both pictures show an ordinary item, which closes the request.
+        assert.equal((await f.receiver.command({ type: "next", playbackId: f.receiver.state.player.playbackId! })).ok, true);
+        await until(() => playingNow(f.receiver) === "movie" && [f.receiver, local].every(client => client.load()?.playbackId === f.receiver.state.player.playbackId));
+        assert.equal(chooserRequest(f.receiver.state), null);
+      }
+      const from = f.receiver.state.player.playbackId;
+      assert.equal((await f.receiver.command({ type: "next", playbackId: from! })).ok, true);
+      await until(() => f.receiver.state.player.playbackId !== from && f.receiver.state.player.status === "paused" && chooserRequest(f.receiver.state) !== null);
+      assert.deepEqual(f.receiver.state.outputs?.map(output => [output.deviceId, output.picture, output.sound]).sort(), [[f.receiver.id, true, false], [local.id, true, false]].sort(), "the private pictures stay");
+    }
+    const current = f.receiver.state.player.playbackId;
+    // Receiver's own sound uses it, so raising it starts the current item in the same playback and closes the request.
     assert.equal((await f.receiver.command({ type: "output", deviceId: f.receiver.id, level: 40 })).ok, true);
     await until(() => f.receiver.state.player.status === "playing");
     const resumed = f.heard(1);
@@ -1406,7 +1422,7 @@ test("two private pictures a live source cannot use keep its group waiting in Wh
     assert.equal(chooserRequest(f.receiver.state), null);
     assert.equal(f.receiver.state.player.error, null);
     assert.equal(f.receiver.state.playback, playback);
-    assert.equal(f.receiver.state.player.playbackId, playbackId);
+    assert.equal(f.receiver.state.player.playbackId, via ? current : playbackId);
     assert.equal(loads(f.publisher).some(load => "livePeerId" in load || load.source.includes("/api/live/")), false, "its publisher never receives it");
   } finally { await f.close(); }
 });
