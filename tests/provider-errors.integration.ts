@@ -50,3 +50,35 @@ test("a provider fetch timeout gets safe copy", async () => {
     assert.deepEqual(await response.json(), { error: "The provider took too long to respond. Try again." });
   } finally { providers.close(); }
 });
+
+for (const declared of [false, true]) test(`provider JSON bounds a ${declared ? "declared" : "chunked"} response and cancels its body`, async () => {
+  let cancelled = false;
+  const request = (async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new Uint8Array(4 * 1024 * 1024 + 1)); },
+    cancel() { cancelled = true; },
+  }), { headers: declared ? { "Content-Length": "9999999" } : {} })) as typeof fetch;
+  await assert.rejects(providerJson("https://provider.example/catalog", {}, request), /The provider returned too much data\./);
+  assert.equal(cancelled, true);
+});
+
+test("provider JSON keeps safe empty and invalid response errors", async () => {
+  for (const [response, message] of [[new Response(null), "The provider returned no data."], [new Response("<html>PRIVATE</html>"), "The provider returned invalid data."]] as const) {
+    await assert.rejects(providerJson("https://provider.example/catalog", {}, (async () => response) as typeof fetch), error => error instanceof Error && error.message === message);
+  }
+});
+
+test("provider JSON cancels a stalled response and keeps the caller's reason", async () => {
+  const controller = new AbortController(), reason = new Error("Stopped browsing");
+  let cancelled = false, started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const request = (async () => {
+    const response = new Response(new ReadableStream({ cancel() { cancelled = true; } }));
+    started();
+    return response;
+  }) as typeof fetch;
+  const pending = providerJson("https://provider.example/catalog", { signal: controller.signal }, request);
+  await ready;
+  controller.abort(reason);
+  await assert.rejects(pending, error => error === reason);
+  assert.equal(cancelled, true);
+});

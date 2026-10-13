@@ -1,7 +1,8 @@
 import type { CollectionLink, MediaCollection, MediaShape } from "./media";
 import { isStreamingCommunityHost } from "./streamingcommunity";
+import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123";
 
-export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity";
+export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity" | "movies123";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export type ProviderItem = {
@@ -52,6 +53,7 @@ export function providerForUrl(value: string): ProviderId | undefined {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
     if (isStreamingCommunityHost(url.hostname)) return "streamingcommunity";
+    if (isMovies123Host(url.hostname)) return "movies123";
     const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"], soundcloud: ["soundcloud.com"] };
     return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
   } catch { return; }
@@ -64,6 +66,10 @@ export function publicProviderMediaUrl(value: string): string | undefined {
     const url = new URL(value), provider = providerForUrl(value);
     if (!provider || url.port || url.hash) return;
     const path = url.pathname.replace(/\/$/, "");
+    if (provider === "movies123") {
+      const page = movies123PageUrl(value);
+      return page && (page.pathname.startsWith("/movie/") || page.searchParams.has("episode")) ? `${movies123Origin}${page.pathname}${page.search}` : undefined;
+    }
     if (provider === "streamingcommunity" && /^\/(?:[a-z]{2}\/)?(?:titles\/\d+(?:-[\w-]+)?|watch\/\d+)$/.test(path)
       && (!url.search || /^\?e=\d+$/.test(url.search) && /\/watch\/\d+$/.test(path))) return url.href;
     if (provider === "youtube") {

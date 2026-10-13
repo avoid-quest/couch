@@ -2,6 +2,9 @@ import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import { isMovies123Host } from "../shared/movies123";
+import { resolveMovies123Link } from "./movies123";
+import { movies123Title } from "./providers/movies123";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
@@ -134,13 +137,20 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
+    const movies123 = isMovies123Host(host) ? await resolveMovies123Link(source, signal, globalThis.fetch, subtitleLanguage) : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", streamingCommunity ?? source], { ...options, signal, plugin });
+    const sourceHeaders = Object.entries(movies123?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", movies123?.url ?? streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     if (info._has_drm === true) await rejectDrm(info, signal);
     const media = parseMedia(info, subtitleLanguage);
+    if (movies123) {
+      media.metadata = { ...media.metadata, ...movies123.metadata };
+      if (movies123.subtitles.length) media.subtitles = movies123.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
+    }
     try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
+    if (movies123) media.headers = { ...media.headers, ...headers(movies123.headers) };
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
     // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
     // its own headers, opens the master playlist instead.
@@ -175,6 +185,10 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
 export function createWebMediaInspector(options: ResolverOptions = {}) {
   return async function inspectWebMedia(url: string, signal?: AbortSignal, streamingCommunityOrigin?: string): Promise<WebMediaMetadata> {
     const source = mediaUrl(url);
+    if (isMovies123Host(new URL(source).hostname)) {
+      const { title, thumbnail, duration } = (await movies123Title(source, signal)).item;
+      return { title, thumbnail, duration };
+    }
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--ignore-no-formats-error", "--", streamingCommunity ?? source], { ...options, signal, plugin: streamingCommunity ? "streamingcommunity" : undefined });
     return publicMetadata(parseInfo(output));

@@ -89,7 +89,7 @@ export function createSubtitles(player: (playbackId: string) => PlayerState | un
       const expected = Buffer.from(sign(url));
       if (!url || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response("Not found", { status: 404 });
       const signal = AbortSignal.timeout(10_000);
-      const content = await fetch(url, { signal }).then(async response => {
+      const content = await fetch(url, { signal, redirect: "error" }).then(async response => {
         if (!response.ok) { await response.body?.cancel(); return ""; }
         return new TextDecoder().decode(await boundedBytes(response, subtitleSizeLimit, signal));
       }).catch(() => "");

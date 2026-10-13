@@ -4,6 +4,7 @@ import { createSubtitles, sourceSubtitle, subtitleSizeLimit } from "../src/serve
 const upstream = "https://subtitles.example/captions.srt";
 const address = () => new URL(sourceSubtitle(upstream), "http://couch.local");
 const subtitles = createSubtitles(() => undefined, () => {});
+const fetchUpstream = globalThis.fetch;
 const request = spyOn(globalThis, "fetch");
 afterEach(() => request.mockReset());
 afterAll(() => request.mockRestore());
@@ -18,6 +19,24 @@ test("source subtitles convert SRT and reject a changed signed URL before fetchi
   changed.searchParams.set("url", "https://other.example/captions.srt");
   expect((await subtitles.serve(changed)).status).toBe(404);
   expect(request).toHaveBeenCalledTimes(1);
+});
+
+test("source subtitles reject redirects without requesting the destination", async () => {
+  let destinationRequests = 0;
+  const destination = Bun.serve({
+    hostname: "127.0.0.1", port: 0,
+    fetch() { destinationRequests++; return new Response(cue); },
+  });
+  const source = Bun.serve({
+    hostname: "127.0.0.1", port: 0,
+    fetch() { return new Response(null, { status: 302, headers: { Location: destination.url.href } }); },
+  });
+  try {
+    request.mockImplementation(fetchUpstream);
+    const response = await subtitles.serve(new URL(sourceSubtitle(source.url.href), "http://couch.local"));
+    expect(response.status).toBe(502);
+    expect(destinationRequests).toBe(0);
+  } finally { source.stop(true); destination.stop(true); }
 });
 
 test("source subtitles stop a chunked download at the byte limit before decoding", async () => {
