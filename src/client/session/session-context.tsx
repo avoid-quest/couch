@@ -75,6 +75,10 @@ export type SessionGateValue = SessionBag & {
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
   playerTarget?: { id: string; status: string };
+  // The request to choose where a shared source plays that was last closed. It outlives the player
+  // surfaces, so moving between the mini player and Now Playing does not reopen it.
+  dismissedChooser: string | null;
+  dismissChooser: (request: string) => void;
 };
 
 export function useSessionGate(): SessionGateValue {
@@ -98,6 +102,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [linkedPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
   const videoQualityPreference = useVideoQualityPreference();
+  const [dismissedChooser, dismissChooser] = useState<string | null>(null);
 
   useEffect(() => { if (linkedPairingCode) history.replaceState(history.state, "", location.pathname + location.search); }, []);
 
@@ -293,7 +298,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId,
-    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled, dismissedChooser, dismissChooser,
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled, dismissedChooser]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

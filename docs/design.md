@@ -397,7 +397,9 @@ Messages:
   press. It is unavailable while another device's private output plays in it,
   since that output would stay. A shared source waiting for
   receivers opens Where it plays for each request to choose; dismissed, it
-  stays closed through unrelated updates. The band and mini player volume shows the loudest in-sound Device's,
+  stays closed through unrelated updates and when the mini player gives way to
+  Now Playing, since the session, not the Sheet, remembers the dismissal. A pressed
+  Only here still commits, so a publisher held out for its source stays out. The band and mini player volume shows the loudest in-sound Device's,
   or 0 while All is at 0, and moves them all together (from All's 0, raising it
   only brings All back to 100 and lowering it does nothing); their Mute mutes
   them all, and so does M.

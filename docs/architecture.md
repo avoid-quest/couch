@@ -49,11 +49,15 @@ device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
 self-join. Only here is exclusive: Core refuses it, changing nothing, while another
-device's private output would stay behind. Joining a Playback is allowed only where
+device's private output would stay behind, checking again where the move lands
+after the item resolves. Joining a Playback is allowed only where
 the joining device could already control it, because joining brings its group
 transport and queue controls; direct output changes still require that device's
 sharing consent. A fully private Playback can only be controlled by its output
-devices, and joining one is refused. The last Sendspin delay each speaker reported
+devices, and joining one is refused. A publisher's output held out of its own
+source (`held`) counts as one of those for control, so a private device joining
+the publisher's playback does not take it over; it is retired when the device is
+unpaired or plays elsewhere, and returns when another item becomes current. The last Sendspin delay each speaker reported
 is kept in `device_sync_delay`, so its row shows it after a restart until the
 speaker reports again; the speaker's own player keeps the value it applies.
 Revoking sharing removes remote output channels and stops their renderer or

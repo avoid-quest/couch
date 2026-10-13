@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useContext, useState, type ReactNode } from "react";
 import { Monitor, SlidersVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Item, ItemGroup, ItemSeparator } from "@/components/ui/item";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { deviceName } from "@/copy";
 import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/native-context";
+import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";
 
@@ -36,14 +37,15 @@ export function outputStatus(state: State, device: DeviceSummary, current?: stri
 /** A request to choose where a shared source plays: its playback and Core's count of requests. */
 export const chooserRequest = (state: ClientSessionState) => { const playback = state.playbacks?.find(item => item.id === state.playback); return playback?.choosing ? `${playback.id}:${playback.choosing}` : null; };
 /** Where it plays opens for each new request and otherwise stays as the user left it. */
-export const reopens = (seen: string | null, request: string | null) => !!request && request !== seen;
+export const reopens = (dismissed: string | null, request: string | null) => !!request && request !== dismissed;
 
-// Radix Dialog's controlled open state: a changed defaultOpen would not open a mounted Sheet.
+// Radix Dialog's controlled open state: a changed defaultOpen would not open a mounted Sheet. The
+// session remembers the closed request, so the mini player and Now Playing each open it at most once.
 function ChooserSheet({ request, children }: { request: string | null; children: ReactNode }) {
-  const [open, setOpen] = useState(!!request);
-  const [seen, setSeen] = useState(request);
-  if (request !== seen) { setSeen(request); if (reopens(seen, request)) setOpen(true); }
-  return <Sheet open={open} onOpenChange={setOpen}>{children}</Sheet>;
+  const gate = useContext(SessionGateContext);
+  const [opened, setOpened] = useState(false);
+  const open = opened || reopens(gate?.dismissedChooser ?? null, request);
+  return <Sheet open={open} onOpenChange={next => { setOpened(next); if (!next && request) gate?.dismissChooser(request); }}>{children}</Sheet>;
 }
 
 type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
@@ -112,7 +114,8 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
               {capturing && <p className="text-sm text-muted-foreground">It plays on the devices you choose here.</p>}
               {privateOutput && <p className="text-sm text-muted-foreground">{privatePicture && privateSound ? "Private" : privatePicture ? "Private picture" : "Private sound"}. {mine ? "Only you can change it." : "Only this device can change it."}</p>}
             </div>
-            <Toggle variant="outline" pressed={only} disabled={!canSolo} aria-label={`Only on ${device.name}`} onPressedChange={() => { if (!only) void run({ type: "solo", deviceId: device.id }); }} className={cn("md:col-start-3 md:row-start-1", inverts)}>Only here</Toggle>
+            {/* Pressed again it still commits: a publisher held out for its own capture would otherwise return. */}
+            <Toggle variant="outline" pressed={only} disabled={!canSolo} aria-label={`Only on ${device.name}`} onPressedChange={() => void run({ type: "solo", deviceId: device.id })} className={cn("md:col-start-3 md:row-start-1", inverts)}>Only here</Toggle>
             <div className="col-span-2 min-w-0 md:col-span-1 md:col-start-2 md:row-start-1">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <Toggle variant="outline" pressed={!!current?.picture && !playback?.audioOnly} disabled={!video || locked || protectedElsewhere || playback?.audioOnly} aria-label={`${device.name} picture`} onPressedChange={picture => void run({ type: "output", deviceId: device.id, picture })} className={cn("shrink-0", inverts)}><Monitor aria-hidden="true" />Picture</Toggle>
