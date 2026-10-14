@@ -54,20 +54,25 @@ rm -f "$COUCH_DATA_DIR/turn/container"
 
 cleanup() {
   trap - EXIT INT TERM
-  if [[ -n ${core_pid:-} ]] && kill "$core_pid" 2>/dev/null; then wait "$core_pid" 2>/dev/null || true; fi
-  # Only the container this run created, by the ID Docker recorded.
-  if [[ -s $COUCH_DATA_DIR/turn/container ]]; then docker stop -t 5 "$(<"$COUCH_DATA_DIR/turn/container")" >/dev/null 2>&1 || true; fi
+  # Core and the relay's log follower, then the container this run created, by the ID Docker recorded.
+  kill $(jobs -p) 2>/dev/null || true
+  wait || true
+  if [[ -s $COUCH_DATA_DIR/turn/container ]]; then docker rm -f "$(<"$COUCH_DATA_DIR/turn/container")" >/dev/null 2>&1 || true; fi
   rm -f "$COUCH_DATA_DIR/live-dev.pid" "$COUCH_DATA_DIR/core.pid" "$COUCH_DATA_DIR/turn/container"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# In the foreground, so a signal waits until Docker has recorded the container, and in
+# its own session, so Ctrl-C can't stop Docker between creating and recording it.
 # Host networking: Docker publishes large relay port ranges badly (coturn's image README).
-docker run --rm --pull=never --name "$container" --cidfile "$COUCH_DATA_DIR/turn/container" --network host --user "$(id -u):$(id -g)" \
+setsid -w docker run -d --pull=never --name "$container" --cidfile "$COUCH_DATA_DIR/turn/container" --network host --user "$(id -u):$(id -g)" \
   --mount type=tmpfs,destination=/var/lib/coturn \
   -v "$COUCH_DATA_DIR/turn/turnserver.conf:/etc/coturn/turnserver.conf:ro" \
-  "$image" -c /etc/coturn/turnserver.conf > "$COUCH_DATA_DIR/logs/turn.log" 2>&1 &
+  "$image" -c /etc/coturn/turnserver.conf >/dev/null
+# Follows the relay's output until it stops.
+docker logs -f "$(<"$COUCH_DATA_DIR/turn/container")" > "$COUCH_DATA_DIR/logs/turn.log" 2>&1 &
 turn_pid=$!
 for _ in {1..20}; do
   [[ -z $(ss -Htln "src $address:$turn_port") ]] || break
@@ -76,6 +81,8 @@ for _ in {1..20}; do
 done
 [[ -n $(ss -Htln "src $address:$turn_port") ]] || { echo "The relay didn't listen on $address:$turn_port; see $COUCH_DATA_DIR/logs/turn.log" >&2; exit 1; }
 
+# Core appends to its log and makes a new pairing code each start: read only this run's lines.
+log_start=$(stat -c %s "$COUCH_DATA_DIR/logs/couch.log" 2>/dev/null || echo 0)
 COUCH_LIVE_TURN_URL="turn:$address:$turn_port?transport=tcp" COUCH_LIVE_TURN_USERNAME=couch COUCH_LIVE_TURN_CREDENTIAL=$credential \
   node build/core.mjs >> "$COUCH_DATA_DIR/logs/couch.log" 2>&1 &
 core_pid=$!
@@ -88,7 +95,7 @@ for _ in {1..60}; do
 done
 curl -skf "https://$address:$COUCH_PORT/api/health" >/dev/null || { echo "Core didn't answer on https://$address:$COUCH_PORT; see $COUCH_DATA_DIR/logs/couch.log" >&2; exit 1; }
 
-echo "Couch: https://$address:$COUCH_PORT ($(grep -m1 -o 'Pairing code: [0-9]*' "$COUCH_DATA_DIR/logs/couch.log"))"
+echo "Couch: https://$address:$COUCH_PORT ($(tail -c +$((log_start + 1)) "$COUCH_DATA_DIR/logs/couch.log" | grep -m1 -o 'Pairing code: [0-9]*'))"
 echo "Relay: turn:$address:$turn_port?transport=tcp, container $container"
 echo "Logs: $COUCH_DATA_DIR/logs/couch.log and turn.log. Stop: kill $$"
 wait -n "$core_pid" "$turn_pid" || true

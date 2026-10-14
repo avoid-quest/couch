@@ -74,7 +74,7 @@ Browser checks with a generated canvas and audio track can verify routing, WebRT
 To test a candidate build from a Mac and phones on the LAN, run its Core on a
 Linux machine with a temporary TURN relay. [scripts/live-dev.sh](../scripts/live-dev.sh)
 starts the built Core (`node build/core.mjs`) and coturn's official image,
-waits until both answer, and stops both when it exits. It needs Docker, `curl`,
+waits until both answer, and stops both when it exits. It needs Docker, `curl`, `setsid`,
 `openssl`, `ss` and `ip`. Pull the pinned relay image once; the script never
 pulls it:
 
@@ -100,7 +100,8 @@ never in arguments or logs, and lasts as long as that data directory. It relays
 only to private (RFC 1918) addresses, so it can't carry traffic to the internet;
 do not forward its ports. A standalone Core has no LAN STUN, so a browser that
 hides its host addresses, as Android Chrome does without capture permission,
-connects through the relay rather than falling back to buffered playback.
+can connect through the relay rather than fall back to buffered playback, if it
+can reach this address and port.
 
 Capture on the Mac with Couch Preview 0.3.1-preview.3 or later in Client mode,
 which has the capture bridge the page uses. A scratch data directory leaves the
@@ -130,6 +131,11 @@ ps -o args= -p "$(cat "$couch_live_data/live-dev.pid")"
 kill "$(cat "$couch_live_data/live-dev.pid")"
 ```
 
-If the script itself was killed without cleaning up, stop what it recorded:
-`kill "$(cat "$couch_live_data/core.pid")"` and
-`docker stop "$(cat "$couch_live_data/turn/container")"`.
+If the script itself was killed without cleaning up, remove what it recorded,
+Core once `ps` shows it is `node build/core.mjs`:
+
+```sh
+ps -o args= -p "$(cat "$couch_live_data/core.pid")"
+kill "$(cat "$couch_live_data/core.pid")"
+docker rm -f "$(cat "$couch_live_data/turn/container")"
+```
