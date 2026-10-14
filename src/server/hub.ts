@@ -1,3 +1,4 @@
+import { parseLiveRelay } from "./live-ice";
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
 import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
@@ -104,6 +105,10 @@ export async function createHub(options: HubOptions) {
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   let allowLanHttp = store.allowLanHttp() ?? options.allowLanHttp ?? false;
+  let savedRelay = store.liveRelay();
+  const liveRelay = () => savedRelay === undefined ? options.liveTurn ?? null : savedRelay;
+  const relaySettings = () => ({ relay: liveRelay(), source: savedRelay === undefined ? options.liveTurn ? "environment" : "none" : "saved" });
+  const iceServers = () => [...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(liveRelay() ? [liveRelay()!] : [])];
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
   const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
@@ -1334,8 +1339,26 @@ export async function createHub(options: HubOptions) {
     const caller = identity();
     if (!caller) return cors(request, json({ error: "Pair this device first." }, 401));
     if (url.pathname === "/api/live/ice-servers") return cors(request, request.method === "GET"
-      ? json([...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(options.liveTurn ? [options.liveTurn] : [])])
+      ? json(iceServers())
       : new Response(null, { status: 405, headers: { Allow: "GET" } }));
+    if (url.pathname === "/api/settings/live-relay") {
+      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      if (request.method === "GET") return cors(request, json(relaySettings()));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const relay = parseLiveRelay(await settingField(request, "relay"));
+        store.saveLiveRelay(relay);
+        savedRelay = relay;
+        // Existing peers keep playing. Connected publishers and receivers use the
+        // new configuration when they next negotiate, without reloading capture.
+        const message = JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage);
+        for (const socket of sockets) {
+          try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); continue; }
+          send(socket, message);
+        }
+        return cors(request, json(relaySettings()));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the live relay." }, error instanceof ControllerError ? error.status : 500)); }
+    }
     if (upload) {
       const sourceId = url.searchParams.get("sourceId") ?? "", key = url.searchParams.get("key") ?? "";
       if (!live.acceptsUpload(sourceId, trusted ? hostId() : caller.device!.id, key)) return json({ error: "This capture upload is not authorized." }, 403);
@@ -1472,6 +1495,7 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
         if (socket.data.tv) tvDevices.add(deviceOf(socket));
         log(`device online ${nameOf(deviceOf(socket))}`);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));

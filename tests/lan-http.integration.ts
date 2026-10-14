@@ -101,7 +101,7 @@ test("opt-in HTTP preserves pairing, origin checks, host isolation and sharing s
   const { token } = await paired.json();
   await assert.rejects(once(f.ws(token, "http://foreign.example"), "open"), /403/);
   const socket = f.ws(token);
-  const [data] = await once(socket, "message"); assert.equal(JSON.parse(String(data)).type, "state");
+  await new Promise<void>(resolve => socket.on("message", data => { if (JSON.parse(String(data)).type === "state") resolve(); }));
   // Only the local host may disable sharing. Doing so closes the real LAN socket.
   assert.equal((await fetch(`${f.http}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: '{"enabled":false}' })).status, 403);
   const closed = once(socket, "close");

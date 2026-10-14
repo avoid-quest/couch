@@ -1,3 +1,4 @@
+import type { LiveRelaySettings } from "../../shared/live-relay";
 import { queryOptions } from "@tanstack/react-query";
 import type { BluetoothState } from "../../shared/bluetooth";
 import type { DisplayState } from "../../shared/display";
@@ -93,3 +94,6 @@ export const lanHttpQuery = (credentials: ApiCredentials) =>
     queryKey: ["devices", "http"],
     queryFn: ({ signal }) => apiJson<{ enabled: boolean }>(credentials, "/api/settings/http", { signal }),
   });
+
+export const liveRelayQuery = (credentials: ApiCredentials) =>
+  queryOptions({ queryKey: ["live-relay"], queryFn: () => apiJson<LiveRelaySettings>(credentials, "/api/settings/live-relay"), retry: false });

@@ -152,8 +152,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     } catch (reason) { stopUpload(current, reason instanceof Error ? reason : new Error("Buffered playback of this input could not start.")); }
   };
   return {
-    receive(message: Extract<ServerMessage, { type: "livePeers" | "liveSignal" }>) {
+    receive(message: Extract<ServerMessage, { type: "livePeers" | "liveSignal" | "liveIceServers" }>) {
       if (closed) return;
+      if (message.type === "liveIceServers") { options.iceServers = message.iceServers; return; }
       if (message.type === "liveSignal") { receiveSignal(message); return; }
       if (message.sourceId !== publication?.source.id) return;
       // A failed attempt waits for a new Core request; its delayed error cannot fail that new attempt.

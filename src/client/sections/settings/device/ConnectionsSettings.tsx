@@ -1,3 +1,4 @@
+import { LiveRelaySettings } from "./LiveRelaySettings";
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -109,6 +110,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
       {manager && <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />}
     </SettingsSection>
+    {host && <LiveRelaySettings credentials={credentials} connected={connected} />}
     <SettingsSection data-devices>
       {devices.isSuccess && !host && manager && !devices.data.some(device => device.role === "host") && <SettingsRow label={hostName} description="Runs this Couch">
         <Button variant="outline" disabled={!connected || rename.isPending} onClick={() => startRename(hostName)}>Rename</Button>

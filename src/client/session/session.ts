@@ -253,7 +253,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
           if (!live.current?.play(message.command)) play(message.command);
-        } else if (message.type === "livePeers" || message.type === "liveSignal") {
+        } else if (message.type === "livePeers" || message.type === "liveSignal" || message.type === "liveIceServers") {
           live.current?.receive(message);
         } else if (message.type === "sendspin") {
           listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");

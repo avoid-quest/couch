@@ -531,3 +531,16 @@ test("closing the desktop window cancels sharing at each step of starting it", (
   await flush();
   assert.equal(recorders.at(-1).state, "recording");
 `, desktop));
+
+test("saved relay changes reach the next negotiation without interrupting a live peer", () => check(`
+  session.play(direct());
+  peers[0].connectionState = "connected";
+  peers[0].onconnectionstatechange();
+  const updated = [{ urls: "turn:other.example:3478", username: "new", credential: "new-password" }];
+  session.receive({ type: "liveIceServers", iceServers: updated });
+  assert.equal(peers[0].connectionState, "connected");
+  assert.deepEqual(peers[0].config.iceServers, iceServers);
+  session.play(direct({ livePeerId: "next" }));
+  assert.deepEqual(peers[1].config.iceServers, updated);
+  assert.equal(signals.length, 0);
+`));
