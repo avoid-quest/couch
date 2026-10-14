@@ -27,14 +27,18 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
   const [pending, setPending] = useState(false);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // What to turn on in the system's settings, once capturing failed without it.
-  const [blocked, setBlocked] = useState<string | null>(null);
+  // What to turn on in the system's settings, once capturing failed without it. A check that
+  // ends after the choice changed answers for the previous kind, so it shows only for that one.
+  const [blocked, setBlocked] = useState<{ kind: CaptureKind; text: string } | null>(null);
   const mine = state?.liveSources?.find(source => source.id === localLiveSourceId);
   const supported = !!navigator.mediaDevices?.getUserMedia;
   const displaySupported = !!navigator.mediaDevices?.getDisplayMedia;
   const choosesSource = !!couchApp?.captureSources && kind !== "microphone";
   const available = connected && !pending && !listing;
-  const checkAccess = async () => setBlocked(await couchApp?.captureAccess?.(kind).catch(() => null) ?? null);
+  const checkAccess = async () => {
+    const text = await couchApp?.captureAccess?.(kind).catch(() => null);
+    setBlocked(text ? { kind, text } : null);
+  };
   // Returning from the system's settings clears the row once access is on.
   useEffect(() => {
     if (!blocked) return;
@@ -121,7 +125,7 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
         {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>
     </>}
-    {blocked && !mine && <SettingsRow label="Allow access" description={blocked}>
+    {blocked?.kind === kind && !mine && <SettingsRow label="Allow access" description={blocked.text}>
       <Button variant="outline" onClick={() => void couchApp?.openCaptureSettings?.(kind).catch(reason => setError(errorText(reason)))}>Open settings</Button>
     </SettingsRow>}
     {!supported && <p className="text-sm text-muted-foreground">Open Couch over HTTPS or on localhost to share this device.</p>}
