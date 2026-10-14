@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 import type { MediaTrack, PlaybackCommand } from "../src/shared/protocol";
 import { liveFixture, until } from "./live-input.fixture";
 
@@ -240,6 +242,113 @@ test("a receiver that can't connect directly plays Couch's buffered stream alone
     assert.equal(f.publisher.state.playback, group);
     assert.equal(f.publisher.state.currentEntryId, entry);
     assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "relaying must not end capture");
+  } finally { await f.close(); }
+});
+
+test("a receiver that goes offline leaves the other playing its own peer, and gets a fresh one back", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const other = await addOther(f);
+    const otherPeer = rtc(other.load()!), before = [loads(other).length, other.messages.length];
+    f.receiver.socket.terminate();
+    await until(() => f.publisher.state.devices?.find(device => device.id === f.receiver.id)?.online === false);
+    await until(() => f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.length === 1);
+    assert.deepEqual(f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.map(peer => peer.peerId), [otherPeer]);
+    assert.equal(loads(other).length, before[0], "the online receiver keeps its peer");
+    assert.equal(other.messages.slice(before[1]).some(message => message.type === "player" && message.command.type === "stop"), false);
+    other.report();
+    assert.equal(f.publisher.state.player.status, "playing");
+    const back = await f.connect(1, "&audio=1&video=1");
+    await until(() => !!back.load());
+    assert.notEqual(rtc(back.load()!), otherPeer);
+    assert.equal(rtc(other.load()!), otherPeer);
+  } finally { await f.close(); }
+});
+
+test("a second receiver's newest tab that closes hands its peer back to its older tab", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const other = await addOther(f);
+    const tab = await f.connect(2, "&audio=1&video=1");
+    await until(() => !!tab.load());
+    const first = [loads(f.receiver).length, loads(other).length];
+    tab.socket.terminate();
+    await until(() => loads(other).length > first[1]!);
+    const peer = rtc(other.load()!);
+    await until(() => f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.some(item => item.peerId === peer) === true);
+    assert.equal(loads(f.receiver).length, first[0], "the first receiver is untouched");
+  } finally { await f.close(); }
+});
+
+// FFmpeg for buffered delivery, replaced after the fixture starts: Core looks it up when it first buffers.
+const ffmpeg = (f: Fixture, script: string) => {
+  const directory = join(dirname(f.databasePath), "replaced");
+  mkdirSync(directory);
+  writeFileSync(join(directory, "ffmpeg"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+  process.env.PATH = `${directory}${delimiter}${process.env.PATH}`;
+  return directory;
+};
+
+test("a fallback that becomes ready after a pause loads paused", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const gate = join(dirname(f.databasePath), "gate");
+    ffmpeg(f, `case " $* " in *" -version "*) while [ ! -e '${gate}' ]; do sleep 0.02; done;; esac\nexec '${join(dirname(f.databasePath), "ffmpeg")}' "$@"`);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.publisher.state.outputs?.[0]?.buffered);
+    assert.equal((await f.publisher.command({ type: "pause", playbackId: f.receiver.load()!.playbackId, paused: true })).ok, true);
+    f.receiver.report({ status: "paused" });
+    await until(() => f.publisher.state.player.status === "paused");
+    writeFileSync(gate, "");
+    await until(() => !!f.receiver.load()?.hls);
+    relayed(f.receiver.load()!, f.receiver);
+    assert.equal(f.receiver.load()!.paused, true, "it loads as the playback is now");
+  } finally { await f.close(); }
+});
+
+test("a buffered stream that fails stops its receiver and says why, while the other keeps its peer and Core doesn't retry", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const other = await addOther(f);
+    const otherPeer = rtc(other.load()!), before = [f.receiver.messages.length, loads(other).length];
+    ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error);
+    assert.ok(f.receiver.messages.slice(before[0]).some(message => message.type === "player" && message.command.type === "stop"), "the relayed receiver stops waiting");
+    assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === other.id)?.error, undefined);
+    assert.equal(loads(other).length, before[1], "the healthy receiver keeps playing");
+    assert.deepEqual(f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.map(peer => peer.peerId), [otherPeer]);
+    assert.equal(uploadRequested(f), false);
+    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "capture continues");
+    // Its level reaches the healthy receiver without starting the encoder again for this item.
+    const requests = f.publisher.messages.filter(message => message.type === "livePeers" && message.upload).length;
+    assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 30 })).ok, true);
+    await until(() => volume(other) === 30);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    assert.equal(f.publisher.messages.filter(message => message.type === "livePeers" && message.upload).length, requests);
+    assert.equal(f.receiver.messages.slice(before[0]).some(message => message.type === "player" && message.command.type === "load"), false);
+  } finally { await f.close(); }
+});
+
+test("a buffered stream that fails on the only receiver shows its error", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const broken = ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => f.publisher.state.player.status === "error");
+    assert.ok(f.publisher.state.player.error);
+    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "capture continues");
+    // Playing it again tries the buffered stream again.
+    rmSync(broken, { recursive: true });
+    const before = loads(f.receiver).length;
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
+    await until(() => loads(f.receiver).length > before && !!f.receiver.load()?.hls);
+    relayed(f.receiver.load()!, f.receiver);
   } finally { await f.close(); }
 });
 

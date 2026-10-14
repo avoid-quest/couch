@@ -228,8 +228,8 @@ Direct receivers are not aligned with each other.
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline
 <name>` for each tab, `playback <id> Direct|Synced on <names>` when a Playback's
-delivery or outputs change (a live input's relayed receiver is marked `(buffered)`),
-`live <id> buffered stream stopped: <reason>` when a buffered live stream fails, and `player error <id> on <name> host=<host>:
+delivery or outputs change (a live input's relayed receiver is marked `(buffered)`, or `(unavailable)` once its buffered stream failed),
+`live <id> buffered stream stopped: <reason>` when a buffered live stream fails, with a `player error` line for each receiver it relayed, and `player error <id> on <name> host=<host>:
 <message>` once per error a tab reports for each load. Core also logs a Sendspin
 FFmpeg failure as `player error <id> Synced host=<host>: <message>`, even without
 a reporting tab; stop and pause stay quiet. Error text is bounded to 300 characters

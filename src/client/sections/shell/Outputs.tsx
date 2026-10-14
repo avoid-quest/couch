@@ -129,6 +129,7 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
               <p data-output-status className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{status}</p>
               {capturing && <p className="text-sm text-muted-foreground">It plays on the devices you choose here.</p>}
               {current?.buffered && <p className="text-sm text-muted-foreground">Buffered: it couldn't connect directly to this source, so it plays a few seconds behind.</p>}
+              {current?.error && <p className="text-sm text-destructive">It couldn't connect directly to this source, and Couch's buffered stream failed: {current.error}</p>}
               {privateOutput && <p className="text-sm text-muted-foreground">{privatePicture && privateSound ? "Private" : privatePicture ? "Private picture" : "Private sound"}. {mine ? "Only you can change it." : "Only this device can change it."}</p>}
             </div>
             {/* Pressed again it still commits: a publisher held out for its own capture would otherwise return. */}

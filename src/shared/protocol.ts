@@ -43,7 +43,8 @@ export type PlayerState = {
 // volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds as it
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
 // buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean };
+// error: that buffered stream failed, so the live input doesn't reach it this item.
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: its shared source waits for Where it plays; it counts up with each request to choose.
 // held: its publisher's output, left out while its own capture plays and returning after it.
