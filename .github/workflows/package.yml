@@ -56,7 +56,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.2
+          cache-dependency-path: native/live-relay/go.sum
       - run: bun install --frozen-lockfile
+      - run: go test -v ./...
+        working-directory: native/live-relay
       - if: inputs.version
         run: bun pm pkg set version=${{ inputs.version }}
       # The Mac app is signed with Couch's own certificate (docs/ci.md), which

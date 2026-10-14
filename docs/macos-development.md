@@ -36,6 +36,9 @@ security find-identity -v -p codesigning
 
 ## Package and launch the isolated app
 
+Install Go 1.27.2 on PATH for packaging the bundled live relay. The package hook
+builds its arm64 executable inside the app before code signing.
+
 These overrides use the repository's electron-builder v26 configuration. Keep
 the same bundle ID and certificate across rebuilds. `forceCodeSigning` makes a
 missing certificate fail the build instead of silently falling back.
