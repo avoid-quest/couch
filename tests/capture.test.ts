@@ -21,6 +21,8 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
   const window = { id: 1 };
   const prompts: { parent: unknown; options: MessageBoxOptions }[] = [];
   let list = [screen, { id: "window:2:0", name: "Music app" }];
+  const statuses: Record<string, string> = { screen: "granted", microphone: "granted" };
+  const opened: string[] = [];
   const module = { exports: {} as typeof import("../app/capture") };
   runInNewContext(code, {
     module, exports: module.exports, URL, AbortController, Date: { now: () => now },
@@ -29,7 +31,8 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
       BrowserWindow: { fromWebContents: (from: unknown) => from === contents ? window : null },
       dialog: { showMessageBox(parent: unknown, options: MessageBoxOptions) { prompts.push({ parent, options }); return prompt(options); } },
       desktopCapturer: { getSources: async () => list },
-      systemPreferences: { askForMediaAccess: microphone },
+      systemPreferences: { askForMediaAccess: microphone, getMediaAccessStatus: (type: string) => statuses[type] },
+      shell: { openExternal: async (target: string) => { opened.push(target); } },
       session: { defaultSession: {
         setPermissionCheckHandler(handler: Check) { check = handler; },
         setPermissionRequestHandler(handler: Request) { request = handler; },
@@ -40,7 +43,7 @@ function harness(platform = "darwin", version = "14.2", microphone: () => Promis
   const capture = module.exports.createCapture(() => contents, () => url, "http://localhost:4100");
   capture.install();
   return {
-    capture, contents, window, prompts,
+    capture, contents, window, prompts, statuses, opened,
     list(next: typeof list) { list = next; },
     expire() { now += 30_001; },
     navigate(next: string) { contents.mainFrame.url = next; },
@@ -409,4 +412,43 @@ test("the actual preload tells the page when Main closes its window, once per su
   close();
   expect(closes).toBe(2);
   expect(listeners.get("couch:window-closed")?.size).toBe(0);
+});
+
+test("a capture macOS denied names the setting to turn on and opens it", async () => {
+  const h = harness();
+  expect(h.capture.access("screen")).toBeNull();
+  h.statuses.screen = "denied";
+  h.statuses.microphone = "not-determined";
+  expect(h.capture.access("system-audio")).toContain("Screen & System Audio Recording");
+  expect(h.capture.access("microphone")).toContain("Microphone");
+  await h.capture.openSettings("system-audio");
+  await h.capture.openSettings("microphone");
+  expect(h.opened).toEqual([
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+  ]);
+  expect(() => h.capture.access("camera")).toThrow("Choose what to share.");
+});
+
+test("Windows has a setting only for the microphone, and Linux none", async () => {
+  const windows = harness("win32");
+  windows.statuses.microphone = "denied";
+  expect(windows.capture.access("screen")).toBeNull();
+  expect(windows.capture.access("microphone")).toContain("desktop apps");
+  await windows.capture.openSettings("screen");
+  await windows.capture.openSettings("microphone");
+  expect(windows.opened).toEqual(["ms-settings:privacy-microphone"]);
+  const linux = harness("linux");
+  linux.statuses.screen = linux.statuses.microphone = "denied";
+  expect(linux.capture.access("microphone")).toBeNull();
+  await linux.capture.openSettings("screen");
+  expect(linux.opened).toEqual([]);
+});
+
+test("only this app's Couch window reads or opens capture settings", async () => {
+  const h = harness();
+  h.navigate("https://elsewhere.example");
+  expect(() => h.capture.access("screen")).toThrow("Start sharing from this computer's Couch window.");
+  await expect(h.capture.openSettings("screen")).rejects.toThrow("Start sharing from this computer's Couch window.");
+  expect(h.opened).toEqual([]);
 });

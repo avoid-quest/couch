@@ -341,6 +341,8 @@ function handle(name: string, run: (event: IpcMainInvokeEvent, ...args: unknown[
 handle("mode", () => choice);
 handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
+handle("capture-access", (_event, kind) => capture.access(kind));
+handle("capture-settings", (_event, kind) => capture.openSettings(kind));
 let restarting = false;
 handle("tv-presentation", (event, enabled) => {
   if (choice.mode !== "local" || new URL(event.senderFrame!.url).origin !== localOrigin) throw new Error("Change TV mode on this computer's Couch.");
