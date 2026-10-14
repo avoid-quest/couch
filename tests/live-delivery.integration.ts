@@ -334,6 +334,64 @@ test("a buffered stream that fails stops its receiver and says why, while the ot
   } finally { await f.close(); }
 });
 
+// The receiver's buffered stream fails while the other, reporting, keeps its peer.
+async function failBuffered(f: Fixture) {
+  await start(f);
+  const other = await addOther(f);
+  const broken = ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
+  f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+  await until(() => !!f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error);
+  other.report();
+  await until(() => f.publisher.state.player.status === "playing");
+  return { other, otherPeer: rtc(other.load()!), broken };
+}
+
+test("Play where the buffered stream failed tries it again, while the other keeps its peer", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    const { other, otherPeer, broken } = await failBuffered(f);
+    rmSync(broken, { recursive: true });
+    const before = [loads(f.receiver).length, loads(other).length];
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
+    await until(() => loads(f.receiver).length > before[0]! && !!f.receiver.load()?.hls);
+    relayed(f.receiver.load()!, f.receiver);
+    await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.buffered === true);
+    assert.equal(loads(other).length, before[1], "the healthy receiver keeps playing");
+    assert.deepEqual(f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.map(peer => peer.peerId), [otherPeer]);
+  } finally { await f.close(); }
+});
+
+test("when only receivers whose buffered stream failed are left online, the playback shows the error", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    const { other } = await failBuffered(f);
+    other.socket.terminate();
+    await until(() => f.publisher.state.player.status === "error");
+    assert.equal(f.publisher.state.player.error, f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error);
+    assert.deepEqual(f.publisher.messages.findLast(message => message.type === "livePeers")?.peers, []);
+  } finally { await f.close(); }
+});
+
+test("the encoder stops when the last buffered receiver goes offline and starts again when it returns, while the other keeps its peer", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const other = await addOther(f);
+    const otherPeer = rtc(other.load()!);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.receiver.load()?.hls && f.uploads.size === 1);
+    const before = loads(other).length;
+    f.receiver.socket.terminate();
+    await until(() => !uploadRequested(f) && !f.uploads.size);
+    const back = await f.connect(1, "&audio=1&video=1");
+    await until(() => !!back.load()?.hls);
+    relayed(back.load()!, back);
+    assert.ok(uploadRequested(f));
+    assert.equal(loads(other).length, before, "the healthy receiver keeps playing");
+    assert.deepEqual(f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.map(peer => peer.peerId), [otherPeer]);
+  } finally { await f.close(); }
+});
+
 test("a buffered stream that fails on the only receiver shows its error", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
