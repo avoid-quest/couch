@@ -1,4 +1,4 @@
-import type { LiveSignalMessage } from "../shared/live-input";
+import type { LiveFailedMessage, LiveSignalMessage } from "../shared/live-input";
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
@@ -102,6 +102,13 @@ export function parseLiveSignal(message: string): LiveSignalMessage | null {
   const signal = description !== undefined ? { description: { type: description.type as "offer" | "answer", sdp: description.sdp as string } }
     : { candidate: candidate === null ? null : { candidate: candidate!.candidate as string, ...(candidate!.sdpMid !== undefined ? { sdpMid: candidate!.sdpMid as string | null } : {}), ...(candidate!.sdpMLineIndex !== undefined ? { sdpMLineIndex: candidate!.sdpMLineIndex as number | null } : {}), ...(candidate!.usernameFragment !== undefined ? { usernameFragment: candidate!.usernameFragment as string | null } : {}) } };
   return { type: "liveSignal", peerId: value.peerId, signal };
+}
+
+export function parseLiveFailed(message: string): LiveFailedMessage | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "liveFailed" || !id(value.peerId) || typeof value.error !== "string") return null;
+  return { type: "liveFailed", peerId: value.peerId, error: safePlaybackError(value.error) };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);

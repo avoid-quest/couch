@@ -86,6 +86,7 @@ const check = (source: string, couchApp = "undefined") => {
     const session = createLiveSession({ iceServers, send: message => signals.push(message), command: async action => { commands.push(action); if (action.type === "publishLive" && publishing) await publishing.promise; }, upload: (sourceId, key) => Object.assign(new WebSocket(), { sourceId, key }), failed: error => failures.push(error), published() {} });
     const direct = (options = {}) => ({ type: "load", playbackId: "playing", source: "", liveSourceId: "source", livePeerId: "peer", liveOutput: { picture: true, sound: true, volume: 75 }, ...options });
     const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+    const unreachable = () => signals.filter(message => message.type === "liveFailed");
     ${source}
     session.close();
     assert.equal(timers.size, 0, "closing a session retires its connection deadline");
@@ -134,15 +135,32 @@ test("a receiver keeps only the channels Core routed to its output", () => check
   assert.ok(both.kept.every(item => item.stopped));
 `));
 
-test("stalled direct playback reports its error through the normal renderer after 30 seconds", () => check(`
+test("a receiver that doesn't connect within 10 seconds, or fails, asks Core to relay its source and keeps buffering", () => check(`
   session.play(direct());
-  advance(29999);
-  assert.equal(streamReports.filter(report => report.error).length, 0);
+  advance(9999);
+  assert.equal(unreachable().length, 0);
   advance(1);
-  assert.match(streamReports.at(-1).error, /connect/);
-  assert.equal(streamReports.at(-1).id, "playing");
+  assert.deepEqual(unreachable().map(message => message.peerId), ["peer"]);
+  assert.match(unreachable()[0].error, /10 seconds/);
   assert.equal(peers[0].connectionState, "closed");
+  assert.equal(streamReports.filter(report => report.error).length, 0, "Core decides what the player shows next");
   assert.equal(failures.length, 0, "receiver failures belong to normal Now Playing state");
+  session.play(direct({ livePeerId: "lost" }));
+  peers[1].connectionState = "connected"; peers[1].onconnectionstatechange();
+  peers[1].connectionState = "failed"; peers[1].onconnectionstatechange();
+  assert.deepEqual(unreachable().map(message => message.peerId), ["peer", "lost"]);
+  advance(60000);
+  assert.equal(unreachable().length, 2, "each peer is reported once");
+`));
+
+test("a publisher that can't negotiate a peer reports it instead of dropping it silently", () => check(`
+  const source = await session.start({ kind: "screen" });
+  RTCPeerConnection.prototype.createOffer = async () => { throw new Error("No codec in common."); };
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
+  await flush();
+  assert.deepEqual(unreachable(), [{ type: "liveFailed", peerId: "remote", error: "No codec in common." }]);
+  assert.equal(peers[0].connectionState, "closed");
+  assert.equal(recorders[0].state, "recording", "the upload Core relays from keeps running");
 `));
 
 test("connected, stopped and replaced direct sessions cancel deadlines and reject stale events", () => check(`
@@ -163,6 +181,7 @@ test("connected, stopped and replaced direct sessions cancel deadlines and rejec
   advance(60000);
   assert.equal(second.connectionState, "closed");
   assert.equal(streamReports.filter(report => report.error).length, 0);
+  assert.equal(unreachable().length, 0, "stopped and replaced peers are never reported");
 `));
 
 test("switching direct playback to a synced URL keeps capture and the warm upload alive", () => check(`
@@ -208,6 +227,7 @@ test("a signaling failure from a replaced receiver cannot fail its replacement",
   reject(new Error("stale failure"));
   await flush();
   assert.equal(streamReports.filter(report => report.error).length, 0);
+  assert.equal(unreachable().length, 0);
   peers[1].connectionState = "connected"; peers[1].onconnectionstatechange();
 `));
 

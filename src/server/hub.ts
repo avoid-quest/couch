@@ -17,7 +17,7 @@ import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality }
 import { createSession, type MediaSource } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
-import { parseCommand, parseLiveSignal, parsePlayer } from "./validation";
+import { parseCommand, parseLiveFailed, parseLiveSignal, parsePlayer } from "./validation";
 import { createLiveInputs } from "./live-input";
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams } from "./live-stream";
@@ -309,6 +309,9 @@ export async function createHub(options: HubOptions) {
   const rendered = (playback: Playback, output: Output | undefined) => !output?.sound ? 0 : Math.round((systemAudio && output.deviceId === hostId() ? 100 : heard(output.deviceId)) * trimOf(playback, output.deviceId) / 100);
   const levelOf = (playback: Playback) => rendered(playback, playback.outputs[0]);
   const spans = (playback: Playback) => new Set(playback.outputs.map(output => output.deviceId)).size > 1;
+  // Outputs that span Devices play in a group, as does a live source on a receiver that couldn't connect to it directly.
+  const grouped = (playback: Playback) => { const sourceId = sourceOf(playback); return spans(playback) || !!sourceId && playback.outputs.some(output => live.relayed(sourceId, output.deviceId)); };
+  const newGroup = (playback: Playback) => sendspin.group(playback.id, player => { playback.heard = player; observeSynced(playback); });
   // A speaker's Sendspin delay applies only while its sound plays in this Playback's group.
   const syncing = (playback: Playback, deviceId: string) => !!playback.synced && sendspin.connected(deviceId) && playback.outputs.some(output => output.deviceId === deviceId && output.sound);
   const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(playback, output) }] : []);
@@ -324,7 +327,7 @@ export async function createHub(options: HubOptions) {
   };
   const sendPlayer = (playback: Playback, command: PlaybackCommand) => {
     const sourceId = sourceOf(playback);
-    if (command.type === "stop" || command.type === "load" && (!sourceId || spans(playback))) live.closePlayback(playback.id);
+    if (command.type === "stop" || command.type === "load" && (!sourceId || grouped(playback))) live.closePlayback(playback.id);
     if (command.type === "stop") playback.loaded = undefined;
     if (command.type === "load") {
       const source = sourceId ? live.source(sourceId) : undefined;
@@ -364,6 +367,19 @@ export async function createHub(options: HubOptions) {
         mpvPlayback = playback;
       } else { mpv.send({ type: "stop" }); mpvPlayback = null; }
     }
+    // Each item is delivered as its own source and outputs require, so a relayed source's group ends with it.
+    if (command.type === "load" && grouped(playback) !== !!playback.synced) {
+      if (playback.synced) {
+        playback.synced.close();
+        playback.synced = undefined;
+        hide(playback);
+        if (!playback.renderer && playback.outputs[0]) playback.renderer = newest(playback.outputs[0].deviceId) ?? null;
+      } else {
+        playback.synced = newGroup(playback);
+        playback.synced.members(members(playback));
+        if (playback.renderer) { send(playback.renderer, playerCommand({ type: "stop" })); playback.renderer = null; }
+      }
+    }
     if (playback.synced) {
       playback.synced.send(command.type === "load" && playback.media?.playbackId === command.playbackId ? { ...command, ...playback.media } : command);
       // Screens follow the clock; only what they show reaches them.
@@ -399,7 +415,7 @@ export async function createHub(options: HubOptions) {
     playback.outputs = outputs;
     refreshTrims(playback);
     // Solo hands everything to one Device, which plays it directly.
-    if (playback.synced && !spans(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
+    if (playback.synced && !grouped(playback)) { playback.synced.close(); playback.synced = undefined; hide(playback); }
     // A group's speakers follow its outputs at once, so a publisher held out of them stops hearing its capture.
     playback.synced?.members(members(playback));
     if (!playback.renderer && outputs[0]) playback.renderer = newest(outputs[0].deviceId) ?? null;
@@ -417,7 +433,7 @@ export async function createHub(options: HubOptions) {
     playback.held = undefined;
     if (servedBy(held.deviceId) || !allows(held, held.local ? held.deviceId : "")) return;
     assign(playback, [...playback.outputs, held], source);
-    if (spans(playback) && live.source(sourceOf(playback) ?? "") === source) reconcile(playback);
+    if (grouped(playback) && live.source(sourceOf(playback) ?? "") === source) reconcile(playback);
   };
   // The selected mix moves to an item of `source`, however it was played: another publisher's held output
   // returns first; then this source's publisher is held.
@@ -520,10 +536,10 @@ export async function createHub(options: HubOptions) {
       release(playback, own.deviceId, false);
       if (!playback.outputs.length) choose(playback, own.deviceId);
     }
-    if (spans(playback)) {
+    if (grouped(playback)) {
       const fresh = !playback.synced;
       live.closePlayback(playback.id);
-      playback.synced ??= sendspin.group(playback.id, player => { playback.heard = player; observeSynced(playback); });
+      playback.synced ??= newGroup(playback);
       playback.synced.members(members(playback));
       const { player } = stateOf(playback);
       if (fresh && playback.loaded?.playbackId === player.playbackId && active(player.status)) {
@@ -569,7 +585,7 @@ export async function createHub(options: HubOptions) {
         deliver(playback, { type: "volume", volume: levelOf(playback) });
       } else if (tab) handOver(playback, tab);
     }
-    if (source && !spans(playback)) {
+    if (source && !grouped(playback)) {
       const output = playback.outputs.find(output => output.picture && source.video || output.sound && source.audio);
       playback.renderer = output ? newest(output.deviceId) ?? null : null;
       if (playback.renderer && active(stateOf(playback).player.status)) playback.session.reload();
@@ -957,7 +973,7 @@ export async function createHub(options: HubOptions) {
     if (entry.liveSourceId) {
       const source = live.source(entry.liveSourceId);
       if (!source) throw new Error("That live source has ended.");
-      if (spans(playback) && !playback.joining) await liveStreams.ready(source.id, signal);
+      if (grouped(playback) && !playback.joining) await liveStreams.ready(source.id, signal);
       return { source: liveUrl(source.id, playbackId, "core"), hls: true, audioOnly: !source.video, metadata: { live: true } };
     }
     if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, await streamingCommunityOrigin(entry.source.slice(4)), tab?.data.vp9 ?? true, stateOf(playback).preferences?.profile.subtitleLanguage);
@@ -1408,6 +1424,16 @@ export async function createHub(options: HubOptions) {
         const signal = parseLiveSignal(message);
         if (signal) {
           try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
+          return;
+        }
+        const unreachable = parseLiveFailed(message);
+        if (unreachable) {
+          let peer;
+          try { peer = live.unreachable(socket, unreachable.peerId); } catch { socket.close(1008, "No permission for that live peer."); return; }
+          const playback = peer && playbacks.get(peer.playbackId);
+          if (!peer || !playback) return;
+          logPlaybackError(playback.id, `on ${nameOf(peer.deviceId)}`, undefined, `The live input couldn't connect directly (${unreachable.error}), so Couch plays it through its own stream.`);
+          if (sourceOf(playback) === peer.sourceId && playback.outputs.some(output => output.deviceId === peer.deviceId)) reconcile(playback);
           return;
         }
         const player = parsePlayer(message);

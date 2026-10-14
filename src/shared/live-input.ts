@@ -8,3 +8,5 @@ export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceI
 export type LivePeer = { peerId: string; deviceId: string; picture: boolean; sound: boolean };
 export type LiveSignal = { description?: { type: "offer" | "answer"; sdp: string }; candidate?: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null; usernameFragment?: string | null } | null };
 export type LiveSignalMessage = { type: "liveSignal"; peerId: string; signal: LiveSignal };
+// Either end of a peer that can't connect directly tells Core, which plays the source through its own stream.
+export type LiveFailedMessage = { type: "liveFailed"; peerId: string; error: string };
