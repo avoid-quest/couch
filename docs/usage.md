@@ -127,9 +127,9 @@ Download Couch, or Couch Preview, from
 dmg on a Mac, the exe on Windows, the AppImage or deb on Linux. After that it
 updates itself.
 
-Couch isn't signed by Apple, so the first time macOS says it "is damaged" or
-"can't be opened". Move it to Applications, then run this once in Terminal
-(`Couch Preview.app` for the preview):
+Couch isn't notarized by Apple, so the first time macOS won't open it. Move it
+to Applications, then run this once in Terminal (`Couch Preview.app` for the
+preview):
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Couch.app

@@ -34,10 +34,11 @@ jobs:
           - name: linux
             runs-on: blacksmith-4vcpu-ubuntu-2404
             targets: --linux AppImage deb --x64
-          # The zip is what the app updates itself from on macOS (app/update.ts).
+          # The zip is what Squirrel.Mac updates the app from. A release
+          # without its signature would lose every user's permissions.
           - name: mac
             runs-on: blacksmith-6vcpu-macos-26
-            targets: --mac dmg zip --arm64
+            targets: --mac dmg zip --arm64 -c.forceCodeSigning=true
           - name: windows
             runs-on: blacksmith-4vcpu-windows-2025
             targets: --win nsis --x64
@@ -58,9 +59,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - if: inputs.version
         run: bun pm pkg set version=${{ inputs.version }}
-      # Unsigned. electron-builder signs by itself once CSC_LINK and
-      # CSC_KEY_PASSWORD (plus APPLE_* for notarising) are in this step's env.
+      # The Mac app is signed with Couch's own certificate (docs/ci.md), which
+      # codesign uses only once this machine trusts it for code signing.
+      - if: runner.os == 'macOS'
+        run: sudo security add-trusted-cert -d -r trustRoot -p codeSign packaging/couch-releases.pem
       - run: bun run package ${{ matrix.targets }}
+        env:
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
       - if: inputs.release
         shell: bash
         env:

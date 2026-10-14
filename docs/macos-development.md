@@ -5,7 +5,8 @@ tests. A scratch data directory separates Couch's database and Chromium profile;
 it does not separate macOS permissions when the bundles share an app ID.
 
 macOS remembers a code-signing **designated requirement**, not just the app's
-name. Ad-hoc signing (`mac.identity: "-"`) ties that requirement to one build.
+name. Ad-hoc signing (`mac.identity: "-"`) ties that requirement to one build;
+releases use Couch's own certificate instead ([CI](ci.md)).
 Rebuilding can leave Screen Recording enabled in Settings while macOS rejects
 the new executable. Repeated toggles and relaunches do not fix identity changes.
 [Apple explains this behavior](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
