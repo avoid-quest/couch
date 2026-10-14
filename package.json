@@ -106,7 +106,11 @@
       "category": "public.app-category.entertainment",
       "identity": "-",
       "hardenedRuntime": false,
-      "minimumSystemVersion": "14.0"
+      "minimumSystemVersion": "14.0",
+      "extendInfo": {
+        "NSAudioCaptureUsageDescription": "Couch shares this computer's audio with the devices you choose.",
+        "NSMicrophoneUsageDescription": "Couch shares your microphone or audio input with the devices you choose."
+      }
     },
     "win": {
       "target": "nsis",

@@ -12,6 +12,7 @@ import { useSession, type Credentials } from "./session";
 import { useInterfaceSize } from "../interface-size";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
+import { choosesHere } from "../sections/shell/Outputs";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
@@ -75,6 +76,12 @@ export type SessionGateValue = SessionBag & {
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
   playerTarget?: { id: string; status: string };
+  // The request to choose where a shared source plays that was last closed. It outlives the player
+  // surfaces, so moving between the mini player and Now Playing does not reopen it.
+  dismissedChooser: string | null;
+  dismissChooser: (request: string) => void;
+  // This window's own request to choose, after Play on a source's publisher that already plays (choosesHere).
+  requestedChooser: string | null;
 };
 
 export function useSessionGate(): SessionGateValue {
@@ -98,6 +105,11 @@ export function SessionGate({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [linkedPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
   const videoQualityPreference = useVideoQualityPreference();
+  const [dismissedChooser, setDismissedChooser] = useState<string | null>(null);
+  const [requestedChooser, setRequestedChooser] = useState<string | null>(null);
+  const chooserRequests = useRef(0);
+  // Closing Where it plays answers this window's request too.
+  const dismissChooser = useCallback((request: string) => { setDismissedChooser(request); setRequestedChooser(null); }, []);
 
   useEffect(() => { if (linkedPairingCode) history.replaceState(history.state, "", location.pathname + location.search); }, []);
 
@@ -108,7 +120,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     dispatchTvRoute(key);
   }
 
-  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
+  const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId } = useSession(credentials, handleNavigation);
   const localName = useLocalDeviceName();
   const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
   useEffect(() => {
@@ -194,7 +206,9 @@ export function SessionGate({ children }: PropsWithChildren) {
     if (undoToast.current !== null) toast.dismiss(undoToast.current);
     undoToast.current = null;
   }, []);
-  useEffect(() => { dismissUndo(); toast.dismiss("queued"); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
+  useEffect(() => { dismissUndo(); toast.dismiss("queued"); setRequestedChooser(null); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
+  // A request belongs to the playback it was made for; viewing another one retires it.
+  useEffect(() => setRequestedChooser(request => request?.startsWith(`${state?.playback}:`) ? request : null), [state?.playback]);
 
   const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration = 6_000) => {
     dismissUndo();
@@ -230,17 +244,20 @@ export function SessionGate({ children }: PropsWithChildren) {
     const attempt = ++commandAttempt.current;
     setError(null);
     try {
-      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && !action.playNow) {
+      if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && !action.playNow || action.type === "playLive" && action.playNow === false) {
         await queue(() => {
           const entries = readObservation()?.queue ?? [];
           if (action.type === "enqueue") return entries.find(entry => entry.id === action.entry.id)?.title ?? action.entry.title;
           if (action.type === "enqueueRadio" || action.type === "enqueueWeb") return entries.find(entry => entry.id === action.entryId)?.title;
+          if (action.type === "playLive") return entries.find(entry => entry.liveSourceId === action.sourceId)?.title;
           const matching = entries.filter(entry => entry.source === `web:${action.url}` && !before?.queue.some(previous => previous.id === entry.id));
           return action.title ?? (matching.length === 1 ? matching[0]?.title : undefined);
         }, () => command(action, targetDeviceId), attempt, targetDeviceId);
       } else {
         await command(action, targetDeviceId);
-        if ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow && current()) announcePlay(readObservation(), action.deviceId);
+        if (current() && ((action.type === "enqueue" || action.type === "enqueueProvider" || action.type === "enqueueRadio" || action.type === "enqueueWeb") && action.playNow || action.type === "playLive" && action.playNow !== false)) announcePlay(readObservation(), action.deviceId);
+        const after = readObservation();
+        if (current() && attempt === commandAttempt.current && choosesHere(action, before, after)) setRequestedChooser(`${after!.playback}:here:${++chooserRequests.current}`);
       }
       if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && action.type === "stop";
@@ -291,8 +308,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   const pairingOrigin = credentials?.origin ?? location.origin;
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
-    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect,
-    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
+    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId,
+    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser,
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }

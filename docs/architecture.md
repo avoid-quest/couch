@@ -40,17 +40,30 @@ pairing discards it. Submitting pairing saves the chosen name; an existing
 saved name survives reload and Forget, which removes a server connection.
 Pairing credentials and keys remain in their original storage.
 
-Client devices opt into sharing audio and video independently in General; both
-start off. Like the name, the choice belongs to the device: the Couch app keeps one
+Client devices opt into letting other devices use their speakers and screen
+independently in General; both start off. Like the name, the choice belongs to the device: the Couch app keeps one
 in `<data>/device-sharing.json` for every Couch it joins, and a browser keeps it in
 the origin's storage. The authenticated WebSocket advertises it. Core accepts
 changes only from that device's own connection, keeps the last choice while the
 device is offline (so it resumes what it played), checks target consent for
 playback and mixer commands, and rechecks it after source resolution and before a
 native mpv fallback. An Output's `local` flag records an explicit self-play or
-self-join, which Solo keeps. Joining a shared Playback accepts its group transport
-and queue controls; direct output changes still require that device's sharing
-consent. A fully private Playback can only be controlled by its output devices.
+self-join. Only here is exclusive, across the queue too: Core refuses it, changing
+nothing, while another device's private output, or a publisher's private `held`
+output, would stay behind or return, checking again where the move lands after the
+item resolves. Joining a Playback is allowed only where
+the joining device could already control it, because joining brings its group
+transport and queue controls; direct output changes still require that device's
+sharing consent. A fully private Playback can only be controlled by its output
+devices, and joining one is refused. A publisher's output held out of its own
+source (`held`) is part of that Playback's mix: it counts for control, joining,
+what the publisher looks at and what its ordinary Play keeps, so a private device
+joining the publisher's playback does not take it over. Consent applies to it per
+channel as to an output, and moving it to another Playback needs the same consent
+as moving an active output. It is retired when the device is unpaired or plays
+elsewhere, and returns when another item becomes current, whether by Next or Play. The last Sendspin delay each speaker reported
+is kept in `device_sync_delay`, so its row shows it after a restart until the
+speaker reports again; the speaker's own player keeps the value it applies.
 Revoking sharing removes remote output channels and stops their renderer or
 Sendspin membership at once. Sharing speakers or a screen never grants permission
 to update or restart the app; that stays with administrators. Full-mode host
@@ -103,11 +116,12 @@ them all proportionally, and its mute mutes them all.
 
 The header selects a server. Within that server, each controller looks at the
 Playback its selected output Device serves. Core keeps that choice in memory
-while it runs: a connection restores it while it still serves a Playback,
-otherwise the controller selects the server's own Device. A choice no longer
-shared also falls back to the server's own Device, and while that Device is
-offline and idle Play and the view use the controller's own Device without
-changing the choice. Outputs stay with the live Playback; a server restart restores queues
+while it runs: an explicit choice stays selected while it is shared, and Remote
+keeps its selected TV through idle and disconnects. Without a valid explicit
+choice, a Device receiving a Playback shows that Playback; an idle controller
+selects the server's own Device. While that Device is offline and idle, Play and
+the view use the controller's own Device without changing the choice. Outputs
+stay with the live Playback; a server restart restores queues
 without outputs. Ordinary Play keeps the current mix, and playing a waiting
 Playback moves that whole mix to it. Explicit Play on a Device (`deviceId` on
 WebSocket Play now, `?on=` on REST play requests; the item menus' "Play on" and
@@ -135,8 +149,11 @@ chose. A Playback renders on its output Device; the newest tab of that Device
 takes over and reloads the item where it was, and when that tab closes the next
 newest one does. The Device fetches the source itself (Direct delivery, no bytes
 through Core): URLs play in `<video>`, YouTube's separate audio in an `<audio>`
-that follows the video, HLS through hls.js where the engine has no native HLS, and
-raw MPEG-TS through mpegts.js. Chromium Devices get YouTube's VP9 and Opus,
+that follows the video, Couch-hosted HLS through hls.js where supported with
+native HLS as the fallback, and raw MPEG-TS through mpegts.js. Direct cross-origin
+HLS retains native playback with hls.js as the fallback because a provider's
+segments may not permit CORS. Synced live pictures use hls.js to map source
+timestamps where supported. Chromium Devices get YouTube's VP9 and Opus,
 others H.264 and AAC. Uploaded SRT/VTT subtitles are served to the `<track>` as
 WebVTT from memory. A browser that needs a gesture before sound plays the picture
 muted and shows "Tap to hear". In the app, Main caps googlevideo's open-ended
@@ -151,7 +168,26 @@ playlists go through Core and segments stay direct when the Device may read
 them; other bytes stream through with their `Range`. Nothing is transcoded.
 Relay addresses are signed for one Playback and work while it plays that item.
 
-When a Playback's outputs span Devices, its sound is Synced
+Live device inputs are captured in the publishing window and exist only while
+that capture is active. The authenticated Device session owns each publication.
+Direct playback attaches a WebRTC MediaStream to the ordinary renderer's video
+element. Core grants signaling only between the exact publishing and receiving
+connections. ICE configuration, including optional authenticated TURN, is returned
+only after pairing and never appears in public discovery.
+One MediaRecorder also uploads the capture over a separate WebSocket using a
+publication-scoped upload token. Core converts it into rolling HLS with FFmpeg
+(`src/server/live-stream.ts`) for Synced playback. Each screen's media address is
+signed for the current Playback and its Device, and works only while that Device's
+output shows the picture; Core's own decoder reads one that no Device receives, from
+this machine. Direct receivers get no media address. Moving between Direct and
+Synced replaces the renderer's media while preserving the ordinary queue, output
+selection and capture ownership.
+The short-lived capture entry can share an ordinary queue with other media, but
+is excluded from persistent queues and removed when its publication ends. Capture
+cleanup closes the upload, stops its encoder and removes its temporary segments.
+For publishing, receiving and capture checks, see [Share a live device](live-inputs.md).
+
+When a Playback has outputs on several Devices, its sound is Synced
 (`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
 `/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
 BoringSSL has no ChaCha20-Poly1305); it admits only this Couch's Devices, whose
@@ -176,6 +212,13 @@ reports the first one, and hls.js maps it to its own timeline (`INIT_PTS_FOUND`)
 picture that joins the stream anywhere lines up with the sound. A screen's report
 adds its picture and subtitle tracks to the Playback's only when it has a video
 track: a screen still loading, or a tab that just reconnected, has none yet.
+
+Grouped captured inputs use that same sound and picture clock. Encoding and the HLS and
+Sendspin buffers add capture-to-output delay so devices can schedule shared
+playback. Clock agreement does not measure physical output alignment; test the
+actual speakers and screens, and use the existing per-device timing adjustment
+where their hardware introduces extra delay. Direct capture bypasses that buffered
+pipeline; a single MediaStream maintains its own audio/video synchronization.
 
 Core prints one line per event, each starting with an ISO timestamp, which the
 app keeps in `<data>/logs/couch.log`: `device online <name>` and `device offline
@@ -202,8 +245,9 @@ can't decode, play in an mpv process on the Device that runs Core
 starts. mpv comes from `PATH` or, on macOS and Windows, from mpv's GitHub
 releases (SHA-256 checked); Linux uses the system's package.
 
-Sources are external internet media only: yt-dlp sites (YouTube, Twitch,
-RaiPlay, Bandcamp and others), StreamingCommunity, radio and IPTV playlists.
+Sources include live device inputs and external internet media: yt-dlp sites
+(YouTube, Twitch, RaiPlay, Bandcamp and others), StreamingCommunity, radio and
+IPTV playlists.
 Couch serves no local files.
 
 ## Helpers

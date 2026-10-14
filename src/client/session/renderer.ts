@@ -6,7 +6,8 @@ import { localDeviceName } from "./device-id";
 
 // Every Device plays what its Core sends it (#644 ticket 6): the Device fetches the source
 // itself. URLs play in <video>; YouTube's separate audio in an <audio> that follows the
-// video; HLS natively where the engine can (Safari, Android) and through hls.js elsewhere;
+// video; Couch-hosted HLS through hls.js where supported, with native HLS as the fallback;
+// cross-origin HLS stays native first because its segments may not allow CORS;
 // raw MPEG-TS through mpegts.js (#644 ticket 1). A picture of a synced Playback plays muted and
 // follows the Sendspin clock instead of Core's transport commands (ticket 11).
 const video = document.createElement("video");
@@ -19,6 +20,7 @@ holder.append(video, audio);
 
 let playbackId: string | null = null;
 let loading: Extract<PlaybackCommand, { type: "load" }> | null = null;
+let mediaStream: MediaStream | null = null;
 let hls: Hls | null = null;
 let mpegts: Mpegts.Player | null = null;
 let ready = false;
@@ -47,6 +49,7 @@ const preferredSubtitle = (command: NonNullable<typeof loading>) => command.subt
   : [...(hls?.subtitleTracks.map(track => track.lang) ?? []), ...external().map(track => track.language)].findIndex(language => matchesLanguage(language, command.preferences?.subtitleLanguage)));
 const tracks = (): MediaTrack[] => {
   if (!playbackId || !ready) return [];
+  const captured = mediaStream?.getTracks().map((track, index): MediaTrack => ({ id: track.id || `${track.kind}-${index}`, index, kind: track.kind as "audio" | "video", label: track.label || (track.kind === "audio" ? "Audio" : "Video"), language: "", selected: true }));
   const picture: MediaTrack[] = video.videoWidth ? [{ id: "video", index: 0, kind: "video", label: "Video", language: "", selected: true }] : [];
   const sound: MediaTrack[] = hls?.audioTracks.length ? hls.audioTracks.map((track, index) => ({ id: `audio-${index}`, index, kind: "audio", label: track.name, language: track.lang ?? "", selected: index === hls!.audioTrack }))
     : [{ id: "audio", index: 0, kind: "audio", label: "Audio", language: "", selected: true }];
@@ -55,20 +58,20 @@ const tracks = (): MediaTrack[] => {
     ...embedded.map((track, index): MediaTrack => ({ id: `subtitle-${index}`, index, kind: "subtitle", label: track.name, language: track.lang ?? "", selected: index === hls!.subtitleTrack })),
     ...external().map((track, index): MediaTrack => ({ id: `external-${index}`, index: embedded.length + index, kind: "subtitle", label: track.label, language: track.language, selected: track.mode === "showing" })),
   ];
-  return [...picture, ...sound, ...subtitles];
+  return [...(captured ?? [...picture, ...sound]), ...subtitles];
 };
 const state = (): PlayerState => ({
   playbackId,
   status: !playbackId ? "idle" : failure ? "error" : video.ended ? "ended" : !ready || waiting() ? "loading" : video.paused ? "paused" : "playing",
   buffering: waiting(),
   position: video.currentTime,
-  duration: Number.isFinite(video.duration) && !loading?.radio && !mpegts ? video.duration : null,
+  duration: Number.isFinite(video.duration) && !loading?.radio && !mpegts && !mediaStream ? video.duration : null,
   volume: Math.round(volume * 100),
-  seekable: Number.isFinite(video.duration) && !mpegts,
+  seekable: Number.isFinite(video.duration) && !mpegts && !mediaStream,
   error: failure,
-  speed: video.playbackRate,
+  speed: mediaStream ? 1 : video.playbackRate,
   tracks: tracks(),
-  audioDelay,
+  audioDelay: mediaStream ? undefined : audioDelay,
   subtitleDelay,
 });
 const send = () => { reportedAt = performance.now(); report?.(state()); };
@@ -85,11 +88,14 @@ export function waitForTap(unlock: (() => void) | null) {
   notify();
 }
 // A browser that wants a gesture before sound plays the picture muted and asks for a tap.
-const start = (element: HTMLMediaElement) => element.play().catch((error: unknown) => {
-  if (!(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
-  setBlocked(true);
-  if (element === video && !video.muted) { video.muted = true; void video.play().catch(() => {}); }
-});
+const start = (element: HTMLMediaElement) => {
+  const id = playbackId, source = loading, stream = mediaStream;
+  return element.play().catch((error: unknown) => {
+    if (playbackId !== id || loading !== source || mediaStream !== stream || !(error instanceof DOMException) || error.name !== "NotAllowedError" || !playbackId) return;
+    setBlocked(true);
+    if (element === video && !video.muted) { video.muted = true; void video.play().catch(() => {}); }
+  });
+};
 
 const follow = (resync = true) => {
   if (!split()) return;
@@ -122,7 +128,7 @@ video.addEventListener("canplay", () => { ready = true; send(); });
 video.addEventListener("timeupdate", () => { follow(false); shiftCues(); if (performance.now() - reportedAt > 1000) send(); });
 video.addEventListener("error", () => {
   if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
-  else if (isPlaylist(loading)) void playlist(loading);
+  else if (isPlaylist(loading)) void playlist(loading, false);
   else unsupported();
 });
 audio.addEventListener("error", () => fail(audio.error?.message || "This media couldn't play here."));
@@ -160,11 +166,20 @@ const setFollow = (follow: Follow | null) => {
 const mapsTimestamps = (command: NonNullable<typeof loading>) => !!command.follow?.pts && !command.mpegts && ("MediaSource" in window || "ManagedMediaSource" in window);
 // An HLS EVENT playlist starts at its first segment; hls.js would start it at the live edge.
 const begin = (command: NonNullable<typeof loading>) => command.startPosition || (command.eventStart ? 0 : undefined);
-// Chromium without native HLS rejects the playlist; hls.js plays it (and not at all on engines without MSE).
-const playlist = async (command: NonNullable<typeof loading>) => {
+// Prefer the same HLS engine and live timeline even when a browser also advertises native HLS.
+const playlist = async (command: NonNullable<typeof loading>, nativeFallback = true) => {
   const { default: Hls } = await import("hls.js");
-  if (command !== loading || !Hls.isSupported()) return fail(video.error?.message || "This media couldn't play here.");
-  hls = new Hls({ startPosition: begin(command) ?? -1 });
+  if (command !== loading) return;
+  if (!Hls.isSupported()) {
+    if (!nativeFallback || !video.canPlayType("application/vnd.apple.mpegurl")) return unsupported();
+    video.src = command.source;
+    const at = begin(command);
+    if (at !== undefined) video.currentTime = at;
+    if (!command.paused && !following) void start(video);
+    return;
+  }
+  // A sliding live window is not a finite, zero-based movie timeline.
+  hls = new Hls({ startPosition: begin(command) ?? -1, liveDurationInfinity: true });
   const codecs: string[] = [Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR, Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR, Hls.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR];
   hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) { if (codecs.includes(data.details)) unsupported(); else fail(`The stream failed (${data.details}).`); } });
   hls.on(Hls.Events.INIT_PTS_FOUND, (_event, data) => { if (data.id === "main") ptsOffset = data.initPTS / data.timescale; });
@@ -198,6 +213,7 @@ const reset = () => {
   for (const track of Array.from(video.textTracks)) track.mode = "disabled";
   playbackId = null;
   loading = null;
+  mediaStream = null;
   setFollow(null);
   ptsOffset = undefined;
   hls?.destroy();
@@ -210,9 +226,32 @@ const reset = () => {
   subtitleDelay = 0;
   setBlocked(false);
   for (const track of video.querySelectorAll("track")) track.remove();
-  for (const element of [video, audio]) { element.removeAttribute("src"); element.load(); }
+  for (const element of [video, audio]) { element.srcObject = null; element.removeAttribute("src"); element.load(); }
   apply();
 };
+
+// Direct capture uses the same element, controls and PlayerState as URL playback.
+// The session owns the tracks; replacing this renderer must not stop its capture.
+export function attachStream(command: Extract<PlaybackCommand, { type: "load" }>, stream: MediaStream) {
+  reset();
+  playbackId = command.playbackId;
+  mediaStream = stream;
+  volume = (command.liveOutput?.volume ?? volume * 100) / 100;
+  video.defaultPlaybackRate = video.playbackRate = 1;
+  video.srcObject = stream;
+  for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
+  selectSubtitle(preferredSubtitle(command));
+  subtitleDelay = command.subtitleDelay ?? 0;
+  apply();
+  if (!command.paused) void start(video);
+  send();
+}
+
+export function streamChanged(id: string, stream: MediaStream, error?: string) {
+  if (playbackId !== id || mediaStream !== stream) return;
+  if (error) fail(error); else send();
+}
+
 // Subtitle delay moves every cue, including those hls.js adds while it plays.
 const shifted = new WeakMap<TextTrackCue, number>();
 const shiftCues = () => {
@@ -244,12 +283,13 @@ export function play(command: PlaybackCommand) {
       apply();
       if (command.mpegts) { void transportStream(command); break; }
       // hls.js attaches once it has loaded; the subtitles, delays and speed below apply to it too.
-      if (mapsTimestamps(command)) void playlist(command);
-      else for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
+      const useHls = mapsTimestamps(command) || isPlaylist(command) && new URL(command.source, location.href).origin === location.origin;
+      if (useHls) void playlist(command);
+      for (const [element, source] of [[video, command.source], [audio, command.audioSource]] as const) {
         if (!source) continue;
         // The app allows googlevideo in CORS mode (app/main.ts); browsers fetch it without CORS.
         element.crossOrigin = window.couchApp && new URL(source).hostname.endsWith(".googlevideo.com") ? "anonymous" : null;
-        element.src = source;
+        if (element !== video || !useHls) element.src = source;
       }
       apply();
       for (const subtitle of command.subtitles ?? []) addTrack(subtitle.source, subtitle.title, subtitle.language);
@@ -260,7 +300,7 @@ export function play(command: PlaybackCommand) {
       // Attaching hls.js or mpegts.js resets the rate to the default one, so set both.
       video.defaultPlaybackRate = video.playbackRate = command.preferences?.speed ?? 1;
       audioDelay = command.preferences?.audioDelay ?? 0;
-      if (!command.paused && !following) void start(video);
+      if (!useHls && !command.paused && !following) void start(video);
       break;
     case "follow":
       setFollow(command.follow);
@@ -274,8 +314,8 @@ export function play(command: PlaybackCommand) {
     case "addSubtitle": addTrack(command.source, command.title, command.language, true); break;
     case "pause": if (command.paused) video.pause(); else void start(video); break;
     case "audioPause": video.pause(); break;
-    case "seek": video.currentTime = command.position; break;
-    case "speed": video.defaultPlaybackRate = video.playbackRate = command.speed; break;
+    case "seek": if (!mediaStream) video.currentTime = command.position; break;
+    case "speed": if (!mediaStream) video.defaultPlaybackRate = video.playbackRate = command.speed; break;
     case "volume": volume = command.volume / 100; apply(); break;
     case "track":
       if (command.kind === "audio" && hls?.audioTracks[command.index]) hls.audioTrack = command.index;
@@ -328,5 +368,5 @@ export function hear() {
 }
 
 // iOS lets a media element play by itself only after a gesture has touched it once.
-const unlock = () => { for (const element of [video, audio]) if (!element.hasAttribute("src")) element.load(); };
+const unlock = () => { for (const element of [video, audio]) if (!element.hasAttribute("src") && !element.srcObject) element.load(); };
 addEventListener("pointerdown", unlock, { capture: true, once: true });

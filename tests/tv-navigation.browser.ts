@@ -280,7 +280,7 @@ window.runTvNavigationRegression = async () => {
     recipient!.click();
     await until(() => !!document.querySelector('[data-mini-player] button[aria-label="Where it plays"]:not(:disabled)'));
     await click('[data-mini-player] button[aria-label="Where it plays"]');
-    await until(() => document.querySelector(`[aria-label="Solo ${CSS.escape(targetName!)}"]`)?.getAttribute("aria-pressed") === "true");
+    await until(() => document.querySelector(`[aria-label="Only on ${CSS.escape(targetName!)}"]`)?.getAttribute("aria-pressed") === "true");
     assert(control(`[aria-label="${CSS.escape(targetName!)} picture"]`).getAttribute("aria-pressed") === "true", "Play on did not select the recipient's picture");
     assert(document.querySelector('[role="dialog"]')?.textContent?.includes(title), "Play on did not select the queued channel");
     await key("Escape"); await wait(350);

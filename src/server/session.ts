@@ -19,6 +19,8 @@ type SessionOptions = {
   invalidate?: (...domains: Domain[]) => void;
   // The current item moved to a new transport (another quality, or another Device).
   moved?: (from: string | null, to: string) => void;
+  // A played item is now current, before this Playback publishes or resolves it.
+  entered?: () => void;
   now?: () => number;
   systemAudio?: boolean;
   prepareAudio?: () => string;
@@ -101,7 +103,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     }
   };
   const finishProgress = (nearEnd = false, required = false) => persistProgress(() => progress.finish(nearEnd), required);
-  const saveQueue = (queue: SessionState["queue"]) => {
+  const saveQueue = (queue: SessionState["queue"], cancelRecovery = true) => {
     // If the cursor was removed, keep the boundary at its nearest retained predecessor.
     const cursor = state.queue.findIndex(entry => entry.id === state.queueCursorEntryId);
     const retained = new Set(queue.map(entry => entry.id));
@@ -111,7 +113,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     state.queueRemoval = undefined;
     state.queueCursorEntryId = cursorEntryId;
     state.queueError = null;
-    cancelWebRecovery();
+    if (cancelRecovery) cancelWebRecovery();
   };
   const saveQueueCursor = (entryId: string, required = true, beforeCommit?: () => void, queue = state.queue, context = continuation) => {
     let completingProgress = false;
@@ -198,7 +200,11 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
   };
   let loaded: Extract<PlaybackCommand, { type: "load" }> | null = null;
   const send = (command: PlaybackCommand) => {
-    if (command.type === "load") loaded = command;
+    if (command.type === "load") {
+      const entry = state.queue.find(item => item.id === state.currentEntryId);
+      if (entry?.live || isRadio(entry) || command.radio) command = { ...command, preferences: { ...command.preferences!, speed: 1 } };
+      loaded = command;
+    }
     try { sendPlayer(command); } catch (error) {
       playIntent++;
       cancelContinuation();
@@ -335,6 +341,7 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     state.currentEntryId = entry.id;
     state.presentationId = reason === "play" ? playbackId : null;
     state.player = { ...state.player, playbackId, status: "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
+    options.entered?.();
     broadcast();
     if (!preserveContext && context === undefined && reason !== "retry") resolveContinuation(entry);
     const failed = (error: unknown) => {
@@ -546,11 +553,13 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
       if (!loaded || loaded.playbackId !== playbackId || !["loading", "playing", "paused"].includes(status)) return;
       const live = loaded.radio || state.queue.find(entry => entry.id === state.currentEntryId)?.live;
       const { startPosition: _start, ...command } = loaded;
-      send({ ...command, ...(live ? {} : { startPosition: position }), paused: status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
+      send({ ...command, ...(live ? {} : { startPosition: position }), paused: pendingPause ?? status === "paused", subtitles: withAdded(command.subtitles), ...carried(state.player), ...(speed ? { preferences: { ...command.preferences!, speed } } : {}) });
     },
-    // No output is online: the Playback pauses where it is and waits (#644 Offline).
+    // No output is online: the Playback pauses where it is and waits (#644 Offline). The wait
+    // supersedes a Play its output never confirmed; only a later Play resumes it.
     wait(message: string) {
       if (!["loading", "playing", "paused"].includes(state.player.status)) return;
+      pendingPause = null;
       state.player = { ...state.player, status: "paused", buffering: false, error: message };
       broadcast();
     },
@@ -590,6 +599,18 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     notice(actor: PlaybackActor, text: string) {
       state.activity = { id: crypto.randomUUID(), actor, text };
       try { broadcast(); } finally { state.activity = undefined; }
+    },
+    // Ephemeral inputs disappear from Up next when capture ends, including removed-entry Undo.
+    endSource(sourceId: string) {
+      let changed = false;
+      for (const [token, removed] of removedEntries) if (removed.entry.liveSourceId === sourceId) {
+        clearTimeout(removed.timer); removedEntries.delete(token);
+        if (state.queueRemoval?.token === token) { state.queueRemoval = undefined; changed = true; }
+      }
+      if (!state.queue.some(entry => entry.liveSourceId === sourceId)) { if (changed) broadcast(); return; }
+      const current = state.queue.find(entry => entry.id === state.currentEntryId)?.liveSourceId === sourceId;
+      saveQueue(state.queue.filter(entry => entry.liveSourceId !== sourceId), current);
+      if (current) stop(); else broadcast();
     },
     get state() { return structuredClone(state); },
     enrichEntry,

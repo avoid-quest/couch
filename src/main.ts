@@ -5,6 +5,7 @@ import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { startHelpers } from "./server/helpers";
 import { createHub } from "./server/hub";
+import { liveTurnFromEnvironment } from "./server/live-ice";
 import type { AppMessage, CoreMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
 
@@ -22,6 +23,8 @@ const allowLanHttp = process.env.COUCH_ALLOW_HTTP === "1";
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
+const liveTurn = liveTurnFromEnvironment(process.env);
+delete process.env.COUCH_LIVE_TURN_CREDENTIAL;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The Couch app must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
 
@@ -45,6 +48,7 @@ const hub = await createHub({
   port: Number(process.env.COUCH_PORT ?? 4100),
   databasePath: join(dataDir, "couch.sqlite"),
   adminRecoveryCode,
+  liveTurn,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
 });

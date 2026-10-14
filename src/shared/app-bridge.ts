@@ -2,6 +2,7 @@ import type { InterfaceSize } from "./appearance";
 import type { ConnectionInfo } from "./protocol";
 import type { DeviceSharing } from "./device-sharing";
 import type { UpdateAction, UpdateChannel, UpdateState } from "./updates";
+import type { CaptureSelection, CaptureSource } from "./capture";
 
 // Keep the existing type imports usable by older renderer code.
 export type { UpdateAction, UpdateChannel, UpdateOutcome, UpdateState, UpdateTarget } from "./updates";
@@ -18,6 +19,10 @@ export type CouchApp = {
   deviceName?(name?: string): Promise<string | null>;
   /** Reads, or saves, what this computer shares with every Couch it joins. Older apps lack it. */
   deviceSharing?(sharing?: DeviceSharing): Promise<DeviceSharing>;
+  /** Capture starts only in this app's own window. Older apps lack these methods. */
+  captureSources?(): Promise<CaptureSource[]>;
+  /** Selects one capture request; null cancels a prepared selection. */
+  prepareCapture?(selection: CaptureSelection | null): Promise<void>;
   mode(): Promise<AppMode>;
   // null: the window is loading the chosen Couch.
   choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;
@@ -26,6 +31,8 @@ export type CouchApp = {
   connection(): Promise<ConnectionInfo>;
   interfaceSize(size?: InterfaceSize): Promise<InterfaceSize>;
   onAddresses(listener: (urls: string[]) => void): () => void;
+  /** Closing hides the window, which keeps hosting and playing; the page ends its sharing. Older apps lack it. */
+  onWindowClosed?(listener: () => void): () => void;
   updates(): Promise<UpdateState>;
   update?(action: UpdateAction): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateState>;

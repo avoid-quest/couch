@@ -28,7 +28,7 @@ Episode artwork   Name and length       Play  …
 ```
 
 Playback keeps named series, season, album or radio destinations visible once.
-Every item opens a full detail page, including inspection from playback and
+Library items open a full detail page, including inspection from playback and
 Up next. Details offer the same breadcrumb; there is no item-detail dialog or
 separate related-content sheet. Nearby items use four divided rows and a small
 heading that links to the full list. Hide this section when there are no nearby
@@ -72,6 +72,36 @@ carries what's on now and next from the XMLTV guide, and the group while no
 group is picked. Play plays the channel; the menu offers Play on and Queue.
 The group Select, Filter and page live in the route (`/find?browse=live-tv`),
 so history restores them. A source without a guide still lists its channels.
+
+## Shared sources
+
+A device's live input uses the same Sources setup, Browse rows, search results
+and Play on menu as other media. Configure capture in Settings → Sources → This
+device, or open Find → Add source → This device. Capture always belongs to the
+device running that form, including for paired users without administrator access.
+The source picker uses two columns so its four tabs fit narrow dialogs without
+overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.
+
+Active inputs appear as rows in Find's Browse list and in search results, under
+the Shared sources source filter and the Live kind filter. Their player
+breadcrumb returns to Find (`/find`). Playback uses the same Now
+Playing page, mini player, Playback settings, Up next and Where it plays controls
+as TV and radio. The usual picture stage displays video; audio-only inputs use
+the usual artwork stage. There is no separate live player or visualizer.
+
+Transport controls depend on media capabilities. A live stream without a seek
+window shows Live and disables Pause, while retry and Next use the ordinary
+player actions. Captured entries are temporary, so they have no persistent
+details page or Save for later action. Other items can still be queued, played
+and saved while capture is active.
+
+A small Stop sharing action stays available throughout browsing while local
+capture is active. There is no separate capture panel on the Find landing page.
+One receiving device gets the input over WebRTC in the normal player. Across
+several devices, the input reaches the normal player as HLS; sound uses the
+existing Sendspin clock and pictures follow it, and that shared delivery buffer
+adds delay between capture and output. See [live inputs](live-inputs.md) for
+capture options, playback limits and physical synchronization checks.
 
 ## Stack
 
