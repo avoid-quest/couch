@@ -103,6 +103,7 @@ export async function createHub(options: HubOptions) {
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
+  let allowLanHttp = store.allowLanHttp() ?? options.allowLanHttp ?? false;
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
   const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
@@ -1363,6 +1364,21 @@ export async function createHub(options: HubOptions) {
         return cors(request, json({ enabled }));
       } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Share on network." }, error instanceof ControllerError ? error.status : 500)); }
     }
+    if (url.pathname === "/api/settings/http") {
+      if (!options.managedLan || !trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      if (request.method === "GET") return cors(request, json({ enabled: allowLanHttp }));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const enabled = await settingField(request, "enabled");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow HTTP connections.");
+        store.saveAllowLanHttp(enabled);
+        allowLanHttp = enabled;
+        lan?.server?.setAllowHttp(enabled);
+        publishLanUrls();
+        invalidate("devices");
+        return cors(request, json({ enabled }));
+      } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save HTTP connections." }, error instanceof ControllerError ? error.status : 500)); }
+    }
     if (url.pathname === "/api/settings/origin-domain") {
       if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));
       if (request.method === "GET") { await lan?.refresh().catch(() => {}); return cors(request, json(originSettings())); }
@@ -1423,7 +1439,7 @@ export async function createHub(options: HubOptions) {
     maxRequestBodySize: subtitleSizeLimit,
     fetch: async (request: Request, upgrade: Upgrade<SocketData>) => {
       // Compatibility serves even public pages only to the selected LAN and admitted origins.
-      if (options.allowLanHttp && !loopbackPeer(requestPeer(request)) && !allowed(request, false)) return json({ error: "Unrecognized host or origin." }, 403);
+      if (allowLanHttp && !loopbackPeer(requestPeer(request)) && !allowed(request, false)) return json({ error: "Unrecognized host or origin." }, 403);
       const { pathname } = new URL(request.url);
       const route = routes[pathname] ?? routes[`${request.method} ${pathname}`];
       if (route) return route(request);
@@ -1776,7 +1792,20 @@ export async function createHub(options: HubOptions) {
   if (urls.length === 0) urls.push(origin);
   const connectionUrls: string[] = [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
   const retainedOrigins = new Set<string>();
-  const withHttp = (urls: string[]) => options.allowLanHttp ? [...urls, ...urls.map(url => httpOrigin(url, port))] : urls;
+  const withHttp = (urls: string[]) => allowLanHttp ? [...urls, ...urls.map(url => httpOrigin(url, port))] : urls;
+
+  let lanUrls: string[] = [];
+  const publishLanUrls = (next = lanUrls) => {
+    lanUrls = next;
+    const current = store.originDomain() || suggestedDomain;
+    const currentAlias = current ? secureOrigin(originDomainUrl(current, port, !current.startsWith("http://")), port) : "";
+    const published = withHttp(next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.some(value => { try { return secureOrigin(value, port) === url; } catch { return false; } })));
+    urls.splice(0, urls.length, ...published);
+    connectionUrls.splice(0, connectionUrls.length, ...published);
+    allowedHosts.clear(); allowedOrigins.clear();
+    for (const url of [...local, ...withHttp(next)]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
+    options.onAddresses?.(published);
+  };
 
   if (options.managedLan) {
     lan = createLanListener({
@@ -1784,23 +1813,17 @@ export async function createHub(options: HubOptions) {
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
       start: async (network, listenPort) => {
-        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: options.allowLanHttp && listenPort === port } });
+        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: allowLanHttp && listenPort === port } });
         if (listenPort !== port) return listener;
         // STUN only adds address candidates; HTTPS sharing and TURN work without it.
         const stun = await serveLiveStun(network, port).catch(error => { console.error("Couch: live address discovery is unavailable.", error); return null; });
-        return { port: listener.port, stun: !!stun, stop: async () => { await Promise.all([listener.stop(), stun?.stop()]); } };
+        listener.setAllowHttp(allowLanHttp);
+        return { ...listener, stun: !!stun, stop: async () => { await Promise.all([listener.stop(), stun?.stop()]); } };
       },
       changed: (next, error, suggested) => {
         lanError = error;
         suggestedDomain = suggested ? `http://${new URL(suggested).hostname}:${port}` : "";
-        const current = store.originDomain() || suggestedDomain;
-        const currentAlias = current ? secureOrigin(originDomainUrl(current, port, !current.startsWith("http://")), port) : "";
-        const published = withHttp(next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.some(value => { try { return secureOrigin(value, port) === url; } catch { return false; } })));
-        urls.splice(0, urls.length, ...published);
-        connectionUrls.splice(0, connectionUrls.length, ...published);
-        allowedHosts.clear(); allowedOrigins.clear();
-        for (const url of [...local, ...withHttp(next)]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
-        options.onAddresses?.(published);
+        publishLanUrls(next);
       },
     });
   }

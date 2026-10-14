@@ -13,7 +13,7 @@ import { loopbackPeer } from "./lan-listener";
 export type Socket<T> = WebSocket & { data: T };
 // A function takes the socket as it is instead of Couch's own handlers (Sendspin, #644 ticket 10).
 export type Upgrade<T> = (data: T | ((socket: WebSocket, request: IncomingMessage) => void)) => boolean;
-export type Listener = { port: number; stop: () => Promise<void> };
+export type Listener = { port: number; setAllowHttp: (enabled: boolean) => void; stop: () => Promise<void> };
 type Options<T> = {
   hostname: string;
   port: number;
@@ -54,7 +54,9 @@ async function readBody(message: IncomingMessage, limit: number) {
 }
 
 export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch, websocket }: Options<T>): Promise<Listener> {
-  const insecure = (message: IncomingMessage) => !!tls && !tls.allowHttp && !encrypted(message) && !loopbackPeer(message.socket.remoteAddress ?? "");
+  let allowHttp = !!tls?.allowHttp;
+  const plaintext = new Set<NetSocket>();
+  const insecure = (message: IncomingMessage) => !!tls && !allowHttp && !encrypted(message) && !loopbackPeer(message.socket.remoteAddress ?? "");
   const handle = async (message: IncomingMessage, response: ServerResponse) => {
     try {
       if (insecure(message)) {
@@ -76,6 +78,10 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
     }
   };
   const plain = createServer(handle);
+  plain.on("connection", socket => {
+    plaintext.add(socket);
+    socket.once("close", () => plaintext.delete(socket));
+  });
   const secure = tls && createSecureServer({ key: tls.key, cert: tls.cert }, handle);
   // A TLS connection opens with a handshake record (0x16); anything else is plain HTTP.
   const server = !secure ? plain : createNetServer({ noDelay: true }, socket => {
@@ -141,6 +147,10 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
   let stopping: Promise<void> | undefined;
   return {
     port: (server.address() as AddressInfo).port,
+    setAllowHttp: enabled => {
+      allowHttp = enabled;
+      if (tls && !enabled) for (const socket of plaintext) if (!loopbackPeer(socket.remoteAddress ?? "")) socket.destroy();
+    },
     stop: () => stopping ??= new Promise<void>(resolve => {
       clearInterval(heartbeat);
       for (const socket of sockets.clients) socket.terminate();

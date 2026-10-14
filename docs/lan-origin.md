@@ -39,17 +39,10 @@ around playback.
 ## TVs that refuse the certificate
 
 HTTPS remains the default. Some TV browsers cannot bypass a self-signed
-certificate warning. To permit HTTP on the selected LAN as well, quit Couch,
-then launch it with `COUCH_ALLOW_HTTP=1` in its environment. On Linux:
-
-```sh
-COUCH_ALLOW_HTTP=1 couch
-```
-
-For an AppImage, replace `couch` with its executable path. For TV setup, put
-`COUCH_ALLOW_HTTP=1` in `/etc/couch/appliance.env` and restart Couch.
-Enable **Allow remote control**, then open the `http://<LAN-IP>:4100` address
-shown in Connection on the TV (use `COUCH_PORT` if customized). HTTPS and the
+certificate warning. On the computer running Couch, open **Settings → Devices**
+and enable **Allow HTTP connections**. The choice is saved and applies immediately.
+Enable **Share on network**, then open the `http://<LAN-IP>:4100` address
+shown when pairing (use `COUCH_PORT` if customized). HTTPS and the
 HTTPS QR code remain available. The separate port 80 listener still redirects to HTTPS, so include
 Couch's port in the HTTP address. A new browser origin requires pairing again.
 If the browser cached an old HTTPS redirect, clear its data for that address.
@@ -57,8 +50,14 @@ If the browser cached an old HTTPS redirect, clear its data for that address.
 HTTP is unencrypted: other people on that network can read or change pairing
 and control traffic. Enable it only on a trusted private network. It retains
 the selected interface/subnet, Host and Origin checks, pairing, and the sharing
-switch. Turning sharing off closes both LAN transports. Remove the environment
-variable and restart to return to HTTPS only; Couch never downgrades automatically.
+switch. Turning sharing off closes both LAN transports. Turn off **Allow HTTP
+connections** to return to HTTPS only: existing HTTP connections close while
+HTTPS connections keep working. Couch never downgrades automatically.
+
+`COUCH_ALLOW_HTTP=1` remains a startup default for deployments, including TV setup
+through `/etc/couch/appliance.env`. A saved Settings choice takes precedence over
+the flag, including a saved choice to disable HTTP.
+
 If you suspect someone intercepted HTTP traffic, revoke the affected paired
 devices and pair them again over HTTPS. Switching back to HTTPS does not revoke
 credentials that may already have been copied.
