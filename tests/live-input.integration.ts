@@ -40,6 +40,7 @@ test("grouped live pictures use normal HLS URLs whose grants end with their tran
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
     await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
     await until(() => !!f.receiver.load());
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
     const other = await f.connect(2, "&audio=1&video=1");
     await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true });
     await until(() => !!f.receiver.load()?.follow);
@@ -81,8 +82,8 @@ test("each screen's live link names its Device and stops serving it once unpaire
   globalThis.fetch = (async (input, init) => { const response = await fetchHub(input, init); if (coreLink.test(String(input))) core.push(response.status); return response; }) as typeof fetch;
   let feeding: ReturnType<typeof setInterval> | undefined;
   try {
-    const upload = await f.publish("screen");
-    feeding = setInterval(() => upload.send(Buffer.from("fixture capture")), 100);
+    await f.publish("screen");
+    feeding = setInterval(() => { const upload = f.uploads.get("screen"); if (upload?.readyState === WebSocket.OPEN) upload.send(Buffer.from("fixture capture")); }, 100);
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
     const other = await f.connect(2, "&audio=1&video=1"), removed = await f.connect(3, "&audio=1&video=1");
     await f.speaker(1);
@@ -94,6 +95,7 @@ test("each screen's live link names its Device and stops serving it once unpaire
     assert.equal(direct.source, "");
     assert.equal(direct.hls, undefined);
     removed.report();
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
     for (const client of [f.receiver, other]) assert.equal((await f.publisher.command({ type: "output", deviceId: client.id, level: 50, picture: true })).ok, true);
     const screens = [removed, f.receiver, other];
     await until(() => screens.every(client => client.load()?.hls === true && !!client.load()?.follow));
@@ -134,13 +136,14 @@ test("a screen's live link ends with its picture or its output, lasts through a 
   const f = await liveFixture();
   let feeding: ReturnType<typeof setInterval> | undefined;
   try {
-    const upload = await f.publish("screen");
-    feeding = setInterval(() => upload.send(Buffer.from("fixture capture")), 100);
+    await f.publish("screen");
+    feeding = setInterval(() => { const upload = f.uploads.get("screen"); if (upload?.readyState === WebSocket.OPEN) upload.send(Buffer.from("fixture capture")); }, 100);
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
     const other = await f.connect(2, "&audio=1&video=1"), host = await f.connect(-1);
     assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
     await until(() => !!f.receiver.load());
     f.receiver.report();
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
     for (const client of [other, host]) assert.equal((await f.publisher.command({ type: "output", deviceId: client.id, level: 50, picture: true })).ok, true);
     const screens = [f.receiver, other, host];
     await until(() => screens.every(client => client.load()?.hls === true && !!client.load()?.follow));
@@ -267,6 +270,7 @@ test("grouped live pictures use the receiver's HTTPS origin and Only here never 
     f.receiver.report();
     await until(() => f.publisher.state.player.status === "playing");
     await f.speaker(1);
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
     const other = await f.connect(2, "&audio=1&video=1", true);
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => !!other.load());
@@ -324,14 +328,19 @@ test("a system-audio input uses the selected normal mix without its publisher, w
   } finally { await f.close(); }
 });
 
-test("source or upload disconnect ends every receiver and releases capture", { timeout: 15_000 }, async () => {
+test("a failed buffered upload ends only buffered delivery, and publisher disconnect ends every receiver", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
-    const upload = await f.publish("mic", "microphone");
+    await f.publish("mic", "microphone");
     await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.publisher.command({ type: "playLive", sourceId: "mic", deviceId: f.receiver.id });
     await until(() => !!f.receiver.load());
-    upload.terminate();
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: f.receiver.load()!.livePeerId, error: "Unreachable." }));
+    await until(() => f.uploads.get("mic")?.readyState === WebSocket.OPEN);
+    f.uploads.get("mic")!.terminate();
+    await until(() => f.publisher.messages.findLast(message => message.type === "livePeers")?.upload === false);
+    assert.equal(f.receiver.state.liveSources?.length, 1, "capture continues");
+    f.publisher.socket.terminate();
     await until(() => !f.receiver.state.liveSources?.length && !f.receiver.state.playbacks?.length);
     assert.ok(f.receiver.messages.some(message => message.type === "player" && message.command.type === "stop"));
   } finally { await f.close(); }

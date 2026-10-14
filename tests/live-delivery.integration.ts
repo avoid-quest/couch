@@ -18,6 +18,21 @@ const synced = (load: Load, group: string) => {
   assert.equal("livePeerId" in load, false);
   assert.deepEqual(load.follow, { group, pts: true });
 };
+// A receiver that couldn't connect directly plays Core's buffered stream from its own link, alone.
+const relayed = (load: Load, receiver: Receiver) => {
+  assert.equal(load.hls, true, "A relayed receiver plays the buffered stream");
+  assert.equal("livePeerId" in load, false);
+  assert.equal(load.follow, undefined, "it follows no group clock");
+  assert.ok(load.source.includes(`/${receiver.id}/`), "its link names the receiver");
+};
+const volume = (receiver: Receiver) => receiver.messages.flatMap(message => message.type === "player" && message.command.type === "volume" ? [message.command.volume] : []).at(-1);
+const uploadRequested = (f: Fixture) => f.publisher.messages.findLast(message => message.type === "livePeers")?.upload === true;
+async function addOther(f: Fixture) {
+  const other = await f.connect(2, "&audio=1&video=1");
+  assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
+  await until(() => !!other.load());
+  return other;
+}
 async function start(f: Fixture) {
   await f.publish("screen");
   await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
@@ -28,74 +43,111 @@ async function start(f: Fixture) {
   await until(() => f.publisher.state.player.status === "playing");
 }
 
-test("Direct RTC starts without waiting for the buffered HLS rendition", { timeout: 15_000 }, async () => {
+test("Direct RTC starts without an encoder or upload", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
-    // Publish the capture, but do not upload MediaRecorder bytes or prepare a segment.
-    assert.equal((await f.publisher.command({ type: "publishLive", sourceId: "screen", uploadToken: f.uploadToken, kind: "screen", audio: true, video: true })).ok, true);
-    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
-    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
-    await until(() => !!f.receiver.load());
-    rtc(f.receiver.load()!);
+    await start(f);
+    assert.equal(f.publisher.messages.some(message => message.type === "livePeers" && message.upload), false, "Core never asks for the recording");
+    assert.equal(f.uploads.size, 0);
   } finally { await f.close(); }
 });
 
-test("Direct RTC becomes normal synchronized playback and Solo restores RTC without replacing the queue", { timeout: 15_000 }, async () => {
+test("a second receiver gets its own RTC peer at its own level, without a group, a reload of the first or an encoder", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const first = rtc(f.receiver.load()!), group = f.publisher.state.playback!, before = loads(f.receiver).length;
+    const other = await addOther(f);
+    assert.notEqual(rtc(other.load()!), first);
+    assert.equal(loads(f.receiver).length, before, "the first receiver keeps playing its peer");
+    assert.equal(f.publisher.state.playback, group);
+    assert.deepEqual(f.publisher.state.outputs?.map(output => output.deviceId), [f.receiver.id, other.id]);
+    await until(() => f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.length === 2);
+    assert.equal(uploadRequested(f), false);
+    assert.equal(f.receiver.messages.some(message => message.type === "sendspin" && message.listen), false, "no Sendspin group forms");
+    assert.equal(f.publisher.state.outputs?.some(output => output.delayActive), false);
+    // Each receiver plays at its own level, and both follow the controls.
+    assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 20 })).ok, true);
+    await until(() => volume(other) === 20);
+    assert.notEqual(volume(f.receiver), 20);
+    assert.equal((await f.publisher.command({ type: "pause", playbackId: f.receiver.load()!.playbackId, paused: true })).ok, true);
+    for (const receiver of [f.receiver, other]) await until(() => receiver.messages.some(message => message.type === "player" && message.command.type === "pause" && message.command.paused));
+    // A new tab of the second receiver takes over its peer; the first is untouched.
+    const tab = await f.connect(2, "&audio=1&video=1");
+    await until(() => !!tab.load());
+    rtc(tab.load()!);
+    assert.equal(loads(f.receiver).length, before);
+  } finally { await f.close(); }
+});
+
+test("In sync moves the receivers to the synchronized group and back to RTC, encoding only meanwhile", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId;
+    await f.speaker(1);
+    const other = await addOther(f);
+    const before = [loads(f.receiver).length, loads(other).length];
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
+    await until(() => loads(f.receiver).length > before[0]! && loads(other).length > before[1]!);
+    for (const receiver of [f.receiver, other]) synced(receiver.load()!, group);
+    assert.equal(f.publisher.state.playbacks?.find(playback => playback.id === group)?.inSync, true);
+    assert.ok(uploadRequested(f), "Core asks for the recording only now");
+    await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === true);
+    assert.equal(f.publisher.state.currentEntryId, entry);
+    const back = [loads(f.receiver).length, loads(other).length];
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: false })).ok, true);
+    await until(() => loads(f.receiver).length > back[0]! && loads(other).length > back[1]!);
+    for (const receiver of [f.receiver, other]) rtc(receiver.load()!);
+    await until(() => !uploadRequested(f) && !f.uploads.size);
+    await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === false);
+    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "delivery changes must not end capture");
+  } finally { await f.close(); }
+});
+
+test("Only here from an In sync group restores RTC without replacing the queue", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
     const firstPeer = rtc(f.receiver.load()!);
     await f.publisher.command({ type: "enqueue", entry: { id: "next", title: "Next", source: `${f.hub.origin}/api/health` } });
     await f.publisher.command({ type: "allSpeakers", level: 35 });
-    const group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId;
-    const queue = f.publisher.state.queue;
+    const group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId, queue = f.publisher.state.queue;
     await f.speaker(1);
-    const other = await f.connect(2, "&audio=1&video=1");
-    const beforeGroup = loads(f.receiver).length;
-    assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
-    await until(() => loads(f.receiver).length > beforeGroup && !!other.load());
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
+    const other = await addOther(f);
+    await until(() => !!f.receiver.load()?.follow);
     for (const receiver of [f.receiver, other]) synced(receiver.load()!, group);
-    assert.equal(f.publisher.state.playback, group);
-    assert.equal(f.publisher.state.currentEntryId, entry);
-    assert.deepEqual(f.publisher.state.queue, queue);
-    assert.equal(f.publisher.state.mixTrim, 35);
-    await until(() => f.publisher.state.player.status === "playing");
+    f.receiver.report();
+    await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
     const beforeSolo = loads(f.receiver).length;
     const solo = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
     assert.equal(solo.ok, true, solo.error);
     await until(() => loads(f.receiver).length > beforeSolo);
     assert.notEqual(rtc(f.receiver.load()!), firstPeer, "returning to RTC must grant a fresh peer");
     await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === false);
-    assert.equal(f.publisher.state.playback, group);
     assert.equal(f.publisher.state.currentEntryId, entry);
     assert.deepEqual(f.publisher.state.queue, queue);
     assert.equal(f.publisher.state.mixTrim, 35);
-    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "delivery changes must not end capture");
     assert.deepEqual(f.publisher.state.outputs?.map(output => output.deviceId), [f.receiver.id]);
     assert.ok(other.messages.some(message => message.type === "player" && message.command.type === "stop"));
   } finally { await f.close(); }
 });
 
-test("removing the last additional output restores RTC and a late rejoin reloads both synchronized pictures", { timeout: 15_000 }, async () => {
+test("removing an additional output keeps RTC, and a later In sync rejoin reloads both synchronized pictures", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
-    const group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId;
-    const other = await f.connect(2, "&audio=1&video=1");
-    await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true });
-    await until(() => !!other.load());
-    const beforeLeave = loads(f.receiver).length;
+    const group = f.publisher.state.playback!, peer = rtc(f.receiver.load()!);
+    const other = await addOther(f);
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 0, picture: false })).ok, true);
-    await until(() => loads(f.receiver).length > beforeLeave);
-    rtc(f.receiver.load()!);
-    f.receiver.report();
-    await until(() => f.publisher.state.player.status === "playing");
+    await until(() => other.messages.some(message => message.type === "player" && message.command.type === "stop"));
+    assert.equal(rtc(f.receiver.load()!), peer);
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
     const beforeRejoin = [loads(f.receiver).length, loads(other).length];
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => loads(f.receiver).length > beforeRejoin[0]! && loads(other).length > beforeRejoin[1]!);
     for (const receiver of [f.receiver, other]) synced(receiver.load()!, group);
-    assert.equal(f.publisher.state.playback, group);
-    assert.equal(f.publisher.state.currentEntryId, entry);
     assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen");
   } finally { await f.close(); }
 });
@@ -159,6 +211,7 @@ test("RTC peer rotation and grouped delivery preserve pause and selected externa
       assert.equal(load.subtitles?.[0]?.source, subtitleSource);
     };
     preserves(f.receiver.load()!);
+    assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
     const other = await f.connect(2, "&audio=1&video=1");
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => !!f.receiver.load()?.follow && !!other.load());
@@ -166,66 +219,62 @@ test("RTC peer rotation and grouped delivery preserve pause and selected externa
   } finally { await f.close(); }
 });
 
-test("a receiver that can't connect directly plays the source through Couch, keeping its playback and capture", { timeout: 15_000 }, async () => {
+test("a receiver that can't connect directly plays Couch's buffered stream alone, while the other keeps its peer", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
-    await f.speaker(1);
     const peerId = rtc(f.receiver.load()!), group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId;
-    const before = loads(f.receiver).length;
+    const other = await addOther(f);
+    const otherPeer = rtc(other.load()!), before = [loads(f.receiver).length, loads(other).length];
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "No network path for live inputs." }));
-    await until(() => loads(f.receiver).length > before);
-    synced(f.receiver.load()!, group);
-    assert.ok(f.receiver.load()!.source.includes(`/${f.receiver.id}/`), "the picture comes from the receiver's own link");
+    await until(() => loads(f.receiver).length > before[0]!);
+    relayed(f.receiver.load()!, f.receiver);
     assert.equal((await fetch(f.receiver.load()!.source)).status, 200);
-    await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === true);
-    f.receiver.report();
-    await until(() => f.heard(1) > 0);
-    assert.ok(f.publisher.messages.some(message => message.type === "livePeers" && !message.peers.length), "the publisher closes the failed peer");
+    assert.equal(loads(other).length, before[1], "the healthy receiver keeps playing");
+    assert.equal(rtc(other.load()!), otherPeer);
+    assert.ok(uploadRequested(f));
+    await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.buffered === true);
+    assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === other.id)?.buffered, undefined);
+    assert.deepEqual(f.publisher.messages.findLast(message => message.type === "livePeers")?.peers.map(peer => peer.peerId), [otherPeer]);
+    assert.equal(f.receiver.messages.some(message => message.type === "sendspin" && message.listen), false, "no group forms");
     assert.equal(f.publisher.state.playback, group);
     assert.equal(f.publisher.state.currentEntryId, entry);
-    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "falling back must not end capture");
-    assert.deepEqual(f.publisher.state.outputs?.map(output => output.deviceId), [f.receiver.id]);
+    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "relaying must not end capture");
   } finally { await f.close(); }
 });
 
-test("a relayed receiver plays the next ordinary item directly and the source relayed again", { timeout: 15_000 }, async () => {
+test("a relayed receiver plays the next ordinary item directly, the encoder stops, and the source is relayed again", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
-    await f.speaker(1);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
-    await until(() => !!f.receiver.load()?.follow);
+    await until(() => !!f.receiver.load()?.hls);
     const source = `${f.hub.origin}/api/health`;
     assert.equal((await f.publisher.command({ type: "enqueue", entry: { id: "next", title: "Next", source }, playNow: true })).ok, true);
     await until(() => f.receiver.load()?.source === source);
     assert.equal(f.receiver.load()!.follow, undefined, "an ordinary item plays directly");
-    await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === false);
+    await until(() => !uploadRequested(f) && !f.uploads.size);
     f.receiver.report();
     await until(() => f.publisher.state.player.status === "playing");
     const before = loads(f.receiver).length;
     assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
     await until(() => loads(f.receiver).length > before && !!f.receiver.load()?.hls);
-    synced(f.receiver.load()!, f.publisher.state.playback!);
+    relayed(f.receiver.load()!, f.receiver);
   } finally { await f.close(); }
 });
 
-test("a relayed receiver's newest tab plays the next ordinary item after the source is replayed", { timeout: 15_000 }, async () => {
+test("a relayed receiver's newest tab takes over its stream and plays the next ordinary item", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
     await start(f);
-    await f.speaker(1);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
-    await until(() => !!f.receiver.load()?.follow);
+    await until(() => !!f.receiver.load()?.hls);
     const source = `${f.hub.origin}/api/health`;
     assert.equal((await f.publisher.command({ type: "enqueue", entry: { id: "next", title: "Next", source } })).ok, true);
-    f.receiver.report();
-    await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
-    assert.equal((await f.publisher.command({ type: "play", entryId: f.publisher.state.currentEntryId!, fromStart: true })).ok, true);
-    await until(() => f.publisher.state.player.status === "loading");
     const tab = await f.connect(1, "&audio=1&video=1");
     f.receiver.socket.terminate();
-    await until(() => !!tab.load()?.follow);
+    await until(() => !!tab.load()?.hls);
+    relayed(tab.load()!, tab);
     tab.report();
     await until(() => f.publisher.state.player.status === "playing");
     assert.equal((await f.publisher.command({ type: "play", entryId: "next" })).ok, true);
@@ -238,12 +287,11 @@ test("Only here grants a fresh peer to a device that can connect, and relays to 
   const f = await liveFixture();
   try {
     await start(f);
-    await f.speaker(1);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
-    await until(() => !!f.receiver.load()?.follow);
+    await until(() => !!f.receiver.load()?.hls);
     // Only here moves an item once it has started.
     f.receiver.report();
-    await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
+    await until(() => f.publisher.state.player.status === "playing");
     const other = await f.connect(2, "&audio=1&video=1");
     assert.equal((await f.publisher.command({ type: "solo", deviceId: other.id })).ok, true);
     await until(() => !!other.load());
@@ -254,7 +302,7 @@ test("Only here grants a fresh peer to a device that can connect, and relays to 
     const back = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
     assert.equal(back.ok, true, back.error);
     await until(() => loads(f.receiver).length > before);
-    synced(f.receiver.load()!, f.publisher.state.playback!);
+    relayed(f.receiver.load()!, f.receiver);
   } finally { await f.close(); }
 });
 
@@ -269,7 +317,8 @@ test("a peer's own publisher can report it failed, and no other connection can",
     assert.equal(await closed, 1008);
     assert.equal(rtc(f.receiver.load()!), peerId);
     f.publisher.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "No codec in common." }));
-    await until(() => !!f.receiver.load()?.follow);
+    await until(() => !!f.receiver.load()?.hls);
+    relayed(f.receiver.load()!, f.receiver);
   } finally { await f.close(); }
 });
 

@@ -81,7 +81,28 @@ setInterval(() => {}, 1000);
   const publisher = await connect(0), receiver = await connect(1);
   const uploadUrl = (sourceId: string, key: string, device = 0) => `${hub.origin.replace("http:", "ws:")}/api/live/upload?${new URLSearchParams({ sourceId, key, token: device === -1 ? hostIdentity.token : identities[device]!.token })}`;
   const uploadToken = "1".repeat(64);
-  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl,
+  // Like live.ts, a publishing window records and uploads only while Core asks for its source (livePeers upload).
+  const uploads = new Map<string, WebSocket>();
+  const answerUploads = (client: { socket: WebSocket }, device = 0) => {
+    const mine = new Set<WebSocket>();
+    client.socket.on("message", data => {
+      const message = JSON.parse(String(data)) as ServerMessage;
+      if (message.type !== "livePeers") return;
+      const open = uploads.get(message.sourceId);
+      if (message.upload && !open) {
+        const upload = new WebSocket(uploadUrl(message.sourceId, uploadToken, device), { headers: { Origin: hub.origin } });
+        sockets.push(upload);
+        mine.add(upload);
+        uploads.set(message.sourceId, upload);
+        upload.once("open", () => upload.send(Buffer.from("fixture capture")));
+        upload.once("close", () => { if (uploads.get(message.sourceId) === upload) uploads.delete(message.sourceId); });
+        upload.on("error", () => {});
+      } else if (!message.upload && open) { uploads.delete(message.sourceId); open.close(); }
+    });
+    return { terminate: () => { for (const upload of mine) upload.terminate(); } };
+  };
+  answerUploads(publisher);
+  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl, uploads, answerUploads,
     // Core restarts on the same database; every socket and speaker reconnects itself.
     restart: async () => {
       await Promise.all(speakers.splice(0).map(speaker => speaker.disconnect()));
@@ -91,14 +112,6 @@ setInterval(() => {}, 1000);
     },
     publish: async (sourceId: string, kind: "screen" | "system-audio" | "microphone" = "screen", audio = true) => {
       assert.equal((await publisher.command({ type: "publishLive", sourceId, uploadToken, kind, audio, video: kind === "screen" })).ok, true);
-      const upload = new WebSocket(uploadUrl(sourceId, uploadToken), { headers: { Origin: hub.origin } });
-      sockets.push(upload);
-      await new Promise<void>((resolve, reject) => {
-        upload.once("error", reject);
-        upload.once("open", () => upload.send(Buffer.from("fixture capture")));
-        upload.on("message", data => { if (JSON.parse(String(data)).type === "ready") resolve(); });
-      });
-      return upload;
     },
     speaker: async (index: number) => {
       const identity = identities[index]!, delays: number[] = [];

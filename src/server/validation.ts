@@ -40,6 +40,7 @@ function validAction(value: unknown): value is Action {
       && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
     case "endLive": return id(value.sourceId);
     case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow });
+    case "inSync": return typeof value.inSync === "boolean";
     case "control": return id(value.deviceId);
     case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
     case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);

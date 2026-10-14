@@ -45,7 +45,6 @@ const check = (source: string, couchApp = "undefined") => {
       async addIceCandidate(candidate) { this.candidates.push(candidate); }
       close() { this.connectionState = this.signalingState = "closed"; }
     };
-    let autoReady = true;
     globalThis.WebSocket = class {
       static OPEN = 1;
       readyState = 0;
@@ -59,7 +58,7 @@ const check = (source: string, couchApp = "undefined") => {
       static isTypeSupported(type) { return type.includes("webm"); }
       state = "inactive";
       constructor(stream, options) { this.stream = stream; this.options = options; recorders.push(this); }
-      start(timeslice) { this.state = "recording"; this.timeslice = timeslice; if (autoReady) queueMicrotask(() => uploads.at(-1).onmessage({ data: JSON.stringify({ type: "ready" }) })); }
+      start(timeslice) { this.state = "recording"; this.timeslice = timeslice; }
       stop() { this.state = "inactive"; }
     };
     globalThis.MediaStream = class {
@@ -87,6 +86,8 @@ const check = (source: string, couchApp = "undefined") => {
     const direct = (options = {}) => ({ type: "load", playbackId: "playing", source: "", liveSourceId: "source", livePeerId: "peer", liveOutput: { picture: true, sound: true, volume: 75 }, ...options });
     const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     const unreachable = () => signals.filter(message => message.type === "liveFailed");
+    // Core asks the publisher for its recording only while something plays the source buffered.
+    const requestUpload = (sourceId, upload = true) => session.receive({ type: "livePeers", sourceId, peers: [], upload });
     ${source}
     session.close();
     assert.equal(timers.size, 0, "closing a session retires its connection deadline");
@@ -160,7 +161,7 @@ test("a publisher that can't negotiate a peer reports it instead of dropping it 
   await flush();
   assert.deepEqual(unreachable(), [{ type: "liveFailed", peerId: "remote", error: "No codec in common." }]);
   assert.equal(peers[0].connectionState, "closed");
-  assert.equal(recorders[0].state, "recording", "the upload Core relays from keeps running");
+  assert.equal(recorders.length, 0, "nothing records until Core asks");
 `));
 
 test("connected, stopped and replaced direct sessions cancel deadlines and reject stale events", () => check(`
@@ -184,7 +185,7 @@ test("connected, stopped and replaced direct sessions cancel deadlines and rejec
   assert.equal(unreachable().length, 0, "stopped and replaced peers are never reported");
 `));
 
-test("switching direct playback to a synced URL keeps capture and the warm upload alive", () => check(`
+test("switching direct playback to a synced URL keeps capture alive", () => check(`
   const source = await session.start({ kind: "screen" });
   session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
   await flush();
@@ -195,10 +196,9 @@ test("switching direct playback to a synced URL keeps capture and the warm uploa
   assert.equal(peers.length, 2);
   assert.equal(session.play({ type: "load", playbackId: "playing", source: "https://couch.example/stream.m3u8", follow: { group: "group", pts: true } }), false);
   assert.equal(peers[1].connectionState, "closed");
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [] });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [], upload: false });
   assert.equal(peers[0].connectionState, "closed");
-  assert.equal(recorders[0].state, "recording");
-  assert.equal(uploads[0].readyState, 1);
+  assert.equal(recorders.length, 0);
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
   advance(60000);
   assert.equal(failures.length, 0);
@@ -240,57 +240,38 @@ test("the capture can publish to another tab on the same device", () => check(`
   assert.equal(signals[0].peerId, "other-tab");
 `));
 
-test("capture uploads one ordered recording and waits for Core's playable source", () => check(`
+test("Core's request starts one ordered recording, and its release or Core closing it stops only that upload", () => check(`
   const source = await session.start({ kind: "screen" });
+  assert.equal(uploads.length, 0, "Publish starts no recording");
+  requestUpload(source.id);
   assert.equal(uploads.length, 1);
   assert.equal(uploads[0].sourceId, source.id);
   assert.match(uploads[0].key, /^[a-f0-9]{64}$/);
   assert.equal(commands[0].uploadToken, uploads[0].key);
+  await flush();
   assert.equal(recorders[0].timeslice, 250);
   const bytes = new Uint8Array(150_000).map((_, i) => i % 251);
   recorders[0].ondataavailable({ data: new Blob([bytes]) });
   assert.ok(uploads[0].sent.every(blob => blob.size <= 65_536));
   assert.deepEqual(new Uint8Array(await new Blob(uploads[0].sent).arrayBuffer()), bytes);
-  advance(60000);
-  assert.equal(failures.length, 0, "ready clears the startup deadline");
-`));
-
-test("a stalled upload fails after 30 seconds and releases capture", () => check(`
-  autoReady = false;
-  const starting = session.start({ kind: "screen" });
-  const rejected = assert.rejects(starting, /didn't start/);
-  await flush();
-  advance(29999);
-  assert.equal(captures[0].getTracks()[0].stopped, false);
-  advance(1);
-  await rejected;
-  assert.ok(captures[0].getTracks().every(track => track.stopped));
-  assert.equal(uploads[0].readyState, 3);
+  requestUpload(source.id);
+  assert.equal(uploads.length, 1, "one recording at a time");
+  requestUpload(source.id, false);
   assert.equal(recorders[0].state, "inactive");
-  assert.equal(commands.at(-1).type, "endLive");
-`));
-
-test("stopping or closing a pending upload cancels its deadline", () => check(`
-  autoReady = false;
-  const starting = session.start({ kind: "screen" });
-  const rejected = assert.rejects(starting, /canceled/);
+  assert.equal(uploads[0].readyState, 3);
+  requestUpload(source.id);
   await flush();
-  await session.end();
-  await rejected;
+  uploads[1].close();
+  assert.equal(recorders[1].state, "inactive");
   advance(60000);
-  assert.equal(failures.length, 0);
-  assert.equal(timers.size, 0);
-  const next = session.start({ kind: "screen" });
-  const nextRejected = assert.rejects(next, /canceled/);
-  await flush();
-  session.close();
-  await nextRejected;
-  assert.ok(captures.flatMap(stream => stream.getTracks()).every(track => track.stopped));
+  assert.equal(failures.length, 0, "Core ending buffered delivery is not a failure");
+  assert.ok(captures[0].getTracks().every(track => !track.stopped), "capture continues");
+  assert.equal(commands.some(action => action.type === "endLive"), false);
 `));
 
 test("Publish waits for Core however long its first FFmpeg lookup takes, and Cancel still releases capture", () => check(`
     const { replyDeadline } = await import("./src/client/session/reply-deadline.ts");
-    assert.equal(replyDeadline({ type: "publishLive" }), undefined, "Core's reply, a lost connection or Cancel ends Publish");
+    assert.equal(replyDeadline({ type: "publishLive" }), 8_000, "Core answers Publish without starting an encoder");
     assert.equal(replyDeadline({ type: "videoQuality" }), 35_000);
     publishing = Promise.withResolvers();
     const slow = session.start({ kind: "screen" });
@@ -309,25 +290,27 @@ test("Publish waits for Core however long its first FFmpeg lookup takes, and Can
     assert.equal(commands.at(-1).type, "endLive");
     publishing.reject(new Error("This input has stopped."));
     await rejected;
-    assert.equal(uploads.length, 1, "a canceled Publish never uploads");
+    assert.equal(uploads.length, 0, "Publish never uploads");
 `));
 
-test("upload backpressure ends sharing instead of growing an unbounded queue", () => check(`
-  await session.start({ kind: "screen" });
+test("upload backpressure stops the upload instead of growing an unbounded queue, and sharing continues", () => check(`
+  const source = await session.start({ kind: "screen" });
+  requestUpload(source.id);
+  await flush();
   uploads[0].bufferedAmount = 4 * 1024 * 1024;
   recorders[0].ondataavailable({ data: new Blob(["next frame"]) });
-  await flush();
   assert.equal(failures.length, 1);
   assert.match(failures[0].message, /cannot keep up/);
   assert.equal(uploads[0].sent.length, 0);
-  assert.ok(captures[0].getTracks().every(track => track.stopped));
-  assert.equal(commands.at(-1).type, "endLive");
+  assert.equal(uploads[0].readyState, 3);
+  assert.equal(recorders[0].state, "inactive");
+  assert.ok(captures[0].getTracks().every(track => !track.stopped));
+  assert.equal(commands.some(action => action.type === "endLive"), false);
 `));
 
-test("a removed source reports failure even when its state arrives before the upload error", () => check(`
+test("a source Core removed reports failure and releases capture", () => check(`
   await session.start({ kind: "screen" });
   session.observe([]);
-  uploads[0].onmessage({ data: JSON.stringify({ type: "error", error: "encoder failed" }) });
   assert.equal(failures.length, 1);
   assert.match(failures[0].message, /stopped/);
   assert.ok(captures[0].getTracks().every(track => track.stopped));
@@ -372,6 +355,7 @@ test("the desktop app is told which source to prepare and whether its sound is i
 
 test("system audio retains only a small idle picture and never sends its video track", () => check(`
   const source = await session.start({ kind: "system-audio" });
+  requestUpload(source.id);
   assert.equal(source.audio, true);
   assert.equal(source.video, false);
   assert.equal(captureRequests[0].video.frameRate.max, 1);
@@ -409,7 +393,7 @@ test("closing the desktop window ends this device's sharing, while its playback 
   session.play(direct());
   const receiving = peers[0];
   const source = await session.start({ kind: "screen" });
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }] });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }], upload: true });
   await flush();
   const publisher = peers[1];
   closeWindow();
@@ -436,24 +420,23 @@ test("closing the desktop window ends this device's sharing, while its playback 
 
 test("closing the desktop window cancels sharing at each step of starting it", () => check(`
   const display = navigator.mediaDevices.getDisplayMedia;
-  for (const step of ["prepare", "capture", "publish", "upload"]) {
+  for (const step of ["prepare", "capture", "publish"]) {
     const before = { captures: captures.length, commands: commands.length, recorders: recorders.length };
     let release = () => {};
     if (step === "prepare") { preparing = Promise.withResolvers(); release = preparing.resolve; }
     if (step === "capture") navigator.mediaDevices.getDisplayMedia = request => new Promise(resolve => { release = () => resolve(display(request)); });
     if (step === "publish") { publishing = Promise.withResolvers(); release = publishing.resolve; }
-    if (step === "upload") autoReady = false;
     const starting = session.start({ kind: "screen" });
     const rejected = assert.rejects(starting, /canceled/);
     await flush(); await flush();
     const published = commands.slice(before.commands).filter(action => action.type === "publishLive").length;
-    assert.equal(published, ["publish", "upload"].includes(step) ? 1 : 0, step);
-    assert.equal(recorders.length - before.recorders, step === "upload" ? 1 : 0, step);
+    assert.equal(published, step === "publish" ? 1 : 0, step);
+    assert.equal(recorders.length - before.recorders, 0, step);
     closeWindow();
     release();
     await rejected;
     await flush();
-    preparing = publishing = undefined; autoReady = true; navigator.mediaDevices.getDisplayMedia = display;
+    preparing = publishing = undefined; navigator.mediaDevices.getDisplayMedia = display;
     assert.equal(captures.length - before.captures, step === "prepare" ? 0 : 1, step);
     assert.ok(captures.slice(before.captures).flatMap(stream => stream.getTracks()).every(track => track.stopped), step);
     assert.ok(recorders.every(recorder => recorder.state === "inactive"), step);
@@ -465,6 +448,8 @@ test("closing the desktop window cancels sharing at each step of starting it", (
   assert.equal(failures.length, 0);
   assert.equal(timers.size, 0);
   // The session still shares after each canceled start.
-  await session.start({ kind: "screen" });
+  const shared = await session.start({ kind: "screen" });
+  requestUpload(shared.id);
+  await flush();
   assert.equal(recorders.at(-1).state, "recording");
 `, desktop));

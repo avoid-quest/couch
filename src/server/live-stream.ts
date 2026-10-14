@@ -24,9 +24,9 @@ type Stream = {
 const uploadLimit = 4 * 1024 * 1024;
 const timeoutMs = 30_000;
 
-// Capture enters Couch once. The resulting rolling HLS source uses the same URL
-// renderer, Sendspin audio and picture clock as a TV stream. The caller owns
-// publication authorization and gates every upload and media request.
+// Capture enters Couch once, and only while something plays it buffered. The resulting
+// rolling HLS source uses the same URL renderer, Sendspin audio and picture clock as a
+// TV stream. The caller owns publication authorization and gates every upload and media request.
 export function createLiveStreams(options: { ffmpeg: () => Promise<string>; failed?: (sourceId: string, error: string) => void }) {
   const streams = new Map<string, Stream>();
   const cleaning = new Set<Promise<void>>();
@@ -116,6 +116,9 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
         throw error;
       }
     },
+    has: (sourceId: string) => streams.has(sourceId),
+    // Its first segment is playable.
+    available: (sourceId: string) => !!streams.get(sourceId)?.available,
     accept(sourceId: string, socket: WebSocket) {
       const stream = streams.get(sourceId);
       if (!stream?.child || stream.ended || stream.socket) return false;

@@ -42,11 +42,13 @@ export type PlayerState = {
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
 // volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds as it
 // last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean };
+// buffered: a live input reaches it through Couch's buffered stream because it couldn't connect directly.
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
 // choosing: its shared source waits for Where it plays; it counts up with each request to choose.
 // held: its publisher's output, left out while its own capture plays and returning after it.
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output };
+// inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 
@@ -93,6 +95,8 @@ export type Action =
   | { type: "publishLive"; sourceId: string; uploadToken: string; kind: LiveSource["kind"]; audio: boolean; video: boolean; name?: string }
   | { type: "endLive"; sourceId: string }
   | { type: "playLive"; sourceId: string; deviceId?: string; playNow?: boolean; placement?: "next" }
+  // The controlled Playback's live inputs play in sync on its devices, buffered, or directly on each.
+  | { type: "inSync"; inSync: boolean }
   | { type: "sharing"; sharing: DeviceSharing }
   | { type: "control"; deviceId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
@@ -137,7 +141,8 @@ export type UpdateReply = { type: "updates"; requestId: string; state?: import("
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
   | LiveSignalMessage
-  | { type: "livePeers"; sourceId: string; peers: LivePeer[] }
+  // upload: Core needs the publisher's encoded capture, for a playback in sync or a receiver it relays to.
+  | { type: "livePeers"; sourceId: string; peers: LivePeer[]; upload: boolean }
   | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
