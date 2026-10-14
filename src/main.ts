@@ -49,6 +49,7 @@ const hub = await createHub({
   databasePath: join(dataDir, "couch.sqlite"),
   adminRecoveryCode,
   liveTurn,
+  relayExecutable: process.env.COUCH_RELAY_PATH ?? join(import.meta.dirname, "live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay"),
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
 });
