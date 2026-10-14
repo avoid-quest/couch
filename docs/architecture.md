@@ -180,7 +180,9 @@ Only while a Playback plays the source In sync, or to a receiver that couldn't c
 directly, does Core ask the publisher (`livePeers.upload`) for one MediaRecorder upload
 over a separate WebSocket using a publication-scoped upload token, and convert it into
 rolling HLS with FFmpeg (`src/server/live-stream.ts`); it stops both once nothing plays
-it buffered. Each media address is signed for the current Playback and its Device, and
+it buffered. Fallback needs a connected receiver; In sync retains its stream while
+paused, including while waiting for offline outputs to reconnect. Each media address
+is signed for the current Playback and its Device, and
 works only while that Device's output shows the picture, or while that Device is relayed;
 Core's own decoder reads one that no Device receives, from this machine. A relayed
 receiver plays its address in the ordinary player with its sound, outside any group.

@@ -198,7 +198,7 @@ export async function createHub(options: HubOptions) {
   const newest = (deviceId: string) => [...sockets].findLast(socket => deviceOf(socket) === deviceId);
   const nameOf = (deviceId: string) => playbackActor(deviceId === hostId() ? null : deviceId)?.name ?? "A Device";
   // A failed buffered stream ends only buffered delivery: direct receivers and capture continue. Each
-  // receiver relayed this source stops waiting and says why; Core starts no stream for it until the next item.
+  // receiver relayed this source stops waiting and says why; Core waits for Play to retry it or the next item.
   const liveStreams = createLiveStreams({ ffmpeg: () => helper("ffmpeg"), failed: (sourceId, error) => {
     live.upload(sourceId, false);
     log(`live ${sourceId.slice(0, 8)} buffered stream stopped: ${error}`);
