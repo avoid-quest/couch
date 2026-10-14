@@ -14,7 +14,9 @@ configure router forwarding or expose Couch to the internet.
 
 Couch checks its private IPv4 selection every second, so sharing can start after
 DHCP assigns an address and recover when an address or occupied port returns.
-Custom DNS names are rechecked every minute. With several eligible interfaces,
+Custom DNS names are rechecked every minute. An active automatically selected
+address stays in use while it remains available, even if another interface appears.
+When initially selecting among several eligible interfaces,
 set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
 has multiple private IPv4 addresses, also set `COUCH_LAN_ADDRESS` to the specific
 local address to use. For example, if `eth0` owns `192.168.1.20`:

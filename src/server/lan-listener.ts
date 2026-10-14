@@ -66,7 +66,14 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
   let pending: Promise<void> = Promise.resolve();
   let last = "";
-  const selectedNetwork = () => selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
+  const selectedNetwork = () => {
+    const interfaces = (options.interfaces ?? networkInterfaces)();
+    // A second interface must not disconnect receivers from a still-valid LAN.
+    if (active && network && !options.selected && !options.address) {
+      try { return selectLan(interfaces, network.name, network.address); } catch {}
+    }
+    return selectLan(interfaces, options.selected, options.address);
+  };
   const stopAll = async () => { await Promise.all([active?.stop(), port80?.stop()]); active = port80 = null; };
   const changed = (urls: string[], error: string | null, suggested = "") => {
     const state = JSON.stringify([urls, error, suggested]);

@@ -19,8 +19,8 @@ const candidate = Object.entries(interfaces).find(([name, entries]) => {
 });
 const port = Number(process.env.COUCH_PORT ?? 42640);
 
-async function fixture(t: TestContext, { enabled = true, available = false, advertised = [], resolve, beforeStart }: {
-  enabled?: boolean; available?: boolean; advertised?: string[]; resolve?: typeof lookup; beforeStart?: () => Promise<void>;
+async function fixture(t: TestContext, { enabled = true, available = false, automatic = false, advertised = [], resolve, beforeStart }: {
+  enabled?: boolean; available?: boolean; automatic?: boolean; advertised?: string[]; resolve?: typeof lookup; beforeStart?: () => Promise<void>;
 } = {}) {
   const [name, entries] = candidate!;
   const network = selectLan({ [name]: entries }, name);
@@ -30,7 +30,7 @@ async function fixture(t: TestContext, { enabled = true, available = false, adve
   let inventory: typeof interfaces = available ? { [name]: entries } : {};
   let reads = 0;
   const lan = createLanListener({
-    port, enabled, selected: name, advertised, resolve, interfaces: () => { reads++; return inventory; },
+    port, enabled, selected: automatic ? undefined : name, advertised, resolve, interfaces: () => { reads++; return inventory; },
     start: async (next, port) => { await beforeStart?.(); return serve({
       hostname: next.address, port, tls, maxRequestBodySize: 4096,
       fetch: async () => Response.json({ ok: true }),
@@ -62,8 +62,29 @@ async function fixture(t: TestContext, { enabled = true, available = false, adve
       request.once("error", reject);
     });
   };
-  return { lan, network, ready, arrive: () => { inventory = { [name]: entries }; }, depart: () => { inventory = {}; }, reads: () => reads };
+  return { lan, network, ready, arrive: () => { inventory = { [name]: entries }; }, depart: () => { inventory = {}; }, reads: () => reads,
+    addNetwork: () => { inventory.bridge100 = [{ ...entries!.find(entry => entry.family === "IPv4")!, address: "192.168.254.1", internal: false }]; },
+  };
 }
+
+test("an additional interface preserves the active automatically selected LAN listener", { skip: !candidate }, async t => {
+  const f = await fixture(t, { available: true, automatic: true });
+  await f.ready();
+  const server = f.lan.server;
+  f.addNetwork();
+  await assert.doesNotReject(f.lan.refresh());
+  assert.equal(f.lan.server, server, "an unrelated interface restarted the active listener");
+  await f.ready();
+});
+
+test("automatic selection still refuses an ambiguous initial network", { skip: !candidate }, async t => {
+  const f = await fixture(t, { automatic: true });
+  await assert.rejects(f.lan.refresh(), /No eligible LAN address/);
+  f.arrive();
+  f.addNetwork();
+  await assert.rejects(f.lan.refresh(), /Several LAN addresses/);
+  assert.equal(f.lan.server, null);
+});
 
 test("LAN HTTPS becomes ready promptly when IPv4 arrives after Core starts", { skip: !candidate }, async t => {
   const f = await fixture(t);
@@ -72,8 +93,8 @@ test("LAN HTTPS becomes ready promptly when IPv4 arrives after Core starts", { s
   await f.ready();
 });
 
-test("a vanished selection closes LAN access and a returning address recovers it", { skip: !candidate }, async t => {
-  const f = await fixture(t, { available: true });
+for (const automatic of [false, true]) test(`a vanished ${automatic ? "automatic" : "explicit"} selection closes LAN access and a returning address recovers it`, { skip: !candidate }, async t => {
+  const f = await fixture(t, { available: true, automatic });
   await f.ready();
   f.depart();
   const deadline = performance.now() + 2_500;
