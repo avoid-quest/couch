@@ -166,6 +166,113 @@ test("RTC peer rotation and grouped delivery preserve pause and selected externa
   } finally { await f.close(); }
 });
 
+test("a receiver that can't connect directly plays the source through Couch, keeping its playback and capture", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    await f.speaker(1);
+    const peerId = rtc(f.receiver.load()!), group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId;
+    const before = loads(f.receiver).length;
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "No network path for live inputs." }));
+    await until(() => loads(f.receiver).length > before);
+    synced(f.receiver.load()!, group);
+    assert.ok(f.receiver.load()!.source.includes(`/${f.receiver.id}/`), "the picture comes from the receiver's own link");
+    assert.equal((await fetch(f.receiver.load()!.source)).status, 200);
+    await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === true);
+    f.receiver.report();
+    await until(() => f.heard(1) > 0);
+    assert.ok(f.publisher.messages.some(message => message.type === "livePeers" && !message.peers.length), "the publisher closes the failed peer");
+    assert.equal(f.publisher.state.playback, group);
+    assert.equal(f.publisher.state.currentEntryId, entry);
+    assert.equal(f.publisher.state.liveSources?.[0]?.id, "screen", "falling back must not end capture");
+    assert.deepEqual(f.publisher.state.outputs?.map(output => output.deviceId), [f.receiver.id]);
+  } finally { await f.close(); }
+});
+
+test("a relayed receiver plays the next ordinary item directly and the source relayed again", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    await f.speaker(1);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.receiver.load()?.follow);
+    const source = `${f.hub.origin}/api/health`;
+    assert.equal((await f.publisher.command({ type: "enqueue", entry: { id: "next", title: "Next", source }, playNow: true })).ok, true);
+    await until(() => f.receiver.load()?.source === source);
+    assert.equal(f.receiver.load()!.follow, undefined, "an ordinary item plays directly");
+    await until(() => f.receiver.messages.findLast(message => message.type === "sendspin")?.listen === false);
+    f.receiver.report();
+    await until(() => f.publisher.state.player.status === "playing");
+    const before = loads(f.receiver).length;
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
+    await until(() => loads(f.receiver).length > before && !!f.receiver.load()?.hls);
+    synced(f.receiver.load()!, f.publisher.state.playback!);
+  } finally { await f.close(); }
+});
+
+test("a relayed receiver's newest tab plays the next ordinary item after the source is replayed", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    await f.speaker(1);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.receiver.load()?.follow);
+    const source = `${f.hub.origin}/api/health`;
+    assert.equal((await f.publisher.command({ type: "enqueue", entry: { id: "next", title: "Next", source } })).ok, true);
+    f.receiver.report();
+    await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
+    assert.equal((await f.publisher.command({ type: "play", entryId: f.publisher.state.currentEntryId!, fromStart: true })).ok, true);
+    await until(() => f.publisher.state.player.status === "loading");
+    const tab = await f.connect(1, "&audio=1&video=1");
+    f.receiver.socket.terminate();
+    await until(() => !!tab.load()?.follow);
+    tab.report();
+    await until(() => f.publisher.state.player.status === "playing");
+    assert.equal((await f.publisher.command({ type: "play", entryId: "next" })).ok, true);
+    await until(() => tab.load()?.source === source);
+    assert.equal(tab.load()!.follow, undefined);
+  } finally { await f.close(); }
+});
+
+test("Only here grants a fresh peer to a device that can connect, and relays to one that couldn't", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    await f.speaker(1);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.receiver.load()?.follow);
+    // Only here moves an item once it has started.
+    f.receiver.report();
+    await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
+    const other = await f.connect(2, "&audio=1&video=1");
+    assert.equal((await f.publisher.command({ type: "solo", deviceId: other.id })).ok, true);
+    await until(() => !!other.load());
+    rtc(other.load()!);
+    other.report();
+    await until(() => f.publisher.state.player.status === "playing");
+    const before = loads(f.receiver).length;
+    const back = await f.publisher.command({ type: "solo", deviceId: f.receiver.id });
+    assert.equal(back.ok, true, back.error);
+    await until(() => loads(f.receiver).length > before);
+    synced(f.receiver.load()!, f.publisher.state.playback!);
+  } finally { await f.close(); }
+});
+
+test("a peer's own publisher can report it failed, and no other connection can", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    const peerId = rtc(f.receiver.load()!);
+    const window = await f.connect(0); // Same paired identity, a different publishing window.
+    const closed = new Promise<number>(resolve => window.socket.once("close", code => resolve(code)));
+    window.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "Spoofed." }));
+    assert.equal(await closed, 1008);
+    assert.equal(rtc(f.receiver.load()!), peerId);
+    f.publisher.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "No codec in common." }));
+    await until(() => !!f.receiver.load()?.follow);
+  } finally { await f.close(); }
+});
+
 test("RTC signaling admits only the exact granted connections", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {

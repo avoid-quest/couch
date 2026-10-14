@@ -1,5 +1,5 @@
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
-import type { LivePeer, LiveSelection, LiveSignalMessage, LiveSource } from "../../shared/live-input";
+import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource } from "../../shared/live-input";
 import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
@@ -11,7 +11,7 @@ const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => 
 
 // Capture belongs to the authenticated session. A single output receives it directly;
 // the warm upload lets Core switch multiple outputs to the ordinary synced player.
-export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
+export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage | LiveFailedMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
   let generation = 0;
   let closed = false;
   let starting = false;
@@ -26,10 +26,18 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     current.peer?.connection.close();
     stopTracks(current.stream);
   };
+  const errorOf = (reason: unknown) => reason instanceof Error ? reason.message : "The live input couldn't connect.";
+  // Core then plays the source through its own stream, so the player keeps buffering until it does.
   const failReceiver = (current: Receiver, reason: unknown) => {
     if (receiver !== current) return;
     closeReceiver();
-    streamChanged(current.load.playbackId, current.stream, reason instanceof Error ? reason.message : "The live input couldn't connect. Start it again.");
+    options.send({ type: "liveFailed", peerId: current.peerId, error: errorOf(reason) });
+  };
+  const failPublisher = (peerId: string, peer: Peer, reason: unknown) => {
+    if (closed || publishers.get(peerId) !== peer) return;
+    publishers.delete(peerId);
+    peer.connection.close();
+    options.send({ type: "liveFailed", peerId, error: errorOf(reason) });
   };
   const makePeer = (peerId: string): Peer => {
     const connection = new RTCPeerConnection({ iceServers: options.iceServers });
@@ -61,7 +69,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         if (peer.connection.remoteDescription) await peer.connection.addIceCandidate(candidate);
         else if (peer.candidates.length < 64) peer.candidates.push(candidate);
       }
-    }).catch(reason => { if (current) failReceiver(current, reason); });
+    }).catch(reason => { if (current) failReceiver(current, reason); else failPublisher(message.peerId, peer, reason); });
   };
   const startPublisher = async (target: LivePeer) => {
     const current = publication;
@@ -76,8 +84,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (!active()) return;
       await peer.connection.setLocalDescription(offer);
       if (active()) options.send({ type: "liveSignal", peerId: target.peerId, signal: { description: { type: "offer", sdp: peer.connection.localDescription!.sdp } } });
-    } catch {
-      if (active()) { publishers.delete(target.peerId); peer.connection.close(); }
+    } catch (reason) {
+      if (active()) failPublisher(target.peerId, peer, reason);
     }
   };
   const closePublication = () => {
@@ -175,9 +183,10 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         peer.connection.onconnectionstatechange = () => {
           if (receiver !== current) return;
           if (peer.connection.connectionState === "connected") clearTimeout(current.timeout);
-          if (peer.connection.connectionState === "failed") failReceiver(current, new Error("The live input lost its connection. Start it again."));
+          if (peer.connection.connectionState === "failed") failReceiver(current, new Error("The direct connection failed."));
         };
-        current.timeout = setTimeout(() => failReceiver(current, new Error("The live input didn't connect. Check the network and start it again.")), 30_000);
+        // A LAN peer connects within a second or two; one that can't is relayed rather than awaited.
+        current.timeout = setTimeout(() => failReceiver(current, new Error("The direct connection didn't connect within 10 seconds.")), 10_000);
       } catch (reason) { failReceiver(current, reason); }
       return true;
     },

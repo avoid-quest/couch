@@ -4,7 +4,8 @@ import type { Action, PlaybackCommand, ServerMessage } from "../shared/protocol"
 
 type Load = Extract<PlaybackCommand, { type: "load" }>;
 type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; sound: boolean; volume: number };
-type Publication<Socket> = { source: LiveSource; owner: Socket; uploadToken: string };
+// Receivers that couldn't connect directly play this source through Core's stream instead.
+type Publication<Socket> = { source: LiveSource; owner: Socket; uploadToken: string; relayed: Set<string> };
 type Peer<Socket> = LivePeer & { publisher: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string };
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
@@ -43,7 +44,7 @@ export function createLiveInputs<Socket>(options: {
       const deviceId = options.deviceOf(socket);
       const label = action.kind === "microphone" ? "Microphone" : action.kind === "system-audio" ? "System audio" : "Screen";
       const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video };
-      sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken });
+      sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken, relayed: new Set() });
       options.changed();
       return source;
     },
@@ -85,6 +86,17 @@ export function createLiveInputs<Socket>(options: {
       if (peer.publisher !== socket && peer.receiver !== socket) throw new Error("This connection has no live peer permission.");
       options.send(peer.publisher === socket ? peer.receiver : peer.publisher, message);
     },
+    // Either end reports a peer that can't connect; its receiver is relayed from now on.
+    unreachable(socket: Socket, peerId: string) {
+      const peer = peers.get(peerId);
+      if (!peer) return; // Already stopped or replaced.
+      if (peer.publisher !== socket && peer.receiver !== socket) throw new Error("This connection has no live peer permission.");
+      sources.get(peer.sourceId)?.relayed.add(peer.deviceId);
+      peers.delete(peerId);
+      announce(peer.sourceId);
+      return peer;
+    },
+    relayed: (sourceId: string, deviceId: string) => !!sources.get(sourceId)?.relayed.has(deviceId),
     closePlayback(playbackId: string) {
       const changed = new Set<string>();
       for (const peer of [...peers.values()]) if (peer.playbackId === playbackId) { removePeer(peer); changed.add(peer.sourceId); }
