@@ -1,27 +1,20 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { EventEmitter } from "node:events";
-import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
-const originalFetch = globalThis.fetch;
 const app = Object.assign(new EventEmitter(), {
   isPackaged: false,
   getVersion: () => "0.3.0",
-  getPath: () => "/unused/Couch.app/Contents/MacOS/couch",
-  quit() { this.emit("quit"); },
 });
-const bytes = new Uint8Array([1, 2, 3]);
-const sha512 = createHash("sha512").update(bytes).digest("base64");
 let available: string | null;
 let checkError: Error | null;
 let installError: Error | null;
 let downloads: string[];
-let swaps: string[];
+let armed: boolean[];
 let temporary: string;
-let bundles: string[];
 let timerActive: boolean;
 let delayedTimer: ((error: Error | null, stdout: string, stderr: string) => void) | null;
 let delayTimer: boolean;
@@ -36,12 +29,13 @@ const autoUpdater = Object.assign(new EventEmitter(), {
     if (checkError) throw checkError;
     return {
       isUpdateAvailable: available !== null,
-      updateInfo: { version: available, files: [{ url: "update.zip", sha512 }] },
+      updateInfo: { version: available, files: [] },
       downloadPromise: available && this.autoDownload ? new Promise(resolve => setImmediate(() => this.downloadUpdate().then(resolve))) : null,
     };
   },
   async downloadUpdate() {
     downloads.push(available!);
+    armed.push(this.autoInstallOnAppQuit);
     this.emit("update-downloaded", { version: available });
     return [];
   },
@@ -53,14 +47,8 @@ mock.module("node:child_process", () => ({
   execFile(command: string, args: string[], callback: (error: Error | null, stdout: string, stderr: string) => void) {
     if (command === "systemctl" && args[0] === "is-active") { if (delayTimer) delayedTimer = callback; else callback(timerActive ? null : new Error("inactive"), "", ""); return; }
     if (command === "systemctl" && args[0] === "start") starts.push(args);
-    if (command === "ditto") {
-      const directory = args.at(-1)!;
-      mkdirSync(join(directory, "Couch.app"));
-      bundles.push(directory);
-    }
     callback(null, "", "");
   },
-  spawn(_command: string, args: string[]) { swaps.push(args[3]!); return { unref() {} }; },
 }));
 const { startUpdates } = await import("../app/update");
 const start = () => {
@@ -71,7 +59,7 @@ const start = () => {
 
 beforeEach(() => {
   temporary = mkdtempSync(join(tmpdir(), "couch-update-test-"));
-  bundles = []; downloads = []; swaps = [];
+  downloads = []; armed = [];
   starts = []; installs = 0;
   available = null; checkError = null; installError = null;
   timerActive = false;
@@ -80,27 +68,19 @@ beforeEach(() => {
   app.removeAllListeners(); autoUpdater.removeAllListeners();
   autoUpdater.on("error", () => {}); // electron-updater's own logging listener.
   autoUpdater.autoDownload = true; autoUpdater.autoInstallOnAppQuit = true;
-  globalThis.fetch = async () => new Response(bytes);
 });
 afterEach(() => {
   Object.defineProperty(process, "platform", platform);
-  globalThis.fetch = originalFetch;
-  for (const directory of [temporary, ...bundles]) rmSync(directory, { recursive: true, force: true });
+  rmSync(temporary, { recursive: true, force: true });
 });
 
-test("returning to Stable discards the staged Mac Preview bundle", async () => {
+test("a downloaded update installs when Couch quits, on macOS as elsewhere", async () => {
   Object.defineProperty(process, "platform", { ...platform, value: "darwin" });
   const updates = start();
-  available = "0.3.1-preview.1";
-  await updates.action({ op: "channel", channel: "preview" });
+  available = "0.3.1";
   await updates.check();
   expect(updates.state().status).toBe("ready");
-  available = null;
-  await updates.action({ op: "channel", channel: "latest" });
-  await updates.check();
-  expect(updates.state().status).toBe("up-to-date");
-  app.quit();
-  expect(swaps).toEqual([]);
+  expect(armed).toEqual([true]);
 });
 
 test("a missing Stable feed cannot offer the previous Preview release", async () => {

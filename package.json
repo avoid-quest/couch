@@ -104,7 +104,7 @@
       ],
       "icon": "packaging/icons/icon.icns",
       "category": "public.app-category.entertainment",
-      "identity": "-",
+      "identity": "Couch Releases",
       "hardenedRuntime": false,
       "minimumSystemVersion": "14.0",
       "extendInfo": {

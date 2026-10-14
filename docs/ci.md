@@ -63,9 +63,7 @@ them runs at a time. electron-updater keeps each on its channel: a preview
 follows only previews (`preview-*.yml`), production only the latest production
 release (`latest-*.yml`). **Settings > Updates** switches channel; leaving
 Preview for Stable installs the older stable release. The app checks at start
-and every 4 hours. Windows and Linux install updates with electron-updater. The
-Mac app is unsigned, and Squirrel.Mac only updates signed apps, so it downloads
-the zip itself, checks its sha512 and swaps its bundle when Couch quits or
+and every 4 hours, and electron-updater installs the update when Couch quits or
 restarts to update ([app/update.ts](../app/update.ts)). The TV installs through
 a root unit ([native TV](native-tv.md)).
 
@@ -78,7 +76,19 @@ artifact storage, and the updater never sees a draft, so a failed run publishes
 nothing; rerun its failed jobs to finish it. Write pull request titles as plain
 sentences: they become the release notes. Package can also be dispatched on its
 own for a test build of `package.json`'s version, kept as run artifacts and
-never published. Builds are unsigned.
+never published.
+
+The Mac app is signed with Couch's own self-signed certificate,
+[`Couch Releases`](../packaging/couch-releases.pem), without an Apple account or
+notarization. macOS keeps an app's permissions, and Squirrel.Mac installs an
+update, only when the new build satisfies the running one's
+[designated requirement](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements):
+its identifier and this certificate. Users' Macs need not trust it; the runner
+trusts it for code signing so that codesign accepts it. The repository secrets
+`CSC_LINK` (the base64 .p12) and `CSC_KEY_PASSWORD` hold the private key for
+electron-builder, and a copy lives in the owner's password manager. Keep that
+certificate: a new one makes every Mac user grant permissions and download
+Couch again. Windows and Linux builds are unsigned.
 
 Every build runs on [Blacksmith](https://docs.blacksmith.sh/blacksmith-runners/overview),
 as in t3code: macOS on `blacksmith-6vcpu-macos-26` and Windows on
