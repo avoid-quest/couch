@@ -1,5 +1,20 @@
-import { BrowserWindow, desktopCapturer, dialog, session, systemPreferences, type WebContents, type WebFrameMain } from "electron";
+import { BrowserWindow, desktopCapturer, dialog, session, shell, systemPreferences, type WebContents, type WebFrameMain } from "electron";
 import type { CaptureKind, CaptureSelection, CaptureSource } from "../src/shared/capture";
+
+// The system setting that allows each kind of capture, and what to turn on there. macOS asks
+// only the first time Couch captures; after that only System Settings changes its answer.
+const settings: Partial<Record<NodeJS.Platform, Partial<Record<"screen" | "microphone", [url: string, action: string]>>>> = {
+  darwin: {
+    screen: ["x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture", "Turn on Couch in Screen & System Audio Recording, then reopen Couch when macOS asks."],
+    microphone: ["x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone", "Turn on Couch in Microphone."],
+  },
+  win32: { microphone: ["ms-settings:privacy-microphone", "Turn on microphone access for desktop apps."] },
+};
+// System audio comes with a screen or window's capture.
+const media = (kind: unknown) => {
+  if (kind !== "system-audio" && kind !== "screen" && kind !== "microphone") throw new Error("Choose what to share.");
+  return kind === "microphone" ? "microphone" : "screen";
+};
 
 const originOf = (url: string | null) => { try { const { origin } = new URL(url!); return origin === "null" ? null : origin; } catch { return null; } };
 
@@ -46,6 +61,18 @@ export function createCapture(contents: () => WebContents | null, address: () =>
 
   return {
     clear,
+    // What the owner still has to allow in the system's settings for this kind; null when nothing.
+    access(kind: unknown): string | null {
+      owner();
+      const type = media(kind);
+      const setting = settings[process.platform]?.[type];
+      return setting && systemPreferences.getMediaAccessStatus(type) !== "granted" ? setting[1] : null;
+    },
+    async openSettings(kind: unknown) {
+      owner();
+      const setting = settings[process.platform]?.[media(kind)];
+      if (setting) await shell.openExternal(setting[0]);
+    },
     async sources(): Promise<CaptureSource[]> {
       const frame = owner();
       const request = generation;

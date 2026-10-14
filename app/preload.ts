@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("couchApp", {
   deviceSharing: sharing => call("device-sharing", sharing),
   captureSources: () => call("capture-sources"),
   prepareCapture: selection => call("prepare-capture", selection),
+  captureAccess: kind => call("capture-access", kind),
+  openCaptureSettings: kind => call("capture-settings", kind),
   mode: () => call("mode"),
   choose: (mode, address, confirm) => call("choose", mode, address, confirm),
   forget: address => call("forget", address),

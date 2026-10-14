@@ -2,7 +2,7 @@ import type { InterfaceSize } from "./appearance";
 import type { ConnectionInfo } from "./protocol";
 import type { DeviceSharing } from "./device-sharing";
 import type { UpdateAction, UpdateChannel, UpdateState } from "./updates";
-import type { CaptureSelection, CaptureSource } from "./capture";
+import type { CaptureKind, CaptureSelection, CaptureSource } from "./capture";
 
 // Keep the existing type imports usable by older renderer code.
 export type { UpdateAction, UpdateChannel, UpdateOutcome, UpdateState, UpdateTarget } from "./updates";
@@ -23,6 +23,10 @@ export type CouchApp = {
   captureSources?(): Promise<CaptureSource[]>;
   /** Selects one capture request; null cancels a prepared selection. */
   prepareCapture?(selection: CaptureSelection | null): Promise<void>;
+  /** What to allow in the system's settings before capturing this kind; null when nothing. */
+  captureAccess?(kind: CaptureKind): Promise<string | null>;
+  /** Opens the system's setting that allows this kind. */
+  openCaptureSettings?(kind: CaptureKind): Promise<void>;
   mode(): Promise<AppMode>;
   // null: the window is loading the chosen Couch.
   choose(mode: "local" | "remote", address: string | null, confirm: boolean): Promise<AppMode | null>;

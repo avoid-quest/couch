@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Square } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -27,11 +27,21 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
   const [pending, setPending] = useState(false);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What to turn on in the system's settings, once capturing failed without it.
+  const [blocked, setBlocked] = useState<string | null>(null);
   const mine = state?.liveSources?.find(source => source.id === localLiveSourceId);
   const supported = !!navigator.mediaDevices?.getUserMedia;
   const displaySupported = !!navigator.mediaDevices?.getDisplayMedia;
   const choosesSource = !!couchApp?.captureSources && kind !== "microphone";
   const available = connected && !pending && !listing;
+  const checkAccess = async () => setBlocked(await couchApp?.captureAccess?.(kind).catch(() => null) ?? null);
+  // Returning from the system's settings clears the row once access is on.
+  useEffect(() => {
+    if (!blocked) return;
+    const recheck = () => void checkAccess();
+    addEventListener("focus", recheck);
+    return () => removeEventListener("focus", recheck);
+  }, [blocked, kind]);
 
   const chooseSource = async () => {
     if (!couchApp?.captureSources || !available) return;
@@ -40,8 +50,8 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
       const next = await couchApp.captureSources();
       setSources(next);
       setSourceId(previous => next.some(source => source.id === previous) ? previous : "");
-      if (!next.length) setError("No screens or windows are available. Allow Couch to record your screen in System Settings, then try again.");
-    } catch (reason) { setError(errorText(reason)); }
+      if (!next.length) { setError("No screens or windows are available. Allow Couch to record your screen in System Settings, then try again."); await checkAccess(); }
+    } catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setListing(false); }
   };
   const chooseInput = async () => {
@@ -52,7 +62,7 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
       setInputs(next);
       setAudioDeviceId(previous => next.some(input => input.deviceId === previous) ? previous : "default");
       if (!next.length) setError("No audio inputs are available. Connect a microphone or audio interface and try again.");
-    } catch (reason) { setError(errorText(reason)); }
+    } catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setListing(false); }
   };
   const share = async () => {
@@ -63,7 +73,7 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
       onAdded?.();
       void navigate({ to: "/find" });
     }
-    catch (reason) { setError(errorText(reason)); }
+    catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setPending(false); }
   };
   const stop = async () => {
@@ -79,7 +89,7 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
       <SettingsRow label="Input">
-        <ChoiceGroup label="What to share" value={kind} disabled={!available || !supported} onValueChange={value => { setKind(value); setError(null); }} options={Object.entries(labels).map(([value, label]) => ({ value: value as CaptureKind, label, disabled: value !== "microphone" && !displaySupported }))} />
+        <ChoiceGroup label="What to share" value={kind} disabled={!available || !supported} onValueChange={value => { setKind(value); setError(null); setBlocked(null); }} options={Object.entries(labels).map(([value, label]) => ({ value: value as CaptureKind, label, disabled: value !== "microphone" && !displaySupported }))} />
       </SettingsRow>
       {choosesSource && <SettingsRow label="Screen or window" htmlFor={sources?.length ? "live-capture-source" : undefined} description={kind === "system-audio" ? "Only sound is sent. The picture stays private." : "Choose the picture to share."}>
         {!!sources?.length && <Select value={sourceId} disabled={!available} onValueChange={setSourceId}>
@@ -111,6 +121,9 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
         {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>
     </>}
+    {blocked && !mine && <SettingsRow label="Allow access" description={blocked}>
+      <Button variant="outline" onClick={() => void couchApp?.openCaptureSettings?.(kind).catch(reason => setError(errorText(reason)))}>Open settings</Button>
+    </SettingsRow>}
     {!supported && <p className="text-sm text-muted-foreground">Open Couch over HTTPS or on localhost to share this device.</p>}
     {!displaySupported && supported && <p className="text-sm text-muted-foreground">This browser can share audio inputs. Use the desktop app to share a screen or system audio.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
