@@ -105,6 +105,23 @@ test("direct streams use the existing player, honest track capabilities, volume 
   assert.equal(reports.at(-1).status, "idle");
 `));
 
+test("a direct stream bound before its tracks arrive plays once they do, unless it was paused", () => check(`
+  // As in Chromium, binding a stream loads it again and pauses the element.
+  let bound;
+  const binds = [];
+  Object.defineProperty(video, "srcObject", { get: () => bound, set: value => { bound = value; binds.push(value); video.paused = true; }, configurable: true });
+  const stream = new MediaStream();
+  attachStream({ type: "load", playbackId: "direct", source: "", liveOutput: { picture: true, sound: true, volume: 75 } }, stream);
+  stream.tracks.push({ kind: "video" }); streamChanged("direct", stream);
+  assert.equal(binds.filter(value => value === stream).length, 2, "the stream is bound again with its track");
+  assert.equal(video.paused, false);
+  const paused = new MediaStream();
+  attachStream({ type: "load", playbackId: "paused", source: "", paused: true, liveOutput: { picture: true, sound: true, volume: 75 } }, paused);
+  paused.tracks.push({ kind: "audio" }); streamChanged("paused", paused);
+  assert.equal(binds.at(-1), paused);
+  assert.equal(video.paused, true);
+`));
+
 test("stream errors report through Now Playing and cannot damage a replacement stream or HLS load", () => check(`
   const first = new MediaStream([{ kind: "audio" }]);
   attachStream({ type: "load", playbackId: "same", source: "" }, first);

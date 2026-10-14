@@ -249,7 +249,12 @@ export function attachStream(command: Extract<PlaybackCommand, { type: "load" }>
 
 export function streamChanged(id: string, stream: MediaStream, error?: string) {
   if (playbackId !== id || mediaStream !== stream) return;
-  if (error) fail(error); else send();
+  if (error) { fail(error); return; }
+  // Chromium never plays tracks added to a stream it was given empty: bind it again with them.
+  const playing = !video.paused;
+  video.srcObject = stream;
+  if (playing) void start(video);
+  send();
 }
 
 // Subtitle delay moves every cue, including those hls.js adds while it plays.
