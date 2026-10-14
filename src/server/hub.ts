@@ -373,7 +373,8 @@ export async function createHub(options: HubOptions) {
         playback.synced.close();
         playback.synced = undefined;
         hide(playback);
-        if (!playback.renderer && playback.outputs[0]) playback.renderer = newest(playback.outputs[0].deviceId) ?? null;
+        // Its Device's newest tab plays it: an older one may have closed or been replaced while the group played.
+        playback.renderer = playback.outputs[0] ? newest(playback.outputs[0].deviceId) ?? null : null;
       } else {
         playback.synced = newGroup(playback);
         playback.synced.members(members(playback));

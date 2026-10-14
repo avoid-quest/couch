@@ -210,6 +210,30 @@ test("a relayed receiver plays the next ordinary item directly and the source re
   } finally { await f.close(); }
 });
 
+test("a relayed receiver's newest tab plays the next ordinary item after the source is replayed", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    await start(f);
+    await f.speaker(1);
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
+    await until(() => !!f.receiver.load()?.follow);
+    const source = `${f.hub.origin}/api/health`;
+    assert.equal((await f.publisher.command({ type: "enqueue", entry: { id: "next", title: "Next", source } })).ok, true);
+    f.receiver.report();
+    await until(() => f.heard(1) > 0 && f.publisher.state.player.status === "playing");
+    assert.equal((await f.publisher.command({ type: "play", entryId: f.publisher.state.currentEntryId!, fromStart: true })).ok, true);
+    await until(() => f.publisher.state.player.status === "loading");
+    const tab = await f.connect(1, "&audio=1&video=1");
+    f.receiver.socket.terminate();
+    await until(() => !!tab.load()?.follow);
+    tab.report();
+    await until(() => f.publisher.state.player.status === "playing");
+    assert.equal((await f.publisher.command({ type: "play", entryId: "next" })).ok, true);
+    await until(() => tab.load()?.source === source);
+    assert.equal(tab.load()!.follow, undefined);
+  } finally { await f.close(); }
+});
+
 test("Only here grants a fresh peer to a device that can connect, and relays to one that couldn't", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
