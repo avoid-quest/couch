@@ -1,9 +1,10 @@
 # Named LAN address
 
-This guide covers the Debian 13 app's direct LAN listener. Enable Allow remote
-control locally and verify the IP address shown in Connection before adding a
-name. Couch uses HTTPS with its own self-signed certificate on port 4100 by
-default; plain HTTP on the LAN redirects there. Sharing off leaves only the
+This guide covers the Debian 13 app's direct LAN listener. Locally, open
+**Settings → Devices → Share on network** and enable sharing, then verify the IP
+address shown when pairing before adding a name. Couch uses HTTPS with its own
+self-signed certificate on port 4100 by default; plain HTTP on the LAN redirects
+there unless **Allow HTTP connections** is enabled. Sharing off leaves only the
 loopback listener used by the local app.
 
 The machine/network administrator owns IP assignment, LAN DNS and any narrowly
@@ -14,8 +15,11 @@ configure router forwarding or expose Couch to the internet.
 
 Couch checks its private IPv4 selection every second, so sharing can start after
 DHCP assigns an address and recover when an address or occupied port returns.
-Custom DNS names are rechecked every minute. An active automatically selected
-address stays in use while it remains available, even if another interface appears.
+Custom DNS names are rechecked every minute. Once sharing selects an address
+automatically, Couch keeps that interface and address until restart, even if
+another interface appears. If it disappears, LAN access closes and pairing URLs
+are withdrawn until it returns. Turning sharing off and on keeps this selection;
+restart Couch to select a different network automatically.
 When initially selecting among several eligible interfaces,
 set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
 has multiple private IPv4 addresses, also set `COUCH_LAN_ADDRESS` to the specific
@@ -41,8 +45,8 @@ around playback.
 HTTPS remains the default. Some TV browsers cannot bypass a self-signed
 certificate warning. On the computer running Couch, open **Settings → Devices**
 and enable **Allow HTTP connections**. The choice is saved and applies immediately.
-Enable **Share on network**, then open the `http://<LAN-IP>:4100` address
-shown when pairing (use `COUCH_PORT` if customized). HTTPS and the
+Enable **Share on network** in **Settings → Devices**, then open the
+`http://<LAN-IP>:4100` address shown when pairing (use `COUCH_PORT` if customized). HTTPS and the
 HTTPS QR code remain available. The separate port 80 listener still redirects to HTTPS, so include
 Couch's port in the HTTP address. A new browser origin requires pairing again.
 If the browser cached an old HTTPS redirect, clear its data for that address.

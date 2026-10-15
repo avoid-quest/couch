@@ -64,14 +64,13 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
   resolve?: typeof lookup;
 }) {
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
+  let automaticNetwork: LanNetwork | null = null;
   let pending: Promise<void> = Promise.resolve();
   let last = "";
   const selectedNetwork = () => {
     const interfaces = (options.interfaces ?? networkInterfaces)();
-    // A second interface must not disconnect receivers from a still-valid LAN.
-    if (active && network && !options.selected && !options.address) {
-      try { return selectLan(interfaces, network.name, network.address); } catch {}
-    }
+    // Keep the automatic choice through outages; never migrate sharing to another LAN.
+    if (automaticNetwork) return selectLan(interfaces, automaticNetwork.name, automaticNetwork.address);
     return selectLan(interfaces, options.selected, options.address);
   };
   const stopAll = async () => { await Promise.all([active?.stop(), port80?.stop()]); active = port80 = null; };
@@ -88,6 +87,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
       const moved = JSON.stringify(next) !== JSON.stringify(network);
       if ((active || port80) && (!enabled || moved)) await stopAll();
       if (closed) return;
+      if (enabled && !options.selected && !options.address) automaticNetwork ??= next;
       network = next;
       if (enabled && !active) {
         try { active = await options.start(next, options.port); }
@@ -136,7 +136,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
     refresh,
     validateAlias: (value: string) => pending = pending.catch(() => {}).then(async () => {
       if (enabled && (!active || !network)) throw new Error("The LAN listener is unavailable.");
-      const selected = enabled ? network! : selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
+      const selected = enabled ? network! : selectedNetwork();
       const result = await lanUrls(selected, options.port, [value], options.resolve, true);
       if (!result.urls.includes(secureOrigin(value, options.port))) throw new Error(result.error ?? "The network address is unavailable.");
       if (options.port !== 80 && !new URL(value).port && !port80) {
