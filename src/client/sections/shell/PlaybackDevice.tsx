@@ -136,7 +136,7 @@ export function useRememberCouchName(installationName?: string) {
   }, [device?.mode, device?.address, installationName]);
 }
 
-/** Settings → Devices in the app: This computer, the Couches it knows, or another Couch's address. */
+/** Settings → Couch connection in the app: This computer, the Couches it knows, or another Couch's address. */
 export function AppCouchChoice({ installationName }: { installationName?: string }) {
   const device = usePlaybackDevice();
   const [dialog, setDialog] = useState<"confirmation" | "forget" | null>(null);
@@ -213,7 +213,7 @@ export function LocalSharingPrompt({ credentials }: { credentials: Credentials |
   // Naming comes first: it is the one thing every other Device will show (#644 ticket 12).
   return <Onboarding back={{ label: "Back", onClick: device!.chooseAgain }} title={savedName ? "Share this computer?" : "Name this computer"} description={savedName ? `${savedName} uses the same name with every Couch.` : "Every device on your network shows this name. Leave it empty to keep the one shown."} data-tv-navigation-scope>
     {!savedName && <Field><FieldLabel htmlFor="host-name">Name</FieldLabel><Input id="host-name" autoComplete="off" maxLength={60} placeholder={defaultDeviceName(deviceId())} value={name} onChange={event => setName(event.target.value)} disabled={sharing.isPending} /></Field>}
-    <div className="grid gap-0.5">{!savedName && <p className="text-base font-medium">Share it on your network?</p>}<p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it in Settings → Devices.</p></div>
+    <div className="grid gap-0.5">{!savedName && <p className="text-base font-medium">Share it on your network?</p>}<p className="text-sm text-muted-foreground">Phones, browsers and other computers on your network can pair, play and join as speakers. Change it later in Settings → Network.</p></div>
     {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error)}</AlertDescription></Alert>}
     <div className="flex flex-wrap gap-2"><Button autoFocus disabled={sharing.isPending} onClick={() => setSharing(true)}>Share</Button><Button variant="ghost" disabled={sharing.isPending} onClick={() => setSharing(false)}>Not now</Button></div>
   </Onboarding>;

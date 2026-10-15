@@ -2,8 +2,14 @@
 // two radio favorites, a Live TV fixture and a second online shared output. Reload
 // before each run so the second Saved item has not already loaded its Details.
 // See docs/native-tv.md for the browser regression command and prerequisites.
+import { applyTvNavigation } from "../src/client/navigation";
+
 declare global {
-  interface Window { runSavedBackRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>; runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]> }
+  interface Window {
+    runSavedBackRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
+    runSharingLocalOnlyRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
+    runTvNavigationRegression: () => Promise<{ name: string; passed: boolean; error?: string }[]>;
+  }
 }
 
 const wait = (milliseconds = 150) => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -74,6 +80,42 @@ window.runSavedBackRegression = async () => {
   return results;
 };
 
+// A paired phone's Remote reaches the TV through applyTvNavigation; it must not pick or share
+// this device's capture, while the TV's own keyboard and pointer still can.
+const sharingLocalOnly = async () => {
+  await click('[data-app-nav] a[href="/settings"]');
+  await click('[data-settings-page="sharing"]');
+  const choice = (label: string) => [...document.querySelectorAll<HTMLElement>('[aria-label="What to share"] [role="radio"]')].find(item => item.textContent === label);
+  const microphone = choice("Microphone or audio input"), screen = choice("Screen");
+  assert(microphone && screen && !microphone.matches(":disabled"), "Sharing has no enabled capture choices; stop any existing capture first");
+  assert(screen!.getAttribute("aria-checked") === "true", "Sharing did not start on Screen");
+  const remote = async (key: Parameters<typeof applyTvNavigation>[0]) => { applyTvNavigation(key); await wait(350); };
+  try {
+    microphone!.focus();
+    await remote("select");
+    assert(microphone!.getAttribute("aria-checked") !== "true", "Remote OK chose what this device shares");
+    await remote("down");
+    assert(!microphone!.closest("fieldset")!.contains(document.activeElement), "Remote arrows stayed in this device's capture");
+    microphone!.click(); await wait(350);
+    assert(microphone!.getAttribute("aria-checked") === "true", "This device's own pointer could not choose the input");
+    control("#live-audio-input").focus(); await key("Enter"); await wait(350);
+    const listbox = control('[role="listbox"][data-state="open"]');
+    const option = document.activeElement;
+    await remote("down"); await remote("select");
+    assert(listbox.isConnected && document.activeElement === option, "Remote moved or picked in this device's audio input list");
+    await key("Escape"); await wait(350);
+    assert(!document.querySelector('[role="listbox"][data-state="open"]'), "This device's own Back did not close its audio input list");
+  } finally {
+    screen!.click(); await wait(350);
+    await click('[data-app-nav] a[href="/"]');
+  }
+};
+
+window.runSharingLocalOnlyRegression = async () => {
+  try { await sharingLocalOnly(); return [{ name: "Remote can't drive this device's capture", passed: true }]; }
+  catch (error) { return [{ name: "Remote can't drive this device's capture", passed: false, error: String(error) }]; }
+};
+
 window.runTvNavigationRegression = async () => {
   const results: { name: string; passed: boolean; error?: string }[] = [];
   const check = async (name: string, test: () => Promise<void>) => {
@@ -89,7 +131,7 @@ window.runTvNavigationRegression = async () => {
   });
   await check("Settings OK enters content; Back restores rail then Home", async () => {
     await click('[data-app-nav] a[href="/settings"]');
-    const rail = control('[data-settings-page="connection"]');
+    const rail = control('[data-settings-page="devices"]');
     rail.focus(); rail.click(); await wait(350);
     assert(document.activeElement?.closest('[data-settings-content]'), "OK lost content focus");
     assert(document.activeElement?.textContent === "Pair a device", "Devices did not begin on Pair a device");
@@ -97,12 +139,13 @@ window.runTvNavigationRegression = async () => {
     assert(document.querySelector('[role="dialog"][data-state="open"]'), "Pairing overlay did not open");
     await key("Escape"); await wait(350);
     assert(!document.querySelector('[role="dialog"][data-state="open"]'), "Back did not close pairing overlay");
-    assert(location.pathname === "/settings/connection" && document.activeElement?.textContent === "Pair a device", "Overlay Back did not return to its opener");
+    assert(location.pathname === "/settings/couch/devices" && document.activeElement?.textContent === "Pair a device", "Overlay Back did not return to its opener");
     await key("Escape");
-    assert(document.activeElement?.matches('[data-settings-page="connection"]'), "Back did not restore rail");
+    assert(document.activeElement?.matches('[data-settings-page="devices"]'), "Back did not restore rail");
     await key("Escape");
     assert(location.pathname === "/", "Rail Back did not reach Home");
   });
+  await check("Remote can't drive this device's capture", sharingLocalOnly);
   await check("Cold delayed Saved Back retains its item opener", () => savedBack(true));
   await check("Warm Saved Back retains its item opener", () => savedBack(false));
   await check("Saved Home tile opens Details, settles page focus and restores its opener", async () => {

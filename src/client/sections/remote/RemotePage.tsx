@@ -60,7 +60,7 @@ export function RemotePage() {
         {volumeState && <div className="border-t pt-4"><PlaybackVolume state={volumeState} connected={ready && target.sharing?.audio === true} run={action => send(action.type === "volume" || action.type === "mute" ? { ...action, deviceId: target.id } : action)} /></div>}
       </section>
     </div>}
-    {!target && <Button variant="outline" className="mt-3" asChild><Link to="/settings/connection">Open Devices</Link></Button>}
+    {!target && <Button variant="outline" className="mt-3" asChild><Link to="/settings/couch/devices">Open Devices</Link></Button>}
   </div>;
 }
 

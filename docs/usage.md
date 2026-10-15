@@ -82,16 +82,19 @@ a Mac.
    its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,
    StreamingCommunity or 123MoviesFree link opens its page.
 
-**Settings > Playback > Video quality** saves this browser's default online video
-quality (Auto is up to 1080p).
+**Settings > This device > Viewing > Online video you start** saves this
+browser's default quality for online video it starts, wherever it plays (Auto is up to 1080p).
 
 ## Administrator access
 
 The first device you pair becomes the admin. If no paired device is admin later,
 **Settings > Devices** on the host shows a one-use code under **Make a device the
 admin**. Enter it under **Admin code** on a paired device and choose **Become
-admin**. Administrators manage paired devices, sources and device settings;
-Controllers browse and play.
+admin**. Administrators manage the whole Couch from any paired device: paired
+devices, network sharing and HTTP, the live relay, TV mode, sources, hardware
+and updates. Controllers browse and play, change the shared Playback
+preferences, and see the rest read-only. Each device's own speaker and screen
+consent stays with that device.
 
 ### Recover administrator access
 

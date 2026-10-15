@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PairingDialog } from "@/components/PairingDialog";
 import { useSessionGate } from "@/session/session-context";
-import { CouchChoice } from "@/sections/settings/device/CouchChoice";
+import { CouchChoice } from "@/sections/settings/this-device/CouchChoice";
 import { deviceName } from "@/copy";
 import type { Credentials } from "@/session/session";
 import { StatusDot } from "./StatusLine";

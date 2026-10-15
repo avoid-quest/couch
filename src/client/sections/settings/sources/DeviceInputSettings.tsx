@@ -14,7 +14,7 @@ import type { LiveVideoQuality } from "../../../../shared/live-input";
 
 const labels: Record<CaptureKind, string> = { "system-audio": "System audio", screen: "Screen", microphone: "Microphone or audio input" };
 
-export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
+export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; title?: string }) {
   const { state, connected, startLive, endLive, liveAudioInputs, localLiveSourceId } = useSessionGate();
   const navigate = useNavigate();
   const [kind, setKind] = useState<CaptureKind>("screen");
@@ -88,7 +88,8 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
     finally { setPending(false); }
   };
 
-  return <SettingsSection description="Add this device's screen or sound as a source for everyone on this Couch.">
+  // Capture runs with this device's authority, so a paired phone's Remote never drives it on a TV.
+  return <SettingsSection title={title} description="Add this device's screen or sound as a source for everyone on this Couch." data-tv-local-only>
     {mine ? <SettingsRow label={mine.name} description="Available in Find while this device is sharing.">
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
@@ -98,14 +99,14 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
       {choosesSource && <SettingsRow label="Screen or window" htmlFor={sources?.length ? "live-capture-source" : undefined} description={kind === "system-audio" ? "Only sound is sent. The picture stays private." : "Choose the picture to share."}>
         {!!sources?.length && <Select value={sourceId} disabled={!available} onValueChange={setSourceId}>
           <SelectTrigger id="live-capture-source" className="w-full max-w-sm"><SelectValue placeholder="Choose a screen or window" /></SelectTrigger>
-          <SelectContent>{sources.map(source => <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>)}</SelectContent>
+          <SelectContent data-tv-local-only>{sources.map(source => <SelectItem key={source.id} value={source.id}>{source.name}</SelectItem>)}</SelectContent>
         </Select>}
         <Button variant="ghost" disabled={!available} onClick={() => void chooseSource()}>{listing ? <><Spinner />Finding screens…</> : sources?.length ? "Refresh" : "Choose screen or window"}</Button>
       </SettingsRow>}
       {kind === "microphone" && <SettingsRow label="Audio input" htmlFor="live-audio-input" description="Choose a microphone or connected audio interface. Access is requested to list input names.">
         <Select value={audioDeviceId} disabled={!available} onValueChange={setAudioDeviceId}>
           <SelectTrigger id="live-audio-input" className="w-full max-w-sm"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="default">System default</SelectItem>{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId}>{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
+          <SelectContent data-tv-local-only><SelectItem value="default">System default</SelectItem>{inputs?.filter(input => input.deviceId !== "default").map((input, index) => <SelectItem key={input.deviceId} value={input.deviceId}>{input.label || `Audio input ${index + 1}`}</SelectItem>)}</SelectContent>
         </Select>
         <Button variant="ghost" disabled={!available || !supported} onClick={() => void chooseInput()}>{listing ? <><Spinner />Finding inputs…</> : inputs ? "Refresh inputs" : "Choose audio input"}</Button>
       </SettingsRow>}
@@ -113,7 +114,7 @@ export function DeviceInputSettings({ onAdded }: { onAdded?: () => void }) {
         <SettingsRow label="Picture quality" htmlFor="live-video-quality" description="Up to 30 fps. Lower resolutions use less bandwidth and processing.">
           <Select value={videoQuality} disabled={!available} onValueChange={value => setVideoQuality(value as LiveVideoQuality)}>
             <SelectTrigger id="live-video-quality" className="w-full max-w-sm"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="720p">720p · Less bandwidth</SelectItem><SelectItem value="1080p">1080p · Balanced</SelectItem><SelectItem value="original">Original resolution</SelectItem></SelectContent>
+            <SelectContent data-tv-local-only><SelectItem value="720p">720p · Less bandwidth</SelectItem><SelectItem value="1080p">1080p · Balanced</SelectItem><SelectItem value="original">Original resolution</SelectItem></SelectContent>
           </Select>
         </SettingsRow>
         <SettingsRow label="Include system audio" htmlFor="live-include-audio" description="Shares the computer's audio mix when available, even when sharing one window.">

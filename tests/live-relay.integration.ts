@@ -177,9 +177,15 @@ test("the bundled relay is opt-in, persisted, and stops with network sharing and
   await hub.close();
   hub = await createHub(options);
   assert.equal((await state()).status, "off", "saved Off persists");
-  const paired = await fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode, id: "p".repeat(43), name: "Receiver" }) }).then(response => response.json());
-  assert.ok(paired.token);
-  assert.equal((await request("/api/settings/live-relay/local", { enabled: true }, paired.token)).status, 403);
+  const pair = (id: string) => fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode, id, name: "Receiver" }) }).then(response => response.json());
+  // The first paired device is the admin, which manages the relay from there; a controller can't read or change it.
+  const admin = await pair("p".repeat(43)), controller = await pair("q".repeat(43));
+  assert.ok(admin.token && controller.token);
+  assert.equal((await request("/api/settings/live-relay/local", undefined, controller.token)).status, 403);
+  assert.equal((await request("/api/settings/live-relay/local", { enabled: true }, controller.token)).status, 403);
+  assert.equal((await state()).status, "off");
+  assert.equal((await request("/api/settings/live-relay/local", undefined, admin.token)).status, 200);
+  assert.equal((await request("/api/settings/live-relay/local", { enabled: false }, admin.token)).status, 200);
   await hub.close();
   hub = await createHub({ ...options, relayExecutable: "/missing/couch-relay" });
   await request("/api/settings/live-relay/local", { enabled: true });

@@ -90,6 +90,10 @@ function startCore() {
       else if (message.type === "updates") void updates.action(message.action, 250).then(
         state => child.postMessage({ type: "updates", requestId: message.requestId, state } satisfies AppMessage),
         (error: Error) => child.postMessage({ type: "updates", requestId: message.requestId, error: error.message } satisfies AppMessage));
+      else if (message.type === "tvMode") {
+        try { setTvPresentation(message.enabled); child.postMessage({ type: "tvMode", requestId: message.requestId } satisfies AppMessage); }
+        catch (error) { child.postMessage({ type: "tvMode", requestId: message.requestId, error: error instanceof Error ? error.message : String(error) } satisfies AppMessage); }
+      }
     });
     child.once("exit", code => {
       reject(new Error(`Couch stopped with code ${code}.`));
@@ -103,6 +107,20 @@ function startCore() {
   }) };
   core = current;
   return current.ready;
+}
+
+// Core asks for TV mode on behalf of an admin (POST /api/settings/tv-mode); only Core runs here in Full mode.
+let restarting = false;
+function setTvPresentation(enabled: unknown) {
+  if (choice.mode !== "local") throw new Error("Change TV mode on the Couch this computer hosts.");
+  if (typeof enabled !== "boolean") throw new Error("Choose whether to use TV mode.");
+  if (appliance) throw new Error("TV mode is set by this app's launcher.");
+  if (restarting || quitting) throw new Error("Couch is restarting or closing.");
+  if (enabled === tv) return;
+  save({ ...choice, tvPresentation: enabled });
+  restarting = true;
+  // Let Core's reply leave before the normal shutdown stops Core and its players.
+  setTimeout(() => { app.relaunch(); app.quit(); }, 250);
 }
 
 async function stopCore() {
@@ -278,7 +296,7 @@ function createWindow() {
       preload: join(import.meta.dirname, "preload.cjs"),
       autoplayPolicy: "no-user-gesture-required",
       backgroundThrottling: false,
-      additionalArguments: [...tv ? ["--couch-tv-presentation"] : [], ...appliance ? ["--couch-tv-presentation-locked"] : []],
+      additionalArguments: tv ? ["--couch-tv-presentation"] : [],
     },
   });
   if (!tv && readJson(statePath).main?.maximized) window.maximize();
@@ -343,18 +361,6 @@ handle("capture-sources", () => capture.sources());
 handle("prepare-capture", (_event, selection) => capture.prepare(selection));
 handle("capture-access", (_event, kind) => capture.access(kind));
 handle("capture-settings", (_event, kind) => capture.openSettings(kind));
-let restarting = false;
-handle("tv-presentation", (event, enabled) => {
-  if (choice.mode !== "local" || new URL(event.senderFrame!.url).origin !== localOrigin) throw new Error("Change TV mode on this computer's Couch.");
-  if (typeof enabled !== "boolean") throw new Error("Choose whether to use TV mode.");
-  if (appliance) throw new Error("TV mode is set by this app's launcher.");
-  if (restarting || quitting) throw new Error("Couch is restarting or closing.");
-  if (enabled === tv) return;
-  save({ ...choice, tvPresentation: enabled });
-  restarting = true;
-  // Let the IPC reply leave before the normal shutdown stops Core and its players.
-  setTimeout(() => { app.relaunch(); app.quit(); }, 250);
-});
 // Opened per call, after the single-instance lock, so couch.sqlite never holds up startup.
 handle("device-name", (_event, name) => {
   if (name === undefined) return readDeviceName(join(dataDir, "couch.sqlite"));

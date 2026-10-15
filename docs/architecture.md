@@ -5,7 +5,7 @@ playback intent, authorization and persistent state. A remote never resolves
 private playback URLs or becomes another playback authority.
 
 The app runs in one of two modes, chosen on first run, in the header's Couch
-switch, or in Settings → Devices' **Couch** section:
+switch, or in Settings → This device → **Couch connection**:
 
 - **Full** (`operating-mode.json` `"local"`): Main starts Core in an Electron
   [`utilityProcess`](https://www.electronjs.org/docs/latest/api/utility-process)
@@ -23,8 +23,18 @@ counts as unnamed. A browser keeps its name in its own storage; older app
 bridges without `deviceName` do the same. General edits the name and pairing asks for
 it only while there is none. A connected device gives each Couch its name; an
 unnamed one adopts the name it paired with instead. An administrator
-renames another Couch's host in Devices (`/api/settings`); every other device
-names only itself.
+renames the Couch from any paired device in the Couch's General or Devices
+(`/api/settings`); every other device names only itself.
+
+Settings that change the Couch for everyone (Share on network, HTTP, network
+address, the live relay, TV mode, sources, hardware, updates) accept the host
+or any paired admin and refuse controllers; writes recheck the role after
+reading the body. TV mode lives in Main, so Core forwards an admin's request
+(`/api/settings/tv-mode`) as a `tvMode` parent-port message; Main saves it,
+replies, then restarts the app, and a TV launcher's lock stays read-only.
+When a device turns sharing or HTTP off over the connection it would cut, Core
+sends that reply first, then stops the LAN listener or closes the plaintext
+socket (`afterResponse` in `src/server/http.ts`).
 
 Every client's Sendspin key, which is its device ID, stays in the storage of the
 origin that made it. The SDK's `storage` interface gives Couch and Sendspin the

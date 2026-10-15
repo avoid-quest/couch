@@ -39,32 +39,34 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
   try {
     await loadURL.call(this, url, options);
     const js = code => this.webContents.executeJavaScript(code);
-    evidence.bridge = await js('({ tv: couchApp.tvPresentation, locked: couchApp.tvPresentationLocked })');
+    // TV mode changes through Core's admin route, which asks Main to save it and restart.
+    const tvMode = (body, auth = true) => js(\`couchApp.connection().then(info => fetch('/api/settings/tv-mode', { method: 'POST', headers: { 'Content-Type': 'application/json', \${auth ? "Authorization: 'Bearer ' + info.token" : ""} }, body: \${JSON.stringify(JSON.stringify(body))} })).then(async r => ({ status: r.status, ...await r.json() }))\`);
+    evidence.bridge = await js('({ tv: couchApp.tvPresentation })');
     evidence.fullscreen = this.isFullScreen();
     evidence.connection = await js('fetch("/api/connection").then(r => r.json())');
     assert.equal(evidence.bridge.tv, ${enabled});
-    assert.equal(evidence.bridge.locked, ${override});
     assert.equal(evidence.connection.tvPresentation, ${enabled});
     assert.equal(evidence.connection.tvAppliance, ${override});
+    assert.equal(evidence.connection.tvModeChangeable, !${override});
     evidence.updates = await js('couchApp.updates()');
     if (!${override}) assert.equal(evidence.updates.automatic, undefined, 'Desktop TV keeps desktop updates');
     evidence.corePids = app.getAppMetrics().filter(metric => metric.name === 'Couch Core').map(metric => metric.pid);
     assert.equal(evidence.corePids.length, 1);
-    evidence.invalid = await js('couchApp.setTvPresentation("yes").catch(e => e.message)');
-    assert.match(evidence.invalid, /Choose whether/);
+    evidence.invalid = await tvMode({ enabled: "yes" });
+    assert.match(evidence.invalid.error, /Choose whether/);
     if (${override}) {
-      evidence.lockedError = await js('couchApp.setTvPresentation(false).catch(e => e.message)');
-      assert.match(evidence.lockedError, /launcher/);
+      evidence.lockedError = await tvMode({ enabled: false });
+      assert.equal(evidence.lockedError.status, 409);
+      assert.match(evidence.lockedError.error, /launcher/);
     }
-    // The bridge is present on a foreign main frame too; Main must reject it.
-    await loadURL.call(this, 'data:text/html,<title>Foreign origin</title>');
-    evidence.foreign = await js('couchApp.setTvPresentation(true).catch(e => e.message)');
-    assert.match(evidence.foreign, /this computer/);
-    await loadURL.call(this, url, options);
+    // Without the host's private token or a paired admin's, Core refuses before asking Main (503 while sharing is off).
+    evidence.unpaired = await tvMode({ enabled: true }, false);
+    assert.ok([401, 503].includes(evidence.unpaired.status), String(evidence.unpaired.status));
     await js('couchApp.deviceName("Test Couch")');
-    await loadURL.call(this, new URL('/settings/tv', url).href, options);
-    for (let attempts = 0; !await js('!!Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode")'); attempts++) {
-      assert(attempts < 50, 'General settings must expose TV mode');
+    await loadURL.call(this, new URL('/settings/couch/general', url).href, options);
+    // The switch is enabled once this window is connected to its Core.
+    for (let attempts = 0; await js('Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode")?.disabled ?? "missing"') !== ${override}; attempts++) {
+      assert(attempts < 50, 'Couch General settings must expose TV mode');
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     evidence.setting = await js('({ checked: Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode").getAttribute("aria-checked"), disabled: Array.from(document.querySelectorAll("button")).find(button => button.getAttribute("aria-label") === "TV mode").disabled, text: document.body.innerText })');
@@ -92,7 +94,7 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
     })()\`);
     assert.equal(evidence.tvDevice, ${enabled});
     record();
-    if (${requested !== null}) await js('couchApp.setTvPresentation(${requested})');
+    if (${requested !== null}) assert.equal((await tvMode({ enabled: ${requested} })).status, 200);
     else app.quit();
   } catch (error) { evidence.error = error.stack; record(); app.quit(); }
 };
@@ -110,5 +112,5 @@ await import(${JSON.stringify(pathToFileURL(join(root, "build/main.mjs")).href)}
   assert.equal(evidence.relaunches, requested === null ? 0 : 1);
   for (const pid of evidence.corePids) assert.throws(() => process.kill(pid, 0), { code: "ESRCH" }, "Core exited before Main");
   assert.equal(JSON.parse(readFileSync(modePath, "utf8")).tvPresentation, requested ?? false);
-  console.log(`${name}: passed (preload, Core, TV registration, origin guard, persistence and shutdown)`);
+  console.log(`${name}: passed (preload, Core, TV registration, admin route, persistence and shutdown)`);
 }

@@ -7,7 +7,7 @@ import { systemLanNames } from "./lan-name";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { healStreamingCommunityOrigin } from "./streamingcommunity";
 import { createStartup } from "./startup";
-import { requestPeer, serve, type Listener, type Socket, type Upgrade } from "./http";
+import { afterResponse, requestPeer, serve, type Listener, type Socket, type Upgrade } from "./http";
 import { createFrontend } from "./frontend";
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { hostname as machineName, networkInterfaces } from "node:os";
@@ -74,6 +74,8 @@ type HubOptions = {
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeUpdates?: (action: UpdateAction) => Promise<UpdateState>;
+  /** Main saves TV mode and restarts the app after replying. */
+  nativeTvMode?: (enabled: boolean) => Promise<void>;
   native?: boolean;
   advertisedUrls?: string[];
   liveTurn?: RTCIceServer;
@@ -178,6 +180,7 @@ export async function createHub(options: HubOptions) {
   const startup = createStartup(async () => null);
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const systemAudio = !!options.native && process.platform === "linux";
+  const tvAppliance = (process.env.COUCH_TV_APPLIANCE ?? process.env.COUCH_TV_PRESENTATION) === "1";
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   // Playbacks (#644 ticket 9). Each Playback is one session with its own queue, current item,
@@ -1310,7 +1313,7 @@ export async function createHub(options: HubOptions) {
   const frontend = createFrontend();
   const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
     "/api/health": request => allowed(request, false) ? json({ ok: true, player: status() }) : json({ error: "Unrecognized host or origin." }, 403),
-    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance: (process.env.COUCH_TV_APPLIANCE ?? process.env.COUCH_TV_PRESENTATION) === "1", systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
+    "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: status(), remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), tvPresentation: process.env.COUCH_TV_PRESENTATION === "1", tvAppliance, tvModeChangeable: !!options.nativeTvMode && !tvAppliance, systemAudio, updates: !!options.nativeUpdates })) : json({ error: "Unrecognized host or origin." }, 403),
     "POST /api/pair": async request => {
       if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
       const respond = (body: unknown, status = 200) => cors(request, json(body, status));
@@ -1354,25 +1357,32 @@ export async function createHub(options: HubOptions) {
     if (url.pathname === "/api/live/ice-servers") return cors(request, request.method === "GET"
       ? json(iceServers())
       : new Response(null, { status: 405, headers: { Allow: "GET" } }));
+    // The Couch's own settings are admin-managed from any paired device. Writes check again after reading the body.
+    const administrator = () => caller.authority === "controller" ? cors(request, json({ error: ADMIN_ONLY }, 403)) : null;
+    const stillAdministrator = () => { const current = identity(); if (!current || current.authority === "controller") throw new ControllerError(NO_LONGER_ADMIN, 403); };
     if (url.pathname === "/api/settings/live-relay/local") {
-      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      const refused = administrator();
+      if (refused) return refused;
       if (request.method === "GET") return cors(request, json(localRelay.state()));
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
       try {
         const enabled = await settingField(request, "enabled");
-        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to run the relay on this computer.");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to run the built-in relay.");
         if (!options.managedLan) throw new ControllerError("The built-in relay requires Couch's managed LAN listener.");
+        stillAdministrator();
         store.saveLocalRelayEnabled(enabled);
         await localRelay.setEnabled(enabled);
         return cors(request, json(localRelay.state()));
       } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the local relay setting." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/settings/live-relay") {
-      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      const refused = administrator();
+      if (refused) return refused;
       if (request.method === "GET") return cors(request, json(relaySettings()));
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
       try {
         const relay = parseLiveRelay(await settingField(request, "relay"));
+        stillAdministrator();
         store.saveLiveRelay(relay);
         savedRelay = relay;
         // Existing peers keep playing. Connected publishers and receivers use the
@@ -1389,12 +1399,18 @@ export async function createHub(options: HubOptions) {
     if (url.pathname === "/api/settings/sharing") {
       if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
-      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      const refused = administrator();
+      if (refused) return refused;
       try {
         const enabled = await settingField(request, "enabled");
         if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to share on the network.");
-        await lan?.setEnabled(enabled);
+        stillAdministrator();
+        // A device turning sharing off over the LAN gets its reply before that listener stops.
+        if (enabled || loopbackPeer(requestPeer(request))) await lan?.setEnabled(enabled);
         store.saveRemoteControlEnabled(enabled);
+        if (!enabled && lan && !loopbackPeer(requestPeer(request))) afterResponse(request, () => {
+          if (!store.remoteControlEnabled()) void lan!.setEnabled(false).catch(error => console.error("Couch: couldn't stop the LAN listener.", error));
+        });
         if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
           sockets.delete(socket);
           socket.close(4003, "Sharing is off. Your pairing is remembered.");
@@ -1410,19 +1426,38 @@ export async function createHub(options: HubOptions) {
       } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save Share on network." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/settings/http") {
-      if (!options.managedLan || !trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      if (!options.managedLan) return cors(request, json({ error: "HTTP connections need Couch's managed LAN listener." }, 404));
+      // Whether HTTP is on is visible in every connection's addresses, so any paired device reads it.
       if (request.method === "GET") return cors(request, json({ enabled: allowLanHttp }));
       if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      const refused = administrator();
+      if (refused) return refused;
       try {
         const enabled = await settingField(request, "enabled");
         if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow HTTP connections.");
+        stillAdministrator();
         store.saveAllowLanHttp(enabled);
         allowLanHttp = enabled;
-        lan?.server?.setAllowHttp(enabled);
+        // A device that turns HTTP off over HTTP gets this reply, then loses that connection.
+        lan?.server?.setAllowHttp(enabled, request);
         publishLanUrls();
         invalidate("devices");
         return cors(request, json({ enabled }));
       } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't save HTTP connections." }, error instanceof ControllerError ? error.status : 500)); }
+    }
+    if (url.pathname === "/api/settings/tv-mode") {
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "POST" } }));
+      const refused = administrator();
+      if (refused) return refused;
+      try {
+        const enabled = await settingField(request, "enabled");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to use TV mode.");
+        if (tvAppliance) throw new ControllerError(`TV mode is set by ${store.installationName()}'s launcher.`, 409);
+        if (!options.nativeTvMode) throw new ControllerError("TV mode needs the Couch app.", 409);
+        stillAdministrator();
+        await options.nativeTvMode(enabled);
+        return cors(request, json({ enabled }));
+      } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Couldn't change TV mode." }, error instanceof ControllerError ? error.status : 500)); }
     }
     if (url.pathname === "/api/settings/origin-domain") {
       if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: ADMIN_ONLY }, 403));

@@ -2,6 +2,8 @@ import type { PlayerState } from "./protocol";
 
 export type ConnectionDetails = {
   lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; tvPresentation?: boolean; tvAppliance?: boolean;
+  /** An admin can switch TV mode: the Couch app hosts it and no TV launcher locks it. */
+  tvModeChangeable?: boolean;
   /** Couch controls this computer's sound outputs and Bluetooth (Linux, #644 ticket 3). */
   systemAudio?: boolean;
   /** Main can update this Couch through an authenticated administrator request. */

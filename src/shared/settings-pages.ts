@@ -1,21 +1,46 @@
+// Two scopes: this device (what changes only on the device in hand) and the Couch
+// everyone shares, its hardware included. Groups split the Couch's longer list.
 export const settingsPages = {
-  general: { label: "General", path: "/settings/tv", manage: "always" },
-  connection: { label: "Devices", path: "/settings/connection", manage: "always" },
-  playback: { label: "Playback", path: "/settings/playback", manage: "always" },
-  home: { label: "Home", path: "/settings/home", manage: "always" },
-  appearance: { label: "Text size", path: "/settings/appearance", manage: "always" },
-  sources: { label: "Sources", path: "/settings/sources", manage: "always" },
-  "source-device-inputs": { label: "This device", path: "/settings/sources/device-inputs", manage: "always" },
-  "source-iptv": { label: "Live TV", path: "/settings/sources/live-tv", manage: "always" },
-  "source-radio": { label: "Radio playlists", path: "/settings/sources/radio", manage: "always" },
-  "source-streaming-community": { label: "StreamingCommunity", path: "/settings/sources/streaming-community", manage: "always" },
-  sound: { label: "Sound", path: "/settings/sound", manage: "administrator" },
-  bluetooth: { label: "Bluetooth", path: "/settings/bluetooth", manage: "administrator" },
-  display: { label: "Display", path: "/settings/display", manage: "administrator" },
-  "tv-appearance": { label: "TV appearance", path: "/settings/tv-appearance", manage: "administrator" },
-  updates: { label: "Updates", path: "/settings/updates", manage: "always" },
+  general: { scope: "device", label: "General", path: "/settings/device/general" },
+  connection: { scope: "device", label: "Couch connection", path: "/settings/device/connection" },
+  viewing: { scope: "device", label: "Viewing", path: "/settings/device/viewing" },
+  home: { scope: "device", label: "Home", path: "/settings/device/home" },
+  sharing: { scope: "device", label: "Sharing", path: "/settings/device/sharing" },
+  "device-updates": { scope: "device", label: "Updates", path: "/settings/device/updates" },
+  couch: { scope: "couch", label: "General", path: "/settings/couch/general" },
+  devices: { scope: "couch", group: "Access", label: "Devices", path: "/settings/couch/devices" },
+  network: { scope: "couch", group: "Access", label: "Network", path: "/settings/couch/network" },
+  playback: { scope: "couch", group: "Watching", label: "Playback", path: "/settings/couch/playback" },
+  sources: { scope: "couch", group: "Watching", label: "Sources", path: "/settings/couch/sources" },
+  "source-iptv": { scope: "couch", label: "Live TV", path: "/settings/couch/sources/live-tv" },
+  "source-radio": { scope: "couch", label: "Radio playlists", path: "/settings/couch/sources/radio" },
+  "source-streaming-community": { scope: "couch", label: "StreamingCommunity", path: "/settings/couch/sources/streaming-community" },
+  sound: { scope: "couch", group: "Hardware", label: "Sound", path: "/settings/couch/sound" },
+  bluetooth: { scope: "couch", group: "Hardware", label: "Bluetooth", path: "/settings/couch/bluetooth" },
+  display: { scope: "couch", group: "Hardware", label: "Display", path: "/settings/couch/display" },
+  updates: { scope: "couch", label: "Updates", path: "/settings/couch/updates" },
 } as const;
 export type SettingsPage = keyof typeof settingsPages;
+
+// Earlier addresses, kept for bookmarks, docs and older Couch apps' links.
+export const settingsAliases: Record<string, SettingsPage> = {
+  "/settings/tv": "general",
+  "/settings/connection": "devices",
+  "/settings/playback": "playback",
+  "/settings/home": "home",
+  "/settings/appearance": "viewing",
+  "/settings/sources": "sources",
+  "/settings/sources/device-inputs": "sharing",
+  "/settings/sources/live-tv": "source-iptv",
+  "/settings/sources/radio": "source-radio",
+  "/settings/sources/streaming-community": "source-streaming-community",
+  "/settings/sound": "sound",
+  "/settings/bluetooth": "bluetooth",
+  "/settings/display": "display",
+  "/settings/tv-appearance": "display",
+  "/settings/updates": "updates",
+};
+
 export const settingsPageForPath = (pathname: string): SettingsPage | null =>
   (Object.keys(settingsPages) as SettingsPage[]).find(page => settingsPages[page].path === pathname.replace(/\/$/, "")) ?? null;
 export const settingsPagePath = (page: SettingsPage | null) => page ? settingsPages[page].path : "/settings";
