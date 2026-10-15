@@ -18,6 +18,33 @@ test("TURN environment configuration is optional and requires a complete TURN UR
   }
 });
 
+for (const source of ["environment", "saved"] as const) test(`standalone Core advertises ${source} TURN despite a saved built-in relay preference`, { timeout: 5000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-standalone-relay-"));
+  const databasePath = join(directory, "couch.sqlite"), hostToken = "h".repeat(64);
+  const liveTurn = { urls: "turn:environment.example:3478?transport=tcp", username: "fixture", credential: "fixture-credential" };
+  const relay = source === "saved" ? { ...liveTurn, urls: "turn:saved.example:3478?transport=tcp" } : liveTurn;
+  const store = openStore(databasePath, true);
+  store.saveLocalRelayEnabled(true);
+  if (source === "saved") store.saveLiveRelay(relay);
+  const token = store.pair(Identity.generate().peerId, "Receiver");
+  store.close();
+  const hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: 0, managedLan: false, liveTurn });
+  const request = (path: string, bearer = hostToken, body?: unknown) => fetch(`${hub.origin}${path}`, {
+    method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  try {
+    assert.deepEqual(await (await request("/api/live/ice-servers", token)).json(), [relay]);
+    assert.deepEqual(await (await request("/api/live/ice-servers")).json(), [relay]);
+    assert.deepEqual(await (await request("/api/settings/live-relay/local")).json(), { enabled: false, status: "off", error: null, relay: null }, "standalone Core must leave the built-in helper off");
+    assert.equal((await request("/api/settings/live-relay/local", hostToken, { enabled: true })).status, 400);
+    await hub.close();
+    const retained = openStore(databasePath, true);
+    try { assert.equal(retained.localRelayEnabled(), true, "standalone Core must preserve the preference for a later managed-LAN run"); }
+    finally { retained.close(); }
+  } finally { await hub.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test("TURN credentials reach only admitted paired devices and never public discovery", async () => {
   const directory = await mkdtemp(join(tmpdir(), "couch-live-ice-"));
   const databasePath = join(directory, "couch.sqlite"), hostToken = "h".repeat(64);

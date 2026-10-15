@@ -108,7 +108,7 @@ export async function createHub(options: HubOptions) {
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   let allowLanHttp = store.allowLanHttp() ?? options.allowLanHttp ?? false;
   let savedRelay = store.liveRelay();
-  const localRelay = createLocalRelay({ executable: options.relayExecutable, enabled: store.localRelayEnabled(), changed: () => publishIce() });
+  const localRelay = createLocalRelay({ executable: options.relayExecutable, enabled: !!options.managedLan && store.localRelayEnabled(), changed: () => publishIce() });
   const externalRelay = () => savedRelay === undefined ? options.liveTurn ?? null : savedRelay;
   const liveRelay = () => localRelay.state().enabled ? localRelay.state().relay : externalRelay();
   const relaySettings = () => ({ relay: externalRelay(), source: savedRelay === undefined ? options.liveTurn ? "environment" : "none" : "saved" });
