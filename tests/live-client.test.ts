@@ -87,7 +87,7 @@ const check = (source: string, couchApp = "undefined") => {
     const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     const unreachable = () => signals.filter(message => message.type === "liveFailed");
     // Core asks the publisher for its recording only while something plays the source buffered.
-    const requestUpload = (sourceId, upload = true) => session.receive({ type: "livePeers", sourceId, peers: [], upload });
+    const requestUpload = (sourceId, upload = true, uploadId = "attempt-1") => session.receive({ type: "livePeers", sourceId, peers: [], upload, uploadId: upload ? uploadId : undefined });
     ${source}
     session.close();
     assert.equal(timers.size, 0, "closing a session retires its connection deadline");
@@ -306,7 +306,7 @@ test("upload backpressure stops the upload instead of growing an unbounded queue
   assert.equal(recorders[0].state, "inactive");
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
   assert.equal(commands.some(action => action.type === "endLive"), false);
-  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, error: failures[0].message }]);
+  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: failures[0].message }]);
 `));
 
 for (const [failure, setup, error] of [
@@ -316,12 +316,12 @@ for (const [failure, setup, error] of [
 ]) test(`${failure} reports buffered failure to Core before opening an upload, without ending direct sharing`, () => check(`
   const Recorder = MediaRecorder;
   const source = await session.start({ kind: "screen" });
-  const peersMessage = { type: "livePeers", sourceId: source.id, peers: [{ peerId: "healthy", deviceId: "other", picture: true, sound: true }], upload: true };
+  const peersMessage = { type: "livePeers", sourceId: source.id, peers: [{ peerId: "healthy", deviceId: "other", picture: true, sound: true }], upload: true, uploadId: "attempt-1" };
   ${setup}
   session.receive(peersMessage);
   await flush();
   const reported = () => signals.filter(message => message.type === "liveUploadFailed");
-  assert.deepEqual(reported(), [{ type: "liveUploadFailed", sourceId: source.id, error: ${JSON.stringify(error)} }]);
+  assert.deepEqual(reported(), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: ${JSON.stringify(error)} }]);
   assert.equal(uploads.length, 0, "the failure reaches Core without an upload socket");
   assert.equal(failures.length, 1);
   assert.equal(peers.length, 1);
@@ -335,7 +335,7 @@ for (const [failure, setup, error] of [
   session.receive({ ...peersMessage, upload: false });
   globalThis.MediaRecorder = Recorder;
   Recorder.isTypeSupported = type => type.includes("webm");
-  session.receive(peersMessage);
+  session.receive({ ...peersMessage, uploadId: "attempt-2" });
   await flush();
   assert.equal(uploads.length, 1, "a new Core request deliberately retries buffered playback");
   assert.equal(recorders.at(-1).state, "recording");
@@ -353,7 +353,7 @@ for (const [failure, trigger, error] of [
   const source = await session.start({ kind: "screen" });
   requestUpload(source.id);
   ${trigger}
-  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, error: ${JSON.stringify(error)} }]);
+  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, uploadId: "attempt-1", error: ${JSON.stringify(error)} }]);
   assert.equal(failures.length, 1);
   assert.equal(recorders[0].state, "inactive");
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
@@ -368,7 +368,7 @@ test("late events from a failed upload cannot stop or report failure for an inte
   const stale = { open: uploads[0].onopen, message: uploads[0].onmessage, error: uploads[0].onerror, close: uploads[0].onclose, data: recorders[0].ondataavailable, recordingError: recorders[0].onerror };
   stale.error();
   requestUpload(source.id, false);
-  requestUpload(source.id);
+  requestUpload(source.id, true, "attempt-2");
   await flush();
   stale.open();
   stale.message({ data: JSON.stringify({ type: "error", error: "Late failure." }) });
@@ -382,6 +382,8 @@ test("late events from a failed upload cannot stop or report failure for an inte
   assert.equal(signals.filter(message => message.type === "liveUploadFailed").length, 1);
   assert.equal(failures.length, 1);
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
+  recorders[1].onerror();
+  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed").map(message => message.uploadId), ["attempt-1", "attempt-2"], "each failure echoes the Core request that created its recorder");
 `));
 
 test("a source Core removed reports failure and releases capture", () => check(`
@@ -469,7 +471,7 @@ test("closing the desktop window ends this device's sharing, while its playback 
   session.play(direct());
   const receiving = peers[0];
   const source = await session.start({ kind: "screen" });
-  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }], upload: true });
+  session.receive({ type: "livePeers", sourceId: source.id, peers: [{ peerId: "remote", deviceId: "other", picture: true, sound: true }], upload: true, uploadId: "attempt-1" });
   await flush();
   const publisher = peers[1];
   closeWindow();

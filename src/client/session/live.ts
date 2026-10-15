@@ -4,7 +4,7 @@ import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; uploadRequested: boolean; recorder?: MediaRecorder; socket?: WebSocket };
+type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; uploadId?: string; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
@@ -111,8 +111,8 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     current.recorder = current.socket = undefined;
     if (recorder) { recorder.ondataavailable = recorder.onerror = null; if (recorder.state !== "inactive") recorder.stop(); }
     if (socket) { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; socket.close(); }
-    if (error && publication === current) {
-      options.send({ type: "liveUploadFailed", sourceId: current.source.id, error: error.message });
+    if (error && publication === current && current.uploadId) {
+      options.send({ type: "liveUploadFailed", sourceId: current.source.id, uploadId: current.uploadId, error: error.message });
       options.failed(error);
     }
   };
@@ -156,9 +156,13 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (closed) return;
       if (message.type === "liveSignal") { receiveSignal(message); return; }
       if (message.sourceId !== publication?.source.id) return;
-      // A failed attempt waits for Core to release its request before another can start.
-      if (message.upload && !publication.uploadRequested) { publication.uploadRequested = true; startUpload(publication); }
-      else if (!message.upload && publication.uploadRequested) { publication.uploadRequested = false; stopUpload(publication); }
+      // A failed attempt waits for a new Core request; its delayed error cannot fail that new attempt.
+      const uploadId = message.upload ? message.uploadId : undefined;
+      if (publication.uploadId !== uploadId) {
+        stopUpload(publication);
+        publication.uploadId = uploadId;
+        if (uploadId) startUpload(publication);
+      }
       const wanted = new Set(message.peers.map(peer => peer.peerId));
       for (const [id, peer] of publishers) if (!wanted.has(id)) { publishers.delete(id); peer.connection.close(); }
       for (const target of message.peers) void startPublisher(target);
@@ -242,7 +246,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const label = selection.kind === "microphone" ? "Microphone" : selection.kind === "system-audio" ? "System audio" : "Screen";
         const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, uploadRequested: false };
+        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false };
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });

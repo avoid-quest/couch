@@ -115,8 +115,8 @@ export function parseLiveFailed(message: string): LiveFailedMessage | null {
 export function parseLiveUploadFailed(message: string): LiveUploadFailedMessage | null {
   let value: unknown;
   try { value = JSON.parse(message); } catch { return null; }
-  if (!object(value) || value.type !== "liveUploadFailed" || !id(value.sourceId) || typeof value.error !== "string") return null;
-  return { type: "liveUploadFailed", sourceId: value.sourceId, error: safePlaybackError(value.error) };
+  if (!object(value) || value.type !== "liveUploadFailed" || !id(value.sourceId) || !id(value.uploadId) || typeof value.error !== "string") return null;
+  return { type: "liveUploadFailed", sourceId: value.sourceId, uploadId: value.uploadId, error: safePlaybackError(value.error) };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);

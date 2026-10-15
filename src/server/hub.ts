@@ -1508,7 +1508,7 @@ export async function createHub(options: HubOptions) {
         const uploadFailure = parseLiveUploadFailed(message);
         if (uploadFailure) {
           let accepted;
-          try { accepted = live.acceptsUploadFailure(socket, uploadFailure.sourceId); } catch { socket.close(1008, "No permission for that live upload."); return; }
+          try { accepted = live.acceptsUploadFailure(socket, uploadFailure.sourceId, uploadFailure.uploadId); } catch { socket.close(1008, "No permission for that live upload."); return; }
           if (accepted) liveStreams.fail(uploadFailure.sourceId, uploadFailure.error);
           return;
         }

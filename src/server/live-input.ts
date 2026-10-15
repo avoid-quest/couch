@@ -6,8 +6,8 @@ type Load = Extract<PlaybackCommand, { type: "load" }>;
 // relay: Core's buffered link for a receiver that couldn't connect directly, instead of a peer.
 type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; sound: boolean; volume: number; relay?: string };
 // Receivers that couldn't connect directly play this source through Core's stream instead.
-// upload: Core asks the publisher for its encoded capture only while something plays it buffered.
-type Publication<Socket> = { source: LiveSource; owner: Socket; uploadToken: string; relayed: Set<string>; upload: boolean };
+// uploadId: Core asks for encoded capture only while something plays it buffered. Each request has its own identity.
+type Publication<Socket> = { source: LiveSource; owner: Socket; uploadToken: string; relayed: Set<string>; uploadId?: string };
 type Peer<Socket> = LivePeer & { publisher: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; relay?: string };
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
@@ -22,7 +22,7 @@ export function createLiveInputs<Socket>(options: {
   const peers = new Map<string, Peer<Socket>>();
   const announce = (sourceId: string) => {
     const publication = sources.get(sourceId);
-    if (publication) options.send(publication.owner, { type: "livePeers", sourceId, upload: publication.upload, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
+    if (publication) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
   };
   const removePeer = (peer: Peer<Socket>) => {
     peers.delete(peer.peerId);
@@ -46,7 +46,7 @@ export function createLiveInputs<Socket>(options: {
       const deviceId = options.deviceOf(socket);
       const label = action.kind === "microphone" ? "Microphone" : action.kind === "system-audio" ? "System audio" : "Screen";
       const source: LiveSource = { id: action.sourceId, deviceId, name: action.name?.trim() || `${options.nameOf(deviceId)} · ${label}`, kind: action.kind, audio: action.audio, video: action.video };
-      sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken, relayed: new Set(), upload: false });
+      sources.set(source.id, { source, owner: socket, uploadToken: action.uploadToken, relayed: new Set() });
       options.changed();
       return source;
     },
@@ -56,16 +56,17 @@ export function createLiveInputs<Socket>(options: {
       const expected = Buffer.from(publication.uploadToken), supplied = Buffer.from(key);
       return expected.length === supplied.length && timingSafeEqual(expected, supplied);
     },
-    acceptsUploadFailure(socket: Socket, sourceId: string) {
+    acceptsUploadFailure(socket: Socket, sourceId: string, uploadId: string) {
       const publication = sources.get(sourceId);
       if (!publication) return false; // Already ended or replaced.
       if (publication.owner !== socket) throw new Error("Only the capturing window can fail this upload.");
-      return publication.upload;
+      // The media socket can close and another receiver retry before an old control message arrives.
+      return publication.uploadId === uploadId;
     },
     upload(sourceId: string, upload: boolean) {
       const publication = sources.get(sourceId);
-      if (!publication || publication.upload === upload) return;
-      publication.upload = upload;
+      if (!publication || !!publication.uploadId === upload) return;
+      publication.uploadId = upload ? crypto.randomUUID() : undefined;
       announce(sourceId);
     },
     end(socket: Socket, sourceId: string) {

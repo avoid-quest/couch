@@ -10,5 +10,5 @@ export type LiveSignal = { description?: { type: "offer" | "answer"; sdp: string
 export type LiveSignalMessage = { type: "liveSignal"; peerId: string; signal: LiveSignal };
 // Either end of a peer that can't connect directly tells Core, which plays the source through its own stream.
 export type LiveFailedMessage = { type: "liveFailed"; peerId: string; error: string };
-// The publisher can fail buffered delivery before a recorder or media socket exists.
-export type LiveUploadFailedMessage = { type: "liveUploadFailed"; sourceId: string; error: string };
+// The publisher echoes Core's uploadId to fail this request even before a recorder or media socket exists.
+export type LiveUploadFailedMessage = { type: "liveUploadFailed"; sourceId: string; uploadId: string; error: string };

@@ -143,7 +143,8 @@ export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "durat
 export type ServerMessage =
   | LiveSignalMessage
   // upload: Core needs the publisher's encoded capture, for a playback in sync or a receiver it relays to.
-  | { type: "livePeers"; sourceId: string; peers: LivePeer[]; upload: boolean }
+  // uploadId identifies this request so delayed recorder errors cannot fail a later retry of the same source.
+  | { type: "livePeers"; sourceId: string; peers: LivePeer[]; upload: boolean; uploadId?: string }
   | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
