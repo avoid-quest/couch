@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import childProcess, { type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { dirname, join } from "node:path";
@@ -22,12 +22,15 @@ test("a last fallback receiver leaving during encoder startup never requests an 
     // before returning it to liveStreams.start(). Hold that final completion.
     if (args[0] === executable && ++lookups === 2) await new Promise<void>(resolve => { provisioned = resolve; });
   });
+  // Keep rendition-directory creation in this turn too, so the queued broadcast
+  // cannot cancel setup before the encoder's startup callback checks demand.
+  t.mock.method(fs, "mkdir", async (...args: Parameters<typeof fs.mkdir>) => mkdirSync(...args));
   t.mock.method(childProcess, "spawn", (...args: Parameters<typeof childProcess.spawn>) => {
     const process = spawn(...args);
-    const playlist = args[1]?.at(-1);
-    if (typeof playlist === "string" && playlist.endsWith("/stream.m3u8")) {
+    const workingDirectory = args[2]?.cwd;
+    if (args[0] === executable && typeof workingDirectory === "string") {
       child = process;
-      directory = dirname(playlist);
+      directory = workingDirectory;
     }
     return process;
   });
