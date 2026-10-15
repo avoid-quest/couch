@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { liveRelayQuery, localRelayQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkLiveRelay } from "@/session/check-live-relay";
@@ -57,8 +57,7 @@ export function LiveRelaySettings({ credentials, connected }: { credentials: Api
       <p className="text-sm text-muted-foreground">The built-in relay takes priority. Saved external relay settings are not used while this switch is on.</p>
       <Button variant="outline" disabled={!connected || !local.data.relay || check.isPending} onClick={() => { setStatus(""); check.mutate(local.data!.relay!); }}>{check.isPending ? "Checking…" : "Check this computer's relay"}</Button>
     </>}
-    {(local.error || toggle.error) && <Alert variant="destructive"><AlertDescription>{local.error?.message ?? toggle.error?.message}</AlertDescription></Alert>}
-    {local.isError && <Button variant="outline" onClick={() => void local.refetch()}>Try again</Button>}
+    {(local.error || toggle.error) && <Alert variant="destructive"><AlertDescription>{local.error?.message ?? toggle.error?.message}</AlertDescription>{local.isError && <AlertAction><Button variant="outline" onClick={() => void local.refetch()}>Try again</Button></AlertAction>}</Alert>}
     <Collapsible>
       <CollapsibleTrigger asChild><Button variant="ghost">External relay settings</Button></CollapsibleTrigger>
       <CollapsibleContent>
@@ -83,7 +82,6 @@ export function LiveRelaySettings({ credentials, connected }: { credentials: Api
     </Collapsible>
     {query.data?.source === "environment" && <p className="text-sm text-muted-foreground">Using launch settings. Saving or removing a relay here overrides them, including after restarting Couch.</p>}
     {status && <p role="status" className="text-sm text-muted-foreground">{status}</p>}
-    {(query.error || save.error || check.error) && <Alert variant="destructive"><AlertDescription>{query.error?.message ?? save.error?.message ?? check.error?.message}{check.error && " Low-delay playback has not been verified."}</AlertDescription></Alert>}
-    {query.isError && <Button variant="outline" disabled={!connected} onClick={() => void query.refetch()}>Try again</Button>}
+    {(query.error || save.error || check.error) && <Alert variant="destructive"><AlertDescription>{query.error?.message ?? save.error?.message ?? check.error?.message}{check.error && " Low-delay playback has not been verified."}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" disabled={!connected} onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>}
   </SettingsSection>;
 }
