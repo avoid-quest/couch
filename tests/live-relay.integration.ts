@@ -1,12 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { networkInterfaces, tmpdir } from "node:os";
 import { createConnection } from "node:net";
+import { spawn, execFileSync } from "node:child_process";
+import { createInterface } from "node:readline";
+import { once } from "node:events";
+import WebSocket from "ws";
 import { createLocalRelay } from "../src/server/live-relay";
 import { createHub } from "../src/server/hub";
 import { selectLan } from "../src/server/lan-listener";
+import { openStore } from "../src/server/store";
+import type { LiveRelay } from "../src/shared/live-relay";
+import { delayedRelay } from "./fixtures/delayed-relay";
 
 const relayExecutable = join(process.cwd(), "build/live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay");
 const network = Object.entries(networkInterfaces()).flatMap(([name, entries]) => { try { return [selectLan({ [name]: entries }, name)]; } catch { return []; } })[0];
@@ -15,6 +22,109 @@ const reachable = (url: string) => new Promise<boolean>(resolve => {
   const socket = createConnection({ host, port: Number(port) });
   socket.once("connect", () => { socket.destroy(); resolve(true); });
   socket.once("error", () => resolve(false));
+});
+
+test("device removal retires cached TURN credentials and existing allocations, and refreshes surviving devices", { skip: !network, timeout: 30000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-relay-revoke-"));
+  const clientExecutable = join(directory, process.platform === "win32" ? "turn-client.exe" : "turn-client");
+  const executable = join(directory, process.platform === "win32" ? "relay.exe" : "relay");
+  await copyFile(relayExecutable, executable);
+  execFileSync("go", ["test", "-c", "-o", clientExecutable, "."], { cwd: "native/live-relay", stdio: "pipe" });
+  const previous = process.env.COUCH_LAN_INTERFACE, previousAddress = process.env.COUCH_LAN_ADDRESS;
+  process.env.COUCH_LAN_INTERFACE = network!.name; process.env.COUCH_LAN_ADDRESS = network!.address;
+  const databasePath = join(directory, "couch.sqlite"), hostToken = "h".repeat(64), removedId = "r".repeat(43), survivorId = "s".repeat(43);
+  const store = openStore(databasePath, true);
+  store.saveLocalRelayEnabled(true);
+  const removedToken = store.pair(removedId, "Removed"), survivorToken = store.pair(survivorId, "Survivor");
+  store.close();
+  const hub = await createHub({ databasePath, hostToken, port: 0, managedLan: true, advertisedUrls: [], relayExecutable: executable, liveTurn: { urls: "turn:external.invalid:3478", username: "external", credential: "external-test" } });
+  t.after(async () => {
+    await hub.close();
+    if (previous === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previous;
+    if (previousAddress === undefined) delete process.env.COUCH_LAN_ADDRESS; else process.env.COUCH_LAN_ADDRESS = previousAddress;
+    await rm(directory, { recursive: true, force: true });
+  });
+  const request = (path: string, token = hostToken, method = "GET") => fetch(`${hub.origin}${path}`, { method, headers: { Authorization: `Bearer ${token}`, Origin: hub.origin } });
+  const currentRelay = async (token: string) => (await (await request("/api/live/ice-servers", token)).json() as LiveRelay[]).find(value => value.urls.startsWith("turn:"));
+  const deadline = Date.now() + 4000;
+  let original: LiveRelay | undefined;
+  while (!(original = await currentRelay(removedToken))) { assert.ok(Date.now() < deadline); await new Promise(resolve => setTimeout(resolve, 10)); }
+  const client = async (relay: LiveRelay) => {
+    const child = spawn(clientExecutable, ["-test.run=^TestRevocationClientProcess$"], { env: { ...process.env, COUCH_TEST_REVOCATION_CLIENT: "1" }, stdio: ["pipe", "pipe", "pipe"] });
+    const exited = once(child, "close");
+    t.after(() => { child.kill(); });
+    const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+    child.stdin.on("error", () => {});
+    child.stdin.write(`${JSON.stringify(relay)}\n`);
+    const response = async () => JSON.parse((await lines.next()).value ?? "null") as { allocated?: boolean; released?: boolean };
+    const allocated = (await response()).allocated;
+    return {
+      allocated,
+      async released() { child.stdin.end('"released"\n'); assert.equal((await response()).released, true); assert.equal((await exited)[0], 0); },
+      async close() { child.stdin.end(); assert.equal((await exited)[0], 0); },
+    };
+  };
+  const existing = await client(original);
+  assert.equal(existing.allocated, true, "cached credentials can relay real data before removal");
+  const updates: LiveRelay[][] = [];
+  const socket = new WebSocket(`${hub.origin.replace("http", "ws")}/api/ws?token=${survivorToken}&device=${survivorId}`, { origin: hub.origin });
+  t.after(() => socket.terminate());
+  socket.on("message", data => { const message = JSON.parse(String(data)); if (message.type === "liveIceServers") updates.push(message.iceServers.filter((value: LiveRelay) => value.urls.startsWith("turn:"))); });
+  await once(socket, "open");
+  assert.equal((await request(`/api/devices/${removedId}`, hostToken, "DELETE")).status, 200);
+  assert.equal((await request("/api/live/ice-servers", removedToken)).status, 401);
+  await existing.released();
+  const cached = await client(original);
+  assert.equal(cached.allocated, false, "old endpoint must refuse new allocations"); await cached.close();
+  const fresh = await currentRelay(survivorToken);
+  assert.ok(fresh && fresh.credential !== original.credential, "remaining device receives rotated credentials");
+  const replay = await client({ ...original, urls: fresh.urls });
+  assert.equal(replay.allocated, false, "cached credentials must also fail against the replacement endpoint"); await replay.close();
+  const admitted = await client(fresh);
+  assert.equal(admitted.allocated, true, "surviving device can relay real data with fresh credentials");
+  const updateDeadline = Date.now() + 2000;
+  while (!updates.some(values => values.some(value => value.credential === fresh.credential))) { assert.ok(Date.now() < updateDeadline, "surviving socket must receive fresh ICE"); await new Promise(resolve => setTimeout(resolve, 10)); }
+  assert.ok(updates.some(values => values.length === 0), "old credentials are withdrawn during rotation");
+  // A replacement failure must still retire the previous helper and never use external fallback.
+  await rename(executable, `${executable}.retired`);
+  assert.equal((await request(`/api/devices/${survivorId}`, hostToken, "DELETE")).status, 200);
+  await admitted.released();
+  assert.equal((await request("/api/live/ice-servers", survivorToken)).status, 401);
+  assert.equal(await currentRelay(hostToken), undefined);
+  assert.equal((await (await request("/api/settings/live-relay/local")).json()).status, "error");
+});
+
+test("revocation during startup never publishes the retired generation, including overlapping revocations", { skip: !network || process.platform === "win32", timeout: 10000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-relay-start-revoke-")), helper = await delayedRelay(directory);
+  const published: string[] = [];
+  const relay = createLocalRelay({ executable: helper.executable, enabled: true, changed: () => { const current = relay.state().relay; if (current) published.push(current.urls); } });
+  t.after(async () => { await relay.close(); await rm(directory, { recursive: true, force: true }); });
+  const starting = relay.setNetwork(network!);
+  await helper.started(1);
+  const revoked = relay.revoke(), again = relay.revoke();
+  assert.equal(relay.state().relay, null);
+  await helper.release(1);
+  await helper.started(2);
+  assert.equal(relay.state().relay, null);
+  assert.deepEqual(published, [], "retired startup result must never reach ICE consumers");
+  await helper.release(2);
+  await Promise.all([starting, revoked, again]);
+  assert.equal(relay.state().status, "running");
+  assert.ok(published.every(url => url.includes(":40002?")));
+});
+
+for (const action of ["off", "network-loss", "close"] as const) test(`revocation racing ${action} during startup leaves no relay`, { skip: !network || process.platform === "win32", timeout: 10000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-relay-stop-revoke-")), helper = await delayedRelay(directory);
+  const relay = createLocalRelay({ executable: helper.executable, enabled: true, changed() {} });
+  t.after(async () => { await relay.close(); await rm(directory, { recursive: true, force: true }); });
+  const starting = relay.setNetwork(network!);
+  await helper.started(1);
+  const revoked = relay.revoke();
+  const stopped = action === "off" ? relay.setEnabled(false) : action === "network-loss" ? relay.setNetwork(null) : relay.close();
+  await helper.release(1);
+  await Promise.all([starting, revoked, stopped]);
+  assert.equal(relay.state().relay, null);
+  assert.equal(relay.state().status, action === "off" ? "off" : "waiting");
 });
 
 test("the bundled relay is opt-in, persisted, and stops with network sharing and Core", { skip: !network, timeout: 10000 }, async t => {

@@ -39,6 +39,9 @@ test("TURN credentials reach only admitted paired devices and never public disco
     const discovery = await fetch(`${hub.origin}/api/connection`).then(response => response.text());
     assert.ok(!discovery.includes(liveTurn.username));
     assert.ok(!discovery.includes(liveTurn.credential));
+    assert.equal((await fetch(`${hub.origin}/api/devices/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${hostToken}`, Origin: hub.origin } })).status, 200);
+    assert.equal((await request(token)).status, 401);
+    assert.deepEqual(await (await request(hostToken)).json(), [liveTurn], "device removal must not change external relay settings");
     const disabled = await fetch(`${hub.origin}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) });
     assert.equal(disabled.status, 200);
     const rejected = await request(token);

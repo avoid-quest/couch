@@ -10,6 +10,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { httpOrigin, selectLan } from "../src/server/lan-listener";
+import { openStore } from "../src/server/store";
+import { delayedRelay } from "./fixtures/delayed-relay";
 
 const candidate = Object.entries(networkInterfaces()).find(([name, entries]) => {
   try { selectLan({ [name]: entries }, name); return true; } catch { return false; }
@@ -20,6 +22,38 @@ test("HTTP aliases keep Couch's port when HTTPS omits its default port", () => {
   assert.equal(httpOrigin("https://192.168.1.20:443", 443), "http://192.168.1.20:443");
   assert.equal(httpOrigin("https://couch.home:4100", 4100), "http://couch.home:4100");
   assert.equal(httpOrigin("https://couch.home:80", 80), "http://couch.home");
+});
+
+test("HTTP Off during relay startup stays HTTPS-only before and after listener publication", { skip: !candidate || process.platform === "win32", timeout: 10000 }, async t => {
+  const [name, entries] = candidate!;
+  const { address } = selectLan({ [name]: entries }, name);
+  const directory = await mkdtemp(join(tmpdir(), "couch-http-relay-start-"));
+  const helper = await delayedRelay(directory), databasePath = join(directory, "couch.sqlite");
+  const store = openStore(databasePath, true);
+  store.saveLocalRelayEnabled(true); store.saveAllowLanHttp(true); store.close();
+  const previous = process.env.COUCH_LAN_INTERFACE, previousAddress = process.env.COUCH_LAN_ADDRESS;
+  process.env.COUCH_LAN_INTERFACE = name; process.env.COUCH_LAN_ADDRESS = address;
+  const hub = await createHub({ databasePath, hostToken, port: 0, managedLan: true, advertisedUrls: [], relayExecutable: helper.executable });
+  t.after(async () => {
+    await hub.close(); await rm(directory, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.COUCH_LAN_INTERFACE; else process.env.COUCH_LAN_INTERFACE = previous;
+    if (previousAddress === undefined) delete process.env.COUCH_LAN_ADDRESS; else process.env.COUCH_LAN_ADDRESS = previousAddress;
+  });
+  await helper.started(1);
+  const http = `http://${address}:${hub.server.port}`, https = http.replace("http:", "https:");
+  const settings = (enabled: boolean) => fetch(`${hub.origin}/api/settings/http`, { method: "POST", headers: { Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
+  assert.equal((await settings(false)).status, 200);
+  assert.equal((await fetch(`${http}/api/health`, { redirect: "manual" })).status, 308, "unpublished listener must already enforce Off");
+  await helper.release(1);
+  await until(() => hub.urls.includes(https));
+  assert.equal((await fetch(`${http}/api/health`, { redirect: "manual" })).status, 308, "startup must not restore stale HTTP policy");
+  const ca = await readFile(join(directory, "tls/cert.pem"), "utf8");
+  const secureStatus = await new Promise<number | undefined>((resolve, reject) => {
+    get(`${https}/api/health`, { ca, allowPartialTrustChain: true, agent: false }, response => { response.resume(); response.on("end", () => resolve(response.statusCode)); }).on("error", reject);
+  });
+  assert.equal(secureStatus, 200);
+  assert.equal((await settings(true)).status, 200);
+  assert.equal((await fetch(`${http}/api/health`, { redirect: "manual" })).status, 200, "explicit On still works after startup");
 });
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 2500;

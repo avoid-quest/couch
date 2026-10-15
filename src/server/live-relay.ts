@@ -44,17 +44,18 @@ export function createLocalRelay(options: { executable?: string; enabled: boolea
   let enabled = options.enabled, closed = false, network: LanNetwork | null = null;
   let active: Awaited<ReturnType<typeof startRelay>> | null = null;
   let activeNetwork = "", error: string | null = null, starting = false;
+  let generation = 0, activeGeneration = 0;
   let pending = Promise.resolve();
   const state = (): LocalRelayState => {
-    const current = !closed && enabled && activeNetwork === JSON.stringify(network) ? active : null;
+    const current = !closed && enabled && activeGeneration === generation && activeNetwork === JSON.stringify(network) ? active : null;
     return { enabled, status: !enabled ? "off" : error ? "error" : starting ? "starting" : current ? "running" : "waiting", error, relay: current?.relay ?? null };
   };
   const reconcile = () => pending = pending.catch(() => {}).then(async () => {
-    const key = JSON.stringify(network);
-    if (active && (closed || !enabled || !network || key !== activeNetwork)) { const previous = active; active = null; options.changed(); await previous.stop(); }
+    if (active && (closed || !enabled || !network || JSON.stringify(network) !== activeNetwork || activeGeneration !== generation)) { const previous = active; active = null; options.changed(); await previous.stop(); }
     error = null;
     if (closed || !enabled || !network) { options.changed(); return; }
     if (active) return;
+    const key = JSON.stringify(network), nextGeneration = generation;
     starting = true; options.changed();
     try {
       if (!options.executable) throw new Error("The relay is not included in this Couch build.");
@@ -63,6 +64,7 @@ export function createLocalRelay(options: { executable?: string; enabled: boolea
         active = null; error = "The bundled relay stopped. Turn it off and on to retry."; options.changed();
       });
       activeNetwork = key;
+      activeGeneration = nextGeneration;
     } catch (reason) { error = reason instanceof Error ? reason.message : "The bundled relay could not start."; }
     finally { starting = false; options.changed(); }
   });
@@ -70,6 +72,9 @@ export function createLocalRelay(options: { executable?: string; enabled: boolea
     state,
     async setEnabled(value: boolean) { enabled = value; await reconcile(); },
     async setNetwork(value: LanNetwork | null) { network = value; await reconcile(); },
+    // Cached credentials and allocations belong to the helper's generation, not a device.
+    // Hide it synchronously, including an in-flight start, then await its replacement.
+    async revoke() { generation++; options.changed(); await reconcile(); },
     async close() { closed = true; await reconcile(); },
   };
 }

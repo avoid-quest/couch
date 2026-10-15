@@ -1144,7 +1144,7 @@ export async function createHub(options: HubOptions) {
   const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
     if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
     invalidate("devices");
-  }, onRevoke: id => {
+  }, onRevoke: async id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
     for (const playback of all()) {
@@ -1157,6 +1157,7 @@ export async function createHub(options: HubOptions) {
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
     }
+    await localRelay.revoke();
   } });
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
@@ -1858,12 +1859,13 @@ export async function createHub(options: HubOptions) {
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
       start: async (network, listenPort) => {
-        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: allowLanHttp && listenPort === port } });
+        // Stay HTTPS-only until setup finishes: Settings cannot reach this listener yet.
+        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port } });
         if (listenPort !== port) return listener;
         // STUN only adds address candidates; HTTPS sharing and TURN work without it.
         const stun = await serveLiveStun(network, port).catch(error => { console.error("Couch: live address discovery is unavailable.", error); return null; });
-        listener.setAllowHttp(allowLanHttp);
         await localRelay.setNetwork(network);
+        listener.setAllowHttp(allowLanHttp);
         return { ...listener, stun: !!stun, stop: async () => { await Promise.all([listener.stop(), stun?.stop(), localRelay.setNetwork(null)]); } };
       },
       changed: (next, error, suggested) => {

@@ -59,6 +59,10 @@ node --test build/live-relay.integration.mjs
 (cd native/live-relay && go test -v ./...)
 ```
 
+The lifecycle integration also compiles a native TURN test client with Go. It
+checks real allocations before and after paired-device removal, including an
+allocation held open across revocation. Keep Go on PATH for that test too.
+
 The desktop resource pattern follows t3code's
 [native resource monitor packaging](https://github.com/pingdotgg/t3code/blob/main/scripts/build-desktop-artifact.ts).
 The helper uses [Pion TURN](https://github.com/pion/turn), pinned by `go.mod`/`go.sum`.

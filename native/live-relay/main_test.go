@@ -14,6 +14,65 @@ import (
 	"github.com/pion/turn/v5"
 )
 
+// Driven by the real hub integration test. Credentials travel only over stdin.
+func TestRevocationClientProcess(t *testing.T) {
+	if os.Getenv("COUCH_TEST_REVOCATION_CLIENT") != "1" {
+		return
+	}
+	input, output := json.NewDecoder(os.Stdin), json.NewEncoder(os.Stdout)
+	var config struct{ URLs, Username, Credential string }
+	if input.Decode(&config) != nil {
+		t.Fatal("missing client configuration")
+	}
+	address := strings.Split(strings.TrimPrefix(config.URLs, "turn:"), "?")[0]
+	conn, err := net.DialTimeout("tcp4", address, time.Second)
+	if err != nil {
+		_ = output.Encode(map[string]bool{"allocated": false})
+		return
+	}
+	defer conn.Close()
+	logger := logging.NewDefaultLoggerFactory()
+	logger.DefaultLogLevel = logging.LogLevelDisabled
+	client, err := turn.NewClient(&turn.ClientConfig{TURNServerAddr: address, STUNServerAddr: address, Conn: turn.NewSTUNConn(conn), Username: config.Username, Password: config.Credential, Realm: "couch-lan", RTO: 20 * time.Millisecond, LoggerFactory: logger})
+	if err != nil || client.Listen() != nil {
+		t.Fatal("client could not listen")
+	}
+	defer client.Close()
+	allocation, err := client.Allocate()
+	if err != nil {
+		_ = output.Encode(map[string]bool{"allocated": false})
+		return
+	}
+	defer allocation.Close()
+	// Prove this is a usable allocation before Core revokes it.
+	peer, err := net.ListenPacket("udp4", net.JoinHostPort(addressIP(allocation.LocalAddr()).String(), "0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close()
+	_ = peer.SetDeadline(time.Now().Add(2 * time.Second))
+	if _, err = allocation.WriteTo([]byte("before-revocation"), peer.LocalAddr()); err != nil {
+		t.Fatal("allocation could not send")
+	}
+	buffer := make([]byte, 64)
+	n, _, err := peer.ReadFrom(buffer)
+	if err != nil || string(buffer[:n]) != "before-revocation" {
+		t.Fatal("relay did not carry the datagram")
+	}
+	_ = output.Encode(map[string]bool{"allocated": true})
+	var command string
+	if input.Decode(&command) != nil || command != "released" {
+		return
+	}
+	// Keep the client allocation open: only Core's revocation may release the server socket.
+	replacement, err := net.ListenPacket("udp4", allocation.LocalAddr().String())
+	if err != nil {
+		t.Fatal("allocation socket survived device removal")
+	}
+	replacement.Close()
+	_ = output.Encode(map[string]bool{"released": true})
+}
+
 func lanConfiguration(t *testing.T) configuration {
 	t.Helper()
 	interfaces, err := net.Interfaces()
