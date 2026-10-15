@@ -11,6 +11,7 @@ import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useInterfaceSize } from "../interface-size";
 import { useVideoQualityPreference } from "../video-quality";
+import { playingOnDevice, useScreenWakeLock } from "../screen-wake-lock";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { choosesHere } from "../sections/shell/Outputs";
 import { applyUndo, undoPlan } from "./undo";
@@ -74,6 +75,7 @@ export type SessionGateValue = SessionBag & {
   savePairing: (credentials: Required<Credentials>) => void;
   unpair: () => void;
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
+  screenWakeLock: ReturnType<typeof useScreenWakeLock>;
   remoteControlEnabled: boolean;
   playerTarget?: { id: string; status: string };
   // The request to choose where a shared source plays that was last closed. It outlives the player
@@ -121,6 +123,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   }
 
   const { clock, readObservation, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId } = useSession(credentials, handleNavigation);
+  const screenWakeLock = useScreenWakeLock(!nativeHost && connected && playingOnDevice(state?.playbacks, deviceId()));
   const localName = useLocalDeviceName();
   const ownName = state?.devices?.find(device => device.id === deviceId())?.name;
   useEffect(() => {
@@ -309,7 +312,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   const value = useMemo<SessionGateValue>(() => ({
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId,
-    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser,
-  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser]);
+    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser,
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, queue, seekBy, offerUndo, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, screenWakeLock, remoteControlEnabled, dismissedChooser, dismissChooser, requestedChooser]);
   return <PlaybackClockContext.Provider value={clock}><SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider></PlaybackClockContext.Provider>;
 }
