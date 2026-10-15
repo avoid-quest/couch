@@ -11,11 +11,11 @@ document.documentElement.classList.add("dark");
 registerAppShellWorker();
 
 function SessionRouter() {
-  const { queryClient, identity, connected } = useSessionGate();
+  const { queryClient, identity, localHost, connected } = useSessionGate();
   // beforeLoad and the rendered shell share the live identity. Re-evaluate
   // existing matches after role/revocation/reconnect transitions as well.
   useLayoutEffect(() => { void router.invalidate(); }, [queryClient, identity?.authority, identity?.device?.id, identity?.claimAvailable, connected]);
-  return <RouterProvider router={router} context={{ queryClient, identity, connected }} />;
+  return <RouterProvider router={router} context={{ queryClient, identity, localHost, connected }} />;
 }
 
 createRoot(document.getElementById("root")!).render(

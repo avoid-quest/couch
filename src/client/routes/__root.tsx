@@ -24,7 +24,7 @@ function NotFound() {
   return null;
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: DeviceIdentity | null; connected: boolean }>()({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient; identity: DeviceIdentity | null; localHost: boolean; connected: boolean }>()({
   component: () => <RemotePlayerSession><AppShell /></RemotePlayerSession>,
   errorComponent: RootError,
   notFoundComponent: NotFound,

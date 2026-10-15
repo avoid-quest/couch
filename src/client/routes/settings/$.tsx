@@ -7,7 +7,9 @@ export const Route = createFileRoute("/settings/$")({
   beforeLoad: ({ location, context }) => {
     const page = settingsAliases[location.pathname.replace(/\/$/, "")] ?? null;
     // Updates used to open on this app's own updater, which the Couch's page shows when this app hosts it.
-    const updates = page === "updates" && couchApp?.updates && context.identity?.authority !== "host" ? "device-updates" : page;
+    // Full mode hosts before this app's identity arrives.
+    const host = context.identity ? context.identity.authority === "host" : context.localHost;
+    const updates = page === "updates" && couchApp?.updates && !host ? "device-updates" : page;
     throw redirect({ href: settingsPagePath(updates ?? "general"), replace: true });
   },
 });

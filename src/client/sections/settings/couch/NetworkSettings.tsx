@@ -44,7 +44,7 @@ export function NetworkSettings({ credentials, connected, urls, remoteControlEna
   const locked = (description: string) => administrator ? description : `${description} ${ADMIN_ONLY}`;
   const secureUrl = urls.find(url => url.startsWith("https:"));
   const changeSharing = (enabled: boolean) => { if (sharing.isPending) return; if (enabled) sharing.mutate(true); else setConfirm("sharing"); };
-  const changeHttp = (enabled: boolean) => { if (saveHttp.isPending) return; if (!enabled && overHttp(credentials.origin)) setConfirm("http"); else saveHttp.mutate(enabled); };
+  const changeHttp = (enabled: boolean) => { if (saveHttp.isPending) return; if (enabled) saveHttp.mutate(true); else setConfirm("http"); };
   function submitDomain(event: FormEvent) {
     event.preventDefault();
     if (!saveDomain.isPending) saveDomain.mutate(domain.trim());
@@ -74,7 +74,7 @@ export function NetworkSettings({ credentials, connected, urls, remoteControlEna
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{confirm === "http" ? "Turn off HTTP connections?" : "Turn off Share on network?"}</AlertDialogTitle>
-          <AlertDialogDescription>{confirm === "http" ? `${device} is connected over HTTP and disconnects now.${secureUrl ? ` Open ${secureUrl} to keep using ${couch}.` : ""}`
+          <AlertDialogDescription>{confirm === "http" ? `Every device connected over HTTP disconnects now${overHttp(credentials.origin) ? `, including ${device}.${secureUrl ? ` Open ${secureUrl} to keep using ${couch}.` : ""}` : ". Devices using HTTPS stay connected."}`
             : host ? `Every paired device disconnects. What ${couch} plays keeps playing.` : `Every paired device disconnects, including ${device}, until someone turns this on at ${couch}.`}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
