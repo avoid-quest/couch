@@ -90,6 +90,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation (id, name) VALUES (1, '${UNNAMED_COUCH}');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_http (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
@@ -161,6 +162,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
       if (!db.query("SELECT 1 FROM sendspin_identity").get()) db.query("INSERT INTO sendspin_identity VALUES (1, ?)").run(fresh());
       return db.query<{ key: string }, []>("SELECT key FROM sendspin_identity WHERE id = 1").get()!.key;
     },
+    allowLanHttp() { const row = db.query<{ enabled: number }, []>("SELECT enabled FROM installation_http WHERE id = 1").get(); return row ? !!row.enabled : null; },
+    saveAllowLanHttp(enabled: boolean) { db.query("INSERT INTO installation_http VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     remoteControlEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_sharing WHERE id = 1").get()!.enabled; },
     saveRemoteControlEnabled(enabled: boolean) { db.query("INSERT INTO installation_sharing VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     originDomain() { return db.query<{ domain: string }, []>("SELECT domain FROM installation_origin_domain WHERE id = 1").get()?.domain ?? ""; },

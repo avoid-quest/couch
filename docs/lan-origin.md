@@ -1,9 +1,10 @@
 # Named LAN address
 
-This guide covers the Debian 13 app's direct LAN listener. Enable Allow remote
-control locally and verify the IP address shown in Connection before adding a
-name. Couch uses HTTPS with its own self-signed certificate on port 4100 by
-default; plain HTTP on the LAN redirects there. Sharing off leaves only the
+This guide covers the Debian 13 app's direct LAN listener. Locally, open
+**Settings → Devices → Share on network** and enable sharing, then verify the IP
+address shown when pairing before adding a name. Couch uses HTTPS with its own
+self-signed certificate on port 4100 by default; plain HTTP on the LAN redirects
+there unless **Allow HTTP connections** is enabled. Sharing off leaves only the
 loopback listener used by the local app.
 
 The machine/network administrator owns IP assignment, LAN DNS and any narrowly
@@ -14,7 +15,12 @@ configure router forwarding or expose Couch to the internet.
 
 Couch checks its private IPv4 selection every second, so sharing can start after
 DHCP assigns an address and recover when an address or occupied port returns.
-Custom DNS names are rechecked every minute. With several eligible interfaces,
+Custom DNS names are rechecked every minute. Once sharing selects an address
+automatically, Couch keeps that interface and address until restart, even if
+another interface appears. If it disappears, LAN access closes and pairing URLs
+are withdrawn until it returns. Turning sharing off and on keeps this selection;
+restart Couch to select a different network automatically.
+When initially selecting among several eligible interfaces,
 set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
 has multiple private IPv4 addresses, also set `COUCH_LAN_ADDRESS` to the specific
 local address to use. For example, if `eth0` owns `192.168.1.20`:
@@ -37,17 +43,10 @@ around playback.
 ## TVs that refuse the certificate
 
 HTTPS remains the default. Some TV browsers cannot bypass a self-signed
-certificate warning. To permit HTTP on the selected LAN as well, quit Couch,
-then launch it with `COUCH_ALLOW_HTTP=1` in its environment. On Linux:
-
-```sh
-COUCH_ALLOW_HTTP=1 couch
-```
-
-For an AppImage, replace `couch` with its executable path. For TV setup, put
-`COUCH_ALLOW_HTTP=1` in `/etc/couch/appliance.env` and restart Couch.
-Enable **Allow remote control**, then open the `http://<LAN-IP>:4100` address
-shown in Connection on the TV (use `COUCH_PORT` if customized). HTTPS and the
+certificate warning. On the computer running Couch, open **Settings → Devices**
+and enable **Allow HTTP connections**. The choice is saved and applies immediately.
+Enable **Share on network** in **Settings → Devices**, then open the
+`http://<LAN-IP>:4100` address shown when pairing (use `COUCH_PORT` if customized). HTTPS and the
 HTTPS QR code remain available. The separate port 80 listener still redirects to HTTPS, so include
 Couch's port in the HTTP address. A new browser origin requires pairing again.
 If the browser cached an old HTTPS redirect, clear its data for that address.
@@ -55,8 +54,14 @@ If the browser cached an old HTTPS redirect, clear its data for that address.
 HTTP is unencrypted: other people on that network can read or change pairing
 and control traffic. Enable it only on a trusted private network. It retains
 the selected interface/subnet, Host and Origin checks, pairing, and the sharing
-switch. Turning sharing off closes both LAN transports. Remove the environment
-variable and restart to return to HTTPS only; Couch never downgrades automatically.
+switch. Turning sharing off closes both LAN transports. Turn off **Allow HTTP
+connections** to return to HTTPS only: existing HTTP connections close while
+HTTPS connections keep working. Couch never downgrades automatically.
+
+`COUCH_ALLOW_HTTP=1` remains a startup default for deployments, including TV setup
+through `/etc/couch/appliance.env`. A saved Settings choice takes precedence over
+the flag, including a saved choice to disable HTTP.
+
 If you suspect someone intercepted HTTP traffic, revoke the affected paired
 devices and pair them again over HTTPS. Switching back to HTTPS does not revoke
 credentials that may already have been copied.

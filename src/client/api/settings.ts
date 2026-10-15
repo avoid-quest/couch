@@ -87,3 +87,9 @@ export const originDomainQuery = (credentials: ApiCredentials, urls: string[]) =
     queryKey: ["settings", "origin-domain", urls],
     queryFn: ({ signal }) => apiJson<{ domain: string; suggested?: string }>(credentials, "/api/settings/origin-domain", { signal }),
   });
+
+export const lanHttpQuery = (credentials: ApiCredentials) =>
+  queryOptions({
+    queryKey: ["devices", "http"],
+    queryFn: ({ signal }) => apiJson<{ enabled: boolean }>(credentials, "/api/settings/http", { signal }),
+  });

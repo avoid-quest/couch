@@ -3,7 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { claimCodeQuery, devicesQuery } from "@/api/devices";
-import { originDomainQuery } from "@/api/settings";
+import { lanHttpQuery, originDomainQuery } from "@/api/settings";
 import { PairingDialog } from "@/components/PairingDialog";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -34,6 +34,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const paired = devices.data?.some(device => device.role !== "host");
   const setupCode = useQuery({ ...claimCodeQuery(credentials), enabled: connected && remoteControlEnabled && host && !administratorClaimed && !!paired });
   const originDomain = useQuery({ ...originDomainQuery(credentials, urls), enabled: connected && manager && managedLan });
+  const lanHttp = useQuery({ ...lanHttpQuery(credentials), enabled: connected && host && managedLan });
   const [domainDraft, setDomainDraft] = useState<string | null>(null);
   const savedDomain = originDomain.data?.domain || originDomain.data?.suggested || "";
   const domain = domainDraft ?? savedDomain;
@@ -59,6 +60,10 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   });
   // The server bumps the devices revision, which refreshes remoteControlEnabled.
   const sharing = useMutation({ mutationFn: (enabled: boolean) => apiSend(credentials, "/api/settings/sharing", { enabled }) });
+  const saveHttp = useMutation({
+    mutationFn: (enabled: boolean) => apiSend<{ enabled: boolean }>(credentials, "/api/settings/http", { enabled }),
+    onSuccess: result => queryClient.setQueryData(lanHttpQuery(credentials).queryKey, result),
+  });
   const saveDomain = useMutation({
     mutationFn: (value: string) => apiSend<{ domain: string; suggested?: string }>(credentials, "/api/settings/origin-domain", { domain: value }),
     onSuccess: result => { queryClient.setQueryData(originDomainQuery(credentials, urls).queryKey, result); setDomainDraft(null); },
@@ -86,6 +91,9 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {host && <SettingsRow label="Share on network" description="Phones, browsers and other computers on your network can pair and play.">
         <Switch aria-label="Share on network" checked={sharing.isPending ? sharing.variables : remoteControlEnabled} disabled={sharing.isPending} onCheckedChange={enabled => { if (!sharing.isPending) sharing.mutate(enabled); }} />
       </SettingsRow>}
+      {host && managedLan && <SettingsRow label="Allow HTTP connections" description="HTTPS is always available. Allow unencrypted HTTP for devices that cannot use HTTPS, only on a trusted network. Turning this off disconnects HTTP devices.">
+        <Switch aria-label="Allow HTTP connections" checked={saveHttp.isPending ? saveHttp.variables : lanHttp.data?.enabled ?? false} disabled={!connected || lanHttp.isPending || lanHttp.isError || saveHttp.isPending} onCheckedChange={enabled => saveHttp.mutate(enabled)} />
+      </SettingsRow>}
       <SettingsRow label="New device" description={!manager ? "Only an admin can pair devices." : !remoteControlEnabled ? host ? "Turn on Share on network first." : `Turn on Share on network on ${hostName} first.`
         : `Show a code to scan or type on the new device.${host && !administratorClaimed && paired === false ? " The first device you pair becomes the admin." : ""}`}>
         {manager && <Button ref={pairingRef} data-page-first variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
@@ -96,6 +104,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
           <Button type="submit" variant="outline" disabled={!connected || saveDomain.isPending || originDomain.isPending || domain.trim() === savedDomain}>{saveDomain.isPending ? "Saving…" : "Save"}</Button>
         </form>
       </SettingsRow>}
+      {host && managedLan && (saveHttp.error || lanHttp.error) && <Alert variant="destructive"><AlertDescription>{message(saveHttp.error, "Couldn't save HTTP connections.") ?? message(lanHttp.error, "Couldn't read HTTP connections.")}</AlertDescription>{lanHttp.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void lanHttp.refetch()}>Try again</Button></AlertAction>}</Alert>}
       {sharing.error && <Alert variant="destructive"><AlertDescription>{message(sharing.error, "Couldn't change Share on network.")}</AlertDescription></Alert>}
       {(saveDomain.error || originDomain.error) && <Alert variant="destructive"><AlertDescription>{message(saveDomain.error, "Couldn't save the address.") ?? message(originDomain.error, "Couldn't read the address.")}</AlertDescription>{originDomain.error && !saveDomain.error && <AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => void originDomain.refetch()}>Try again</Button></AlertAction>}</Alert>}
       {manager && <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />}

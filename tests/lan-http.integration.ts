@@ -39,7 +39,7 @@ async function fixture(t: TestContext, allowLanHttp = false) {
   // Keep provider discovery offline without mocking local transport or the LAN inventory.
   const fetchLocal = globalThis.fetch;
   t.mock.method(globalThis, "fetch", (input: Parameters<typeof fetch>[0], init?: RequestInit) => ["127.0.0.1", "localhost", address].includes(new URL(String(input)).hostname) ? fetchLocal(input, init) : Promise.resolve(new Response("")));
-  const hub = await createHub({ managedLan: true, allowLanHttp, advertisedUrls: [], databasePath: join(directory, "couch.sqlite"), port: 0, hostToken, pairingCode: "123456" });
+  let hub = await createHub({ managedLan: true, allowLanHttp, advertisedUrls: [], databasePath: join(directory, "couch.sqlite"), port: 0, hostToken, pairingCode: "123456" });
   const sockets: WebSocket[] = [];
   t.after(async () => { for (const socket of sockets) socket.terminate(); await hub.close(); await rm(directory, { recursive: true, force: true }); });
   const http = `http://${address}:${hub.server.port}`, https = http.replace("http:", "https:");
@@ -49,12 +49,22 @@ async function fixture(t: TestContext, allowLanHttp = false) {
     const request = get(`${https}/api/health`, { ca, allowPartialTrustChain: true, agent: false }, response => { response.resume(); response.on("end", () => resolve(response.statusCode)); });
     request.on("error", reject); request.setTimeout(1000, () => request.destroy(new Error("TLS request timed out")));
   });
-  const ws = (token: string, origin = http) => {
-    const socket = new WebSocket(`${http.replace("http:", "ws:")}/api/ws?token=${token}&device=${device}`, { origin });
+  const ws = (token: string, origin = http, id = device, tls = false) => {
+    const socket = new WebSocket(`${(tls ? https : http).replace(/^http/, "ws")}/api/ws?token=${token}&device=${id}`, { origin, ca, allowPartialTrustChain: true });
     sockets.push(socket); socket.on("error", () => {}); return socket;
   };
-  const pair = (code: string, origin: string | null = http) => fetch(`${http}/api/pair`, { method: "POST", headers: { "Content-Type": "application/json", ...(origin === null ? {} : { Origin: origin }) }, body: JSON.stringify({ code, id: device, name: "TV browser" }) });
-  return { hub, http, https, secure, ws, pair };
+  const pair = (code: string, origin: string | null = http, id = device) => fetch(`${http}/api/pair`, { method: "POST", headers: { "Content-Type": "application/json", ...(origin === null ? {} : { Origin: origin }) }, body: JSON.stringify({ code, id, name: "TV browser" }) });
+  const settings = (value?: unknown, path = "http") => fetch(`${hub.origin}/api/settings/${path}`, {
+    method: value === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" },
+    ...(value === undefined ? {} : { body: JSON.stringify({ enabled: value }) }),
+  });
+  const restart = async (allowLanHttp = false) => {
+    const port = hub.server.port;
+    await hub.close();
+    hub = await createHub({ managedLan: true, allowLanHttp, advertisedUrls: [], databasePath: join(directory, "couch.sqlite"), port, hostToken, pairingCode: "123456" });
+    await until(() => hub.urls.includes(https));
+  };
+  return { get hub() { return hub; }, http, https, secure, ws, pair, settings, restart };
 }
 
 test("default LAN transport keeps HTTPS and refuses plaintext WebSockets", { skip: !candidate, timeout: 8000 }, async t => {
@@ -110,4 +120,49 @@ test("HTTP compatibility cannot opt an unrestricted listener into plaintext", as
     const hub = await createHub({ allowLanHttp: true, databasePath: join(directory, "couch.sqlite"), hostname: "127.0.0.1", port: 0, hostToken });
     await hub.close();
   }, /managed LAN listener/);
+});
+
+test("saved HTTP setting applies live, closes plaintext only and overrides the startup flag", { skip: !candidate, timeout: 15000 }, async t => {
+  const f = await fixture(t);
+  assert.deepEqual(await (await f.settings()).json(), { enabled: false });
+  assert.equal((await f.settings("true")).status, 400);
+  assert.equal((await fetch(`${f.hub.origin}/api/settings/http`)).status, 401);
+  assert.equal((await f.settings(true)).status, 200);
+  assert.deepEqual(f.hub.urls, [f.https, f.http]);
+  assert.equal((await fetch(`${f.http}/api/health`, { redirect: "manual" })).status, 200);
+  assert.equal(await f.secure(), 200);
+  const { token } = await (await f.pair("123456")).json();
+  // A remote administrator cannot weaken the host's transport policy.
+  assert.equal((await fetch(`${f.http}/api/settings/http`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: '{"enabled":false}' })).status, 403);
+  const plain = f.ws(token);
+  await once(plain, "message");
+  const secureId = "u".repeat(43);
+  const secureToken = (await (await f.pair("123456", f.http, secureId)).json()).token;
+  const secure = f.ws(secureToken, f.https, secureId, true);
+  await once(secure, "message");
+  const closed = once(plain, "close");
+  assert.equal((await f.settings(false)).status, 200);
+  await closed;
+  assert.deepEqual(f.hub.urls, [f.https]);
+  assert.equal((await fetch(`${f.http}/api/health`, { redirect: "manual" })).status, 308);
+  await assert.rejects(once(f.ws(token), "open"));
+  assert.equal(await f.secure(), 200);
+  const pong = once(secure, "pong"); secure.ping(); await pong;
+  assert.equal(secure.readyState, WebSocket.OPEN);
+  // Persisted off wins over a legacy launch flag; persisted on needs no flag.
+  await f.restart(true);
+  assert.deepEqual(await (await f.settings()).json(), { enabled: false });
+  assert.equal((await fetch(`${f.http}/api/health`, { redirect: "manual" })).status, 308);
+  assert.equal((await f.settings(true)).status, 200);
+  await f.restart();
+  assert.deepEqual(await (await f.settings()).json(), { enabled: true });
+  assert.equal((await fetch(`${f.http}/api/health`, { redirect: "manual" })).status, 200);
+  // Choosing HTTP while sharing is off must not expose either LAN transport.
+  assert.equal((await f.settings(false, "sharing")).status, 200);
+  assert.equal((await f.settings(false)).status, 200);
+  assert.equal((await f.settings(true)).status, 200);
+  await assert.rejects(fetch(`${f.http}/api/health`));
+  await assert.rejects(f.secure());
+  assert.equal((await f.settings(true, "sharing")).status, 200);
+  assert.equal((await fetch(`${f.http}/api/health`)).status, 200);
 });
