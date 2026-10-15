@@ -334,8 +334,8 @@ export async function createHub(options: HubOptions) {
   // Outputs that span Devices play in a group. A live input does only when In sync is chosen: otherwise
   // each receiver gets it directly, however many there are (docs/adr/0001).
   const grouped = (playback: Playback) => spans(playback) && (!sourceOf(playback) || !!playback.inSync);
-  // The buffered stream this item's relayed receivers waited for failed, and none has started since.
-  const bufferFailed = (playback: Playback) => playback.bufferFailure?.playbackId === stateOf(playback).player.playbackId && !liveStreams.available(sourceOf(playback) ?? "") ? playback.bufferFailure.error : undefined;
+  // This item's relayed receivers stay failed until this playback retries, even if another restarts the shared stream.
+  const bufferFailed = (playback: Playback) => playback.bufferFailure?.playbackId === stateOf(playback).player.playbackId ? playback.bufferFailure.error : undefined;
   // An online receiver of this playback couldn't connect directly.
   const relays = (playback: Playback, sourceId: string) => playback.outputs.some(output => live.relayed(sourceId, output.deviceId) && newest(output.deviceId));
   // Core encodes a live input only while it plays buffered: In sync, or to a receiver that couldn't connect directly.
@@ -575,8 +575,8 @@ export async function createHub(options: HubOptions) {
       const relay = relayed ? liveStreams.available(sourceId) && load ? liveUrl(sourceId, load.playbackId, output.deviceId, socket?.data.origin) : null : undefined;
       return socket && (picture || sound) && !(relayed && failed) ? [{ socket, deviceId: output.deviceId, picture, sound, volume: rendered(playback, output), relay }] : [];
     });
-    // A relayed receiver still waiting for the stream gets nothing yet, but stays the renderer it would be.
-    playback.renderer = receivers[0]?.socket ?? null;
+    // Prefer the first routed receiver while a relay waits; with none yet, keep the pending renderer for controls and reload.
+    playback.renderer = (receivers.find(receiver => receiver.relay !== null) ?? receivers[0])?.socket ?? null;
     live.route(playback.id, sourceId, load, receivers.flatMap(({ relay, ...receiver }) => relay === null ? [] : [{ ...receiver, relay }]));
   };
   // A level reaches every player: a group's speakers, each receiver of a Direct live input at its own, else the renderer.
@@ -1600,7 +1600,7 @@ export async function createHub(options: HubOptions) {
             } else { fresh = true; playback = mediaPlayback(playedBy, false); }
             const select = () => { remoteControllers.delete(deviceId); targets.set(deviceId, viewable?.deviceId ?? target); };
             // Play where its buffered stream failed tries that stream again; the other receivers keep their peers.
-            if (there && live.relayed(source.id, target) && bufferFailed(there)) { there.bufferFailure = undefined; routeLive(there, source.id); }
+            if (there && live.relayed(source.id, target) && bufferFailed(there)) { there.bufferFailure = undefined; there.session.reload(); }
             if (!fresh && playNow) { select(); broadcast(); }
             if (fresh) {
               // A new item's selection and outputs change only once the Session admits it, so a refused Play changes neither.
