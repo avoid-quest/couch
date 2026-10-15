@@ -12,6 +12,7 @@ import { deviceName, offline } from "@/copy";
 import { useBottomBar } from "@/sections/shell/MiniPlayer";
 import { QueuePanel } from "./QueuePanel";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
+import { isAudioOnly } from "./player-presentation";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
@@ -65,7 +66,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const ended = player?.status === "ended";
   const findingNext = ended && state?.autoplay?.enabled && state.autoplay.pending;
   const playback = state?.playbacks?.find(playback => playback.id === state.playback);
-  const audioOnly = playback?.audioOnly || isRadio(current) || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const audioOnly = isAudioOnly(playback, current, player?.tracks);
   // The picture shows on the Playback's picture outputs; every other window shows the artwork (#644 ticket 9).
   const at = playsOn(state);
   const elsewhere = !!at?.elsewhere;

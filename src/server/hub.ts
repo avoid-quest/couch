@@ -571,9 +571,8 @@ export async function createHub(options: HubOptions) {
       const relay = relayed ? liveStreams.available(sourceId) && load ? liveUrl(sourceId, load.playbackId, output.deviceId, socket?.data.origin) : null : undefined;
       return socket && (picture || sound) && !(relayed && failed) ? [{ socket, deviceId: output.deviceId, picture, sound, volume: rendered(playback, output), relay }] : [];
     });
-    // Prefer a picture receiver's track report: a sound-only receiver cannot
-    // describe the shared screen. A pending relay stays the renderer it would be.
-    playback.renderer = (receivers.find(receiver => receiver.picture) ?? receivers[0])?.socket ?? null;
+    // A relayed receiver still waiting for the stream gets nothing yet, but stays the renderer it would be.
+    playback.renderer = receivers[0]?.socket ?? null;
     live.route(playback.id, sourceId, load, receivers.flatMap(({ relay, ...receiver }) => relay === null ? [] : [{ ...receiver, relay }]));
   };
   // A level reaches every player: a group's speakers, each receiver of a Direct live input at its own, else the renderer.
