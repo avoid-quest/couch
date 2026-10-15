@@ -4,7 +4,7 @@ Research checked 13 October 2026 against the specifications and browser vendors'
 documentation. Screen Wake Lock can prevent an idle phone's screen from dimming
 or locking while Couch is visible. Installing Couch as a web app is useful for
 access and presentation, but does not itself keep the screen awake or guarantee
-background execution. [1][2][8]
+background execution. [1], [2], [8]
 
 ## What Couch already has
 
@@ -21,7 +21,7 @@ The practical installation gap is certificate trust: Couch's LAN listener uses
 a self-signed certificate, and clicking past its warning does not make Chrome
 accept it for service-worker registration or normal PWA installability checks.
 Chromium explicitly checks certificate errors for both. See the existing
-[controller guide](desktop-controllers.md) and [LAN setup](lan-origin.md). [6][7]
+[controller guide](desktop-controllers.md) and [LAN setup](lan-origin.md). [6], [7]
 
 ## Keep the visible client awake
 
@@ -30,7 +30,7 @@ It is exposed only in secure contexts, and the document must be fully active
 and visible. Modern Chromium supports it; Safari added the API in 16.4. WebKit
 specifically announced working **Home Screen web-app** support in iOS and iPadOS
 18.4, so Safari-tab support must not be taken as proof that older installed iOS
-web apps work. [1][2][3][4]
+web apps work. [1], [2], [3], [4]
 
 Couch's browser behavior:
 
@@ -55,7 +55,7 @@ platform policy, or user preference. Hidden pages lose their screen locks.
 The specification treats OS acquisition as advisory; even a returned sentinel
 cannot promise that the screen will never sleep. Manual screen locking and
 switching to another app remain under the user's control. Network heartbeats
-are not a substitute for this screen-lock mechanism. [1][2]
+are not a substitute for this screen-lock mechanism. [1], [2]
 
 ## Make the existing PWA dependable
 
@@ -71,7 +71,7 @@ On iOS/iPadOS, a manifest with `display: "standalone"` makes an added Home Scree
 site open as a web app. Retain the Apple touch icon; WebKit gives it precedence
 over manifest icons. For a future installation control, use the browser's
 install event where supported and documented Add to Home Screen instructions
-elsewhere. Installation remains a user action. [5][9]
+elsewhere. Installation remains a user action. [5], [9]
 
 Trusted HTTPS is the next infrastructure requirement for a dependable LAN PWA.
 Ordinary `http://192.168.x.x` or HTTP LAN hostnames are not secure contexts;
@@ -87,14 +87,14 @@ loading and renewal are not implemented by the direct listener. Do not infer
 wake-lock availability solely from a clicked-through certificate warning:
 secure-context API exposure and Chrome's worker/install certificate checks are
 different checks. Use the runtime capability check and handle request failure.
-[6][7][10]
+[6], [7], [10]
 
 An installed app and its service worker do not keep a WebSocket, timer, or page
 running indefinitely after the OS backgrounds or locks the device. Service
 workers have event-driven lifetimes and may be terminated when idle. Couch still
 needs its existing reconnect behavior, and the server must remain reachable for
 control and playback; precaching the shell does not provide offline playback.
-[1][8]
+[1], [8]
 
 ## Device verification
 
@@ -128,3 +128,14 @@ phone power-management behavior.
    standalone manifests and icon selection.
 10. [W3C Secure Contexts](https://www.w3.org/TR/secure-contexts/):
     potentially trustworthy origins and `isSecureContext` detection.
+
+[1]: https://www.w3.org/TR/screen-wake-lock/
+[2]: https://developer.chrome.com/docs/capabilities/web-apis/wake-lock
+[3]: https://webkit.org/blog/13966/webkit-features-in-safari-16-4/
+[4]: https://webkit.org/blog/16574/webkit-features-in-safari-18-4/
+[5]: https://web.dev/articles/install-criteria
+[6]: https://github.com/chromium/chromium/blob/main/content/browser/service_worker/service_worker_loader_helpers.cc
+[7]: https://github.com/chromium/chromium/blob/main/components/webapps/browser/installable/installable_evaluator.cc
+[8]: https://www.w3.org/TR/service-workers/#service-worker-lifetime
+[9]: https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/
+[10]: https://www.w3.org/TR/secure-contexts/
