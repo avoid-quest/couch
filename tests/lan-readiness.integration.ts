@@ -170,3 +170,44 @@ test("disabling sharing during interface recovery drains the pending bind", { sk
   await sleep(50);
   assert.equal(f.lan.server, null, "a pending bind exposed LAN access after sharing was disabled");
 });
+
+test("a failed enable doesn't turn off sharing that a later enable requested", { skip: !candidate }, async t => {
+  let release!: () => void, starts = 0;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const f = await fixture(t, { enabled: false, available: true, beforeStart: async () => { if (++starts === 1) { await gate; throw new Error("busy"); } } });
+  await f.lan.refresh();
+  const failing = f.lan.setEnabled(true);
+  const deadline = performance.now() + 2_500;
+  while (!starts && performance.now() < deadline) await sleep(20);
+  assert.equal(starts, 1);
+  const enabling = f.lan.setEnabled(true);
+  release();
+  await assert.rejects(failing, /cannot listen/);
+  await enabling;
+  await f.ready();
+});
+
+test("a remote disable stops only after its reply, even behind queued refreshes and a host disable", { skip: !candidate }, async t => {
+  const { address } = selectLan({ [candidate![0]]: candidate![1] }, candidate![0]);
+  let held = Promise.resolve(), looked = () => {};
+  const resolve = (async () => { looked(); await held; return [{ address, family: 4 }]; }) as unknown as typeof lookup;
+  const f = await fixture(t, { available: true, advertised: [`https://couch.test:${port}`], resolve });
+  await f.ready();
+  let releaseDns!: () => void, closeReply!: () => void;
+  held = new Promise(resolve => { releaseDns = resolve; });
+  const lookedUp = new Promise<void>(resolve => { looked = resolve; });
+  // One refresh waits on DNS, and another, such as a Settings read, queues behind it.
+  const refreshes = Promise.all([f.lan.refresh(), f.lan.refresh()]);
+  await lookedUp;
+  const remoteOff = f.lan.setEnabled(false, new Promise<void>(resolve => { closeReply = resolve; }));
+  const hostOff = f.lan.setEnabled(false);
+  releaseDns();
+  await refreshes;
+  try { await f.ready(); } finally { closeReply(); }
+  await Promise.all([remoteOff, hostOff]);
+  assert.equal(f.lan.server, null);
+  await f.lan.refresh();
+  assert.equal(f.lan.server, null, "a refresh restarted the listener after sharing was disabled");
+  await f.lan.setEnabled(true);
+  await f.ready();
+});

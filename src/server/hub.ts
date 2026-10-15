@@ -1406,11 +1406,12 @@ export async function createHub(options: HubOptions) {
         if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to share on the network.");
         stillAdministrator();
         // A device turning sharing off over the LAN gets its reply before that listener stops.
-        if (enabled || loopbackPeer(requestPeer(request))) await lan?.setEnabled(enabled);
+        // Only the host can turn it on, so a remote's On is already saved: waiting on the
+        // listener would let it overwrite an Off accepted meanwhile.
+        if (enabled ? !store.remoteControlEnabled() : loopbackPeer(requestPeer(request))) await lan?.setEnabled(enabled);
         store.saveRemoteControlEnabled(enabled);
-        if (!enabled && lan && !loopbackPeer(requestPeer(request))) afterResponse(request, () => {
-          if (!store.remoteControlEnabled()) void lan!.setEnabled(false).catch(error => console.error("Couch: couldn't stop the LAN listener.", error));
-        });
+        // The listener queues that stop now, so a host enabling sharing again restarts it afterwards.
+        if (!enabled && lan && !loopbackPeer(requestPeer(request))) void lan.setEnabled(false, new Promise<void>(resolve => afterResponse(request, resolve))).catch(error => console.error("Couch: couldn't stop the LAN listener.", error));
         if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
           sockets.delete(socket);
           socket.close(4003, "Sharing is off. Your pairing is remembered.");
