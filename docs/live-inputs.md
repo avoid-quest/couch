@@ -68,3 +68,74 @@ kill "$couch_live_pid"
 ```
 
 Browser checks with a generated canvas and audio track can verify routing, WebRTC delivery, buffered upload, rendering, autoplay recovery and cleanup. They do not verify physical macOS capture, audible synchronization between devices, hardware encoding or capture-to-output latency.
+
+## Scratch Core with a relay
+
+To test a candidate build from a Mac and phones on the LAN, run its Core on a
+Linux machine with a temporary TURN relay. [scripts/live-dev.sh](../scripts/live-dev.sh)
+starts the built Core (`node build/core.mjs`) and coturn's official image,
+waits until both answer, and stops both when it exits. It needs Docker, `curl`, `setsid`,
+`openssl`, `ss` and `ip`. Pull the pinned relay image once; the script never
+pulls it:
+
+```sh
+docker pull coturn/coturn:4.18.0-alpine
+bun install --frozen-lockfile
+bun run build
+couch_live_data=$(mktemp -d /tmp/couch-live.XXXXXX)
+COUCH_DATA_DIR=$couch_live_data COUCH_PORT=4610 scripts/live-dev.sh 192.168.1.20
+```
+
+Pass this machine's LAN IPv4 address. Core serves HTTPS with its self-signed
+certificate on every local address at `COUCH_PORT` and prints the pairing code.
+Open it by IP address, `https://192.168.1.20:4610`: a standalone Core accepts
+only its own addresses as the host, so a DNS name gets `Unrecognized host or
+origin`. Accept the certificate warning once on each device and pair it.
+
+The relay listens on that address at `COUCH_PORT + 1` over TCP only, the
+`turn:…?transport=tcp` URL Core hands to paired devices, and relays through UDP
+ports 49160–49200 on the same address. It requires the generated credential,
+which stays in `$couch_live_data/turn` (mode 0600) and Core's environment,
+never in arguments or logs, and lasts as long as that data directory. It relays
+only to private (RFC 1918) addresses, so it can't carry traffic to the internet;
+do not forward its ports. A standalone Core has no LAN STUN, so a browser that
+hides its host addresses, as Android Chrome does without capture permission,
+can connect through the relay rather than fall back to buffered playback, if it
+can reach this address and port.
+
+Capture on the Mac with Couch Preview 0.3.1-preview.3 or later in Client mode,
+which has the capture bridge the page uses. A scratch data directory leaves the
+installed Couch's own mode and pairing as they are:
+
+```sh
+couch_client_data=$(mktemp -d "${TMPDIR%/}/couch-client.XXXXXX")
+open -n --env "COUCH_DATA_DIR=$couch_client_data" --env COUCH_PORT=4510 "/Applications/Couch Preview.app"
+```
+
+Enter `https://192.168.1.20:4610` in **Another Couch**, connect, pair, then add
+the source as above. A browser tab on the Mac can capture the screen too, but may
+not include the computer's audio.
+
+To tell how each receiver plays, read `$couch_live_data/logs/couch.log`:
+`playback … Direct on A, B` means WebRTC, and `(buffered)` after a name means
+that device fell back to Couch's buffered stream, after a `player error` line
+with the reason. Browsers open a relay session for every connection, so a
+session in `$couch_live_data/logs/turn.log` alone doesn't show the media went
+through the relay; the selected candidate pair in `chrome://webrtc-internals`
+on Android Chrome does.
+
+Stop it with Ctrl-C, or by the PID it recorded once `ps` shows it is this script:
+
+```sh
+ps -o args= -p "$(cat "$couch_live_data/live-dev.pid")"
+kill "$(cat "$couch_live_data/live-dev.pid")"
+```
+
+If the script itself was killed without cleaning up, remove what it recorded,
+Core once `ps` shows it is `node build/core.mjs`:
+
+```sh
+ps -o args= -p "$(cat "$couch_live_data/core.pid")"
+kill "$(cat "$couch_live_data/core.pid")"
+docker rm -f "$(cat "$couch_live_data/turn/container")"
+```
