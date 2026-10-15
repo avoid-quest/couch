@@ -1,3 +1,4 @@
+import type { LiveRelay } from "../shared/live-relay";
 import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
 import { Database } from "./sqlite";
@@ -90,6 +91,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation (id, name) VALUES (1, '${UNNAMED_COUCH}');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_local_relay (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
+    CREATE TABLE IF NOT EXISTS installation_live_relay (id INTEGER PRIMARY KEY CHECK (id = 1), relay TEXT);
     CREATE TABLE IF NOT EXISTS installation_http (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
@@ -162,6 +165,10 @@ export function openStore(path: string, remoteControlEnabled = false) {
       if (!db.query("SELECT 1 FROM sendspin_identity").get()) db.query("INSERT INTO sendspin_identity VALUES (1, ?)").run(fresh());
       return db.query<{ key: string }, []>("SELECT key FROM sendspin_identity WHERE id = 1").get()!.key;
     },
+    localRelayEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_local_relay WHERE id = 1").get()?.enabled; },
+    saveLocalRelayEnabled(enabled: boolean) { db.query("INSERT INTO installation_local_relay VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
+    liveRelay(): LiveRelay | null | undefined { const row = db.query<{ relay: string | null }, []>("SELECT relay FROM installation_live_relay WHERE id = 1").get(); return row ? row.relay ? JSON.parse(row.relay) : null : undefined; },
+    saveLiveRelay(relay: LiveRelay | null) { db.query("INSERT INTO installation_live_relay VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET relay = excluded.relay").run(relay ? JSON.stringify(relay) : null); },
     allowLanHttp() { const row = db.query<{ enabled: number }, []>("SELECT enabled FROM installation_http WHERE id = 1").get(); return row ? !!row.enabled : null; },
     saveAllowLanHttp(enabled: boolean) { db.query("INSERT INTO installation_http VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     remoteControlEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_sharing WHERE id = 1").get()!.enabled; },

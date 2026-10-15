@@ -141,6 +141,7 @@ export type PlayerMessage = { type: "player"; state: PlayerState };
 export type UpdateReply = { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
+  | { type: "liveIceServers"; iceServers: RTCIceServer[] }
   | LiveSignalMessage
   // upload: Core needs the publisher's encoded capture, for a playback in sync or a receiver it relays to.
   // uploadId identifies this request so delayed recorder errors cannot fail a later retry of the same source.

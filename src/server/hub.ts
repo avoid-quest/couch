@@ -1,3 +1,5 @@
+import { createLocalRelay } from "./live-relay";
+import { parseLiveRelay } from "./live-ice";
 import { ADMIN_ONLY, NO_LONGER_ADMIN, REMOTES_OFF, STORAGE_ERROR, VERSION_MISMATCH } from "./messages";
 import { createLanListener, httpOrigin, lanPeer, loopbackPeer, secureOrigin } from "./lan-listener";
 import { certificate } from "./certificate";
@@ -75,6 +77,7 @@ type HubOptions = {
   native?: boolean;
   advertisedUrls?: string[];
   liveTurn?: RTCIceServer;
+  relayExecutable?: string;
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -104,6 +107,12 @@ export async function createHub(options: HubOptions) {
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   let allowLanHttp = store.allowLanHttp() ?? options.allowLanHttp ?? false;
+  let savedRelay = store.liveRelay();
+  const localRelay = createLocalRelay({ executable: options.relayExecutable, enabled: !!options.managedLan && store.localRelayEnabled(), changed: () => publishIce() });
+  const externalRelay = () => savedRelay === undefined ? options.liveTurn ?? null : savedRelay;
+  const liveRelay = () => localRelay.state().enabled ? localRelay.state().relay : externalRelay();
+  const relaySettings = () => ({ relay: externalRelay(), source: savedRelay === undefined ? options.liveTurn ? "environment" : "none" : "saved" });
+  const iceServers = () => [...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(liveRelay() ? [liveRelay()!] : [])];
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   // Synced sound (#644 ticket 10). Admits the app window's Device from this machine and, while remotes are allowed, paired ones.
   const sendspin = createSendspin({ identity: store.sendspinKey(() => Identity.generate().privateB64u), name: store.installationName(), ffmpeg: () => helper("ffmpeg"),
@@ -151,6 +160,14 @@ export async function createHub(options: HubOptions) {
   // A client that stops reading is dropped rather than buffered without limit. A pending state goes
   // first, so every message still follows the state it was sent after.
   const send = (socket: Socket<SocketData>, message: string) => { if (pending) flush(); return socket.bufferedAmount > 4 * 1024 * 1024 ? socket.terminate() : socket.send(message); };
+  const publishIce = () => {
+    if (closed) return;
+    const message = JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage);
+    for (const socket of sockets) {
+      try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); continue; }
+      send(socket, message);
+    }
+  };
   const streamingCommunitySettings = createStreamingCommunitySettings(store);
   // Checked at start so saved pages load from the current address; afterwards only
   // StreamingCommunity requests wait for the check.
@@ -1127,7 +1144,7 @@ export async function createHub(options: HubOptions) {
   const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
     if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
     invalidate("devices");
-  }, onRevoke: id => {
+  }, onRevoke: async id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
     for (const playback of all()) {
@@ -1140,6 +1157,7 @@ export async function createHub(options: HubOptions) {
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
     }
+    await localRelay.revoke();
   } });
   if (systemAudio) soundRouting = createSoundRouting({
     saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
@@ -1334,8 +1352,35 @@ export async function createHub(options: HubOptions) {
     const caller = identity();
     if (!caller) return cors(request, json({ error: "Pair this device first." }, 401));
     if (url.pathname === "/api/live/ice-servers") return cors(request, request.method === "GET"
-      ? json([...(lan?.server?.stun && lan.network ? [{ urls: `stun:${lan.network.address}:${port}` }] : []), ...(options.liveTurn ? [options.liveTurn] : [])])
+      ? json(iceServers())
       : new Response(null, { status: 405, headers: { Allow: "GET" } }));
+    if (url.pathname === "/api/settings/live-relay/local") {
+      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      if (request.method === "GET") return cors(request, json(localRelay.state()));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const enabled = await settingField(request, "enabled");
+        if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to run the relay on this computer.");
+        if (!options.managedLan) throw new ControllerError("The built-in relay requires Couch's managed LAN listener.");
+        store.saveLocalRelayEnabled(enabled);
+        await localRelay.setEnabled(enabled);
+        return cors(request, json(localRelay.state()));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the local relay setting." }, error instanceof ControllerError ? error.status : 500)); }
+    }
+    if (url.pathname === "/api/settings/live-relay") {
+      if (!trusted) return cors(request, json({ error: `Change this on ${store.installationName()}.` }, 403));
+      if (request.method === "GET") return cors(request, json(relaySettings()));
+      if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+      try {
+        const relay = parseLiveRelay(await settingField(request, "relay"));
+        store.saveLiveRelay(relay);
+        savedRelay = relay;
+        // Existing peers keep playing. Connected publishers and receivers use the
+        // new configuration when they next negotiate, without reloading capture.
+        publishIce();
+        return cors(request, json(relaySettings()));
+      } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Couldn't save the live relay." }, error instanceof ControllerError ? error.status : 500)); }
+    }
     if (upload) {
       const sourceId = url.searchParams.get("sourceId") ?? "", key = url.searchParams.get("key") ?? "";
       if (!live.acceptsUpload(sourceId, trusted ? hostId() : caller.device!.id, key)) return json({ error: "This capture upload is not authorized." }, 403);
@@ -1472,6 +1517,7 @@ export async function createHub(options: HubOptions) {
       open(socket: Socket<SocketData>) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this device again."); return; }
         sockets.add(socket);
+        send(socket, JSON.stringify({ type: "liveIceServers", iceServers: iceServers() } satisfies ServerMessage));
         if (socket.data.tv) tvDevices.add(deviceOf(socket));
         log(`device online ${nameOf(deviceOf(socket))}`);
         if (socket.data.updates && !socket.data.trusted) clientUpdates.set(socket, createNativeUpdates((requestId, action) => { send(socket, JSON.stringify({ type: "updates", requestId, action } satisfies ServerMessage)); }));
@@ -1813,12 +1859,14 @@ export async function createHub(options: HubOptions) {
       advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       suggested: () => store.originDomain() || options.advertisedUrls !== undefined ? [] : suggestedNames.map(name => `http://${name}:${port}`),
       start: async (network, listenPort) => {
-        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port, allowHttp: allowLanHttp && listenPort === port } });
+        // Stay HTTPS-only until setup finishes: Settings cannot reach this listener yet.
+        const listener = await serve({ ...serveOptions, hostname: network.address, port: listenPort, tls: { ...await tls(), securePort: port } });
         if (listenPort !== port) return listener;
         // STUN only adds address candidates; HTTPS sharing and TURN work without it.
         const stun = await serveLiveStun(network, port).catch(error => { console.error("Couch: live address discovery is unavailable.", error); return null; });
+        await localRelay.setNetwork(network);
         listener.setAllowHttp(allowLanHttp);
-        return { ...listener, stun: !!stun, stop: async () => { await Promise.all([listener.stop(), stun?.stop()]); } };
+        return { ...listener, stun: !!stun, stop: async () => { await Promise.all([listener.stop(), stun?.stop(), localRelay.setNetwork(null)]); } };
       },
       changed: (next, error, suggested) => {
         lanError = error;
@@ -1853,7 +1901,7 @@ export async function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([lan?.close(), server.stop()]);
+    const results = await Promise.allSettled([lan?.close(), localRelay.close(), server.stop()]);
     store.close();
     if (progressError) throw progressError;
     const failed = results.find(result => result.status === "rejected");

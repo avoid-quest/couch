@@ -152,6 +152,7 @@
       "provider": "github",
       "owner": "avoid-quest",
       "repo": "couch"
-    }
+    },
+    "afterPack": "./scripts/build-relay.ts"
   }
 }

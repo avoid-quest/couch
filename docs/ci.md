@@ -41,6 +41,39 @@ The TV health integration needs native Linux `/proc` (CPU emulation changes the
 reported executable). The installed app's Node also runs it:
 `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
 
+## Bundled live relay
+
+Packaging also requires Go **1.27.2** on PATH. Package installs that pinned toolchain;
+ordinary `bun run build` still needs only Bun/Node. The electron-builder `afterPack`
+hook compiles the pinned `native/live-relay` module for the actual platform and
+architecture with CGO disabled, and puts the executable and dependency notices in
+`Resources/live-relay` before signing. Users need neither Go nor a separate relay
+installation. macOS signing covers the helper along with the app.
+
+For a local development Core, build its helper and check the lifecycle with:
+
+```sh
+bun scripts/build-relay.ts
+bun build tests/live-relay.integration.ts --target=node --outfile=build/live-relay.integration.mjs
+node --test build/live-relay.integration.mjs
+(cd native/live-relay && go test -v ./...)
+```
+
+The lifecycle integration also compiles a native TURN test client with Go. It
+checks real allocations before and after paired-device removal, including an
+allocation held open across revocation. Keep Go on PATH for that test too.
+
+The desktop resource pattern follows t3code's
+[native resource monitor packaging](https://github.com/pingdotgg/t3code/blob/main/scripts/build-desktop-artifact.ts).
+The helper uses [Pion TURN](https://github.com/pion/turn), pinned by `go.mod`/`go.sum`.
+Validate native lifecycle/allocation on the target platform as well as the Linux
+package workflow in `act`; cross-compilation alone is not a runtime test.
+Package runs the Go allocation tests on each target OS. Network tests explicitly
+skip if that runner has no active, non-loopback private IPv4
+host admitted by the relay's subnet policy (for example, a /32 is ineligible).
+They log interface eligibility and the TCP client source to diagnose runner
+network differences. A skipped test is not relay runtime validation.
+
 ## Releases
 
 Couch ships on two channels, both published in
