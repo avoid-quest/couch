@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
@@ -10,13 +11,16 @@ import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceId
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
+import { createLiveSession } from "./live";
+import { replyDeadline } from "./reply-deadline";
+import type { LiveSelection } from "../../shared/live-input";
 
 export type ClientPlayerState = Omit<SessionState["player"], "position" | "duration">;
 export type ClientSessionState = Omit<SessionState, "player"> & { player: ClientPlayerState };
 
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
-type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = { resolve: () => void; reject: (error: Error) => void; timer?: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
 // getRandomValues works in any context, secure or not.
@@ -41,6 +45,32 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const ready = useRef(false);
   const pending = useRef(new Map<string, Pending>());
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const live = useRef<ReturnType<typeof createLiveSession> | null>(null);
+  const [localLiveSourceId, setLocalLiveSourceId] = useState<string | null>(null);
+
+  const command = useCallback((action: Action, targetDeviceId?: string) => {
+    const connection = socket.current;
+    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error("Reconnecting. Try again in a moment."));
+    }
+    return new Promise<void>((resolve, reject) => {
+      const requestId = createId();
+      const deadline = replyDeadline(action);
+      const timer = deadline === undefined ? undefined : setTimeout(() => {
+        pending.current.delete(requestId);
+        reject(new Error("No reply from Couch. Check before retrying."));
+      }, deadline);
+      pending.current.set(requestId, { resolve, reject, timer });
+      const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
+      try {
+        connection.send(JSON.stringify(message));
+      } catch (error) {
+        clearTimeout(timer);
+        pending.current.delete(requestId);
+        reject(error);
+      }
+    });
+  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
   useEffect(() => {
     setState(null);
@@ -73,7 +103,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
     const unsubscribeIdentity = subscribeDeviceIdentity(advertiseSharing);
     const reportPlayback = () => { void couchApp?.reportPlayback?.(["loading", "playing", "paused"].includes(syncedStatus) ? syncedStatus : rendererStatus).catch(() => {}); };
-    const stopPlayback = () => { textInput?.close(); textInput = undefined; stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
+    const stopPlayback = () => { textInput?.close(); textInput = undefined; live.current?.close(); live.current = null; setLocalLiveSourceId(null); stopRendering?.(); listen(false, false, "Couch"); rendererStatus = syncedStatus = "idle"; reportPlayback(); };
 
     const rejectPending = () => {
       for (const request of pending.current.values()) {
@@ -93,6 +123,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
       const origin = credentials?.origin ?? location.origin;
+      let iceServers: RTCIceServer[] = [];
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal, redirect: "error" });
@@ -133,6 +164,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           if (disposed) return;
           setIdentity(caller);
           setCredentialRejected(false);
+          const ice = await fetch(`${origin}/api/live/ice-servers`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal, redirect: "error" });
+          if (disposed) return;
+          if (ice.status === 401) { pairingRequired(); return; }
+          if (ice.status === 403) { setStatus("connection-rejected"); return; }
+          if (!ice.ok) throw new Error("Server unavailable");
+          iceServers = await ice.json() as RTCIceServer[];
         }
       } catch {
         if (!disposed) { setStatus("server-unavailable"); retryLater(); }
@@ -168,6 +205,14 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));
         });
+        live.current = createLiveSession({ iceServers, send: message => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify(message)); }, command: action => command(action), upload: (sourceId, key) => {
+          const upload = new URL("/api/live/upload", origin);
+          upload.protocol = upload.protocol === "https:" ? "wss:" : "ws:";
+          upload.searchParams.set("sourceId", sourceId);
+          upload.searchParams.set("token", credentials.token);
+          upload.searchParams.set("key", key);
+          return new WebSocket(upload);
+        }, failed: error => { if (isCurrent()) toast.error(error.message); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;
@@ -184,6 +229,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           attempt = 0;
           ready.current = true;
           observation.current = message.state;
+          live.current?.observe(message.state.liveSources ?? []);
           syncedStatus = message.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === deviceId() && output.sound))?.status ?? "idle";
           reportPlayback();
           const { position, duration, ...player } = message.state.player;
@@ -206,7 +252,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const reply = (value: object) => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "updates", requestId: message.requestId, ...value })); };
           void couchApp.update(message.action).then(state => reply({ state }), (error: Error) => reply({ error: error.message }));
         } else if (message.type === "player") {
-          play(message.command);
+          if (!live.current?.play(message.command)) play(message.command);
+        } else if (message.type === "livePeers" || message.type === "liveSignal") {
+          live.current?.receive(message);
         } else if (message.type === "sendspin") {
           listen(message.listen, message.watch, observation.current?.devices?.find(device => device.id === deviceId())?.name ?? "Couch");
         } else if (message.type === "text") {
@@ -315,28 +363,17 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     setReconnectAttempt(attempt => attempt + 1);
   }, []);
 
-  const command = useCallback((action: Action, targetDeviceId?: string) => {
-    const connection = socket.current;
-    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("Reconnecting. Try again in a moment."));
-    }
-    return new Promise<void>((resolve, reject) => {
-      const requestId = createId();
-      const timer = setTimeout(() => {
-        pending.current.delete(requestId);
-        reject(new Error("No reply from Couch. Check before retrying."));
-      }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
-      pending.current.set(requestId, { resolve, reject, timer });
-      const message: ClientMessage = { type: "command", requestId, action, ...(targetDeviceId ? { targetDeviceId } : {}) };
-      try {
-        connection.send(JSON.stringify(message));
-      } catch (error) {
-        clearTimeout(timer);
-        pending.current.delete(requestId);
-        reject(error);
-      }
-    });
-  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  const startLive = useCallback((selection: LiveSelection) => {
+    if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before sharing a live input."));
+    return live.current.start(selection);
+  }, []);
+  const liveAudioInputs = useCallback(() => {
+    if (!ready.current || !live.current) return Promise.reject(new Error("Reconnect before choosing an audio input."));
+    return live.current.audioInputs();
+  }, []);
+  const endLive = useCallback(() => live.current?.end() ?? Promise.resolve(), []);
 
-  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
+
+
+  return { clock: current && connectionStatus === "connected" ? clock : emptyPlaybackClock, readObservation, state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect, startLive, endLive, liveAudioInputs, localLiveSourceId: current ? localLiveSourceId : null };
 }

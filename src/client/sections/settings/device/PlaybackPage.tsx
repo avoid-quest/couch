@@ -30,7 +30,7 @@ export function PlaybackPage() {
         {profile && preferences && credentials && <PlaybackPreferences key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={run} />}
       </SettingsSection>
       {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
-      {!nativeHost && screenWakeLock.error && <Alert><AlertDescription>{screenWakeLock.error}</AlertDescription></Alert>}
+      {!nativeHost && screenWakeLock.error && <Alert variant="destructive"><AlertDescription>{screenWakeLock.error}</AlertDescription></Alert>}
     </SettingsLayout>
   );
 }

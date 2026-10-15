@@ -109,11 +109,11 @@ test("output controls agree with Core for own moves and foreign private replacem
     // Solo moves the whole destination and requires the current item to have started.
     f.host.socket.send(JSON.stringify({ type: "player", state: { ...f.host.state.player, status: "playing", duration: 100, seekable: true, speed: 1, buffering: false } }));
     await until(() => f.actor.state.player.status === "playing");
-    await check("Solo Actor", { type: "solo", deviceId: f.actorId }, true);
+    await check("Only on Actor", { type: "solo", deviceId: f.actorId }, true);
     assert.deepEqual(f.actor.state.outputs, [{ deviceId: f.actorId, picture: true, sound: true, local: true }]);
 
     await f.actor.command({ type: "sharing", sharing: { audio: false, video: false } });
-    for (const label of ["Actor volume", "Actor picture", "Mute Actor", "Solo Actor"]) {
+    for (const label of ["Actor volume", "Actor picture", "Mute Actor", "Only on Actor"]) {
       const props = control(render(), label); assert.ok(props, label); assert.equal(!!props.disabled, false, label);
     }
     await check("Actor volume", { type: "output", deviceId: f.actorId, level: 40 }, true);
@@ -123,7 +123,7 @@ test("output controls agree with Core for own moves and foreign private replacem
     await until(() => f.actor.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === otherId && output.picture)) === true);
     const foreignBefore = f.actor.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === otherId));
     await check("Other volume", { type: "output", deviceId: otherId, level: 45 }, false);
-    await check("Solo Other", { type: "solo", deviceId: otherId }, false);
+    await check("Only on Other", { type: "solo", deviceId: otherId }, false);
     assert.deepEqual(f.actor.state.playbacks?.find(playback => playback.id === foreignBefore?.id), foreignBefore);
     await check("Mute Other", { type: "mute", deviceId: otherId, muted: true }, true);
     await check("Other picture", { type: "output", deviceId: otherId, picture: true }, false);
@@ -134,13 +134,13 @@ test("output controls agree with Core for own moves and foreign private replacem
     await f.other.command({ type: "output", deviceId: otherId, picture: true });
     await until(() => f.actor.state.outputs?.some(output => output.deviceId === otherId && output.picture) === true);
     await check("Other volume", { type: "output", deviceId: otherId, level: 35 }, true);
-    await check("Solo Other", { type: "solo", deviceId: otherId }, false);
+    await check("Only on Other", { type: "solo", deviceId: otherId }, false);
     await f.other.command({ type: "sharing", sharing: { audio: false, video: false } });
     await until(() => f.actor.state.devices?.find(device => device.id === otherId)?.sharing?.audio === false);
     await check("Other volume", { type: "output", deviceId: otherId, level: 45 }, false);
     f.other.socket.terminate();
     await until(() => f.actor.state.devices?.find(device => device.id === otherId)?.online === false);
-    for (const label of ["Other volume", "Other picture", "Mute Other", "Solo Other"]) assert.equal(control(render(), label)?.disabled, true, label);
+    for (const label of ["Other volume", "Other picture", "Mute Other", "Only on Other"]) assert.equal(control(render(), label)?.disabled, true, label);
   } finally { await f.close(); }
 });
 

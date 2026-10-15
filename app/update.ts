@@ -1,18 +1,11 @@
 import { app, Notification } from "electron";
 import updater from "electron-updater";
-import { execFile, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { pipeline } from "node:stream/promises";
+import { execFile } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { isUpdateChannel, isUpdateVersion, parseUpdateOutcome, validateUpdateAction, type UpdateChannel, type UpdateOutcome, type UpdateState } from "../src/shared/updates";
 import { appDiagnostic, logAppError } from "./diagnostics";
 
-// package.json build.publish: the public repo electron-updater reads.
-const releases = "https://github.com/avoid-quest/couch/releases/download";
 const every = 4 * 60 * 60 * 1000;
 // The channel this build was released on (scripts/package.ts).
 const own: UpdateChannel = /-preview\.\d+$/.test(app.getVersion()) ? "preview" : "latest";
@@ -27,10 +20,9 @@ type Options = {
 };
 
 // Checks at start and every 4 hours on the chosen channel, the build's own by
-// default. electron-updater downloads and installs on Windows and Linux. On
-// macOS it installs through Squirrel.Mac, which only updates signed apps, and
-// Couch is unsigned, so there Couch swaps its own bundle when it quits, as the
-// Tauri app did. The TV runs as an account that can't install packages: root's
+// default. electron-updater downloads and installs, through Squirrel.Mac on
+// macOS, which takes only builds signed like the running one (docs/ci.md).
+// The TV runs as an account that can't install packages: root's
 // couch-update.timer installs overnight while nothing plays, and Restart to
 // update starts couch-update@<version>.service (docs/native-tv.md).
 export function startUpdates({ channelPath, tv, onState }: Options) {
@@ -41,7 +33,6 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     warn: message => console.warn(appDiagnostic("update", "warning", message)),
     error: message => logAppError("update", message),
   };
-  const mac = process.platform === "darwin";
   // Keep a ready installer until it is used; a replacement download clears
   // electron-updater's pending cache even when that download fails.
   autoUpdater.autoDownload = false;
@@ -72,11 +63,8 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     setInterval(() => void automatic(), 10_000).unref();
   }
 
-  let bundle: string | null = null;
-  let relaunch = false;
   let notified: string | null = null;
   const ready = (version: string) => {
-    autoUpdater.autoInstallOnAppQuit = !mac && !tv;
     set({ status: "ready", available: version, progress: null });
     if (tv || notified === version) return;
     notified = version;
@@ -87,7 +75,6 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
   autoUpdater.on("error", () => {
     if (state.status === "installing") set({ status: "ready", error: "Couldn't install the update. Try again later." });
   });
-  if (mac) app.once("quit", () => { if (bundle) swap(process.pid, bundle, resolve(app.getPath("exe"), "../../.."), relaunch); });
 
   function install(expected: string, delay: number) {
     if (state.status !== "ready" || state.available !== expected) throw new Error("The available update changed. Check again.");
@@ -98,11 +85,7 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
 
   async function finishInstall(version: string, delay: number) {
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-    if (!tv) {
-      relaunch = true;
-      if (mac) app.quit(); else autoUpdater.quitAndInstall(true, true);
-      return;
-    }
+    if (!tv) return autoUpdater.quitAndInstall(true, true);
     // Root installs the release and restarts the TV app.
     await promisify(execFile)("systemctl", ["start", "--no-block", `couch-update@${version}.service`]).catch(error => {
       logAppError("update", `Couldn't start the TV update: ${error.message}`);
@@ -123,17 +106,11 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
       set({ checkedAt: Date.now() });
       if (waiting && !tv) ready(waiting);
       else if (!found) return set({ status: "up-to-date", available: null });
-      else if (!mac && !tv) {
+      else if (!tv) {
         set({ status: "downloading", available: found.version, progress: 0 });
+        // Updates install on quit only if this is on when their download finishes.
+        autoUpdater.autoInstallOnAppQuit = true;
         await autoUpdater.downloadUpdate();
-      } else if (mac) {
-        set({ status: "downloading", available: found.version, progress: 0 });
-        const zip = found.files.find(file => file.url.endsWith(".zip"));
-        if (!zip) throw new Error(`${found.version} has no Mac zip`);
-        const next = await download(`${releases}/v${found.version}/${zip.url}`, zip.sha512, progress => set({ progress }));
-        if (bundle) await rm(dirname(bundle), { recursive: true, force: true });
-        bundle = next;
-        ready(found.version);
       } else ready(found.version);
     } catch (error) {
       logAppError("update", `Update failed: ${error instanceof Error ? error.message : error}`);
@@ -155,12 +132,10 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
     if (running || ["checking", "downloading", "installing"].includes(state.status)) throw new Error("Wait for the update to finish.");
     if (channel === state.channel) return state;
     writeFileSync(channelPath, channel);
+    // Squirrel.Mac still installs an update it staged; the next check corrects the channel.
     autoUpdater.autoInstallOnAppQuit = false;
-    const previous = bundle;
-    bundle = null;
     follow(channel);
     set({ channel, status: "checking", available: null, progress: null, error: null });
-    if (previous) await rm(dirname(previous), { recursive: true, force: true }).catch(error => logAppError("update", `Couldn't remove the previous update: ${error.message}`));
     void check();
     return state;
   }
@@ -182,43 +157,4 @@ export function startUpdates({ channelPath, tv, onState }: Options) {
 // KEY=value lines from the TV's update script; null when absent or garbled.
 function lastOutcome(): UpdateOutcome | null {
   try { return parseUpdateOutcome(readFileSync(statusPath, "utf8")); } catch { return null; }
-}
-
-// Downloads the zip into a temporary directory, checks it against the update
-// file's sha512 and unpacks it there, returning the app bundle inside. A failed
-// download removes the directory; after a good one, swap removes it.
-export async function download(url: string, sha512: string, onProgress?: (percent: number) => void) {
-  const dir = await mkdtemp(join(tmpdir(), "couch-update-"));
-  try {
-    const response = await fetch(url);
-    if (!response.ok || !response.body) throw new Error(`${url} answered ${response.status}`);
-    const total = Number(response.headers.get("content-length")) || 0;
-    let received = 0;
-    const hash = createHash("sha512");
-    const zip = join(dir, "update.zip");
-    await pipeline(response.body, async function* (chunks: AsyncIterable<Uint8Array>) {
-      for await (const chunk of chunks) {
-        hash.update(chunk);
-        received += chunk.length;
-        if (total) onProgress?.(Math.round(received / total * 100));
-        yield chunk;
-      }
-    }, createWriteStream(zip));
-    if (hash.digest("base64") !== sha512) throw new Error(`${url} doesn't match its sha512`);
-    await promisify(execFile)("ditto", ["-x", "-k", zip, dir]);
-    const name = (await readdir(dir)).find(entry => entry.endsWith(".app"));
-    if (!name) throw new Error(`${url} holds no app`);
-    return join(dir, name);
-  } catch (error) {
-    await rm(dir, { recursive: true, force: true });
-    throw error;
-  }
-}
-
-// A detached shell waits for Couch to exit, puts the new bundle where the
-// running one is (restoring the old one if that fails), removes the rest and,
-// when asked to relaunch, opens Couch again.
-export function swap(pid: number, bundle: string, current: string, relaunch = false) {
-  const script = 'while kill -0 "$0" 2>/dev/null; do sleep 0.5; done; dir=$(dirname "$1"); mv "$2" "$dir/old.app" && { mv "$1" "$2" || mv "$dir/old.app" "$2"; }; rm -rf "$dir"; [ -z "$3" ] || open "$2"';
-  spawn("/bin/sh", ["-c", script, String(pid), bundle, current, relaunch ? "1" : ""], { detached: true, stdio: "ignore" }).unref();
 }

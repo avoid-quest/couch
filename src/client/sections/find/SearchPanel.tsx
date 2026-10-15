@@ -25,6 +25,7 @@ import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Progress } from "@/components/ui/progress";
 import { isTvPresentation } from "@/session/native-context";
+import { useLiveSourceHits } from "./useLiveSourceHits";
 
 export type Props = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
@@ -40,7 +41,7 @@ export type Props = {
 type Entry = [source: string, summary: SearchResultSummary];
 
 // Sources in the order their results interleave; the rest are searched too.
-const sourceOrder = ["YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "123MoviesFree"];
+const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "123MoviesFree"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 const isLink = (value: string) => {
   try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
@@ -69,7 +70,9 @@ export function SearchPanel(props: Props) {
   }, [props.active]);
   const [localSearch, setSearch] = useState({ query: "", attempt: 0 });
   const search = { ...localSearch, query: props.searchState?.query ?? localSearch.query };
-  const [summaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
+  const [remoteSummaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
+  const liveHits = useLiveSourceHits(search.query);
+  const summaries = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Shared sources": { count: liveHits.length, hits: liveHits, facets: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
   const resultsKey = JSON.stringify([search.query, props.origin, props.token]);
   const [seenResults, setSeenResults] = useState(resultsKey);
   if (resultsKey !== seenResults) { setSeenResults(resultsKey); setSummaries({}); }
@@ -189,11 +192,11 @@ export function BrowseActions({ title, actions }: { title: string; actions: Sear
   const { devices, on } = usePlayOn();
   const play = actions.find(action => action.label === "Play" || action.label === "Resume");
   // Play on waits for a second online Device, so it alone doesn't open an empty menu.
-  const more = actions.filter(action => action !== play && (!action.playOn || devices.length));
+  const more = actions.filter(action => action !== play && (!action.playOn || devices.length > 0));
   return <>
     {play && <Button variant="ghost" size="icon" aria-label={on(`${play.label} ${title}`)} title={on(play.label)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4 fill-current" /></Button>}
     {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
+      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>}
   </>;
 }

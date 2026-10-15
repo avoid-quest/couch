@@ -4,11 +4,12 @@ import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./viewing";
 import type { TvAppearance } from "./appearance";
 import type { DeviceSharing } from "./device-sharing";
+import type { LivePeer, LiveSignalMessage, LiveSource } from "./live-input";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
 export type PlaybackCollection = MediaCollection;
-export type QueueEntry = { subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
+export type QueueEntry = { subtitle?: string; description?: string; id: string; title: string; source: string; thumbnail?: string; duration?: number; live?: boolean; liveSourceId?: string; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor; collection?: PlaybackCollection };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
 export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; autoplay?: boolean };
@@ -39,11 +40,13 @@ export type PlayerState = {
 };
 
 // A Device's picture and sound in one Playback (#644 ticket 9); the sound plays at the Device's own
-// volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds,
-// present while it is connected (ticket 10).
-export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; local?: boolean };
+// volume attenuated by the Playback's mixTrim. delay is the speaker's own Sendspin delay in milliseconds as it
+// last reported it (ticket 10); delayActive while its sound plays in sync with other devices, when delay applies.
+export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean };
+// choosing: its shared source waits for Where it plays; it counts up with each request to choose.
+// held: its publisher's output, left out while its own capture plays and returning after it.
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 
@@ -66,6 +69,7 @@ export type SessionState = {
   outputs?: Output[];
   playbacks?: PlaybackSummary[];
   devices?: DeviceSummary[];
+  liveSources?: LiveSource[];
   activity?: { id: string; actor: PlaybackActor; text: string };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
@@ -86,6 +90,9 @@ export type SessionState = {
 };
 
 export type Action =
+  | { type: "publishLive"; sourceId: string; uploadToken: string; kind: LiveSource["kind"]; audio: boolean; video: boolean; name?: string }
+  | { type: "endLive"; sourceId: string }
+  | { type: "playLive"; sourceId: string; deviceId?: string; playNow?: boolean; placement?: "next" }
   | { type: "sharing"; sharing: DeviceSharing }
   | { type: "control"; deviceId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
@@ -129,6 +136,8 @@ export type PlayerMessage = { type: "player"; state: PlayerState };
 export type UpdateReply = { type: "updates"; requestId: string; state?: import("./app-bridge").UpdateState; error?: string };
 export type PlaybackClock = Pick<PlayerState, "playbackId" | "position" | "duration">;
 export type ServerMessage =
+  | LiveSignalMessage
+  | { type: "livePeers"; sourceId: string; peers: LivePeer[] }
   | { type: "updates"; requestId: string; action: import("./app-bridge").UpdateAction }
   | ({ type: "clock" } & PlaybackClock)
   | { type: "state"; state: SessionState }
@@ -149,7 +158,7 @@ export type PlaybackCommand =
   // mpegts: raw MPEG-TS for mpegts.js. mpv: Chromium can't decode it, so Core's own mpv plays it (#644 ticket 1).
   // hls: Pass-through found an HLS playlist, which hls.js plays where the engine can't.
   // audioTrack, subtitleTrack and subtitleDelay carry the chosen tracks when playback moves to another Device (#644 ticket 9).
-  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow }
+  | { type: "load"; playbackId: string; source: string; audioSource?: string; startPosition?: number; paused?: boolean; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; eventStart?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; audioTrack?: number; subtitleTrack?: number; subtitleDelay?: number; follow?: Follow; liveSourceId?: string; livePeerId?: string; liveOutput?: { picture: boolean; sound: boolean; volume: number } }
   | { type: "follow"; playbackId: string; follow: Follow | null }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }

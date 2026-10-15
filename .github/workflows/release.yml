@@ -104,6 +104,7 @@ jobs:
     permissions:
       contents: write
     uses: ./.github/workflows/package.yml
+    secrets: inherit
     with:
       version: ${{ needs.preflight.outputs.version }}
       ref: ${{ needs.preflight.outputs.ref }}

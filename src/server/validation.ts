@@ -1,3 +1,4 @@
+import type { LiveFailedMessage, LiveSignalMessage } from "../shared/live-input";
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
@@ -21,7 +22,7 @@ const collectionLink = (value: unknown, provider: unknown) => object(value) && h
   && typeof value.title === "string" && value.title.length > 0 && value.title.length <= 300 && !/[\u0000-\u001f\u007f]/.test(value.title);
 
 function validEntry(value: unknown): value is QueueEntry {
-  if (!object(value) || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;
+  if (!object(value) || value.liveSourceId !== undefined || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;
   if (value.kind !== undefined && (value.kind !== "radio" || !httpUrl(value.source))) return false;
   try {
     const url = new URL(value.source.startsWith("web:") ? value.source.slice(4) : value.source);
@@ -33,6 +34,12 @@ function validEntry(value: unknown): value is QueueEntry {
 function validAction(value: unknown): value is Action {
   if (!object(value)) return false;
   switch (value.type) {
+    case "publishLive": return id(value.sourceId) && typeof value.uploadToken === "string" && /^[a-f0-9]{64}$/.test(value.uploadToken) && typeof value.kind === "string" && ["microphone", "system-audio", "screen"].includes(value.kind)
+      && typeof value.audio === "boolean" && typeof value.video === "boolean"
+      && (value.kind === "screen" ? value.video === true : value.audio === true && value.video === false)
+      && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
+    case "endLive": return id(value.sourceId);
+    case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow });
     case "control": return id(value.deviceId);
     case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
     case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
@@ -80,6 +87,30 @@ function validAction(value: unknown): value is Action {
   }
 }
 
+export function parseLiveSignal(message: string): LiveSignalMessage | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "liveSignal" || !id(value.peerId) || !object(value.signal)) return null;
+  const { description, candidate } = value.signal;
+  if ((description === undefined) === (candidate === undefined)) return null;
+  if (description !== undefined && (!object(description) || typeof description.type !== "string" || !["offer", "answer"].includes(description.type) || typeof description.sdp !== "string" || description.sdp.length > 32_768)) return null;
+  if (candidate !== undefined && candidate !== null && (!object(candidate) || typeof candidate.candidate !== "string" || candidate.candidate.length > 4096
+    || candidate.sdpMid !== undefined && candidate.sdpMid !== null && (typeof candidate.sdpMid !== "string" || candidate.sdpMid.length > 256)
+    || candidate.sdpMLineIndex !== undefined && candidate.sdpMLineIndex !== null && (!number(candidate.sdpMLineIndex, 255) || !Number.isInteger(candidate.sdpMLineIndex))
+    || candidate.usernameFragment !== undefined && candidate.usernameFragment !== null && (typeof candidate.usernameFragment !== "string" || candidate.usernameFragment.length > 256))) return null;
+  // Rebuild the envelope so unvalidated sibling fields are never forwarded.
+  const signal = description !== undefined ? { description: { type: description.type as "offer" | "answer", sdp: description.sdp as string } }
+    : { candidate: candidate === null ? null : { candidate: candidate!.candidate as string, ...(candidate!.sdpMid !== undefined ? { sdpMid: candidate!.sdpMid as string | null } : {}), ...(candidate!.sdpMLineIndex !== undefined ? { sdpMLineIndex: candidate!.sdpMLineIndex as number | null } : {}), ...(candidate!.usernameFragment !== undefined ? { usernameFragment: candidate!.usernameFragment as string | null } : {}) } };
+  return { type: "liveSignal", peerId: value.peerId, signal };
+}
+
+export function parseLiveFailed(message: string): LiveFailedMessage | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "liveFailed" || !id(value.peerId) || typeof value.error !== "string") return null;
+  return { type: "liveFailed", peerId: value.peerId, error: safePlaybackError(value.error) };
+}
+
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const playerStatuses = ["idle", "loading", "playing", "paused", "ended", "error"];
 const mediaTrack = (value: unknown): value is MediaTrack => object(value) && id(value.id) && Number.isInteger(value.index) && ["video", "audio", "subtitle"].includes(value.kind as string)
@@ -89,9 +120,9 @@ export function parsePlayer(message: string): PlayerState | null {
   let value: unknown;
   try { value = JSON.parse(message); } catch { return null; }
   if (!object(value) || value.type !== "player" || !object(value.state)) return null;
-  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed, tracks = [], audioDelay = 0, subtitleDelay = 0 } = value.state;
+  const { playbackId, status, buffering, position, duration, volume, seekable, error, speed, tracks = [], audioDelay, subtitleDelay = 0 } = value.state;
   if (!(playbackId === null || id(playbackId)) || !playerStatuses.includes(status as string) || typeof buffering !== "boolean" || !finite(position) || !(duration === null || finite(duration))
-    || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed) || !finite(audioDelay) || !finite(subtitleDelay)
+    || !finite(volume) || typeof seekable !== "boolean" || !(error === null || typeof error === "string") || !finite(speed) || audioDelay !== undefined && !finite(audioDelay) || !finite(subtitleDelay)
     || !Array.isArray(tracks) || tracks.length > 64 || !tracks.every(mediaTrack)) return null;
   return { playbackId, status: status as PlayerState["status"], buffering, position, duration, volume, seekable, error: error === null ? null : safePlaybackError(error), speed, tracks: tracks.map(({ id, index, kind, label, language, selected }) => ({ id, index, kind, label: label.slice(0, 120), language: language.slice(0, 35), selected })), audioDelay, subtitleDelay };
 }

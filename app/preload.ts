@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld("couchApp", {
   setTvPresentation: enabled => call("tv-presentation", enabled),
   deviceName: name => call("device-name", name),
   deviceSharing: sharing => call("device-sharing", sharing),
+  captureSources: () => call("capture-sources"),
+  prepareCapture: selection => call("prepare-capture", selection),
+  captureAccess: kind => call("capture-access", kind),
+  openCaptureSettings: kind => call("capture-settings", kind),
   mode: () => call("mode"),
   choose: (mode, address, confirm) => call("choose", mode, address, confirm),
   forget: address => call("forget", address),
@@ -32,6 +36,11 @@ contextBridge.exposeInMainWorld("couchApp", {
     const handler = (_event: unknown, urls: string[]) => listener(urls);
     ipcRenderer.on("couch:addresses", handler);
     return () => { ipcRenderer.off("couch:addresses", handler); };
+  },
+  onWindowClosed: listener => {
+    const handler = () => listener();
+    ipcRenderer.on("couch:window-closed", handler);
+    return () => { ipcRenderer.off("couch:window-closed", handler); };
   },
   updates: () => update({ op: "read" }),
   update,

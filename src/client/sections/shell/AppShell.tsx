@@ -10,6 +10,7 @@ import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
+import type { SourceKind } from "@/components/sourceTypes";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { MiniPlayer } from "./MiniPlayer";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
@@ -33,6 +34,7 @@ import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 import { PairForm } from "./PairForm";
 import { Onboarding } from "./Onboarding";
 import { StatusLine } from "./StatusLine";
+import { LiveSharingStatus } from "./LiveSharingStatus";
 import { useNativeWindowTitle } from "@/native-window-title";
 import { useMediaSession } from "@/session/media-session";
 import { hear, onBlocked } from "@/session/renderer";
@@ -67,7 +69,7 @@ function useShellValue() {
     if (section === "Now" && !playerTarget && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
   }, [section, playerTarget?.id, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [setupSource, setSetupSource] = useState<"radio" | "iptv" | "streaming-community">("iptv");
+  const [setupSource, setSetupSource] = useState<SourceKind>("iptv");
   const openSources = (source: typeof setupSource = "iptv") => { setSetupSource(source); setSourcesOpen(true); };
   const installationId = credentials?.installationId ?? details?.installationId;
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
@@ -322,6 +324,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               </Button>)}
             </nav>}
             <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
+              <LiveSharingStatus />
               {tvPresentation ? <span className="max-w-64 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
               <span role="status" className="sr-only">{statusLabel}</span>
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}

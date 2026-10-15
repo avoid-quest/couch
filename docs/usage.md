@@ -52,8 +52,8 @@ a Mac.
   host and no H.264 alternative is available. Remote-only HEVC tries that
   browser's decoder; a decoding failure never adds or starts the host.
   Adding the Linux host to HEVC-only playback takes the same native fallback,
-  leaving only the host. Turning off both channels of a pending Solo destination
-  cancels that move; the original device keeps playing and Solo can be tried again.
+  leaving only the host. Turning off both channels of a pending Only here destination
+  cancels that move; the original device keeps playing and Only here can be tried again.
   Actual HEVC support depends on the browser build and device.
 - Public Vimeo items without DRM can play through yt-dlp; items requiring DRM
   or sign-in cannot. Other sites requiring DRM or sign-in cannot play either. Live TV
@@ -127,9 +127,9 @@ Download Couch, or Couch Preview, from
 dmg on a Mac, the exe on Windows, the AppImage or deb on Linux. After that it
 updates itself.
 
-Couch isn't signed by Apple, so the first time macOS says it "is damaged" or
-"can't be opened". Move it to Applications, then run this once in Terminal
-(`Couch Preview.app` for the preview):
+Couch isn't notarized by Apple, so the first time macOS won't open it. Move it
+to Applications, then run this once in Terminal (`Couch Preview.app` for the
+preview):
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Couch.app
