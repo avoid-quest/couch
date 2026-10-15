@@ -343,8 +343,12 @@ export async function createHub(options: HubOptions) {
   // With no receiver left to report, the playback shows why.
   const unavailable = (playback: Playback, error: string) => { const { player } = stateOf(playback); if (active(player.status)) playback.session.observe({ ...player, status: "error", buffering: false, error }); };
   const buffer = (source: { id: string; audio: boolean; video: boolean }, signal?: AbortSignal) => {
-    // A stream that ended while starting asks for nothing.
-    if (!liveStreams.has(source.id)) void liveStreams.start(source.id, source).then(() => { if (liveStreams.has(source.id)) live.upload(source.id, true); }, () => {});
+    // Demand may disappear during startup, before the pending broadcast cleans up.
+    if (!liveStreams.has(source.id)) void liveStreams.start(source.id, source).then(() => {
+      if (!liveStreams.has(source.id)) return;
+      if (!buffered(source.id)) return liveStreams.end(source.id);
+      live.upload(source.id, true);
+    }, () => {});
     return liveStreams.ready(source.id, signal);
   };
   const newGroup = (playback: Playback) => sendspin.group(playback.id, player => { playback.heard = player; observeSynced(playback); });
