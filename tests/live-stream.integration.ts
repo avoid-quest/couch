@@ -17,6 +17,13 @@ const decodedFrames = (input: Buffer) => {
   assert.equal(decoded.status, 0, String(decoded.stderr));
   return decoded.stdout.length / 4;
 };
+const videoPts = (input: Buffer) => {
+  const probe = spawnSync(ffmpeg, ["-hide_banner", "-copyts", "-i", "pipe:0", "-map", "0:v:0", "-vf", "showinfo", "-frames:v", "1", "-f", "null", "-"], { input });
+  assert.equal(probe.status, 0, String(probe.stderr));
+  const match = /Parsed_showinfo[^\n]+n:\s*0\s+pts:\s*\d+\s+pts_time:([\d.]+)/.exec(String(probe.stderr));
+  assert.ok(match, "the picture must retain its MPEG-TS presentation clock");
+  return Number(match[1]);
+};
 async function until(check: () => Promise<boolean>, timeout = 10_000) {
   const deadline = Date.now() + timeout;
   while (!await check()) { if (Date.now() > deadline) throw new Error("Live input did not reach the expected state."); await new Promise(resolve => setTimeout(resolve, 25)); }
@@ -25,7 +32,7 @@ async function until(check: () => Promise<boolean>, timeout = 10_000) {
 async function fixture(t: TestContext, executable?: () => Promise<string>) {
   const directory = await mkdtemp(join(tmpdir(), "couch-live-stream-test-"));
   const marker = join(directory, "encoder"), wrapper = join(directory, "ffmpeg");
-  await writeFile(wrapper, `#!/bin/sh\nfor couch_arg do couch_last="$couch_arg"; done\nprintf '%s\\n%s\\n' "$$" "$couch_last" > ${quote(marker)}\nexec ${quote(ffmpeg)} "$@"\n`, { mode: 0o755 });
+  await writeFile(wrapper, `#!/bin/sh\nprintf '%s\\n%s\\n' "$$" "$PWD/av/stream.m3u8" > ${quote(marker)}\nexec ${quote(ffmpeg)} "$@"\n`, { mode: 0o755 });
   const failures: string[] = [];
   const streams = createLiveStreams({ ffmpeg: executable ?? (async () => wrapper), failed: (_sourceId, error) => failures.push(error) });
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: 65_536 });
@@ -85,6 +92,18 @@ test("one continuous upload becomes bounded HLS with real audio and video before
   assert.equal(decodedFrames(bytes), 10, "Lower capture rates must not be raised to the 30 fps maximum");
   const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes });
   assert.equal(decoded.status, 0, String(decoded.stderr));
+  for (const rendition of ["audio", "video"] as const) {
+    const filtered = await (await f.streams.response("screen", "stream.m3u8", rendition)).text();
+    const name = filtered.split("\n").filter(line => line.endsWith(".ts")).at(-1)!;
+    const input = Buffer.from(await (await f.streams.response("screen", name, rendition)).arrayBuffer());
+    const included = rendition === "audio" ? "a" : "v", excluded = rendition === "audio" ? "v" : "a";
+    assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", `0:${included}:0`, "-f", "null", "-"], { input }).status, 0);
+    assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", `0:${excluded}:0`, "-f", "null", "-"], { input }).status, 0, `${rendition} output must omit the unselected captured track`);
+    if (rendition === "video") {
+      const combined = Buffer.from(await (await f.streams.response("screen", name)).arrayBuffer());
+      assert.equal(videoPts(input), videoPts(combined), "In sync picture must keep Core's exact source PTS");
+    }
+  }
   assert.deepEqual(f.failures, []);
   const [pid, path] = (await readFile(f.marker, "utf8")).trim().split("\n");
   f.streams.end("screen");
@@ -101,11 +120,14 @@ test("audio-only input uses the same HLS path without a video track", { skip: !h
   const uploader = await f.upload("audio");
   for (let at = 0; at < recording.length; at += 16_384) uploader.client.send(recording.subarray(at, at + 16_384));
   await f.streams.ready("audio", AbortSignal.timeout(10_000));
-  const playlist = await (await f.streams.response("audio", "stream.m3u8")).text();
-  const name = playlist.split("\n").find(line => line.endsWith(".ts"))!;
-  const bytes = Buffer.from(await (await f.streams.response("audio", name)).arrayBuffer());
-  assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes }).status, 0);
-  assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"], { input: bytes }).status, 0);
+  for (const rendition of ["av", "audio"] as const) {
+    const playlist = await (await f.streams.response("audio", "stream.m3u8", rendition)).text();
+    const name = playlist.split("\n").find(line => line.endsWith(".ts"))!;
+    const bytes = Buffer.from(await (await f.streams.response("audio", name, rendition)).arrayBuffer());
+    assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"], { input: bytes }).status, 0);
+    assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"], { input: bytes }).status, 0);
+  }
+  assert.equal((await f.streams.response("audio", "stream.m3u8", "video")).status, 404);
 });
 
 test("misleading WebM frame-rate metadata cannot multiply captured frames", { skip: !hasFfmpeg, timeout: 15_000 }, async t => {
@@ -173,6 +195,9 @@ test("picture-only input includes a silent clock track for shared playback", { s
   assert.ok(audio.stdout.length > 0);
   assert.equal(audio.stdout.some(value => value !== 0), false);
   assert.equal(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "null", "-"], { input: bytes }).status, 0);
+  const picture = Buffer.from(await (await f.streams.response("picture", name, "video")).arrayBuffer());
+  assert.equal(videoPts(picture), videoPts(bytes), "picture-only capture keeps Core's silent reference clock");
+  assert.notEqual(spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "null", "-"], { input: picture }).status, 0);
   assert.deepEqual(f.failures, []);
 });
 
@@ -181,9 +206,15 @@ test("ending while the encoder helper is pending cannot start a process later", 
   const f = await fixture(t, () => pending.promise);
   const start = f.streams.start("canceled", { audio: true, video: false });
   const rejected = assert.rejects(start, /stopped/);
+  const controller = new AbortController();
+  const canceled = assert.rejects(f.streams.ready("canceled", controller.signal), /receiver left/);
+  const waiting = assert.rejects(f.streams.ready("canceled"), /stopped/);
+  controller.abort(new Error("receiver left"));
+  await canceled;
+  assert.equal(f.streams.has("canceled"), true, "one caller's cancellation leaves the shared stream intact");
   f.streams.end("canceled");
+  await Promise.all([rejected, waiting]);
   pending.resolve(ffmpeg);
-  await rejected;
   await f.streams.close();
   await assert.rejects(access(f.marker));
   assert.deepEqual(f.failures, []);
@@ -201,7 +232,9 @@ test("an input that sends no bytes expires and reports an upload error", { skip:
   const f = await fixture(t);
   await f.streams.start("silent", { audio: true, video: false });
   const uploader = await f.upload("silent");
+  const waiting = assert.rejects(f.streams.ready("silent"), /stopped sending media/);
   t.mock.timers.tick(30_001);
+  await waiting;
   await new Promise(resolve => setTimeout(resolve, 350));
   assert.equal(f.failures.length, 1);
   assert.match(f.failures[0]!, /stopped sending media/);

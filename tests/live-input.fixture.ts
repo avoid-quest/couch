@@ -28,15 +28,17 @@ const path = require('node:path');
 if (process.argv.includes('-version')) { console.log('ffmpeg version 7.0'); process.exit(0); }
 // Each capture chunk becomes the next segment; the playlist lists the newest four.
 if (process.argv.includes('pipe:0')) {
-  const playlist = process.argv.at(-1);
+  const playlists = process.argv.at(-1).split('|').map(output => output.slice(output.indexOf(']') + 1));
   let n = 0;
   process.stdin.on('data', () => {
     const name = index => 'segment-' + String(index).padStart(9, '0') + '.ts', first = Math.max(0, n - 3);
-    fs.writeFileSync(path.join(path.dirname(playlist), name(n)), 'fixture segment');
     const lines = ['#EXTM3U', '#EXT-X-TARGETDURATION:1', '#EXT-X-MEDIA-SEQUENCE:' + first];
     for (let index = first; index <= n; index++) lines.push('#EXTINF:1,', name(index));
-    fs.writeFileSync(playlist + '.tmp', lines.join('\\n') + '\\n');
-    fs.renameSync(playlist + '.tmp', playlist);
+    for (const playlist of playlists) {
+      fs.writeFileSync(path.join(path.dirname(playlist), name(n)), 'fixture segment');
+      fs.writeFileSync(playlist + '.tmp', lines.join('\\n') + '\\n');
+      fs.renameSync(playlist + '.tmp', playlist);
+    }
     n++;
   });
 }
@@ -81,7 +83,28 @@ setInterval(() => {}, 1000);
   const publisher = await connect(0), receiver = await connect(1);
   const uploadUrl = (sourceId: string, key: string, device = 0) => `${hub.origin.replace("http:", "ws:")}/api/live/upload?${new URLSearchParams({ sourceId, key, token: device === -1 ? hostIdentity.token : identities[device]!.token })}`;
   const uploadToken = "1".repeat(64);
-  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl,
+  // Like live.ts, a publishing window records and uploads only while Core asks for its source (livePeers upload).
+  const uploads = new Map<string, WebSocket>();
+  const answerUploads = (client: { socket: WebSocket }, device = 0) => {
+    const mine = new Set<WebSocket>();
+    client.socket.on("message", data => {
+      const message = JSON.parse(String(data)) as ServerMessage;
+      if (message.type !== "livePeers") return;
+      const open = uploads.get(message.sourceId);
+      if (message.upload && !open) {
+        const upload = new WebSocket(uploadUrl(message.sourceId, uploadToken, device), { headers: { Origin: hub.origin } });
+        sockets.push(upload);
+        mine.add(upload);
+        uploads.set(message.sourceId, upload);
+        upload.once("open", () => upload.send(Buffer.from("fixture capture")));
+        upload.once("close", () => { if (uploads.get(message.sourceId) === upload) uploads.delete(message.sourceId); });
+        upload.on("error", () => {});
+      } else if (!message.upload && open) { uploads.delete(message.sourceId); open.close(); }
+    });
+    return { terminate: () => { for (const upload of mine) upload.terminate(); } };
+  };
+  answerUploads(publisher);
+  return { get hub() { return hub; }, publisher, receiver, connect, databasePath, uploadToken, uploadUrl, uploads, answerUploads,
     // Core restarts on the same database; every socket and speaker reconnects itself.
     restart: async () => {
       await Promise.all(speakers.splice(0).map(speaker => speaker.disconnect()));
@@ -91,14 +114,6 @@ setInterval(() => {}, 1000);
     },
     publish: async (sourceId: string, kind: "screen" | "system-audio" | "microphone" = "screen", audio = true) => {
       assert.equal((await publisher.command({ type: "publishLive", sourceId, uploadToken, kind, audio, video: kind === "screen" })).ok, true);
-      const upload = new WebSocket(uploadUrl(sourceId, uploadToken), { headers: { Origin: hub.origin } });
-      sockets.push(upload);
-      await new Promise<void>((resolve, reject) => {
-        upload.once("error", reject);
-        upload.once("open", () => upload.send(Buffer.from("fixture capture")));
-        upload.on("message", data => { if (JSON.parse(String(data)).type === "ready") resolve(); });
-      });
-      return upload;
     },
     speaker: async (index: number) => {
       const identity = identities[index]!, delays: number[] = [];

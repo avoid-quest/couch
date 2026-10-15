@@ -100,6 +100,11 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
           <span className="w-[3ch] shrink-0 text-right tabular-nums">{Math.round(trim)}</span>
         </div>
       </Item>
+      {/* A live input plays directly on each device unless In sync is chosen (docs/adr/0001). */}
+      {source && (outputs.length > 1 || playback?.inSync) && <Item role="listitem" className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-none border-0 border-t px-0 py-4 md:gap-x-6">
+        <div><p className="text-base font-medium">In sync</p><p className="text-sm text-muted-foreground">{playback?.inSync ? "Devices play together, a few seconds behind the source." : "Each device plays as soon as it receives the source, so devices can be slightly apart."}</p></div>
+        <Toggle variant="outline" pressed={!!playback?.inSync} aria-label="Play in sync" onPressedChange={inSync => void run({ type: "inSync", inSync })} className={inverts}>In sync</Toggle>
+      </Item>}
         {devices.map(device => {
           const current = output(device.id);
           // Ownership permits local controls even while viewing another playback.
@@ -123,6 +128,8 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
               <p className="flex items-start gap-2 text-base font-medium"><DeviceIcon {...signalOf(state, device.id)} className="mt-1" /><span data-output-name className="min-w-0 [overflow-wrap:anywhere]">{device.name}</span></p>
               <p data-output-status className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{status}</p>
               {capturing && <p className="text-sm text-muted-foreground">It plays on the devices you choose here.</p>}
+              {current?.buffered && <p className="text-sm text-muted-foreground">Buffered: it couldn't connect directly to this source, so it plays a few seconds behind.</p>}
+              {current?.error && <p className="text-sm text-destructive">It couldn't connect directly to this source, and Couch's buffered stream failed: {current.error}</p>}
               {privateOutput && <p className="text-sm text-muted-foreground">{privatePicture && privateSound ? "Private" : privatePicture ? "Private picture" : "Private sound"}. {mine ? "Only you can change it." : "Only this device can change it."}</p>}
             </div>
             {/* Pressed again it still commits: a publisher held out for its own capture would otherwise return. */}

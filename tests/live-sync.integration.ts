@@ -9,6 +9,8 @@ async function grouped(withHost = false) {
   await f.receiver.command({ type: "sharing", sharing: { audio: true, video: true } });
   await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
   await until(() => !!f.receiver.load());
+  // Live inputs play in sync only when chosen (docs/adr/0001).
+  assert.equal((await f.publisher.command({ type: "inSync", inSync: true })).ok, true);
   const delays = await f.speaker(1);
   const other = await f.connect(2, "&audio=1&video=1");
   assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
@@ -16,7 +18,7 @@ async function grouped(withHost = false) {
   return { ...f, delays, receivers: [f.receiver, other] };
 }
 
-test("a live input on multiple devices uses the normal shared sound and picture clock", { timeout: 15_000 }, async () => {
+test("a live input In sync on multiple devices uses the normal shared sound and picture clock", { timeout: 15_000 }, async () => {
   const f = await grouped(true);
   try {
     for (const receiver of f.receivers) {

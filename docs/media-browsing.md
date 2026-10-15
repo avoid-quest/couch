@@ -97,10 +97,10 @@ and saved while capture is active.
 
 A small Stop sharing action stays available throughout browsing while local
 capture is active. There is no separate capture panel on the Find landing page.
-One receiving device gets the input over WebRTC in the normal player. Across
-several devices, the input reaches the normal player as HLS; sound uses the
-existing Sendspin clock and pictures follow it, and that shared delivery buffer
-adds delay between capture and output. See [live inputs](live-inputs.md) for
+Every receiving device gets the input over WebRTC in the normal player. With
+**In sync** on in Where it plays, the input reaches the normal player as HLS
+instead; sound uses the existing Sendspin clock and pictures follow it, and that
+shared delivery buffer adds delay between capture and output. See [live inputs](live-inputs.md) for
 capture options, playback limits and physical synchronization checks.
 
 ## Stack

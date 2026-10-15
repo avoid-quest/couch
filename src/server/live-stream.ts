@@ -1,8 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket, type RawData } from "ws";
+
+export type LiveRendition = "av" | "audio" | "video";
 
 type Stream = {
   directory?: string;
@@ -24,9 +26,9 @@ type Stream = {
 const uploadLimit = 4 * 1024 * 1024;
 const timeoutMs = 30_000;
 
-// Capture enters Couch once. The resulting rolling HLS source uses the same URL
-// renderer, Sendspin audio and picture clock as a TV stream. The caller owns
-// publication authorization and gates every upload and media request.
+// Capture enters Couch once, and only while something plays it buffered. The resulting
+// rolling HLS source uses the same URL renderer, Sendspin audio and picture clock as a
+// TV stream. The caller owns publication authorization and gates every upload and media request.
 export function createLiveStreams(options: { ffmpeg: () => Promise<string>; failed?: (sourceId: string, error: string) => void }) {
   const streams = new Map<string, Stream>();
   const cleaning = new Set<Promise<void>>();
@@ -71,6 +73,14 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
         stream.directory = await mkdtemp(join(tmpdir(), "couch-live-stream-"));
         const executable = await options.ffmpeg();
         if (stream.ended) throw new Error("This input has stopped.");
+        const renditions: LiveRendition[] = source.video ? ["av", "audio", "video"] : ["av", "audio"];
+        await Promise.all(renditions.map(rendition => mkdir(join(stream.directory!, rendition))));
+        if (stream.ended) throw new Error("This input has stopped.");
+        // Tee encodes once, then muxes only the selected packets into each HLS
+        // output. Keep the encoded timestamps in every muxer so filtered picture
+        // retains the audio clock (including AAC encoder delay). Relative paths
+        // keep platform temp-directory syntax out of tee's parser.
+        const outputs = renditions.map(rendition => `[f=hls${rendition === "av" ? "" : `:select=${rendition === "audio" ? "a" : "v"}`}:avoid_negative_ts=disabled:hls_segment_options=avoid_negative_ts=disabled:hls_time=1:hls_list_size=8:hls_delete_threshold=2:hls_flags=delete_segments+independent_segments+temp_file:hls_segment_filename=${rendition}/segment-%09d.ts]${rendition}/stream.m3u8`).join("|");
         const child = stream.child = spawn(executable, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-protocol_whitelist", "pipe", "-probesize", "1000000", "-analyzeduration", "1000000", "-i", "pipe:0",
           // Picture-only inputs still need a silent reference clock for the
           // ordinary multi-device picture follower. This is not shared sound.
@@ -80,8 +90,7 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
           ...source.video ? ["-map", "0:v:0", "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-fpsmax", "30", "-threads", "2", "-force_key_frames", "expr:gte(t,n_forced*1)", "-sc_threshold", "0"] : ["-vn"],
           "-map", source.audio ? "0:a:0" : "1:a:0", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "160k", "-sn", "-dn",
           ...source.audio ? [] : ["-shortest"],
-          "-f", "hls", "-hls_time", "1", "-hls_list_size", "8", "-hls_delete_threshold", "2", "-hls_flags", "delete_segments+independent_segments+temp_file",
-          "-hls_segment_filename", join(stream.directory, "segment-%09d.ts"), join(stream.directory, "stream.m3u8")], { stdio: ["pipe", "pipe", "pipe"] });
+          "-avoid_negative_ts", "disabled", "-f", "tee", outputs], { cwd: stream.directory, stdio: ["pipe", "pipe", "pipe"] });
         stream.exited = new Promise(resolve => child.once("close", () => resolve()));
         child.stdout.resume();
         // Decoder diagnostics may contain attacker-controlled bytes; only the
@@ -100,8 +109,8 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
           if (!stream.available && Date.now() - stream.startedAt > timeoutMs) return fail(sourceId, stream, "Couch couldn't prepare this live input.");
           if (stream.available || stream.polling) return;
           stream.polling = true;
-          void readFile(join(stream.directory!, "stream.m3u8"), "utf8").then(playlist => {
-            if (stream.ended || !playlist.includes("#EXTINF:")) return;
+          void Promise.all(renditions.map(rendition => readFile(join(stream.directory!, rendition, "stream.m3u8"), "utf8"))).then(playlists => {
+            if (stream.ended || !playlists.every(playlist => playlist.includes("#EXTINF:"))) return;
             stream.available = true;
             stream.resolve();
             if (stream.socket?.readyState === WebSocket.OPEN) stream.socket.send(JSON.stringify({ type: "ready" }));
@@ -115,6 +124,13 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
         fail(sourceId, stream, "Couch couldn't start the live input encoder.");
         throw error;
       }
+    },
+    has: (sourceId: string) => streams.has(sourceId),
+    // Its first segment is playable.
+    available: (sourceId: string) => !!streams.get(sourceId)?.available,
+    fail(sourceId: string, message: string) {
+      const stream = streams.get(sourceId);
+      if (stream) fail(sourceId, stream, message);
     },
     accept(sourceId: string, socket: WebSocket) {
       const stream = streams.get(sourceId);
@@ -138,18 +154,20 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
     async ready(sourceId: string, signal?: AbortSignal) {
       const stream = streams.get(sourceId);
       if (!stream || stream.ended) throw new Error("This input has stopped.");
-      const timeout = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...signal ? [signal] : []]);
-      timeout.throwIfAborted();
+      // The stream's media deadline starts after helper provisioning. Every
+      // waiter shares it; only its caller's cancellation can end this wait early.
+      if (!signal) return stream.ready;
+      signal.throwIfAborted();
       await new Promise<void>((resolve, reject) => {
-        const abort = () => reject(timeout.reason);
-        timeout.addEventListener("abort", abort, { once: true });
-        void stream.ready.then(resolve, reject).finally(() => timeout.removeEventListener("abort", abort));
+        const abort = () => reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        void stream.ready.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
       });
     },
-    async response(sourceId: string, file: string) {
+    async response(sourceId: string, file: string, rendition: LiveRendition = "av") {
       const stream = streams.get(sourceId);
-      if (!stream?.directory || stream.ended || !/^(?:stream\.m3u8|segment-\d{9,}\.ts)$/.test(file)) return new Response(null, { status: 404 });
-      const body = await readFile(join(stream.directory, file)).catch(() => null);
+      if (!stream?.directory || stream.ended || !["av", "audio", "video"].includes(rendition) || !/^(?:stream\.m3u8|segment-\d{9,}\.ts)$/.test(file)) return new Response(null, { status: 404 });
+      const body = await readFile(join(stream.directory, rendition, file)).catch(() => null);
       if (!body || stream.ended) return new Response(null, { status: 404 });
       return new Response(body, { headers: { "Content-Type": file.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t", "Cache-Control": "no-store" } });
     },

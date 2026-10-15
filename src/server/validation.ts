@@ -1,4 +1,4 @@
-import type { LiveFailedMessage, LiveSignalMessage } from "../shared/live-input";
+import type { LiveFailedMessage, LiveSignalMessage, LiveUploadFailedMessage } from "../shared/live-input";
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
@@ -40,6 +40,7 @@ function validAction(value: unknown): value is Action {
       && (value.name === undefined || typeof value.name === "string" && value.name.trim().length > 0 && value.name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.name));
     case "endLive": return id(value.sourceId);
     case "playLive": return id(value.sourceId) && playOptions({ ...value, playNow: value.playNow === undefined ? true : value.playNow });
+    case "inSync": return typeof value.inSync === "boolean";
     case "control": return id(value.deviceId);
     case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
     case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
@@ -109,6 +110,13 @@ export function parseLiveFailed(message: string): LiveFailedMessage | null {
   try { value = JSON.parse(message); } catch { return null; }
   if (!object(value) || value.type !== "liveFailed" || !id(value.peerId) || typeof value.error !== "string") return null;
   return { type: "liveFailed", peerId: value.peerId, error: safePlaybackError(value.error) };
+}
+
+export function parseLiveUploadFailed(message: string): LiveUploadFailedMessage | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "liveUploadFailed" || !id(value.sourceId) || !id(value.uploadId) || typeof value.error !== "string") return null;
+  return { type: "liveUploadFailed", sourceId: value.sourceId, uploadId: value.uploadId, error: safePlaybackError(value.error) };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
