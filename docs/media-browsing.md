@@ -76,8 +76,8 @@ so history restores them. A source without a guide still lists its channels.
 ## Shared sources
 
 A device's live input uses the same Sources setup, Browse rows, search results
-and Play on menu as other media. Configure capture in Settings → Sources → This
-device, or open Find → Add source → This device. Capture always belongs to the
+and Play on menu as other media. Configure capture in Settings → This device → Sharing,
+or open Find → Add source → This device. Capture always belongs to the
 device running that form, including for paired users without administrator access.
 The source picker uses two columns so its four tabs fit narrow dialogs without
 overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.

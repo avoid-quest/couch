@@ -65,7 +65,7 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
 }) {
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
   let automaticNetwork: LanNetwork | null = null;
-  let pending: Promise<void> = Promise.resolve();
+  let pending: Promise<void> = Promise.resolve(), changes = 0, enabledAt = 0;
   let last = "";
   const selectedNetwork = () => {
     const interfaces = (options.interfaces ?? networkInterfaces)();
@@ -148,13 +148,16 @@ export function createLanListener<T extends { stop(): Promise<void> }>(options: 
         catch { throw new Error("Couch can't use port 80. Add Couch's port to the address."); }
       }
     }),
-    async setEnabled(value: boolean) {
-      enabled = value;
-      if (!value) await (pending = pending.catch(() => {}).then(stopAll));
-      if (value) {
-        try { await refresh(); }
-        catch (error) { enabled = false; throw error; }
-      }
+    // A disable takes effect at its turn in the queue, optionally after something it waits for,
+    // such as its own reply: refreshes queued before it keep listening, and later changes queue
+    // behind its stop. It and a failed enable clear `enabled` only if no later enable replaced them.
+    async setEnabled(value: boolean, after?: Promise<unknown>) {
+      const change = ++changes;
+      if (!value) return await (pending = pending.catch(() => {}).then(() => after).then(() => { if (enabledAt < change) enabled = false; return stopAll(); }));
+      enabled = true;
+      enabledAt = change;
+      try { await refresh(); }
+      catch (error) { if (enabledAt === change) enabled = false; throw error; }
     },
     async close() { closed = true; clearInterval(timer); clearInterval(interfaceTimer); await pending.catch(() => {}); await stopAll(); },
   };

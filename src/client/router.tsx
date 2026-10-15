@@ -5,7 +5,7 @@ import { routeTree } from "./routeTree.gen";
 // There is deliberately no application-wide credential or QueryClient singleton.
 export const router = createRouter({
   routeTree,
-  context: { queryClient: undefined!, identity: null, connected: false },
+  context: { queryClient: undefined!, identity: null, localHost: false, connected: false },
   scrollRestoration: true,
   scrollToTopSelectors: [".tv-browser"],
   defaultPreload: "intent",

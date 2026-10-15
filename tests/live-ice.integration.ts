@@ -81,7 +81,9 @@ test("a host can save a relay for paired playback and keep it across a normal re
   const directory = await mkdtemp(join(tmpdir(), "couch-live-relay-"));
   const databasePath = join(directory, "couch.sqlite"), hostToken = "h".repeat(64);
   const store = openStore(databasePath, true);
+  // The first paired device is the admin; the next is a controller.
   const id = Identity.generate().peerId, token = store.pair(id, "Receiver");
+  const controller = store.pair(Identity.generate().peerId, "Phone");
   store.close();
   const relay = { urls: "turn:relay.example:3478?transport=tcp", username: "fixture", credential: "fixture-credential" };
   let hub = await createHub({ databasePath, hostToken, hostname: "127.0.0.1", port: 0 });
@@ -109,6 +111,16 @@ test("a host can save a relay for paired playback and keep it across a normal re
     assert.deepEqual(await waitUpdate(2), [relay]);
     socket.close();
     await once(socket, "close");
+    // An admin manages the relay from any paired device; a controller can't read its credential or change it.
+    assert.deepEqual(await (await request("/api/settings/live-relay", token)).json(), { relay, source: "saved" });
+    for (const body of [undefined, { relay: null }]) {
+      const refused = await request("/api/settings/live-relay", controller, body);
+      assert.equal(refused.status, 403);
+      assert.ok(!(await refused.text()).includes(relay.credential));
+    }
+    assert.equal((await request("/api/settings/live-relay", "unpaired")).status, 401);
+    // Losing the admin role takes the relay settings with it.
+    assert.equal((await fetch(`${hub.origin}/api/devices/${id}/role`, { method: "POST", headers: { Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ role: "controller" }) })).status, 200);
     assert.equal((await request("/api/settings/live-relay", token)).status, 403);
     assert.equal((await request("/api/settings/live-relay", token, { relay: null })).status, 403);
     assert.equal((await request("/api/live/ice-servers", "invalid")).status, 401);

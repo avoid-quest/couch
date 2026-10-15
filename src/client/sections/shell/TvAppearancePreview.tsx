@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { TvAppearance } from "../../../shared/appearance";
 import type { Credentials } from "@/session/session";
 import { usePreviewSeconds } from "@/interface-size";
-import { TvInterfaceSize } from "../settings/device/TvInterfaceSize";
+import { TvInterfaceSize } from "../settings/couch/TvInterfaceSize";
 
 export function TvAppearancePreview({ appearance, credentials, connected }: { appearance: TvAppearance; credentials: Credentials | null; connected: boolean }) {
   const seconds = usePreviewSeconds(appearance);

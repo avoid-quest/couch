@@ -7,8 +7,8 @@ Docker or a native Couch package on the controller computer.
 ## Connect
 
 1. Connect your computer to the playback computer's network. On the TV, choose
-   **This computer**, open **Settings > Devices**, turn on **Share on network**
-   if it is off and choose **Pair a device**. Scan its QR or type the shown
+   **This computer**, open **Settings > Network**, turn on **Share on network**
+   if it is off, then choose **Pair a device** in **Settings > Devices**. Scan its QR or type the shown
    address into your browser, including any port.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
    and enter the TV's six-digit pairing code. The first device you pair becomes
@@ -27,8 +27,9 @@ Pairing grants Controller access, except for the first device, which becomes
 the admin. If no paired device is admin later, the TV's **Settings > Devices**
 shows a one-use code; enter it under **Admin code** in this browser's
 **Settings > Devices** and choose **Become admin**. An admin can make later
-devices admin with **Make admin** in **Settings > Devices**. A browser does not become
-another player.
+devices admin with **Make admin** in **Settings > Devices**, and manages the
+whole Couch from its own device: network sharing, HTTP, the relay, TV mode,
+sources, hardware and updates. A browser does not become another player.
 
 ## Native desktop app
 
@@ -41,14 +42,14 @@ The app remembers the chosen mode and addresses. If the other Couch is
 unreachable, the app keeps trying and offers **Try again** or **Use this
 computer**; it never switches on its own. Closing the window keeps Couch running
 (minimized on Linux); reopen it from the tray, the Dock or by starting it again.
-**Quit Couch** in **Settings → General**, the tray or the app menu stops the app
+**Quit Couch** in **Settings → This device → General**, the tray or the app menu stops the app
 and its Core. On Linux and Windows, **File → Quit Couch** and **Ctrl+Q** also work
 when the system tray is unavailable or the page cannot load. See the
 [current architecture](architecture.md).
 
 ## Keep a shortcut
 
-**Settings → Playback → Keep screen awake** is on by default in browsers. It
+**Settings → This device → Viewing → Keep screen awake** is on by default in browsers. It
 keeps the screen on while picture or sound plays on that device and Couch is
 visible, including buffering. Pausing, stopping or moving playback elsewhere
 releases it; controlling playback on the TV does not keep your phone awake.

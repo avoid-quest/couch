@@ -1,35 +1,28 @@
+import { Fragment } from "react";
 import { Check } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { deviceName } from "@/copy";
 import { cn } from "@/lib/utils";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { couchApp } from "@/session/native-context";
 import { useSessionGate } from "@/session/session-context";
 import { focusPageControl } from "@/navigation";
+import { useSettingsPages, useSettingsScope } from "./settings-scope";
 
 type Props = { active: SettingsPage };
 
-/** Grouped settings pages: a rail with a check on wide screens, a Select on narrow ones. */
+/** Pages under their two owners, this device then the shared Couch: a rail with a check on wide screens, a Select on narrow ones. */
 export function SettingsNav({ active }: Props) {
   const navigate = useNavigate();
-  const { identity, tvPresentation, details, state } = useSessionGate();
-  const administrator = identity?.authority === "host" || identity?.authority === "administrator";
-  const visible = (id: SettingsPage) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
-    && (id !== "display" || !!details?.tvPresentation)
-    // Sound outputs and Bluetooth exist only where Couch controls the system's sound (Linux).
-    && (id !== "sound" && id !== "bluetooth" || !!details?.systemAudio)
-    && (id !== "updates" || !!couchApp?.updates || administrator && (!!details?.updates || state?.devices?.some(device => device.updates)))
-    && (settingsPages[id].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
-  const groups = ([
-    // Identity, everyday use, media, the Couch's hardware, then maintenance.
-    [deviceName(state?.installationName ?? details?.name), ["general", "connection"]],
-    ["Preferences", ["playback", "home", "appearance"]],
-    ["Media", ["sources"]],
-    ["Hardware", ["sound", "bluetooth", "display", "tv-appearance"]],
-    ["Updates", ["updates"]],
-  ] as const).map(([label, pages]) => ({ label, pages: pages.filter(visible) })).filter(group => group.pages.length);
+  const { tvPresentation } = useSessionGate();
+  const scope = useSettingsScope();
+  const pages = useSettingsPages();
+  const scopes = [
+    { id: "device", title: "This device", detail: scope.device },
+    { id: "couch", title: scope.couch, detail: scope.role ? `Shared · ${scope.role}` : "Shared" },
+  ].map(item => ({ ...item, pages: pages.filter(id => settingsPages[id].scope === item.id) }));
+  const group = (id: SettingsPage) => { const page = settingsPages[id]; return "group" in page ? page.group : null; };
+  const groupLabel = (name: string) => name === "Hardware" ? `${scope.couch}'s hardware` : name;
   const current = active.startsWith("source-") ? "sources" : active;
 
   return <>
@@ -38,33 +31,38 @@ export function SettingsNav({ active }: Props) {
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {groups.map(group => (
-          <SelectGroup key={group.label}>
-            <SelectLabel>{group.label}</SelectLabel>
-            {group.pages.map(id => <SelectItem key={id} value={id}>{settingsPages[id].label}</SelectItem>)}
+        {scopes.map(item => (
+          <SelectGroup key={item.id}>
+            <SelectLabel>{item.title} · {item.detail}</SelectLabel>
+            {item.pages.map(id => <SelectItem key={id} value={id}>{settingsPages[id].label}</SelectItem>)}
           </SelectGroup>
         ))}
       </SelectContent>
     </Select>
-    <nav aria-label="Settings pages" className="hidden min-w-0 flex-col gap-6 md:flex">
-      {groups.map(group => (
-        <div key={group.label} className="flex flex-col">
-          <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{group.label}</p>
-          {group.pages.map(id => (
-            <Button key={id} data-settings-page={id} variant="ghost" asChild className="w-full justify-start font-normal">
-              <Link data-page-first={current === id || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path} onClick={event => {
-                if (!tvPresentation || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                event.preventDefault();
-                void navigate({ to: settingsPages[id].path }).then(() => {
-                  const content = document.querySelector<HTMLElement>("[data-settings-content]");
-                  if (content) focusPageControl(content);
-                });
-              }}>
-                <Check aria-hidden="true" className={cn(current !== id && "invisible")} />
-                {settingsPages[id].label}
-              </Link>
-            </Button>
-          ))}
+    <nav aria-label="Settings pages" className="hidden min-w-0 flex-col gap-8 md:flex">
+      {scopes.map(item => (
+        <div key={item.id} role="group" aria-label={`${item.title} · ${item.detail}`} data-settings-scope={item.id} className="flex flex-col">
+          <p aria-hidden="true" className="truncate px-2.5 text-sm font-medium">{item.title}</p>
+          <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{item.detail}</p>
+          {item.pages.map((id, index) => {
+            const name = group(id), starts = index > 0 && name !== group(item.pages[index - 1]!);
+            return <Fragment key={id}>
+              {starts && (name ? <p aria-hidden="true" className="mt-3 mb-1 truncate px-2.5 text-xs text-muted-foreground">{groupLabel(name)}</p> : <div aria-hidden="true" className="mt-3" />)}
+              <Button data-settings-page={id} variant="ghost" asChild className="w-full justify-start font-normal">
+                <Link data-page-first={current === id || undefined} aria-current={current === id ? "page" : undefined} to={settingsPages[id].path} onClick={event => {
+                  if (!tvPresentation || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                  event.preventDefault();
+                  void navigate({ to: settingsPages[id].path }).then(() => {
+                    const content = document.querySelector<HTMLElement>("[data-settings-content]");
+                    if (content) focusPageControl(content);
+                  });
+                }}>
+                  <Check aria-hidden="true" className={cn(current !== id && "invisible")} />
+                  {settingsPages[id].label}
+                </Link>
+              </Button>
+            </Fragment>;
+          })}
         </div>
       ))}
     </nav>

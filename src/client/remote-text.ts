@@ -2,6 +2,7 @@ import { isTvPresentation } from "./session/native-context";
 import { flushSync } from "react-dom";
 import { isRemoteField, remoteFields, type TextFocus } from "../shared/remote";
 import type { ServerMessage } from "../shared/protocol";
+import { settingsPages } from "../shared/settings-pages";
 
 // Only explicitly annotated, ordinary inputs can receive text. Identity rotates on every focus lifecycle.
 export function connectRemoteText(report: (field: TextFocus | null) => void) {
@@ -15,7 +16,7 @@ export function connectRemoteText(report: (field: TextFocus | null) => void) {
       || element.closest('[hidden], [inert], [aria-hidden="true"], [data-tv-local-only]') || !element.checkVisibility({ visibilityProperty: true, opacityProperty: true })) return null;
     const kind = element.dataset.remoteField;
     if (!isRemoteField(kind) || element.id !== (kind === "find" ? "media-search" : "local-device-name")) return null;
-    if (location.pathname !== (kind === "find" ? "/find" : "/settings/tv")) return null;
+    if (location.pathname !== (kind === "find" ? "/find" : settingsPages.general.path)) return null;
     return { element, kind };
   };
   const update = () => {

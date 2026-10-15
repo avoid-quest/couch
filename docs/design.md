@@ -98,7 +98,7 @@ catalog provides interface icons, not brand identities.
   visible rail entry or narrow Settings page selector, then Home (a source's
   own Back first returns to Sources).
   After every page change, focus is on the page's first control. The header holds the sections, the TV's name
-  and the clock as plain text; the Couch choice lives in Settings → Devices.
+  and the clock as plain text; the Couch choice lives in Settings → Couch connection.
   Volume and every fader move 5 per press. Text fields say "Type with Remote on
   your phone": a phone's Remote is the TV's text entry.
 - **The TV player answers a remote.** With its controls hidden, OK shows them
@@ -245,7 +245,7 @@ Spacing uses Tailwind steps 1, 2, 3, 4, 6, 8 and 12, plus `gap-0.5`, `py-1.5` an
 `px-(--gutter)` (3rem, 1rem on phones). Two-column pages use a `12rem` rail plus `gap-12`, keeping each page’s breakpoint.
 The shell's content wrapper sets the one top offset below the header (`pt-6`); pages add none, and Home's first row drops its rule.
 Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones. On the TV, OK on a rail entry opens its page and moves focus to the page's first control.
-Settings runs from identity (this device's name in General, then Devices) through Preferences, Media and Hardware to Updates, and opens on the first page; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last. On the TV, Devices opens on Pair a device.
+Settings has two owners, each titled with its real name. **This device** (its name) holds what changes only on the device in hand and what it consents to: General, Couch connection, Viewing, Home, Sharing and, in the app, Updates. **The Couch** (its name, "Shared") holds what changes it for everyone: General, Access (Devices, Network), Watching (Playback for the active watching profile, Sources), the Couch's hardware (Sound, Bluetooth, Display, where it has them) and Updates. Each page's eyebrow repeats its owner; shared pages say "· This device" on the host. Every paired device opens every shared page: rows that need an admin say "Only an admin can change this." instead of disappearing, and the server enforces it. Only a device's own consent, its capture, Quit Couch and the first-admin code on the host stay local. Settings opens on This device → General; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last. On the TV, Devices opens on Pair a device.
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
@@ -341,7 +341,7 @@ Messages:
   and the Couch switch. Wide screens also show the clock and, outside Remote,
   Keyboard shortcuts; the player's header carries the switch too.
   The TV uses its local name instead of the
-  switch and omits Remote and Keyboard shortcuts. The Popover reuses Settings → Devices' Couch
+  switch and omits Remote and Keyboard shortcuts. The Popover reuses Settings → Couch connection's
   choice: saved servers, the app's This computer option, and another address.
   On the host with sharing on, it ends with Pair a device. It scrolls within
   the available space and keeps the same flat, divided settings rows.

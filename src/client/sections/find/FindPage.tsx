@@ -21,7 +21,7 @@ export function FindPage() {
   if (draft.route !== searchState.query) setDraft({ route: searchState.query, query: searchState.query });
   const homeQuery = draft.query;
   const onStage = section === "Find";
-  const openSources = () => void navigate({ to: "/settings/sources" });
+  const openSources = () => void navigate({ to: "/settings/couch/sources" });
   return <section data-page="Find">
     {browse === "radio" ? <BrowseRadio origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onCommand={run} /> : browse === "live-tv" ? <BrowseLiveTv /> : <>
       <SearchPanel onOpenCollection={shell.openProvider} draftQuery={homeQuery} onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={query => setDraft(current => ({ ...current, query }))} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} />

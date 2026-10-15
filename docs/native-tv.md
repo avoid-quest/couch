@@ -9,11 +9,13 @@ the current login, display manager and power policy unchanged.
 
 ## Use an existing desktop installation as a TV
 
-On that computer, choose **This computer**, then open **Settings > General**
-and turn on **TV mode**. Confirm **Restart Couch** to save the choice and open
-fullscreen. Playback stops during the restart; the library and paired devices
-stay saved. Turn on **Share on network** in **Settings > Devices** to let paired
-phones use **Remote**. Turn TV mode off in General to return to the desktop window.
+On that computer, choose **This computer**, then open the Couch's **General**
+in Settings and turn on **TV mode**; a paired admin can do the same from its own
+device. Confirm **Restart Couch** to save the choice and open fullscreen.
+Playback stops during the restart; the library and paired devices stay saved.
+Turn on **Share on network** in **Settings > Network** to let paired phones use
+**Remote**. Turn TV mode off in the same place to return to the desktop window.
+A TV launcher's TV mode stays on and shows as set by the launcher.
 
 This choice keeps the desktop's normal login and update mechanism. **Start on
 boot** and the overnight update service belong to the dedicated TV setup below.
@@ -49,14 +51,14 @@ the running app with `check-health.js`, run by the app's own Node
 with the TV's database open and a healthy loopback listener; Another Couch runs
 no Core. The check uses Core's open files and sockets rather than
 `/proc/<pid>/environ`, which Electron can clear when setting process titles. Select this
-computer for TV playback. To pair a phone, open **Settings > Devices**, turn on
-**Share on network** if the TV is still private, and choose **Pair a device**
+computer for TV playback. To pair a phone, turn on **Share on network** in
+**Settings > Network** if the TV is still private, then open **Settings > Devices** and choose **Pair a device**
 for the pairing QR and six-digit code. The first device you pair becomes the
 admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
 phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
 **Home** shows what plays now and Up next, **Find** holds search and sources,
-**Saved** holds lists and favorites, and **Settings** the rest. TV **Settings > Text size** offers Default,
+**Saved** holds lists and favorites, and **Settings** the rest. TV **Settings > Display > Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
@@ -97,11 +99,11 @@ each run so the second Saved item’s Details query is cold; its check delays th
 real For later response by 800 ms. Run with the tab visible
 or a T3 recording active so Radix exit animations finish. Also save two radio
 favorites, configure a local Live TV channel, and pair a second online shared
-output for the favorite ordering/Undo and Live TV Queue/Play on checks. Build the dependency-free
-browser checks:
+output for the favorite ordering/Undo and Live TV Queue/Play on checks. Don't be sharing this device's screen or sound.
+Build the browser checks, minified so the bundle fits one preview evaluation:
 
 ```sh
-bun build tests/tv-navigation.browser.ts --target browser --format iife --outfile build/tv-navigation.browser.js
+bun build tests/tv-navigation.browser.ts --target browser --format iife --minify --outfile build/tv-navigation.browser.js
 ```
 
 Evaluate that bundle in the T3 preview, then evaluate
@@ -109,7 +111,9 @@ Evaluate that bundle in the T3 preview, then evaluate
 focus and playback behavior: one Home station stop, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
 repeated Home Back, five-point OK-to-adjust Volume, Saved removal/Undo/order,
-and retained favorite and Live TV actions. Cold and warm Saved Back retain the
+retained favorite and Live TV actions, and a Remote that can't choose or open this device's
+capture on Sharing while its own pointer and keys still can (it drives the bundle's copy of
+`applyTvNavigation`, the path Remote keys take; `runSharingLocalOnlyRegression()` runs it alone). Cold and warm Saved Back retain the
 item opener after settling and continue arrow navigation from it. Live TV checks
 the labeled Play on device group, a successful Queue request and recipient selection.
 Details Back asserts Playback focus,

@@ -1,6 +1,7 @@
 import { linuxBluetooth } from "./server/bluetooth-linux";
 import { createNativeDisplay } from "./server/display-native";
 import { createNativeUpdates } from "./server/updates-native";
+import { createNativeTvMode } from "./server/tv-mode-native";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { startHelpers } from "./server/helpers";
@@ -31,6 +32,7 @@ const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
 const bluetooth = native && process.platform === "linux" ? linuxBluetooth() : undefined;
 const nativeDisplay = createNativeDisplay(app && ((requestId, action) => app.postMessage({ type: "display", requestId, action })));
 const nativeUpdates = createNativeUpdates(app && ((requestId, action) => app.postMessage({ type: "updates", requestId, action })));
+const nativeTvMode = createNativeTvMode(app && ((requestId, enabled) => app.postMessage({ type: "tvMode", requestId, enabled })));
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
@@ -42,7 +44,7 @@ const hub = await createHub({
   remoteControlEnabled: !native,
   native,
   nativeDisplay: nativeDisplay.request,
-  ...(native ? { nativeUpdates: nativeUpdates.request } : {}),
+  ...(native ? { nativeUpdates: nativeUpdates.request, nativeTvMode: nativeTvMode.request } : {}),
   ...(bluetooth ? { nativeBluetooth: bluetooth.request } : {}),
   hostname: process.env.COUCH_HOST ?? "0.0.0.0",
   port: Number(process.env.COUCH_PORT ?? 4100),
@@ -66,6 +68,7 @@ async function close() {
   closing = true;
   nativeDisplay.close();
   nativeUpdates.close();
+  nativeTvMode.close();
   bluetooth?.close();
   try { await hub.close(); } finally { process.exit(0); }
 }
@@ -74,6 +77,7 @@ process.on("SIGTERM", close);
 app?.on("message", ({ data }) => {
   if (data.type === "display") nativeDisplay.receive(data);
   else if (data.type === "updates") nativeUpdates.receive(data);
+  else if (data.type === "tvMode") nativeTvMode.receive(data);
   else if (data.type === "renamed") hub.renamed();
   else if (data.type === "shutdown") void close();
 });

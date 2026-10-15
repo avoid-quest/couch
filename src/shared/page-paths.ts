@@ -1,11 +1,11 @@
-import { settingsPageForPath, settingsPages } from "./settings-pages";
+import { settingsAliases, settingsPageForPath, settingsPages } from "./settings-pages";
 
 // Main destinations and the player. Sources are filters inside Find, not places.
 export const pagePaths: Record<string, string> = {
   Home: "/", Now: "/now", Find: "/find", Saved: "/saved", Settings: "/settings", Remote: "/remote",
 };
 
-export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...Object.values(settingsPages).map(page => page.path)];
+export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...Object.values(settingsPages).map(page => page.path), ...Object.keys(settingsAliases)];
 
 export const sectionForPath = (pathname: string): string | undefined => {
   const clean = pathname.replace(/\/$/, "") || "/";

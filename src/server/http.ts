@@ -13,7 +13,8 @@ import { loopbackPeer } from "./lan-listener";
 export type Socket<T> = WebSocket & { data: T };
 // A function takes the socket as it is instead of Couch's own handlers (Sendspin, #644 ticket 10).
 export type Upgrade<T> = (data: T | ((socket: WebSocket, request: IncomingMessage) => void)) => boolean;
-export type Listener = { port: number; setAllowHttp: (enabled: boolean) => void; stop: () => Promise<void> };
+// Turning HTTP off closes plaintext connections; the one carrying `current` closes once its response is sent.
+export type Listener = { port: number; setAllowHttp: (enabled: boolean, current?: Request) => void; stop: () => Promise<void> };
 type Options<T> = {
   hostname: string;
   port: number;
@@ -32,7 +33,14 @@ type Options<T> = {
 };
 
 const peers = new WeakMap<Request, string>();
+const responses = new WeakMap<Request, ServerResponse>();
 export const requestPeer = (request: Request) => peers.get(request) ?? "";
+/** Runs once the response to `request` is sent or abandoned, so a change can't cut off its own reply. */
+export function afterResponse(request: Request, run: () => void) {
+  const response = responses.get(request);
+  if (response && !response.closed) response.once("close", run);
+  else setImmediate(run);
+}
 
 const encrypted = (message: IncomingMessage) => !!(message.socket as TLSSocket).encrypted;
 function toRequest(message: IncomingMessage, body?: Buffer, signal?: AbortSignal) {
@@ -68,7 +76,9 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
       response.once("close", () => { if (!response.writableFinished) aborted.abort(); });
       const body = message.method === "GET" || message.method === "HEAD" ? undefined : await readBody(message, maxRequestBodySize);
       if (body === null) { response.writeHead(413, { Connection: "close" }).end(); return; }
-      const result = await fetch(toRequest(message, body, aborted.signal), () => false) ?? new Response(null, { status: 404 });
+      const request = toRequest(message, body, aborted.signal);
+      responses.set(request, response);
+      const result = await fetch(request, () => false) ?? new Response(null, { status: 404 });
       response.writeHead(result.status, [...result.headers].flat());
       if (!result.body || message.method === "HEAD") { await result.body?.cancel(); response.end(); }
       else await pipeline(Readable.fromWeb(result.body as ReadableStream), response);
@@ -147,9 +157,13 @@ export async function serve<T>({ hostname, port, tls, maxRequestBodySize, fetch,
   let stopping: Promise<void> | undefined;
   return {
     port: (server.address() as AddressInfo).port,
-    setAllowHttp: enabled => {
+    setAllowHttp: (enabled, current) => {
       allowHttp = enabled;
-      if (tls && !enabled) for (const socket of plaintext) if (!loopbackPeer(socket.remoteAddress ?? "")) socket.destroy();
+      const serving = current && responses.get(current)?.socket;
+      if (tls && !enabled) for (const socket of plaintext) if (!loopbackPeer(socket.remoteAddress ?? "")) {
+        if (socket === serving) afterResponse(current!, () => socket.destroy());
+        else socket.destroy();
+      }
     },
     stop: () => stopping ??= new Promise<void>(resolve => {
       clearInterval(heartbeat);

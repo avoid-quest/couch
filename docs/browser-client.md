@@ -34,7 +34,7 @@ web apps work. [1], [2], [3], [4]
 
 Couch's browser behavior:
 
-- A browser-local **Keep screen awake** preference in **Settings → Playback** is
+- A browser-local **Keep screen awake** preference in **Settings → This device → Viewing** is
   enabled by default for browser clients. It applies while this device is playing
   picture or sound and Couch is visible, including playback loading. Playback
   on a different device does not keep an idle controller awake. This is the

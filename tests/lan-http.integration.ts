@@ -55,9 +55,9 @@ test("HTTP Off during relay startup stays HTTPS-only before and after listener p
   assert.equal((await settings(true)).status, 200);
   assert.equal((await fetch(`${http}/api/health`, { redirect: "manual" })).status, 200, "explicit On still works after startup");
 });
-async function until(predicate: () => boolean) {
+async function until(predicate: () => boolean | Promise<boolean>) {
   const deadline = Date.now() + 2500;
-  while (!predicate()) { assert.ok(Date.now() < deadline, "LAN listener did not become ready"); await sleep(10); }
+  while (!await predicate()) { assert.ok(Date.now() < deadline, "LAN listener did not reach the expected state"); await sleep(10); }
 }
 async function fixture(t: TestContext, allowLanHttp = false) {
   const [name, entries] = candidate!;
@@ -136,13 +136,17 @@ test("opt-in HTTP preserves pairing, origin checks, host isolation and sharing s
   await assert.rejects(once(f.ws(token, "http://foreign.example"), "open"), /403/);
   const socket = f.ws(token);
   await new Promise<void>(resolve => socket.on("message", data => { if (JSON.parse(String(data)).type === "state") resolve(); }));
-  // Only the local host may disable sharing. Doing so closes the real LAN socket.
-  assert.equal((await fetch(`${f.http}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: '{"enabled":false}' })).status, 403);
+  // A controller can't disable sharing; the admin can from its own device, over the LAN listener it is about to stop.
+  const controller = (await (await f.pair("123456", f.http, "v".repeat(43))).json()).token;
+  const sharing = (bearer: string) => fetch(`${f.http}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" }, body: '{"enabled":false}' });
+  assert.equal((await sharing(controller)).status, 403);
   const closed = once(socket, "close");
-  const response = await fetch(`${f.hub.origin}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" }, body: '{"enabled":false}' });
-  assert.equal(response.status, 200); await closed;
+  const response = await sharing(token);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { enabled: false }, "the admin gets its reply before the listener stops");
+  await closed;
   assert.equal((await fetch(`${f.hub.origin}/api/connection`).then(response => response.json())).remoteControlEnabled, false);
-  await assert.rejects(fetch(`${f.http}/api/health`));
+  await until(async () => fetch(`${f.http}/api/health`).then(() => false, () => true));
   await assert.rejects(f.secure());
   assert.equal((await fetch(`${f.hub.origin}/api/health`)).status, 200);
 });
@@ -166,16 +170,21 @@ test("saved HTTP setting applies live, closes plaintext only and overrides the s
   assert.equal((await fetch(`${f.http}/api/health`, { redirect: "manual" })).status, 200);
   assert.equal(await f.secure(), 200);
   const { token } = await (await f.pair("123456")).json();
-  // A remote administrator cannot weaken the host's transport policy.
-  assert.equal((await fetch(`${f.http}/api/settings/http`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: '{"enabled":false}' })).status, 403);
   const plain = f.ws(token);
   await once(plain, "message");
   const secureId = "u".repeat(43);
   const secureToken = (await (await f.pair("123456", f.http, secureId)).json()).token;
+  const http = (bearer: string, body?: string) => fetch(`${f.http}/api/settings/http`, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" }, ...(body ? { body } : {}) });
+  // Every paired device reads the transport policy; only an admin changes it, from any paired device.
+  assert.deepEqual(await (await http(secureToken)).json(), { enabled: true });
+  assert.equal((await http(secureToken, '{"enabled":false}')).status, 403);
   const secure = f.ws(secureToken, f.https, secureId, true);
   await once(secure, "message");
   const closed = once(plain, "close");
-  assert.equal((await f.settings(false)).status, 200);
+  // Over HTTP, the admin still gets its reply; then its plaintext connections close.
+  const off = await http(token, '{"enabled":false}');
+  assert.equal(off.status, 200);
+  assert.deepEqual(await off.json(), { enabled: false });
   await closed;
   assert.deepEqual(f.hub.urls, [f.https]);
   assert.equal((await fetch(`${f.http}/api/health`, { redirect: "manual" })).status, 308);

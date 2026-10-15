@@ -69,8 +69,9 @@ a Mac.
 
 ## Connect a phone
 
-1. On the playback computer choose **This computer**, open **Settings >
-   Devices**, turn on **Share on network** and choose **Pair a device**.
+1. On the playback computer choose **This computer**, turn on **Share on
+   network** in **Settings > Network**, then open **Settings > Devices** and
+   choose **Pair a device**.
 2. On the phone, scan the code or open the address shown there. The first time,
    the browser warns that the connection isn't private: continue to the page.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
@@ -82,16 +83,19 @@ a Mac.
    its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,
    StreamingCommunity or 123MoviesFree link opens its page.
 
-**Settings > Playback > Video quality** saves this browser's default online video
-quality (Auto is up to 1080p).
+**Settings > This device > Viewing > Online video you start** saves this
+browser's default quality for online video it starts, wherever it plays (Auto is up to 1080p).
 
 ## Administrator access
 
 The first device you pair becomes the admin. If no paired device is admin later,
 **Settings > Devices** on the host shows a one-use code under **Make a device the
 admin**. Enter it under **Admin code** on a paired device and choose **Become
-admin**. Administrators manage paired devices, sources and device settings;
-Controllers browse and play.
+admin**. Administrators manage the whole Couch from any paired device: paired
+devices, network sharing and HTTP, the live relay, TV mode, sources, hardware
+and updates. Controllers browse and play, change the shared Playback
+preferences, and see the rest read-only. Each device's own speaker and screen
+consent stays with that device.
 
 ### Recover administrator access
 
@@ -164,9 +168,11 @@ bun run app
   version in `package.json` builds Couch Preview. The
   [Package](../.github/workflows/package.yml) workflow builds all three, and
   [releases](ci.md#releases) publish them. The installed app checks for updates
-  at start and every 4 hours; **Settings > Updates** shows them.
+  at start and every 4 hours. On the app hosting Couch, the Couch's
+  **Settings > Updates** shows them; in **Another Couch** mode, the app's own
+  updates are in **Settings > This device > Updates**.
 
-From a paired administrator phone, **Settings > Updates** lists the host app
+From a paired administrator phone, the Couch's **Settings > Updates** lists the host app
 and connected Couch apps, including TVs in **Another Couch** mode. Choose the
 TV, check for updates, then click **Update and restart** when its update is
 ready. The TV installs and reconnects itself; no keyboard, SSH or physical
