@@ -306,6 +306,82 @@ test("upload backpressure stops the upload instead of growing an unbounded queue
   assert.equal(recorders[0].state, "inactive");
   assert.ok(captures[0].getTracks().every(track => !track.stopped));
   assert.equal(commands.some(action => action.type === "endLive"), false);
+  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, error: failures[0].message }]);
+`));
+
+for (const [failure, setup, error] of [
+  ["missing MediaRecorder", "globalThis.MediaRecorder = undefined;", "This browser cannot record a live input for buffered playback."],
+  ["no supported MIME", "MediaRecorder.isTypeSupported = () => false;", "This browser cannot encode this live input for buffered playback."],
+  ["recorder construction throws", "globalThis.MediaRecorder = class extends MediaRecorder { constructor() { throw new Error('Cannot construct recorder.'); } };", "Cannot construct recorder."],
+]) test(`${failure} reports buffered failure to Core before opening an upload, without ending direct sharing`, () => check(`
+  const Recorder = MediaRecorder;
+  const source = await session.start({ kind: "screen" });
+  const peersMessage = { type: "livePeers", sourceId: source.id, peers: [{ peerId: "healthy", deviceId: "other", picture: true, sound: true }], upload: true };
+  ${setup}
+  session.receive(peersMessage);
+  await flush();
+  const reported = () => signals.filter(message => message.type === "liveUploadFailed");
+  assert.deepEqual(reported(), [{ type: "liveUploadFailed", sourceId: source.id, error: ${JSON.stringify(error)} }]);
+  assert.equal(uploads.length, 0, "the failure reaches Core without an upload socket");
+  assert.equal(failures.length, 1);
+  assert.equal(peers.length, 1);
+  assert.notEqual(peers[0].connectionState, "closed");
+  assert.ok(captures[0].getTracks().every(track => !track.stopped));
+  assert.equal(commands.some(action => action.type === "endLive"), false);
+  session.receive(peersMessage);
+  session.receive(peersMessage);
+  assert.equal(failures.length, 1, "peer announcements cannot loop the same failed upload");
+  assert.equal(reported().length, 1);
+  session.receive({ ...peersMessage, upload: false });
+  globalThis.MediaRecorder = Recorder;
+  Recorder.isTypeSupported = type => type.includes("webm");
+  session.receive(peersMessage);
+  await flush();
+  assert.equal(uploads.length, 1, "a new Core request deliberately retries buffered playback");
+  assert.equal(recorders.at(-1).state, "recording");
+  assert.equal(peers.length, 1, "the healthy peer remains in place throughout retry");
+  assert.equal(failures.length, 1);
+`));
+
+for (const [failure, trigger, error] of [
+  ["recorder start", "MediaRecorder.prototype.start = () => { throw new Error('Cannot start.'); }; await flush();", "The live input could not start recording."],
+  ["recording", "await flush(); recorders[0].onerror();", "The live input stopped recording for buffered playback."],
+  ["socket handshake", "uploads[0].onerror();", "The live input lost its connection to Couch."],
+  ["Core transfer", "await flush(); uploads[0].onmessage({ data: JSON.stringify({ type: 'error', error: 'Transfer failed.' }) });", "Transfer failed."],
+  ["invalid response", "await flush(); uploads[0].onmessage({ data: 'invalid JSON' });", "Couch sent an invalid live input response."],
+]) test(`${failure} errors report buffered failure once and leave capture running`, () => check(`
+  const source = await session.start({ kind: "screen" });
+  requestUpload(source.id);
+  ${trigger}
+  assert.deepEqual(signals.filter(message => message.type === "liveUploadFailed"), [{ type: "liveUploadFailed", sourceId: source.id, error: ${JSON.stringify(error)} }]);
+  assert.equal(failures.length, 1);
+  assert.equal(recorders[0].state, "inactive");
+  assert.ok(captures[0].getTracks().every(track => !track.stopped));
+  requestUpload(source.id);
+  assert.equal(uploads.length, 1, "the same demand never retries a failed transfer");
+`));
+
+test("late events from a failed upload cannot stop or report failure for an intentional retry", () => check(`
+  const source = await session.start({ kind: "screen" });
+  requestUpload(source.id);
+  await flush();
+  const stale = { open: uploads[0].onopen, message: uploads[0].onmessage, error: uploads[0].onerror, close: uploads[0].onclose, data: recorders[0].ondataavailable, recordingError: recorders[0].onerror };
+  stale.error();
+  requestUpload(source.id, false);
+  requestUpload(source.id);
+  await flush();
+  stale.open();
+  stale.message({ data: JSON.stringify({ type: "error", error: "Late failure." }) });
+  stale.error();
+  stale.close();
+  stale.recordingError();
+  stale.data({ data: new Blob(["late media"]) });
+  assert.equal(recorders[0].state, "inactive");
+  assert.equal(recorders[1].state, "recording");
+  assert.equal(uploads[1].readyState, WebSocket.OPEN);
+  assert.equal(signals.filter(message => message.type === "liveUploadFailed").length, 1);
+  assert.equal(failures.length, 1);
+  assert.ok(captures[0].getTracks().every(track => !track.stopped));
 `));
 
 test("a source Core removed reports failure and releases capture", () => check(`

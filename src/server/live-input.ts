@@ -56,6 +56,12 @@ export function createLiveInputs<Socket>(options: {
       const expected = Buffer.from(publication.uploadToken), supplied = Buffer.from(key);
       return expected.length === supplied.length && timingSafeEqual(expected, supplied);
     },
+    acceptsUploadFailure(socket: Socket, sourceId: string) {
+      const publication = sources.get(sourceId);
+      if (!publication) return false; // Already ended or replaced.
+      if (publication.owner !== socket) throw new Error("Only the capturing window can fail this upload.");
+      return publication.upload;
+    },
     upload(sourceId: string, upload: boolean) {
       const publication = sources.get(sourceId);
       if (!publication || publication.upload === upload) return;

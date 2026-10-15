@@ -1,17 +1,17 @@
 import type { Action, PlaybackCommand, ServerMessage } from "../../shared/protocol";
-import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource } from "../../shared/live-input";
+import type { LiveFailedMessage, LivePeer, LiveSelection, LiveSignalMessage, LiveSource, LiveUploadFailedMessage } from "../../shared/live-input";
 import { couchApp } from "./native-context";
 import { deviceId, localDeviceName } from "./device-id";
 import { attachStream, streamChanged } from "./renderer";
 
-type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; recorder?: MediaRecorder; socket?: WebSocket };
+type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStream; key: string; published: boolean; uploadRequested: boolean; recorder?: MediaRecorder; socket?: WebSocket };
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 
 // Capture belongs to the authenticated session. Every receiver gets it directly over WebRTC;
 // Core asks for an encoded upload only while it plays the source buffered (docs/adr/0001).
-export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage | LiveFailedMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
+export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (message: LiveSignalMessage | LiveFailedMessage | LiveUploadFailedMessage) => void; command: (action: Action) => Promise<void>; upload: (sourceId: string, key: string) => WebSocket; failed: (error: Error) => void; published: (source: LiveSource | null) => void }) {
   let generation = 0;
   let closed = false;
   let starting = false;
@@ -111,7 +111,10 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     current.recorder = current.socket = undefined;
     if (recorder) { recorder.ondataavailable = recorder.onerror = null; if (recorder.state !== "inactive") recorder.stop(); }
     if (socket) { socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null; socket.close(); }
-    if (error && publication === current) options.failed(error);
+    if (error && publication === current) {
+      options.send({ type: "liveUploadFailed", sourceId: current.source.id, error: error.message });
+      options.failed(error);
+    }
   };
   const startUpload = (current: Publication) => {
     try {
@@ -126,23 +129,26 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       const recording = { mimeType, audioBitsPerSecond: 192_000, videoBitsPerSecond: 5_000_000, videoKeyFrameIntervalDuration: 1000 };
       const recorder = current.recorder = new MediaRecorder(current.stream, recording);
       const socket = current.socket = options.upload(current.source.id, current.key);
+      const active = () => current.socket === socket;
       recorder.ondataavailable = event => {
-        if (!event.data.size || current.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+        if (!event.data.size || !active() || socket.readyState !== WebSocket.OPEN) return;
         if (socket.bufferedAmount + event.data.size > 4 * 1024 * 1024) { stopUpload(current, new Error("The connection cannot keep up with buffered playback of this input. Try a lower capture quality.")); return; }
         // Timeslices form ONE continuous recording. Keep their byte order and fit
         // each message within Core's existing WebSocket frame limit.
         for (let at = 0; at < event.data.size; at += 64 * 1024) socket.send(event.data.slice(at, at + 64 * 1024));
       };
-      recorder.onerror = () => stopUpload(current, new Error("The live input stopped recording for buffered playback."));
-      socket.onopen = () => { try { recorder.start(250); } catch { stopUpload(current, new Error("The live input could not start recording.")); } };
+      recorder.onerror = () => { if (active()) stopUpload(current, new Error("The live input stopped recording for buffered playback.")); };
+      socket.onopen = () => { if (!active()) return; try { recorder.start(250); } catch { stopUpload(current, new Error("The live input could not start recording.")); } };
       socket.onmessage = event => {
+        if (!active()) return;
         try {
           const message = JSON.parse(event.data);
           if (message.type === "error") stopUpload(current, new Error(typeof message.error === "string" ? message.error : "Buffered playback of this input failed."));
         } catch { stopUpload(current, new Error("Couch sent an invalid live input response.")); }
       };
+      socket.onerror = () => { if (active()) stopUpload(current, new Error("The live input lost its connection to Couch.")); };
       // Core closes it once nothing plays the source buffered.
-      socket.onclose = () => stopUpload(current);
+      socket.onclose = () => { if (active()) stopUpload(current); };
     } catch (reason) { stopUpload(current, reason instanceof Error ? reason : new Error("Buffered playback of this input could not start.")); }
   };
   return {
@@ -150,8 +156,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
       if (closed) return;
       if (message.type === "liveSignal") { receiveSignal(message); return; }
       if (message.sourceId !== publication?.source.id) return;
-      if (message.upload && !publication.socket) startUpload(publication);
-      else if (!message.upload && publication.socket) stopUpload(publication);
+      // A failed attempt waits for Core to release its request before another can start.
+      if (message.upload && !publication.uploadRequested) { publication.uploadRequested = true; startUpload(publication); }
+      else if (!message.upload && publication.uploadRequested) { publication.uploadRequested = false; stopUpload(publication); }
       const wanted = new Set(message.peers.map(peer => peer.peerId));
       for (const [id, peer] of publishers) if (!wanted.has(id)) { publishers.delete(id); peer.connection.close(); }
       for (const target of message.peers) void startPublisher(target);
@@ -235,7 +242,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const label = selection.kind === "microphone" ? "Microphone" : selection.kind === "system-audio" ? "System audio" : "Screen";
         const source: LiveSource = { id: crypto.randomUUID(), deviceId: deviceId(), name: `${localDeviceName() ?? "This device"} · ${label}`, kind: selection.kind, audio: !!audioTracks.length, video: !!videoTracks.length };
         const uploadToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
-        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false };
+        const current: Publication = { source, capture, stream: new MediaStream([...audioTracks, ...videoTracks]), key: uploadToken, published: false, uploadRequested: false };
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });

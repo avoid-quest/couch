@@ -17,7 +17,7 @@ import { providerForUrl, type ProviderId, type ProviderPage, type VideoQuality }
 import { createSession, type MediaSource } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
-import { parseCommand, parseLiveFailed, parseLiveSignal, parsePlayer } from "./validation";
+import { parseCommand, parseLiveFailed, parseLiveSignal, parseLiveUploadFailed, parsePlayer } from "./validation";
 import { createLiveInputs } from "./live-input";
 import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
@@ -1503,6 +1503,13 @@ export async function createHub(options: HubOptions) {
         const signal = parseLiveSignal(message);
         if (signal) {
           try { live.receive(socket, signal); } catch { socket.close(1008, "No permission for that live peer."); }
+          return;
+        }
+        const uploadFailure = parseLiveUploadFailed(message);
+        if (uploadFailure) {
+          let accepted;
+          try { accepted = live.acceptsUploadFailure(socket, uploadFailure.sourceId); } catch { socket.close(1008, "No permission for that live upload."); return; }
+          if (accepted) liveStreams.fail(uploadFailure.sourceId, uploadFailure.error);
           return;
         }
         const unreachable = parseLiveFailed(message);

@@ -128,6 +128,10 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
     has: (sourceId: string) => streams.has(sourceId),
     // Its first segment is playable.
     available: (sourceId: string) => !!streams.get(sourceId)?.available,
+    fail(sourceId: string, message: string) {
+      const stream = streams.get(sourceId);
+      if (stream) fail(sourceId, stream, message);
+    },
     accept(sourceId: string, socket: WebSocket) {
       const stream = streams.get(sourceId);
       if (!stream?.child || stream.ended || stream.socket) return false;

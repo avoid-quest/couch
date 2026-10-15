@@ -1,4 +1,4 @@
-import type { LiveFailedMessage, LiveSignalMessage } from "../shared/live-input";
+import type { LiveFailedMessage, LiveSignalMessage, LiveUploadFailedMessage } from "../shared/live-input";
 import type { Action, ClientMessage, MediaTrack, PlayerState, QueueEntry } from "../shared/protocol";
 import { providerForUrl } from "../shared/providers";
 import { isDeviceSharing } from "../shared/device-sharing";
@@ -110,6 +110,13 @@ export function parseLiveFailed(message: string): LiveFailedMessage | null {
   try { value = JSON.parse(message); } catch { return null; }
   if (!object(value) || value.type !== "liveFailed" || !id(value.peerId) || typeof value.error !== "string") return null;
   return { type: "liveFailed", peerId: value.peerId, error: safePlaybackError(value.error) };
+}
+
+export function parseLiveUploadFailed(message: string): LiveUploadFailedMessage | null {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { return null; }
+  if (!object(value) || value.type !== "liveUploadFailed" || !id(value.sourceId) || typeof value.error !== "string") return null;
+  return { type: "liveUploadFailed", sourceId: value.sourceId, error: safePlaybackError(value.error) };
 }
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
