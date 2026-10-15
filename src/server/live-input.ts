@@ -82,7 +82,7 @@ export function createLiveInputs<Socket>(options: {
         const peer: Peer<Socket> = { peerId: crypto.randomUUID(), deviceId: receiver.deviceId, picture: receiver.picture, sound: receiver.sound, publisher: publication.owner, receiver: receiver.socket, sourceId, playbackId, loadId: load.playbackId, relay: receiver.relay };
         peers.set(peer.peerId, peer);
         if (peer.relay) {
-          // Core's own stream, with its sound, in the ordinary player: the publisher sends it nothing.
+          // Core's channel-filtered stream in the ordinary player: the publisher sends it nothing.
           options.send(receiver.socket, { type: "player", command: { ...load, source: peer.relay, hls: true, paused: load.paused ?? false } });
           options.send(receiver.socket, { type: "player", command: { type: "volume", volume: receiver.volume } });
           continue;

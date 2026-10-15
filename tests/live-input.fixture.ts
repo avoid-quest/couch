@@ -28,15 +28,17 @@ const path = require('node:path');
 if (process.argv.includes('-version')) { console.log('ffmpeg version 7.0'); process.exit(0); }
 // Each capture chunk becomes the next segment; the playlist lists the newest four.
 if (process.argv.includes('pipe:0')) {
-  const playlist = process.argv.at(-1);
+  const playlists = process.argv.at(-1).split('|').map(output => output.slice(output.indexOf(']') + 1));
   let n = 0;
   process.stdin.on('data', () => {
     const name = index => 'segment-' + String(index).padStart(9, '0') + '.ts', first = Math.max(0, n - 3);
-    fs.writeFileSync(path.join(path.dirname(playlist), name(n)), 'fixture segment');
     const lines = ['#EXTM3U', '#EXT-X-TARGETDURATION:1', '#EXT-X-MEDIA-SEQUENCE:' + first];
     for (let index = first; index <= n; index++) lines.push('#EXTINF:1,', name(index));
-    fs.writeFileSync(playlist + '.tmp', lines.join('\\n') + '\\n');
-    fs.renameSync(playlist + '.tmp', playlist);
+    for (const playlist of playlists) {
+      fs.writeFileSync(path.join(path.dirname(playlist), name(n)), 'fixture segment');
+      fs.writeFileSync(playlist + '.tmp', lines.join('\\n') + '\\n');
+      fs.renameSync(playlist + '.tmp', playlist);
+    }
     n++;
   });
 }
