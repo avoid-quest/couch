@@ -19,8 +19,9 @@ done
 docker image inspect "$image" >/dev/null 2>&1 || { echo "Pull the relay image first: docker pull $image" >&2; exit 1; }
 if docker container inspect "$container" >/dev/null 2>&1; then echo "Container $container already exists." >&2; exit 1; fi
 
-mkdir -p -m 700 "$COUCH_DATA_DIR" "$COUCH_DATA_DIR/turn" "$COUCH_DATA_DIR/logs"
 umask 077
+mkdir -p "$COUCH_DATA_DIR" "$COUCH_DATA_DIR/turn" "$COUCH_DATA_DIR/logs"
+chmod 700 "$COUCH_DATA_DIR" "$COUCH_DATA_DIR/turn" "$COUCH_DATA_DIR/logs"
 # The credential stays in these files and Core's environment, never in arguments or logs.
 # Keeping it across restarts lets paired receivers keep the ICE servers they fetched.
 [[ -s $COUCH_DATA_DIR/turn/credential ]] || openssl rand -hex 24 > "$COUCH_DATA_DIR/turn/credential"
