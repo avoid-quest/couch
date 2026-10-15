@@ -73,6 +73,46 @@ func TestRevocationClientProcess(t *testing.T) {
 	_ = output.Encode(map[string]bool{"released": true})
 }
 
+func testLANConfiguration(iface net.Interface, cidr string) (configuration, bool) {
+	ip, network, err := net.ParseCIDR(cidr)
+	// The tests act as both client and peer on this address. A private /32,
+	// for example, binds successfully but is excluded by the relay's LAN policy.
+	if err != nil || ip.To4() == nil || iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+		return configuration{}, false
+	}
+	config := configuration{ip.String(), net.IP(network.Mask).String(), strings.Repeat("u", 24), strings.Repeat("p", 48)}
+	network, err = config.network()
+	return config, err == nil && allowedPeer(network, ip)
+}
+
+func TestLANConfigurationSelection(t *testing.T) {
+	for _, test := range []struct {
+		name, cidr string
+		flags      net.Flags
+		eligible   bool
+	}{
+		{"private LAN", "192.168.1.20/24", net.FlagUp | net.FlagBroadcast, true},
+		{"host route", "192.168.1.20/32", net.FlagUp, false},
+		{"unspecified subnet", "192.168.1.20/0", net.FlagUp, false},
+		{"point to point subnet", "192.168.1.20/31", net.FlagUp, false},
+		{"network address", "192.168.1.0/24", net.FlagUp, false},
+		{"broadcast address", "192.168.1.255/24", net.FlagUp, false},
+		{"point to point with eligible host", "10.0.0.2/24", net.FlagUp | net.FlagPointToPoint, true},
+		{"private loopback alias", "10.0.0.2/24", net.FlagUp | net.FlagLoopback, false},
+		{"down", "192.168.1.20/24", 0, false},
+		{"public", "8.8.8.8/24", net.FlagUp, false},
+		{"IPv6", "fd00::1/64", net.FlagUp, false},
+		{"invalid CIDR", "invalid", net.FlagUp, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, eligible := testLANConfiguration(net.Interface{Flags: test.flags}, test.cidr)
+			if eligible != test.eligible {
+				t.Fatalf("eligible = %t, want %t", eligible, test.eligible)
+			}
+		})
+	}
+}
+
 func lanConfiguration(t *testing.T) configuration {
 	t.Helper()
 	interfaces, err := net.Interfaces()
@@ -80,15 +120,19 @@ func lanConfiguration(t *testing.T) configuration {
 		t.Fatal(err)
 	}
 	for _, iface := range interfaces {
-		addresses, _ := iface.Addrs()
+		addresses, err := iface.Addrs()
+		if err != nil {
+			t.Fatalf("addresses for %s: %v", iface.Name, err)
+		}
 		for _, address := range addresses {
-			ip, network, err := net.ParseCIDR(address.String())
-			if err == nil && ip.To4() != nil && ip.IsPrivate() {
-				return configuration{ip.String(), net.IP(network.Mask).String(), strings.Repeat("u", 24), strings.Repeat("p", 48)}
+			config, eligible := testLANConfiguration(iface, address.String())
+			t.Logf("relay test interface=%s flags=%s address=%s eligible=%t", iface.Name, iface.Flags, address, eligible)
+			if eligible {
+				return config
 			}
 		}
 	}
-	t.Skip("relay integration requires a private IPv4 interface")
+	t.Skip("relay integration requires an active non-loopback private IPv4 host admitted by the relay's subnet policy")
 	return configuration{}
 }
 
@@ -99,6 +143,7 @@ func relayClient(t *testing.T, address, username, password string) *turn.Client 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
+	t.Logf("relay test TCP source=%s destination=%s", conn.LocalAddr(), conn.RemoteAddr())
 	logger := logging.NewDefaultLoggerFactory()
 	logger.DefaultLogLevel = logging.LogLevelDisabled
 	client, err := turn.NewClient(&turn.ClientConfig{TURNServerAddr: address, STUNServerAddr: address, Conn: turn.NewSTUNConn(conn), Username: username, Password: password, Realm: "couch-lan", RTO: 20 * time.Millisecond, LoggerFactory: logger})

@@ -69,8 +69,10 @@ The helper uses [Pion TURN](https://github.com/pion/turn), pinned by `go.mod`/`g
 Validate native lifecycle/allocation on the target platform as well as the Linux
 package workflow in `act`; cross-compilation alone is not a runtime test.
 Package runs the Go allocation tests on each target OS. Network tests explicitly
-skip if that runner has no private IPv4 interface; a skipped test is not relay
-runtime validation.
+skip if that runner has no active, non-loopback private IPv4
+host admitted by the relay's subnet policy (for example, a /32 is ineligible).
+They log interface eligibility and the TCP client source to diagnose runner
+network differences. A skipped test is not relay runtime validation.
 
 ## Releases
 
