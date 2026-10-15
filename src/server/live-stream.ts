@@ -141,12 +141,14 @@ export function createLiveStreams(options: { ffmpeg: () => Promise<string>; fail
     async ready(sourceId: string, signal?: AbortSignal) {
       const stream = streams.get(sourceId);
       if (!stream || stream.ended) throw new Error("This input has stopped.");
-      const timeout = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...signal ? [signal] : []]);
-      timeout.throwIfAborted();
+      // The stream's media deadline starts after helper provisioning. Every
+      // waiter shares it; only its caller's cancellation can end this wait early.
+      if (!signal) return stream.ready;
+      signal.throwIfAborted();
       await new Promise<void>((resolve, reject) => {
-        const abort = () => reject(timeout.reason);
-        timeout.addEventListener("abort", abort, { once: true });
-        void stream.ready.then(resolve, reject).finally(() => timeout.removeEventListener("abort", abort));
+        const abort = () => reject(signal.reason);
+        signal.addEventListener("abort", abort, { once: true });
+        void stream.ready.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
       });
     },
     async response(sourceId: string, file: string) {

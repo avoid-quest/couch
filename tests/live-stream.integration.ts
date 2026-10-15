@@ -181,9 +181,15 @@ test("ending while the encoder helper is pending cannot start a process later", 
   const f = await fixture(t, () => pending.promise);
   const start = f.streams.start("canceled", { audio: true, video: false });
   const rejected = assert.rejects(start, /stopped/);
+  const controller = new AbortController();
+  const canceled = assert.rejects(f.streams.ready("canceled", controller.signal), /receiver left/);
+  const waiting = assert.rejects(f.streams.ready("canceled"), /stopped/);
+  controller.abort(new Error("receiver left"));
+  await canceled;
+  assert.equal(f.streams.has("canceled"), true, "one caller's cancellation leaves the shared stream intact");
   f.streams.end("canceled");
+  await Promise.all([rejected, waiting]);
   pending.resolve(ffmpeg);
-  await rejected;
   await f.streams.close();
   await assert.rejects(access(f.marker));
   assert.deepEqual(f.failures, []);
@@ -201,7 +207,9 @@ test("an input that sends no bytes expires and reports an upload error", { skip:
   const f = await fixture(t);
   await f.streams.start("silent", { audio: true, video: false });
   const uploader = await f.upload("silent");
+  const waiting = assert.rejects(f.streams.ready("silent"), /stopped sending media/);
   t.mock.timers.tick(30_001);
+  await waiting;
   await new Promise(resolve => setTimeout(resolve, 350));
   assert.equal(f.failures.length, 1);
   assert.match(f.failures[0]!, /stopped sending media/);
