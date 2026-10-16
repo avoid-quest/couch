@@ -2,7 +2,6 @@ import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -66,7 +65,6 @@ export function HomePage() {
   const { stations: allStations, show: onAir, playing: playingStation, meta: showMeta, pending: radioPending, favorites, builtIn } = useOnAir(hasRow("radio"), shell.recentRadio);
   const resume = useMutation({
     mutationFn: ({ item, fromStart }: { item: HistoryItem; fromStart: boolean }) => play(on => shell.playHistory(item, { fromStart, on })),
-    onError: (error: Error, { item }) => toast.error(error.message || `Couldn't play ${item.title}.`),
   });
   const resumable = (item: HistoryItem) => available && !resume.isPending && !!(item.playable || item.queueEntryId);
 

@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
@@ -40,14 +39,11 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   const action = useMutation({
     mutationFn: ({ item, mode, deviceId }: { item: ForLaterItem; mode: Mode; deviceId?: string }) => {
       const path = `/api/for-later/${encodeURIComponent(item.id)}`;
-      const send = (on?: string) => apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load${playOnQuery(on)}`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
+      const send = (on?: string) => apiSend<{ undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load${playOnQuery(on)}`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
       return mode === "play" ? play(send, deviceId) : mode === "append" && session ? session.queue(item.title, send) : send();
     },
     onSuccess: async (body, { item, mode }) => {
-      if (mode !== "remove") {
-        if (body && body.notice) toast(body.notice);
-        return;
-      }
+      if (mode !== "remove") return;
       const text = savedNotice(item.title, false);
       const undoToken = body && body.undoToken;
       if (undoToken && session) session.offerUndo(text, async () => {

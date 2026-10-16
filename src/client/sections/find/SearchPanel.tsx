@@ -1,6 +1,5 @@
 import { mergeSearchHits, searchSources, searchKinds, searchLengths, type SearchRouteState } from "../../search";
 import { memo, useMemo, useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -13,7 +12,7 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
-import { SearchOnlineResults, matchesFacet, providerNames, searchError, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
+import { SearchOnlineResults, matchesFacet, providerNames, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
 import { createId } from "../../session/session";
@@ -215,8 +214,8 @@ function PastedLink({ url, quality, onQualityChange, onDone, ...props }: Props &
     if (!props.onCommand || pending || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setPending(true);
+    // The command reports its own failure on the page.
     try { if (await props.onCommand(mode === "Direct media" ? { type: "enqueue", entry: { id: createId(), title: (hostname + pathname).slice(0, 200), source: url }, playNow, deviceId } : { type: "enqueueWeb", entryId: createId(), url, quality, playNow, deviceId }) && !signal.aborted) onDone(); }
-    catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
     finally { if (!signal.aborted) setPending(false); }
   }
   const navigation = useDetailNavigation();

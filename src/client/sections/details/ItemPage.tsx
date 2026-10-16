@@ -1,7 +1,6 @@
 import type { ComponentProps } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { forLaterQuery } from "@/api/for-later";
 import { radioFavoritesListQuery, radioProgrammesQuery } from "@/api/radio";
@@ -17,6 +16,7 @@ import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
 import { RelatedCollection } from "@/components/RelatedCollection";
 import { RelatedRadio } from "@/components/RelatedRadio";
 import { useSessionGate } from "@/session/session-context";
+import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
 import type { ForLaterItem, ForLaterReference } from "../../../shared/for-later";
 import type { HistoryItem } from "../../../shared/viewing";
@@ -28,7 +28,7 @@ import { sourceLabel } from "@/source-label";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { useDetailNavigation } from "@/detail-navigation";
 import { reorderedIds } from "@/lib/dnd";
-import { savedNotice } from "@/copy";
+import { deviceName, savedNotice } from "@/copy";
 
 const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = typeof kinds[number];
@@ -90,8 +90,10 @@ function DetailLayout({ collection, radio, ...header }: ComponentProps<typeof De
   </>;
 }
 
+// Core says why a verb failed; without its answer, Couch wasn't reached.
 function useDetailAction() {
-  return useMutation({ mutationFn: (run: () => Promise<unknown>) => run(), onError: (error: Error) => toast.error(error.message) });
+  const name = useSessionGate().state?.installationName;
+  return useMutation({ mutationFn: (run: () => Promise<unknown>) => run(), onError: (error: Error) => failed(`Couldn't reach ${deviceName(name)}.`, error) });
 }
 
 function QueueDetails({ id }: { id: string }) {
@@ -174,9 +176,8 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     await refresh();
   };
   const load = async (mode: "play" | "append", on?: string) => {
-    const send = () => apiSend<{ notice?: string }>(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load${playOnQuery(on)}`, { mode }, "POST", 30_000);
-    const result = await (mode === "append" ? queue(item.title, send) : send());
-    if (result?.notice) toast(result.notice);
+    const send = () => apiSend(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load${playOnQuery(on)}`, { mode }, "POST", 30_000);
+    await (mode === "append" ? queue(item.title, send) : send());
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
   // A saved item has no Save: Remove, with Undo, takes it out of For later.

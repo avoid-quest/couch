@@ -1,10 +1,10 @@
 import { loadSendspinClientIdentity, type SendspinStorage } from "@sendspin/sendspin-js";
 import { useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import type { SessionState } from "../../shared/protocol";
 import { normalizeDeviceName } from "../../shared/devices";
 import { couchApp } from "./native-context";
 import { fromSavedCouch } from "./connection";
+import * as toasts from "../toasts";
 import { defaultDeviceSharing, isDeviceSharing, type DeviceSharing } from "../../shared/device-sharing";
 import { playingOn } from "./where-it-plays";
 
@@ -120,5 +120,5 @@ export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output =>
  */
 export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
   const name = playingOn(state, target, deviceId());
-  if (name) toast(`Playing on ${name}`, { id: "playing-on" });
+  if (name) toasts.playingOn(name);
 }
