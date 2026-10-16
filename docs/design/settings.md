@@ -10,6 +10,8 @@ This device → Home lists Home's shelves, Continue, For later, Radio, Played re
 
 Settings is the last tab on the TV and the desktop, and the top bar's gear on phones; every page renders inside the shell on all three.
 
+Not yet: restructuring Settings beyond fitting the shell. #761 settled its two owners and their pages.
+
 ## Admin-only rows
 
 Every paired device opens every shared page: rows that need an admin say "Only an admin can change this." instead of disappearing, and the server enforces it. Only a device's own consent, its capture, Quit Couch and the first-admin code on the host stay local.
