@@ -95,14 +95,18 @@ OK, OK and pausable Stop is OK, Right, OK.
 
 Use an isolated Core and data directory, a paired TV renderer (the TV app's
 window, or a browser tab using the [TV override](design/tv.md#see-the-tv-in-a-browser)), a 1920×1080
-viewport and a paused finite video that supports byte-range seeking. Network
+viewport and a paused finite direct-media video that supports byte-range seeking (a
+provider's video opens `/collection`, and the Details check wants the Playback sheet's `/item` link). Network
 sharing must be enabled for the pairing-dialog check. Save two videos for later
 to exercise the Home tile and asynchronous Details check. Reload the renderer before
 each run so the second Saved item’s Details query is cold; its check delays the
 real For later response by 800 ms. Run with the tab visible
 or a T3 recording active so Radix exit animations finish. Also save two radio
-favorites, configure a local Live TV channel, and pair a second online shared
-output for the favorite ordering/Undo and Live TV Queue/Play on checks. Don't be sharing this device's screen or sound.
+favorites, configure a local Live TV channel the second output can play (serve its
+stream with CORS), and pair a second online shared output for the favorite ordering/Undo
+and Live TV Queue/Play on checks. Queue skips a channel already anywhere in the queue,
+and Play on leaves the TV controlling that output, so before another run remove the
+channel from Up next's Played and bring the video back with Only here. Don't be sharing this device's screen or sound.
 Build the browser checks, minified so the bundle fits one preview evaluation:
 
 ```sh
