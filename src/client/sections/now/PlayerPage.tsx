@@ -18,13 +18,9 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
-import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { WhereItPlays } from "@/sections/shell/Outputs";
-import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
-import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
-import { providerForUrl } from "../../../shared/providers";
 import { isRadio } from "../../../shared/radio";
 import { queueItemLocation, restoreDetailFocus, useDetailNavigation } from "@/detail-navigation";
 
@@ -55,7 +51,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
-    (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus();
+    (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)'))?.focus();
   }, [setQueueOpen]);
   const band = useRef<HTMLDivElement>(null);
   // Up next opened over a video starts below the top band (index.css), so the band publishes its height.
@@ -88,7 +84,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
-  useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus(); }, [queueOpen]);
+  useEffect(() => { if (queueOpen) queueClose.current?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const ends = useEndTime(state);
   useEffect(() => {
@@ -166,14 +162,15 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const buffering = player?.status === "loading" && player.buffering;
   const bufferingStatus = buffering && <p role="status" className={cn("flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm", !playerTarget && "ml-auto w-fit")}><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
-  const provider = current && providerForUrl(current.source.replace(/^web:/, ""));
   const radio = isRadio(current);
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
   const openDetails = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!detailHref || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); detailNavigation.open(detailHref, panel === "settings" ? '.player-page button[aria-label="Playback"]' : undefined);
   };
-  const details = !tvPresentation && detailHref && <Button asChild variant="ghost" size="icon" className="size-11" aria-label="Details" title="Details"><Link to={detailHref} onClick={openDetails}><Info aria-hidden="true" /></Link></Button>;
+  // A pointer has no Back key, so desktop and phones lead the top band with Back; the TV's remote has its own.
+  const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
+  const back = !tvPresentation && <Button variant="ghost" size="icon" className="-ml-2.5 size-11 shrink-0" aria-label={backLabel} title={backLabel} onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
@@ -197,36 +194,32 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
-    {/* The top band shows and hides with the band. Desktop and phones keep the header's trail and Couch switch at the app header's
-        height; over a video, the title and subtitle follow at the left, the clock and the end time at the right. */}
-    <div ref={topBand} data-player-top={shown ? "shown" : "hidden"} inert={!shown} hidden={tvPresentation && !osd} className={cn("player-top absolute inset-x-0 top-0 z-20 grid transition-opacity duration-200 motion-reduce:transition-none tv:pt-6", osd && "player-video-controls", !shown && "opacity-0")}>
-      {!tvPresentation && <div data-player-header className={cn("player-header drag-region window-controls-inset flex h-14 items-center gap-3 px-(--gutter)", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5")}>
-        <div className="min-w-0">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb compact title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
+    {/* The top band shows and hides with the band. Over a video it reads as one board line: the title and subtitle at the
+        left, the clock and the end time at the right. Without a video only desktop and phones show it, for Back and a
+        Remote's TV status. */}
+    <div ref={topBand} data-player-top={shown ? "shown" : "hidden"} inert={!shown} hidden={!osd && !back} className={cn("player-top absolute inset-x-0 top-0 z-20 grid pt-6 transition-opacity duration-200 motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
+      {!osd && <div data-player-header className={cn("player-header drag-region window-controls-inset flex min-h-11 items-center gap-3 px-(--gutter)", playerTarget && "max-sm:flex-wrap max-sm:gap-y-0")}>
+        {back}
         {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
         {playerTarget && bufferingStatus}
-        <div className={cn("ml-auto flex shrink-0 items-center gap-2", !playerTarget && !sharing && "max-w-2/5")}><LiveSharingStatus /><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
       </div>}
-      {/* Two rows read as one board line: title and clock, then subtitle and the end time, said only here. Each row sizes
-          itself, so a narrow screen gives the title all but the clock. */}
-      {osd && <div data-player-heading className="grid px-(--gutter)">
-        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1"><h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1>{details}</div><DigitalClock className="shrink-0 text-sm text-muted-foreground" /></div>
+      {/* Two rows, each sizing itself, so a narrow screen gives the title all but the clock. */}
+      {osd && <div data-player-heading className="drag-region window-controls-inset grid px-(--gutter)">
+        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><DigitalClock className="shrink-0 text-sm text-muted-foreground" /></div>
         {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl">{ends}</p>}</div>}
       </div>}
     </div>
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
-      {/* Only the TV shows a large Paused: it reads from the sofa. */}
-      {player?.status === "paused" && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 hidden place-items-center tv:grid">
+      {/* A large Paused reads from the sofa. */}
+      {player?.status === "paused" && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
         <div className="grid justify-items-center gap-2 bg-background px-6 py-4"><Pause aria-hidden="true" className="size-20 fill-current" /><span className="text-2xl font-medium">Paused</span></div>
       </div>}
       {current && (!picture || (active || ended) && audioOnly) && !status && <div data-player-summary className="player-summary">
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         {/* Home's hero, in its order: the title at display size, one muted meta line, then the departures board's line. */}
         <div data-player-audio-copy className="grid min-w-0 gap-2">
-          <div className="flex min-w-0 items-center gap-1">
-            <h1 className="min-w-0 line-clamp-2 text-3xl font-semibold tracking-tight break-words" title={title}>{title}</h1>
-            {details}
-          </div>
+          <h1 className="min-w-0 line-clamp-2 text-3xl font-semibold tracking-tight break-words" title={title}>{title}</h1>
           <p role="status" className="truncate text-sm text-muted-foreground">{meta}</p>
           {ends && <p data-player-ends className="text-2xl tabular-nums">{ends}</p>}
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
@@ -264,6 +257,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {state && <WhereItPlays state={state} connected={connected} run={run} className="size-11" />}
             <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
             <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
+            {/* The window can leave fullscreen; the TV's never does. */}
             {!tvPresentation && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>
