@@ -26,15 +26,6 @@ type or copy rules.
 - **Fewer exceptions.** A rule that needs an exception for one surface is a
   sign the structure is wrong. Prefer changing the structure.
 
-## Player
-
-- **Over a video:** with controls up, the title and subtitle sit at the top
-  left and the clock and end time at the top right, over the existing scrim.
-  The band keeps its order and auto-hide.
-- **Audio:** Now playing keeps contained artwork beside Up next.
-- **TV:** Info still opens the player. Everything in "The TV player answers a
-  remote" holds.
-
 ## Where it plays
 
 People must never wonder whether a word names a device, a group or a place.
@@ -108,7 +99,7 @@ release notes ([ci.md](ci.md)).
 | `home` | Open Home on what you'll most likely play next | Home (landed) | `design/home.md` |
 | `browse` | Search everything and open each source from its own home | Search, source homes, details (landed) | `design/browse.md` |
 | `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library (landed) | `design/browse.md` |
-| `player` | Show the time and title over the playing picture | Player | `design/player.md` |
+| `player` | Show the time and title over the playing picture | Player (landed) | `design/player.md` |
 | `where-it-plays` | Choose where it plays from a simple list of devices | rules model and tests; picker | `design/where-it-plays.md` |
 | `devices` | See every device and what it plays on one page | overview | `design/where-it-plays.md` |
 | `remote` | Drive the TV from a classic remote on your phone | Remote; Settings fitted to the shell; delete this brief | `design/remote.md`, `design/settings.md` |
