@@ -59,9 +59,10 @@ Live (`/live`) is one page in three parts, each under a section heading, as
 Home's shelves are:
 
 - **On air:** a shelf of `MediaTile`s, the saved stations first, then the
-  built-in ones. Each tile reads the station, its current show and "Live"
-  (a `DurationBar`): a show's `expiresAt` is when its data refreshes, not when
-  it ends, so there is no "until" time. A tile plays its station. Home's
+  built-in ones. Each tile reads the station and its current show; the
+  heading already says they're on air, so a tile doesn't repeat "Live". A
+  show's `expiresAt` is when its data refreshes, not when it ends, so there
+  is no "until" time. A tile plays its station. Home's
   Radio shelf builds the same list (`useOnAir`, with Home's recents first).
   The shelf waits for the shows, so no tile grows a line under the focus,
   then keeps its order while Live stays open, as Home's shelves do. Its first
@@ -141,7 +142,7 @@ keep their existing disabled state.
 
 One `Button` wrapping `MediaArtwork` (contained; 2:3 for films
 and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
-title and one meta line, plus a `DurationBar` on Continue and On air. It is one focus
+title and one meta line, plus a `DurationBar` on Continue. It is one focus
 stop whose press does the item's main verb. The catalog has no media tile
 and Card breaks Flat, so a tile is the smallest Button composition. Shelves
 (`Shelf`: Home's, and Live's On air) are plain overflow rows (`data-nav-row`):
