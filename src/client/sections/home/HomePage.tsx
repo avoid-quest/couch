@@ -124,10 +124,11 @@ export function HomePage() {
   const live = !!(current?.live || current?.kind === "radio");
   const at = playsOn(state);
   const show = programme?.playbackId === player?.playbackId ? programme : null;
-  // Where it plays reads "on {name}" here too, as in the now-playing bar and the player.
+  // Where it plays reads "on {name}" here too, as in the now-playing bar and the player. A station without its show
+  // reads Radio, as the player does, never its stream's host.
   const playingMeta = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
-    : [(show ? current.title : current.subtitle) || sourceLabel(current.source), player?.status === "paused" ? "Paused" : player?.status === "loading" ? "Loading…" : null, at?.elsewhere && `on ${at.name}${at.more ? ` +${at.more}` : ""}`].filter(Boolean).join(", ");
+    : [(show ? current.title : current.subtitle) || (isRadio(current) ? "Radio" : sourceLabel(current.source)), player?.status === "paused" ? "Paused" : player?.status === "loading" ? "Loading…" : null, at?.elsewhere && `on ${at.name}${at.more ? ` +${at.more}` : ""}`].filter(Boolean).join(", ");
 
   const lead = !hero ? null : hero.kind === "playing" ? current && <HomeHero thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={show?.title || current.title} meta={playingMeta}
       time={live ? "Live" : remaining != null && length ? `ends ${formatEndTime(remaining, now)}` : undefined}>
