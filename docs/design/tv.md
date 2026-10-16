@@ -1,0 +1,63 @@
+# TV
+
+## The TV has its own layout
+
+A TV (`body.tv-presentation`, styled with the
+`tv:` variant) keeps the sections, routes and model and recomposes them for
+a remote at ten feet. The TV uses its own
+composition: fewer focus stops, a quiet local-name header and controls revealed
+over the picture. Desktop and phone keep their browsing and Couch-switch controls.
+Home's tiles: [Home](home.md#tiles-on-the-tv).
+
+Focus is
+the only highlight; no hover style applies on the TV. The TV has no hover: under `.tv-presentation` the `hover` variant
+never applies, so a stray pointer can't compete with focus.
+
+Back closes an open
+overlay, then leaves a detail page for the page that opened it with its focus
+restored, then takes any section to Home, where Back does nothing. Opening
+Up next changes the player URL without losing its opener. Settings' own OK
+and Back: [Settings](settings.md#section-nav).
+
+After every page change, focus is on the page's first control. The header holds the sections, the TV's name
+and the clock as plain text; the Couch choice lives in Settings → Couch connection.
+Volume and every fader move 5 per press. Text fields say "Type with Remote on
+your phone": a phone's Remote is the TV's text entry.
+
+## Every journey step works with a remote
+
+The TV has only arrows, Enter and
+Back, so no control may keep them all: the arrows past a radio group's first
+or last radio move on, and on the TV so do Up/Down across a horizontal slider,
+Up/Down in a one-line field and every arrow on a closed select or menu button
+(OK opens it).
+
+A TV fader (Where it plays' faders, and every Volume, which
+has the player's tools beside it) moves on with every arrow until
+OK hands it the keys along it; OK, Back or leaving it ends that, as TV
+equalisers do, and Where it plays' hint says so on the TV. Playback position
+keeps Left/Right for seeking, and a seek's brief stall keeps the transport
+enabled so focus stays where it was.
+
+Spatial navigation places a
+slider by its whole track, not its moving thumb, reaches the sticky header
+and mini player only after the page's own controls, and keeps focus clear
+of both. After a page change the first key starts at the page's first
+control. Screens shown before the shell (the first-run chooser) bring the
+same arrow navigation.
+
+## The TV player answers a remote
+
+With its controls hidden, OK shows them
+on the first enabled transport slot, Up and Down show them on the timeline (or
+that transport slot when there is no seekable timeline), and Left and Right seek
+10 s and show the timeline (live media that can't seek only shows them). Back
+hides the controls; with them hidden it leaves the player for the page that
+opened it, and playback goes on in Home's Now row and the mini player.
+
+Paused shows a large Pause glyph and "Paused", and the controls stay up until
+Back hides them. The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
+Details is in the Playback sheet. From hidden controls, Stop for pausable media
+is OK, Right, OK. Nonpausable radio/live starts on Stop, so it is OK, OK.
+Home's Now row uses that
+same transport rather than maintaining separate Play/Pause, Stop and Next logic.
