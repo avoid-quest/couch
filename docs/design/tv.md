@@ -1,12 +1,21 @@
 # TV
 
-## The TV has its own layout
+## The TV is driven by a remote
 
-A TV (`body.tv-presentation`, styled with the
-`tv:` variant) keeps the sections, routes and model and recomposes them for
-a remote at ten feet. The TV uses its own
-composition: fewer focus stops, a quiet local-name header and controls revealed
-over the picture. Desktop and phone keep their browsing and Couch-switch controls.
+A TV (`body.tv-presentation`, styled with the `tv:` variant) has Couch's one
+layout, the layout every screen takes ([Design](../design.md)): one focus stop
+per row and tile, a quiet header, and controls revealed over the picture.
+What the TV adds is for its remote, which has only arrows, OK and Back:
+
+- spatial navigation, focus on page entry and Back, below;
+- its own name in the header instead of the Couch switch, and no Remote tab
+  or Keyboard shortcuts ([Shell](shell.md#header-and-section-nav));
+- a visible "…" on rows whose page doesn't hold their other verbs, since a
+  remote can't open the context menu that holds them on other screens
+  ([Browse](browse.md#mediarow--medialist));
+- no shelf scrollbars, Back buttons or fullscreen, which only a pointer or a
+  window uses.
+
 Home's hero and shelves: [Home](home.md). Search and Details: [Browse](browse.md).
 
 Focus is
@@ -24,9 +33,8 @@ After every page change, focus is on the page's first control. When that control
 after later ones (Home's hero waits for its data, Live's first On air tile for the shows, a collection's Play for its source), focus moves
 to it as it appears, unless a key or pointer came first. Library starts on its rail's current section, and OK on
 another section opens it and keeps the rail; Right reaches its rows. On Details the first control is the
-primary verb, so OK plays, and Right walks the other verbs one stop each. The header holds the sections as centred tabs,
-the TV's name at the left and the clock at the right, as plain text; the Couch choice lives in Settings → Couch
-connection, and the TV has no Remote tab or Keyboard shortcuts. Layout per screen: [Shell](shell.md#header-and-section-nav).
+primary verb, so OK plays, and Right walks the other verbs one stop each. The header's left holds the TV's name
+as plain text; its Couch choice lives in Settings → Couch connection ([Shell](shell.md#header-and-section-nav)).
 Volume and every fader move 5 per press. Search's field says "Type with Remote on
 your phone": a phone's Remote is the TV's text entry.
 
@@ -73,10 +81,9 @@ shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row firs
 shelves are walked one by one and never skipped for a farther control that
 lines up. In their own row they reach only a control past them (a wrapped
 line, Continue's Details), never a tile beside them whose caption is shorter
-or taller. The TV's tab bar is not sticky: it scrolls away
-with the page, as on Apple TV, so the page gets the screen. Up from a page's
-first row reaches it on the current tab, and Down from it returns to the
-page's first control. After a page change the first key starts at the page's first
+or taller. The tab bar scrolls away with the page, as on Apple TV and on every
+Couch screen. Up from a page's first row reaches it on the current tab, and
+Down from it returns to the page's first control. After a page change the first key starts at the page's first
 control. Screens shown before the shell (the first-run chooser) bring the
 same arrow navigation.
 
@@ -90,11 +97,11 @@ hides the controls; with them hidden it leaves the player for the page that
 opened it, and playback goes on in Home's hero and the now-playing bar.
 
 Paused shows a large Pause glyph and "Paused", and the controls stay up until
-Back hides them. Over a video, the top band shows and hides with the controls:
-the title and subtitle at the top left, the clock and the end time at the top
-right ([Player](player.md#controls-over-the-picture)). The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
-Details is in the Playback sheet, and the tab bar is hidden while it is open
-(the header takes the `hidden` attribute, since `tv:grid` would beat the class). From hidden controls, Stop for pausable media
+Back hides them. Over a video, the top band shows and hides with the controls
+([Player](player.md#controls-over-the-picture)). The TV's player has none of
+the pointer's Back arrow or the window's fullscreen; Details is in the Playback
+sheet, and the tab bar is hidden while the player is open (the header takes
+the `hidden` attribute). From hidden controls, Stop for pausable media
 is OK, Right, OK. Nonpausable radio/live starts on Stop, so it is OK, OK.
 Home's hero uses that
 same transport rather than maintaining separate Play/Pause, Stop and Next logic.
