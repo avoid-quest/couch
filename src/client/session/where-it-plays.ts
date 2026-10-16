@@ -130,6 +130,24 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
   };
 }
 
+/** Another Playback in the overview: its summary and status over the devices it plays on now. */
+export type Elsewhere = { playback: PlaybackSummary; status: string; rows: Row[] };
+/** The overview: the picker's header over the devices in the Playback you control, then `elsewhere`, then `free`. */
+export type Overview = Picker & { elsewhere: Elsewhere[]; free: Row[] };
+
+/**
+ * The overview: the picker grouped by where each device plays now, since a window acts only on the Playback it
+ * controls. That Playback's devices come first, then each other Playback that plays on an online device, in Core's
+ * order, then the free devices, offline ones last. A row's check still means "in the Playback you control".
+ */
+export function overview(state: ClientSessionState, options: { here: string; tv?: boolean }): Overview {
+  const { rows, ...header } = picker(state, options);
+  // A Playback that hasn't stopped, where an online device out of yours plays now; a stopped one leaves it free.
+  const playing = ({ device, output }: Row) => output || !device.online ? undefined : state.playbacks?.find(playback => playback.id !== state.playback && playback.status !== "idle" && playback.outputs.some(item => item.deviceId === device.id));
+  const elsewhere = (state.playbacks ?? []).map(playback => ({ playback, status: statusText[playback.status], rows: rows.filter(row => playing(row) === playback) })).filter(group => group.rows.length);
+  return { ...header, rows: rows.filter(row => row.output), elsewhere, free: rows.filter(row => !row.output && !playing(row)) };
+}
+
 /** Play on's targets: this device first, then the other online devices that share; none while this is the only one. */
 export function playOnTargets(state: State, here: string) {
   const online = (state?.devices ?? []).filter(device => device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(b.id === here) - Number(a.id === here));
