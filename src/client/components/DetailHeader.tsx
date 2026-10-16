@@ -33,7 +33,7 @@ export function DetailHeader({ title, meta, description, thumbnail, shape = "vid
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
   return <header className="grid gap-x-12 gap-y-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-start">
     {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
-    {thumbnail && <div aria-hidden="true" className="h-56 min-w-0 md:h-64 tv:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>}
+    {thumbnail && <div aria-hidden="true" className="h-56 min-w-0 md:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>}
     <div className="grid min-w-0 content-start gap-2 [--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
       <h1 tabIndex={-1} className="text-3xl font-semibold tracking-tight break-words outline-none">{title}</h1>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}

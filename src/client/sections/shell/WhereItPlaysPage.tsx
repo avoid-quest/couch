@@ -8,8 +8,8 @@ export function WhereItPlaysPage() {
   const { state, connected, run } = useSessionGate();
   const navigation = useDetailNavigation();
   return <section data-page="Where it plays">
-    {/* A phone's top bar already names the page, and a TV's remote has its own Back. */}
-    <PageHeader title="Where it plays" back={{ label: "Back", onClick: () => navigation.back("/") }} className="touch:[&_h1]:sr-only tv:[&_[data-back]]:hidden" />
+    {/* A pointer needs Back; a TV's remote has its own. */}
+    <PageHeader title="Where it plays" back={{ label: "Back", onClick: () => navigation.back("/") }} className="tv:[&_[data-back]]:hidden" />
     {state && <Overview state={state} connected={connected} run={run} />}
   </section>;
 }
