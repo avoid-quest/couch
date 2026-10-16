@@ -167,8 +167,8 @@ links do, and a bordered field there would be a panel inside the pager.
 
 ## ContentBreadcrumb
 
-The path above a collection or item (Search, then
-the source, then the collection; a station's starts at Live). It replaces a Back control, so its
+The path above a collection or item: the section the page belongs to (its
+tab: [Shell](shell.md#sections)), then the source, then the collection. It replaces a Back control, so its
 links are `text-sm`, the controls' size, rather than Mira's `text-xs`
 caption size, and each is `min-h-11`, a 44px target on every screen.
 

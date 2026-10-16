@@ -23,6 +23,7 @@ import type { HistoryItem } from "../../../shared/viewing";
 import { avoidRadioPlaylistId, isRadio, type RadioStation } from "../../../shared/radio";
 import type { PlaybackCollection } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
+import { readFrom } from "../../../shared/page-paths";
 import { sourceLabel } from "@/source-label";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { useDetailNavigation } from "@/detail-navigation";
@@ -33,9 +34,10 @@ const kinds = ["history", "saved", "radio", "queue"] as const;
 type Kind = typeof kinds[number];
 type ItemDetails = { kind: "history"; item: HistoryItem } | { kind: "saved"; item: ForLaterItem } | { kind: "radio"; item: RadioStation };
 
-export function readItemSearch(search: Record<string, unknown>): { kind?: Kind; id?: string } {
+export function readItemSearch(search: Record<string, unknown>): { kind?: Kind; id?: string; from?: string } {
   const kind = kinds.find(kind => kind === search.kind);
-  return kind && typeof search.id === "string" && search.id.trim() && search.id.length <= 2048 ? { kind, id: search.id } : {};
+  const from = readFrom(search.from);
+  return { ...kind && typeof search.id === "string" && search.id.trim() && search.id.length <= 2048 ? { kind, id: search.id } : {}, ...from ? { from } : {} };
 }
 
 async function readDetails(credentials: ApiCredentials, kind: Exclude<Kind, "queue">, id: string, signal: AbortSignal): Promise<ItemDetails> {

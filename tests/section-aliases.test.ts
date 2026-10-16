@@ -28,3 +28,11 @@ test("Core serves the sections, Where it plays' overview and the earlier address
   expect(sectionForPath("/collection")).toBe("Search");
   expect(pathForSection("For later")).toBe("/library");
 });
+
+test("an item or collection page keeps the section that opened it, as its URL says", () => {
+  expect(sectionForPath("/item", "?kind=saved&id=x&from=library")).toBe("Library");
+  expect(sectionForPath("/collection", "?provider=youtube&url=&from=home")).toBe("Home");
+  expect(sectionForPath("/item", "?kind=radio&id=x&from=search")).toBe("Search");
+  expect(sectionForPath("/item", "?kind=radio&id=x")).toBe("Live");
+  expect(sectionForPath("/item", "?kind=saved&id=x&from=settings")).toBe("Search");
+});
