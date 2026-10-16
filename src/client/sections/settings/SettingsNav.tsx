@@ -43,7 +43,8 @@ export function SettingsNav({ active }: Props) {
       {scopes.map(item => (
         <div key={item.id} role="group" aria-label={`${item.title} · ${item.detail}`} data-settings-scope={item.id} className="flex flex-col">
           <p aria-hidden="true" className="truncate px-2.5 text-sm font-medium">{item.title}</p>
-          <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{item.detail}</p>
+          {/* The role can be longer than the rail is wide, so it wraps. */}
+          <p aria-hidden="true" className="mb-1 px-2.5 text-xs text-muted-foreground">{item.detail}</p>
           {item.pages.map((id, index) => {
             const name = group(id), starts = index > 0 && name !== group(item.pages[index - 1]!);
             return <Fragment key={id}>
