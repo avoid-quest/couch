@@ -15,7 +15,7 @@ import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
-import { SearchOnlineResults, matchesFacet, providerNames, searchError, type SearchCollection, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
+import { SearchOnlineResults, matchesFacet, providerNames, searchError, type SearchFacet, type SearchHit, type SearchKind, type SearchLength, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
 import { createId } from "../../session/session";
@@ -23,7 +23,6 @@ import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
-import { Progress } from "@/components/ui/progress";
 import { isTvPresentation } from "@/session/presentation";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 
@@ -188,43 +187,17 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
 });
 
 /** Every media row's verbs: a filled ▷ for Play (or Resume), then one "…" menu with Play on, Queue, Save and the rest. */
-export function BrowseActions({ title, actions }: { title: string; actions: SearchHit["actions"] }) {
+export function BrowseActions({ title, actions, size = "icon" }: { title: string; actions: SearchHit["actions"]; size?: "icon" | "icon-lg" }) {
   const { devices, on } = usePlayOn();
   const play = actions.find(action => action.label === "Play" || action.label === "Resume");
   // Play on waits for a second online Device, so it alone doesn't open an empty menu.
   const more = actions.filter(action => action !== play && (!action.playOn || devices.length > 0));
   return <>
-    {play && <Button variant="ghost" size="icon" aria-label={on(`${play.label} ${title}`)} title={on(play.label)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4 fill-current" /></Button>}
-    {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
+    {play && <Button variant="ghost" size={size} aria-label={on(`${play.label} ${title}`)} title={on(play.label)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4 fill-current" /></Button>}
+    {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size={size} aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>}
   </>;
-}
-
-/** Compact title and artwork; the breadcrumb owns navigation. */
-export function CollectionHeader({ collection, canPlay }: { collection: SearchCollection; canPlay: boolean }) {
-  const { on } = usePlayOn();
-  return <header>
-    <div data-collection-preview className="flex items-start gap-4">
-      {collection.thumbnail && <MediaArtwork thumbnail={collection.thumbnail} title={collection.title} className="size-20 shrink-0 object-contain bg-transparent sm:size-24" />}
-      <div className="min-w-0 space-y-2">
-        <h1 tabIndex={-1} className="max-w-3xl text-2xl font-semibold tracking-tight break-words outline-none">{collection.title}</h1>
-        {collection.subtitle && <p className="text-sm text-muted-foreground">{collection.subtitle}</p>}
-        {!!collection.position && <div className="max-w-sm space-y-1 text-sm text-muted-foreground"><p>Resume at {formatDuration(collection.position)}{collection.duration != null && ` of ${formatDuration(collection.duration)}`}</p>{!!collection.duration && <Progress aria-label="Viewing progress" value={Math.min(100, collection.position / collection.duration * 100)} className="h-1" />}</div>}
-        {(collection.playAll || collection.queueAll || collection.save) && <div className="flex flex-wrap items-center gap-1">
-          {collection.playAll && <Button size="sm" disabled={!canPlay || collection.disabled} onClick={collection.playAll}>{on(collection.playLabel ?? (collection.single ? "Play" : "Play all"))}</Button>}
-          {collection.fromStart && <Button variant="ghost" size="sm" disabled={!canPlay || collection.disabled} onClick={collection.fromStart}>From start</Button>}
-          <BrowseActions title={collection.title} actions={[
-            ...(collection.playOn ? [{ label: "Play on", disabled: !canPlay || collection.disabled, playOn: collection.playOn }] : []),
-            ...(collection.playNext ? [{ label: "Play next", disabled: collection.disabled, run: collection.playNext }] : []),
-            ...(collection.queueAll ? [{ label: collection.single ? "Queue" : "Queue all", disabled: collection.disabled, run: collection.queueAll }] : []),
-            ...(collection.save ? [{ label: collection.saved ? "Saved" : "Save", disabled: collection.disabled || collection.saveDisabled, run: collection.save }] : []),
-          ]} />
-        </div>}
-      </div>
-    </div>
-    {collection.description && <p className="mt-4 max-w-prose text-sm leading-relaxed break-words text-muted-foreground">{collection.description}</p>}
-  </header>;
 }
 
 export function MoreResults({ summaries }: { summaries: Entry[] }) {

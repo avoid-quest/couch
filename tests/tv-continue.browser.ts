@@ -52,11 +52,15 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
     await until(() => !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
     const options = async () => { document.querySelector<HTMLElement>('[data-page="Item"] button[aria-label^="Options"]')!.focus(); await press("Enter"); };
     const menu = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === label);
+    // Details' row of verbs holds From start, Queue and Play on; its "…" menu holds the rest.
+    const verb = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[data-page="Item"] header [data-nav-row] button')].find(element => element.textContent === label);
+    assert(verb("From start") && verb("Queue") && (unavailable || verb("Play on") && !verb("Play on")!.disabled), "History Details lacks Continue verbs or Play on");
     await options();
-    assert(menu("From start") && menu("Queue") && menu("Remove from Continue") && (unavailable || document.querySelector('[role="group"][aria-label="Play on"] [role="menuitem"]:not([data-disabled])')), "History Details lacks Continue actions or playable targets");
+    assert(menu("Remove from Continue"), "History Details lacks Remove from Continue");
     if (unavailable) {
-      assert(menu("From start")!.hasAttribute("data-disabled") && document.querySelector('[data-page="Item"] button:disabled') && !menu("Remove from Continue")!.hasAttribute("data-disabled"), "Unavailable History lost disabled playback or enabled removal");
+      assert(verb("From start")!.disabled && document.querySelector('[data-page="Item"] button:disabled') && !menu("Remove from Continue")!.hasAttribute("data-disabled"), "Unavailable History lost disabled playback or enabled removal");
     } else {
+      await press("Escape"); await until(() => !document.querySelector('[role="menu"]'));
       const originalFetch = window.fetch;
       let queued = false;
       window.fetch = async (...args) => {
@@ -64,7 +68,7 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
         if (new URL(String(args[0]), location.href).pathname === `/api/progress/${encodeURIComponent(id)}/queue` && response.ok) queued = true;
         return response;
       };
-      try { menu("Queue")!.click(); await until(() => queued); }
+      try { verb("Queue")!.click(); await until(() => queued); }
       finally { window.fetch = originalFetch; }
       assert(location.pathname === "/item" && document.querySelector('video')?.paused === paused, "Queue started playback or left Details");
       await options();
@@ -150,7 +154,7 @@ window.runBusyLiveHitRegression = async () => {
     assert(row.querySelector('button[aria-label^="Options"]') && row.querySelector('button[aria-label^="Play"]:disabled'), "Busy Play or secondary actions changed");
     const paused = document.querySelector('video')?.paused;
     open.focus(); open.click();
-    await until(() => new URLSearchParams(location.search).get("kind") === "radio" && new URLSearchParams(location.search).get("id") === id && !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
+    await until(() => new URLSearchParams(location.search).get("kind") === "radio" && new URLSearchParams(location.search).get("id") === id && !!document.querySelector('[data-page="Item"] [data-page-first]'));
     assert(document.querySelector('video')?.paused === paused, "Open started playback");
     await press("Escape"); await wait();
     // Remount ends this row's busy lifetime and restores Play, so the temporary
