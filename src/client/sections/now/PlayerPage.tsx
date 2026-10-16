@@ -61,12 +61,13 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)'))?.focus();
   }, [setQueueOpen]);
   const band = useRef<HTMLDivElement>(null);
-  // Up next opened over a video starts below the top band (index.css), so the band publishes its height.
+  // Up next opened over a video (index.css) and toasts (sonner.tsx) start below the top band, so it publishes its height.
   const topBand = useCallback((element: HTMLDivElement | null) => {
     if (!element) return;
-    const observer = new ResizeObserver(() => element.parentElement?.style.setProperty("--player-top", `${element.offsetHeight}px`));
+    const root = document.documentElement.style;
+    const observer = new ResizeObserver(() => root.setProperty("--player-top", `${element.offsetHeight}px`));
     observer.observe(element, { box: "border-box" });
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); root.removeProperty("--player-top"); };
   }, []);
   const panelTrigger = useRef<HTMLButtonElement>(null);
   const panelClose = useRef<HTMLButtonElement>(null);

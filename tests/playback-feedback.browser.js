@@ -142,8 +142,8 @@
       check(`${active ? "active" : "idle"} ${surface} Queue confirms exact title once and preserves playback`,
         confirmation(item.title) && gate().state.queue.at(-1).title === item.title && gate().state.currentEntryId === before.current && !!before.current === active);
       if (confirmation(item.title)) {
-        click("[data-sonner-toast] a", "Up next");
-        await wait(() => location.pathname + location.search === "/now?queue=true", "actual item Up next link");
+        click("[data-sonner-toast] button", "Up next");
+        await wait(() => location.pathname + location.search === "/now?queue=true", "actual item Up next action");
         check(`${surface} Up next opens the actual queue`, gate().state.queue.at(-1).title === item.title && document.body.innerText.includes(item.title));
       }
       return { failures: results.slice(start).filter(result => !result.pass).length, results: results.slice(start) };

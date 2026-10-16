@@ -44,9 +44,9 @@ Volume across several Devices: [Where it plays](where-it-plays.md#volume).
 Audio and remote playback place contained artwork beside a persistent
 desktop queue. On phones, Up next replaces the artwork while transport stays
 available. Video uses the full viewport until Up next opens beside it; then the picture is letterboxed, never cropped.
-On phones, Up next replaces the picture too. Opened over a video, Up next and
-the picture start below the top band, which turns solid and publishes its
-height as `--player-top`.
+On phones, Up next replaces the picture too. The top band publishes its
+height as `--player-top`, and toasts sit below it. Opened over a video, Up
+next and the picture start below it too, as it turns solid.
 Queue navigation survives playback changes; track-specific settings reset.
 Transport, volume and tools share one bottom dock across media modes. Keep
 unavailable controls in their slots so loading and queue changes preserve

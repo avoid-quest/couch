@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { collectionLocation } from "@/detail-navigation";
 import { providerCollectionCursor } from "@/collection-pagination";
 import type { Action } from "../../../shared/protocol";
@@ -12,6 +11,7 @@ import { forLaterQuery } from "@/api/for-later";
 import { apiFetch } from "@/api/client";
 import { historyQuery } from "@/api/progress";
 import { usePlayOn } from "@/components/PlayOn";
+import { failed } from "@/toasts";
 import type { MenuAction } from "@/components/RowMenu";
 import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
 import type { HistoryItem } from "../../../shared/viewing";
@@ -115,23 +115,23 @@ function OnlineResults(props: Props) {
     const result = await browse.fetchNextPage({ cancelRefetch: false });
     if (!signal?.aborted && !result.isError) setVisible(value => value + 6);
   }
-  async function action(work: (signal: AbortSignal) => Promise<boolean | void>) {
+  async function action(failure: string, work: (signal: AbortSignal) => Promise<boolean | void>) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal;
     setBusy(true);
     try { await work(signal); }
-    catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
+    catch (reason) { if (!signal.aborted) failed(failure, reason); }
     finally { if (!signal.aborted) setBusy(false); }
   }
   function play(item: ProviderItem, playNow: boolean, placement?: "next", deviceId?: string) {
-    void action(async signal => {
+    void action(`Couldn't ${playNow ? "play" : "queue"} ${item.title}.`, async signal => {
       const ok = await props.onCommand?.({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.collection ? { collection: item.collection } : {}), ...(!music ? { quality: props.quality } : {}), playNow, ...(placement ? { placement } : {}), ...(deviceId ? { deviceId } : {}) });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
     });
   }
   function save(item: ProviderItem, saved: boolean) {
-    void action(async signal => {
+    void action(`Couldn't ${saved ? "remove" : "save"} ${item.title}.`, async signal => {
       if (item.kind === "media") {
         const existing = savedWeb(item);
         let collection = item.collection;
@@ -189,11 +189,11 @@ function OnlineResults(props: Props) {
     const progress = animeResume ?? (start ? progressFor(start, historyItems) : selected ? seriesResumeFor(selected, historyItems) : undefined);
     const resume = progress?.playable && !progress.watched && progress.position > 0 ? progress : undefined;
     const startItem = (fromStart = false, deviceId?: string) => {
-      if (resume && props.onPlayHistory) void action(() => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on }), deviceId));
+      if (resume && props.onPlayHistory) void action(`Couldn't play ${resume.title}.`, () => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on }), deviceId));
       else if (start) play(start, true, undefined, deviceId);
     };
     const selectedSaved = !!selected && (selected.kind === "media" ? !!savedWeb(selected) : !!favorites?.some(entry => entry.id === selected.id));
-    const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(() => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(!playNow ? { title: page.title || selected?.title || providerNames[provider] } : {}), ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
+    const list = (playNow: boolean, deviceId?: string) => props.onCommand && props.url && page?.items.some(item => item.kind === "media") ? () => void action(`Couldn't ${playNow ? "play" : "queue"} ${page.title || selected?.title || providerNames[provider]}.`, () => props.onCommand?.({ type: "enqueueProvider", provider, url: props.url!, shape: selected?.kind === "media" ? "atom" : "playlist", ...(!playNow ? { title: page.title || selected?.title || providerNames[provider] } : {}), ...(selected?.collection ? { collection: selected.collection } : {}), playNow, quality: props.quality, ...(deviceId ? { deviceId } : {}) }) ?? Promise.resolve(false)) : undefined;
     props.onResults?.(providerNames[provider], { page: page ?? undefined, count: page?.items.length ?? 0, loading, error: !!error, errorMessage: error, retry: () => { if (props.paged) void single.refetch(); else if (browse.isFetchNextPageError) void more(); else void browse.refetch(); }, warning: page?.warning, more: !props.paged && (visible < (page?.items.length ?? 0) || browse.hasNextPage) ? () => void more() : undefined, moreDisabled: !props.connected || loading, facets: page?.items.map(facet), hits,
       ...(props.url ? { collection: { title: page?.title || selected?.title || providerNames[provider], thumbnail: page?.thumbnail ?? selected?.thumbnail, description: page?.description ?? selected?.description ?? progress?.description, subtitle: page?.subtitle ?? selected?.subtitle, source: providerNames[provider], disabled: busy || !props.connected || !!props.onPlayHistory && history.isLoading,
         single: selected?.kind === "media", playAll: start || resume ? () => startItem() : list(true), playOn: start || resume ? deviceId => startItem(false, deviceId) : list(true) && (deviceId => list(true, deviceId)?.()), queueAll: list(false),

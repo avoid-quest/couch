@@ -121,6 +121,7 @@ current tab, Saved Details entry on Play and Right across its verbs, pairing ove
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
 the tab bar's scroll, Up and Back, repeated Home Back, five-point OK-to-adjust Volume, Where it plays' Every device
 entry on the overview's first device and Back to the picker's button, Saved removal/Undo/order,
+a remote's Undo by Up past the tabs (Back leaves it, OK undoes and returns focus to the tab),
 retained favorite and Live TV actions, and a Remote that can't choose or open this device's
 capture on Sharing while its own pointer and keys still can (it drives the bundle's copy of
 `applyTvNavigation`, the path Remote keys take; `runSharingLocalOnlyRegression()` runs it alone). Cold and warm Saved Back retain the

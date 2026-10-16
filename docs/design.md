@@ -101,7 +101,7 @@ The shell's content wrapper sets the one top offset below the header (`pt-6`); p
 
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
-actions use its `actionButton` classes because its default height is 24px.
+actions take `h-8 text-sm` and the touch target through its `actionButton` classes, as its default is 24px.
 
 ## Components
 
@@ -132,7 +132,10 @@ has room to read. Keep the parser's safe URL handling and omit raw HTML.
 
 Messages:
 
-- **Toast** (`sonner`) at bottom right for errors, removal/Stop Undo, other people's activity and unexpected outcomes. Successful explicit Queue confirms `Queued {title}` with Up next on the requesting controller, idle or playing; other controllers and queue snapshots stay quiet. Other routine user-triggered actions stay quiet. One line, at most one action.
+- **Toast** (`sonner`) for errors, removal/Stop Undo, other people's activity and unexpected outcomes. Successful explicit Queue confirms `Queued {title}` with Up next on the requesting controller, idle or playing; other controllers and queue snapshots stay quiet. Other routine user-triggered actions stay quiet. One line, at most one action, named by its verb: Undo, Up next, Tap to hear.
+  - **Kinds.** Every toast is one of `src/client/toasts.ts`'s kinds; only that module and the Toaster import sonner. Each kind fixes its duration, its action and its id, so a repeat replaces the toast showing: `failed` ("Couldn't X.", 6 s), `undoable` (Undo, 6 s or what the Undo has left; each offer retires the last), `queued` (Up next, 4 s), `playingOn` (4 s), `activity` (6 s), `notice` (6 s) and `waitingForTap` (Tap to hear, until sound plays). `failed` shows Core's own sentence when Core sent one; a network error or timeout gets the call site's Couch sentence, and its detail goes to the console.
+  - **Placement.** Top right at the page gutter on every screen: below the header's row (the clock's on the TV, the top bar's on phones), and in the player below its top band, which publishes its height as `--player-top`. Two show at most, both open, since a remote can't hover to expand a stack.
+  - **Focus.** A toast never takes focus. Up where nothing is above (the header's tabs, or the top of the player's band) reaches the newest toast's action, with a remote as with arrow keys; OK runs it, and any other key, Back included, returns focus to where it came from, as sonner does when focus leaves a toast. Spatial navigation otherwise passes toasts by, so they never catch a press meant for the page.
 - **System notification**: the desktop app has one, "Couch X is ready", shown
   once per version when an update has downloaded. It stays because desktop
   updates install only when Couch quits or restarts, which can be days away

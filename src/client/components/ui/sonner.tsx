@@ -1,18 +1,20 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-// Couch: one placement at the page gutter, above whatever bar is at the
-// bottom (the shell footer or the player band publish --bottom-bar).
-const offset = { left: "var(--gutter)", right: "var(--gutter)", bottom: "calc(var(--bottom-bar, 0px) + 1rem)" }
+// Couch: one placement, top right at the page gutter, below the header's row (min-h-14), or in the
+// player below its top band (PlayerPage publishes --player-top). Two at most, both open: a remote can't hover.
+const offset = { left: "var(--gutter)", right: "var(--gutter)", top: "calc(var(--player-top, 3.5rem) + 1rem)" }
 
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme="dark"
       className="toaster group"
-      position="bottom-right"
+      position="top-right"
       offset={offset}
       mobileOffset={offset}
+      visibleToasts={2}
+      expand
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />
@@ -36,6 +38,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          // In rem, so one line holds the same words as the type scales up to the TV.
+          "--width": "24rem",
           fontFamily: "var(--font-sans)",
         } as React.CSSProperties
       }
@@ -45,7 +49,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: "cn-toast shadow-none! text-sm!",
           content: "min-w-0",
           title: "truncate",
-          actionButton: "touch:min-h-11 touch:min-w-11 hover:opacity-80",
+          actionButton: "h-8! text-sm! touch:min-h-11 touch:min-w-11 hover:opacity-80",
         },
       }}
       {...props}

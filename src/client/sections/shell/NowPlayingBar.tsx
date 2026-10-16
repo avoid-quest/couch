@@ -26,7 +26,7 @@ function publishBars() {
   else document.documentElement.style.removeProperty("--bottom-bar");
 }
 
-/** Publishes a bar's height as --bottom-bar so toasts sit above it. */
+/** Publishes a bar's height as --bottom-bar, which scroll padding and the player's workspace clear. */
 export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true) {
   useLayoutEffect(() => {
     const element = ref.current;

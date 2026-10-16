@@ -5,6 +5,7 @@ import { isTvPresentation } from "./session/presentation";
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
 const localOnly = '[data-tv-local-only]';
+const toaster = "[data-sonner-toaster]";
 let remoteNavigation = false;
 // The TV fader that OK handed the Up/Down keys to (#644 ticket 12).
 let adjusting: HTMLElement | null = null;
@@ -21,8 +22,9 @@ const visible = (element: HTMLElement) => rendered(element) && !element.closest(
 const lastVisible = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
 const navigationScope = () => lastVisible(portals) ?? lastVisible("[data-tv-navigation-scope]")
   ?? document.querySelector<HTMLElement>(".watch-mode") ?? document.body;
+// A toast's action is reached only by Up past the top (moveFocus), never in passing.
 const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElement>(focusable)].filter(element => visible(element)
-  && (!remoteNavigation || !element.closest(localOnly))
+  && !element.closest(toaster) && (!remoteNavigation || !element.closest(localOnly))
   && !element.matches('[role="tablist"], [role="tabpanel"]')
   && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
 // With nothing focused (after a page change), the first key starts in the page, not on the header.
@@ -46,6 +48,8 @@ function moveFocus(key: string) {
   const scope = navigationScope();
   const controls = controlsIn(scope);
   const active = document.activeElement;
+  // Any arrow leaves a toast's action; sonner returns focus to where it came from.
+  if (active instanceof HTMLElement && active.closest(toaster)) { active.blur(); return; }
   if (!(active instanceof HTMLElement) || !scope.contains(active) || !visible(active) || active === scope
     || remoteNavigation && active.closest(localOnly)) {
     focus(entry(controls));
@@ -95,7 +99,9 @@ function moveFocus(key: string) {
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
   const tab = key === "ArrowUp" && later && best?.element.closest(later)
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
-  focus(tab ?? best?.element);
+  // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
+  const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-button]`)].find(visible) : undefined;
+  focus(tab ?? best?.element ?? toast);
 }
 
 export function sendKey(target: HTMLElement, key: string) {
@@ -197,6 +203,8 @@ export function useNavigation(onBack: () => void) {
       if (event.key === "Escape" || event.key === "BrowserBack") {
         if (lastVisible(portals)) return;
         event.preventDefault();
+        // Back on a toast's action leaves it, as sonner returns focus to where it came from.
+        if (target?.closest(toaster)) { target.blur(); return; }
         const localBack = [...navigationScope().querySelectorAll<HTMLButtonElement>("[data-back]")].find(visible);
         // The component restores focus after its own navigation has committed.
         if (localBack) localBack.click();

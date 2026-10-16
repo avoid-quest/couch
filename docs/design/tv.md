@@ -83,7 +83,8 @@ lines up. In their own row they reach only a control past them (a wrapped
 line, Continue's Details), never a tile beside them whose caption is shorter
 or taller. The tab bar scrolls away with the page, as on Apple TV and on every
 Couch screen. Up from a page's first row reaches it on the current tab, and
-Down from it returns to the page's first control. After a page change the first key starts at the page's first
+Down from it returns to the page's first control. Up again, past the top,
+reaches a toast's action, such as Undo ([Design](../design.md), Messages). After a page change the first key starts at the page's first
 control. Screens shown before the shell (the first-run chooser) bring the
 same arrow navigation.
 

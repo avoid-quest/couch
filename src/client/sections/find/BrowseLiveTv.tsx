@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { defaultStringifySearch, useLocation, useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
 import { offline, TRY_AGAIN } from "@/copy";
 import { apiSend } from "@/api/client";
 import { iptvGuideQuery, iptvLogoQuery } from "@/api/iptv";
@@ -18,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
+import { failed } from "@/toasts";
 import type { GuideChannel, GuideRow } from "../../../shared/iptv";
 import { searchError } from "./SearchOnlineResults";
 
@@ -51,7 +51,7 @@ export function BrowseLiveTv() {
     mutationFn: ({ channel, playNow, deviceId }: { channel: GuideChannel; playNow: boolean; deviceId?: string }) => playNow
       ? play(on => apiSend(credentials, `/api/iptv/channels/${channel.id}/play${playOnQuery(on)}`), deviceId)
       : queue(channel.name, () => apiSend(credentials, `/api/iptv/channels/${channel.id}/queue`)),
-    onError: reason => toast.error(searchError(reason)),
+    onError: (reason, { channel, playNow }) => failed(`Couldn't ${playNow ? "play" : "queue"} ${channel.name}.`, reason),
   });
   const go = (next: LiveTvSearch, replace = false) => void navigate({ href: liveTvLocation(search, { page: requested, filter, group, ...next }), replace, resetScroll: false }).then(() => {
     if (replace) return;

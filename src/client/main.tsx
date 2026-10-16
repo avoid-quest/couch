@@ -21,7 +21,7 @@ function SessionRouter() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <NativeModeGate>
-      <SessionGate><SessionRouter /></SessionGate>
+      <SessionGate upNext={targetDeviceId => void router.navigate({ to: "/now", search: { queue: true, targetDeviceId } })}><SessionRouter /></SessionGate>
     </NativeModeGate>
   </StrictMode>,
 );

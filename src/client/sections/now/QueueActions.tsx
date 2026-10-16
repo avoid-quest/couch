@@ -1,11 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { apiSend } from "@/api/client";
 import type { Credentials } from "../../session/session";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import type { MenuAction } from "@/components/RowMenu";
 import { queueItemLocation } from "@/detail-navigation";
+import { failed } from "@/toasts";
 
 export type QueueActionsProps = {
   credentials: Credentials;
@@ -22,7 +22,7 @@ export type QueueActionsProps = {
 export function useQueueActions(props?: QueueActionsProps): MenuAction[] {
   const save = useMutation({
     mutationFn: () => apiSend(props!.credentials, "/api/for-later", { reference: { kind: "queue", id: props!.entry.id } }, "POST", 20_000),
-    onError: error => toast.error(error.message || `Couldn't save ${props?.entry.title}.`),
+    onError: error => failed(`Couldn't save ${props?.entry.title}.`, error),
   });
   if (!props) return [];
   const { entry, index, queue, connected, run, firstUpcomingIndex, lastUpcomingIndex } = props;
