@@ -1,6 +1,6 @@
 - Follow YAGNI. Prefer small, readable changes and one-liners where sufficient. 
 - Prefer first class solutions. Check official docs.
-- UI work must preserve Couch's design system and prefer shadcn. Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
+- UI work must preserve Couch's design system ([docs/design.md](docs/design.md)) and prefer shadcn. While the `t3/redesign/*` stack is open, it follows [docs/redesign.md](docs/redesign.md). Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
 - Compose UI with open typography, whitespace, and divided rows. Keep content flat rather than wrapping it in Card or card-like bordered panels, especially on the pairing screen.
 - Start CI and releases by hand as [docs/ci.md](docs/ci.md) lists; nothing runs on push.
 - Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`.
