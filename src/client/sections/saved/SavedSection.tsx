@@ -20,7 +20,7 @@ import { deviceName } from "@/copy";
 export const savedTabs = ["later", "channels", "lists"] as const;
 export type SavedTab = typeof savedTabs[number];
 
-/** Saved's sections the way Settings shows its pages: a rail with a check on wide screens, a Select on narrow ones. */
+/** Library's sections the way Settings shows its pages: a rail with a check on wide screens, a Select on narrow ones. */
 export function SavedSection({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
   state: ClientSessionState | null;
   credentials: Credentials;
@@ -53,18 +53,18 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
   ] as const;
   const shared = `Shared on ${deviceName(state?.installationName)}`;
 
-  return <section ref={page} aria-label="Saved" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
+  return <section ref={page} aria-label="Library" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
     <Select value={tab} onValueChange={value => onTabChange(value as SavedTab)}>
-      <SelectTrigger aria-label="Saved section" data-page-first className="w-full md:hidden"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label="Library section" data-page-first className="w-full md:hidden"><SelectValue /></SelectTrigger>
       <SelectContent><SelectGroup>
         <SelectLabel>{shared}</SelectLabel>
         {tabs.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
       </SelectGroup></SelectContent>
     </Select>
-    <nav aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
+    <nav aria-label="Library sections" className="hidden min-w-0 flex-col md:flex">
       <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{shared}</p>
       {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="w-full justify-start font-normal">
-        <Link to="/saved" search={value === "later" ? {} : { tab: value }} replace activeOptions={{ exact: true }} data-page-first={tab === value || undefined}>
+        <Link to="/library" search={value === "later" ? {} : { tab: value }} replace activeOptions={{ exact: true }} data-page-first={tab === value || undefined}>
           <Check aria-hidden="true" className={tab === value ? undefined : "invisible"} />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count != null && <span className="tabular-nums text-muted-foreground">{count}</span>}

@@ -9,7 +9,7 @@ import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities
 import { sourceLabel } from "@/source-label";
 import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
 import { deviceName, offline } from "@/copy";
-import { useBottomBar } from "@/sections/shell/MiniPlayer";
+import { useBottomBar } from "@/sections/shell/NowPlayingBar";
 import { QueuePanel } from "./QueuePanel";
 import { usePlayerFullscreen } from "./usePlayerFullscreen";
 import { isAudioOnly } from "./player-presentation";
@@ -215,7 +215,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         {(retry || player?.status === "error") && <div className="mt-4 flex flex-wrap gap-2">
           <Button disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>{retry ? "Try now" : "Try again"}</Button>
           <Button variant="ghost" disabled={!available} onClick={skip}>Skip</Button>
-          {player?.status === "error" && <Button variant="ghost" onClick={shell.leavePlayer}>{shell.playerBackLabel || "Find"}</Button>}
+          {player?.status === "error" && <Button variant="ghost" onClick={shell.leavePlayer}>{shell.playerBackLabel || "Search"}</Button>}
         </div>}
       </div>
     </div>}
@@ -228,7 +228,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </aside>}
     </div>
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
-      {/* Gutter to gutter like the mini player, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
+      {/* Gutter to gutter like the now-playing bar, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
           A timeline takes its own row above (index.css); live that can't seek leaves "Live" in its slot. Every tool is an icon. */}
       <div className="grid gap-1">
         {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm tv:text-2xl font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{tvPresentation && buffering && <span role="status" className="text-sm">Buffering…</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}

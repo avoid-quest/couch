@@ -1,7 +1,7 @@
 import { defaultStringifySearch, Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Keyboard, X } from "lucide-react";
+import { HouseIcon, Keyboard, LibraryIcon, RadioIcon, SearchIcon, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
@@ -12,7 +12,7 @@ import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import type { SourceKind } from "@/components/sourceTypes";
 import { errorText, useSessionGate } from "@/session/session-context";
-import { MiniPlayer } from "./MiniPlayer";
+import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TvAppearancePreview } from "./TvAppearancePreview";
 import { readSearchState, searchLocation, type SearchRouteState } from "@/search";
@@ -40,7 +40,8 @@ import { useMediaSession } from "@/session/media-session";
 import { hear, onBlocked } from "@/session/renderer";
 import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id";
 
-const navItems = ["Home", "Find", "Saved", "Settings"];
+// The sections in tab order, with their icons in the phone tab bar.
+const sections: [string, LucideIcon][] = [["Home", HouseIcon], ["Live", RadioIcon], ["Search", SearchIcon], ["Library", LibraryIcon], ["Remote", TvIcon], ["Settings", SettingsIcon]];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 const reducedMotion = () => window.matchMedia(reducedMotionQuery).matches;
 function subscribeReducedMotion(onChange: () => void) {
@@ -62,7 +63,7 @@ function useShellValue() {
   const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
   const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "general" : null);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
-  if (location.pathname === "/find") rememberedSearch.current = readSearchState(location.searchStr);
+  if (location.pathname === "/search") rememberedSearch.current = readSearchState(location.searchStr);
   const lastBrowsePath = useRef("/");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   useEffect(() => {
@@ -86,7 +87,7 @@ function useShellValue() {
   const changePage = (name: string) => {
     // Big-picture behavior: while playing, any navigation opens the browsing
     // layer over the player instead of floating the controls above the page.
-    const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
+    const to = name === "Search" ? searchLocation(rememberedSearch.current) : pathForSection(name);
     if (to !== at) {
       if (name === "Now") {
         if (section === "Now") void router.navigate({ href: to, replace: true, state: previous => previous });
@@ -129,7 +130,7 @@ function useShellValue() {
     detailNavigation.back(playerTarget ? "/remote" : lastBrowsePath.current);
   };
   const browseSection = (name: string) => {
-    const destination = name === "Home" || name === "Queue" ? "Home" : name === "For later" ? "Saved" : "Find";
+    const destination = name === "Home" || name === "Queue" ? "Home" : name === "For later" ? "Library" : "Search";
     changeSection(destination);
   };
   const changeSettingsSection = (page: SettingsPage | null) => {
@@ -145,9 +146,9 @@ function useShellValue() {
     if (to !== at) router.history.replace(to);
   };
   useNavigation(() => {
-    if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/find"); return; }
+    if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/search"); return; }
     if (section === "Now") leavePlayer();
-    else if (section === "Find" && !tvPresentation && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
+    else if (section === "Search" && !tvPresentation && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
     else if (section !== "Home") changeSection("Home");
   });
 
@@ -204,7 +205,7 @@ function useShellValue() {
     openSources, openProvider, setSourcesOpen,
     enqueueProvider, enqueueRadio, playHistory,
     setupSource, sourcesOpen,
-    sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
+    sectionUrl: (name: string) => name === "Search" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
 }
 
@@ -307,7 +308,10 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const localName = useLocalDeviceName();
   const tvName = localName ?? state?.devices?.find(device => device.id === deviceId())?.name ?? installationName;
   useRememberCouchName(installationName);
-  const miniPlayer = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && section !== "Remote";
+  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && section !== "Remote";
+  // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
+  const footer = useRef<HTMLDivElement>(null);
+  useBottomBar(footer, paired && !setupPending);
 
   if (setupPending) return <div className="app-shell drag-region flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
@@ -316,19 +320,20 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          <header className={cn("app-header drag-region window-controls-inset sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-(--gutter) py-1.5", onPlayer && "hidden")}>
+          {/* The TV's tab bar scrolls away with the page (Up from its first row returns to it); elsewhere the header stays. */}
+          <header className={cn("app-header drag-region window-controls-inset sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-(--gutter) py-1.5 tv:static tv:grid tv:grid-cols-[1fr_auto_1fr]", onPlayer && "hidden")}>
+            {/* The TV names itself at the left; a phone's top bar names the page. */}
+            {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : paired && <span className="hidden min-w-0 flex-1 truncate text-lg font-semibold tracking-tight touch:block">{section}</span>}
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). */}
-            {paired && <nav data-app-nav aria-label="Main navigation" className="-ml-2.5 flex max-w-full flex-wrap items-center max-sm:w-full">
-              {[...navItems.slice(0, 3), ...(!tvPresentation ? ["Remote"] : []), "Settings"].map(name => <Button key={name} asChild variant="ghost" className="rounded-none border-x-0 border-t-0 border-b-2 border-transparent px-2.5 text-base font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground min-h-11 min-w-11 max-sm:px-2 max-sm:text-sm">
-                <Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{name}</Link>
-              </Button>)}
-            </nav>}
-            <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1">
+            {paired && <SectionTabs className="-ml-2.5 flex min-w-0 items-center touch:hidden tv:ml-0 tv:flex" />}
+            <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1 tv:col-start-3">
               <LiveSharingStatus />
-              {tvPresentation ? <span className="max-w-64 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+              {!tvPresentation && <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="max-sm:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
-              <DigitalClock className="ml-2 max-sm:hidden" />
+              {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
+              {/* Phones open Settings from here: the tab bar keeps the sections people browse. */}
+              {paired && !tvPresentation && <Button asChild variant="ghost" size="icon" className="hidden touch:inline-flex"><Link to="/settings" aria-label="Settings" title="Settings" aria-current={section === "Settings" ? "page" : undefined}><SettingsIcon aria-hidden="true" /></Link></Button>}
+              <DigitalClock className="ml-2 touch:hidden tv:inline" />
             </div>
           </header>
           {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && section !== "Remote" && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
@@ -337,13 +342,29 @@ export function ShellChrome({ children }: PropsWithChildren) {
             {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-6 pb-12")}>{children}</div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
-            {miniPlayer && state && <MiniPlayer state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
+            <div ref={footer} className={cn("app-footer sticky bottom-0 z-20", onPlayer && "hidden")}>
+              {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
+              <SectionTabs bar className="hidden border-t bg-background touch:flex tv:hidden" />
+            </div>
           </>}
         </div>
         <Toaster />
       </main>
     </div>
   );
+}
+
+// The sections as tabs: text in the header on the TV and wide screens, icons over labels in the phone tab bar (`bar`),
+// where Settings is the top bar's gear. Remote shows on a device that can drive a TV while the Couch has one.
+function SectionTabs({ bar = false, className }: { bar?: boolean; className?: string }) {
+  const { section, sectionUrl } = useShell();
+  const { tvPresentation, state } = useSessionGate();
+  const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
+  return <nav data-app-nav aria-label="Main navigation" className={className}>
+    {sections.filter(([name]) => name === "Remote" ? remote : !bar || name !== "Settings").map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-t-0 border-b-2 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 px-1 py-1.5 text-xs" : "min-h-11 min-w-11 px-2.5 text-base")}>
+      <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
+    </Button>)}
+  </nav>;
 }
 
 function ErrorAlert({ error, onDismiss }: { error: string; onDismiss: () => void }) {

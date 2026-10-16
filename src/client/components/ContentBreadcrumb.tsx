@@ -15,7 +15,7 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false, 
   // The player already shows the title; keep its containing destinations beside the Couch switch.
   if (compact) {
     const path = collections.length ? collections.map(item => ({ title: item.title, href: collectionLocation(item) }))
-      : [{ title: radio ? "Radio" : source ? providerNames[source] : "Find", href: radio ? "/find?browse=radio" : source ? collectionLocation({ provider: source, url: "" }) : "/find" }];
+      : [{ title: radio ? "Live" : source ? providerNames[source] : "Search", href: radio ? "/live" : source ? collectionLocation({ provider: source, url: "" }) : "/search" }];
     return <Breadcrumb aria-label="Content path">
       <BreadcrumbList className="flex-nowrap gap-1 text-sm">
         {path.map((item, index) => <Fragment key={item.href}>
@@ -27,8 +27,9 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false, 
   }
   return <Breadcrumb aria-label="Content path">
     <BreadcrumbList className="text-sm">
-      <BreadcrumbItem><BreadcrumbLink asChild><Link to="/find" className={linkClassName}>Find</Link></BreadcrumbLink></BreadcrumbItem>
-      {radio && title !== "Radio" ? <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to="/find" search={{ browse: "radio" }} className={linkClassName}>Radio</Link></BreadcrumbLink></BreadcrumbItem></> : source && (title !== providerNames[source] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={collectionLocation({ provider: source, url: "" })} className={linkClassName}>{providerNames[source]}</Link></BreadcrumbLink></BreadcrumbItem></>}
+      {/* A station belongs to Live, everything else to Search. */}
+      <BreadcrumbItem><BreadcrumbLink asChild><Link to={radio ? "/live" : "/search"} className={linkClassName}>{radio ? "Live" : "Search"}</Link></BreadcrumbLink></BreadcrumbItem>
+      {!radio && source && (title !== providerNames[source] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={collectionLocation({ provider: source, url: "" })} className={linkClassName}>{providerNames[source]}</Link></BreadcrumbLink></BreadcrumbItem></>}
       {collections.map(item => <Fragment key={item.url}>
         <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={collectionLocation(item)} className={`${linkClassName} break-words`}>{item.title}</Link></BreadcrumbLink></BreadcrumbItem>
       </Fragment>)}

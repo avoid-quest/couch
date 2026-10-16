@@ -133,7 +133,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     <SavedStatus connected={connected} loading={loading} />
     {loadError && <SavedError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !favorites.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Find</Button>}>Nothing saved yet. Save a channel, playlist or station in Find.</SavedEmpty>}
+    {connected && !loading && !loadError && !favorites.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Save a channel, playlist or station in Search or Live.</SavedEmpty>}
     {!!favorites.length && <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <MediaList ref={list} aria-label="Channels & stations">
         {kinds.map((group, groupIndex) => <SortableContext key={groupIndex} items={group.map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>

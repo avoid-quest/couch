@@ -162,7 +162,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
       await refresh();
     });
     await refresh();
-    navigation.back("/saved");
+    navigation.back("/library");
   };
   const move = async (offset: number) => {
     const adjacent = items[index + offset];
