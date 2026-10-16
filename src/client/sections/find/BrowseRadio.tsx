@@ -4,7 +4,6 @@ import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useState } from "react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { PageHeader } from "@/components/PageHeader";
 import { HitList, SourceProblems } from "./SearchPanel";
 import { SearchRadioResults } from "./SearchRadioResults";
 import type { SearchPlaybackProps, SearchResultSummary } from "./SearchOnlineResults";
@@ -30,11 +29,11 @@ export function BrowseRadio(props: SearchPlaybackProps) {
     const heading = document.getElementById("radio-stations");
     heading?.focus({ preventScroll: true }); heading?.scrollIntoView({ block: "start" });
   });
-  return <section className="min-w-0 space-y-6" aria-label="Browse radio">
-    <PageHeader title="Radio" className="mb-0" />
+  return <section className="min-w-0 space-y-6" aria-labelledby="stations-heading">
+    <h2 id="stations-heading" className="mb-3 text-base font-medium">Stations</h2>
     <ChoiceGroup label="Radio source" value={source} onValueChange={source => void navigate({ href: radioBrowseLocation(source, 1, "", search) })} options={radioBrowseSources.map(value => ({ value, label: value }))} />
     {!props.connected && <p className="text-sm text-muted-foreground" role="status">{offline(name)}</p>}
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><h2 id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading && !summary.hits?.length ? <><Spinner className="size-3.5" /><span role="status">Loading stations…</span></> : <>{hits.length} {hits.length === 1 ? "station" : "stations"}</>}</h2>
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><p id="radio-stations" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading && !summary.hits?.length ? <><Spinner className="size-3.5" /><span role="status">Loading stations…</span></> : <>{hits.length} {hits.length === 1 ? "station" : "stations"}</>}</p>
       <div className="flex flex-wrap items-center gap-4">
         <Input type="search" aria-label="Filter these stations" placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={filter} onChange={event => void navigate({ href: radioBrowseLocation(source, 1, event.target.value, search), replace: true, resetScroll: false })} />
         <BrowsePagination page={paging.page} pages={paging.pages} previous={paging.previous ? radioBrowseLocation(source, paging.page - 1, filter, search) : undefined} next={paging.next ? radioBrowseLocation(source, paging.page + 1, filter, search) : undefined} disabled={!props.connected || !!summary?.loading} onSelectPage={goToPage}
