@@ -9,17 +9,23 @@ mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
 mistaken for the header's Couch switch. It opens a bottom Sheet of divided
 rows (`Item`).
 
-## All
+## Volume
 
-The first row, set off by a rule like a console's master
-fader, is All: its fader trims only the selected speakers you may control from
-100 (the Device levels) to 0 (silent), and the Playback keeps it across restarts.
-Private speakers keep their own attenuation; new private sound and revoked
-foreign influence return to their own level. Sharing audio again joins All. It
-shows its own trim, preserves Device levels and mute, and keeps outputs
-selected at zero so raising it restores their sound; it has no Picture, Only here
-or Mute. Its label is "Selected sound you can control": shared sound and this
-Device's own private sound.
+The first row, set off by a rule like a console's master fader, is the
+band's Volume (`PlaybackVolume`): one level for the whole Playback, with
+each device's fader below it. It shows the loudest level the Playback's
+sound plays at and moves the sound you may control so the loudest reaches
+it, keeping their proportion; its Mute mutes them all.
+
+Couch had two group levels: this Volume, which scaled device levels, and
+All, a stored trim that kept them. The Volume stays because it needs fewer
+exceptions: on a TV it is the system volume the remote's keys move, and with
+one device it is that device's level, where a trim could never go above it.
+All's trim survives only from older clients and saved Playbacks, so it is
+never a hidden level: the Volume shows the level sound plays at with the trim
+included, and moving it folds the trim into the device levels you may
+control (from a trim at 0, keeping their proportion). Another device's
+private sound keeps its own attenuation, as All always left it.
 
 ## Device rows
 
@@ -55,7 +61,7 @@ Its controls and slider tracks have at least a 44px target at the base scale.
 
 The fader is the Device's one volume while its sound is in, else 0: 0 turns
 its sound off and raising it turns it on. Rows show saved levels
-independently of All's trim. A row's "Sync … ms earlier" slider, shown under
+independently of any trim. A row's "Sync … ms earlier" slider, shown under
 its fader while its sound plays in sync with other devices, plays a late
 speaker sooner (Sendspin's static delay); "Delay" read as the opposite, and
 "Sync" keeps it apart from Playback's audio delay against the picture. With
@@ -79,10 +85,8 @@ Only here still commits, so a publisher held out for its source stays out.
 
 ## Band volume
 
-The band and now-playing bar volume shows the loudest in-sound Device's,
-or 0 while All is at 0, and moves them all together (from All's 0, raising it
-only brings All back to 100 and lowering it does nothing); their Mute mutes
-them all, and so does M.
+The band and now-playing bar volume is the same [Volume](#volume); their Mute
+mutes every in-sound device you may control, and so does M.
 
 ## Play on
 

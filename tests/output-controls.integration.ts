@@ -9,6 +9,7 @@ import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { PlaybackVolume } from "../src/client/components/PlaybackTransport";
 import { deviceId } from "../src/client/session/device-id";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 
@@ -23,7 +24,10 @@ type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNod
 function control(node: ReactNode, label: string): ControlProps | undefined {
   if (Array.isArray(node)) return node.map(child => control(child, label)).find(Boolean);
   if (!isValidElement<ControlProps>(node)) return;
-  if (node.props.label === label || node.props["aria-label"] === label) return node.props;
+  // Controls, not the groups that name them.
+  if ((node.props.label === label || node.props["aria-label"] === label) && typeof node.type !== "string") return node.props;
+  // The band's Volume renders inside the Sheet as its own component, without hooks.
+  if (node.type === PlaybackVolume) return control(PlaybackVolume(node.props as Parameters<typeof PlaybackVolume>[0]), label);
   return control(node.props.children, label);
 }
 
@@ -144,20 +148,19 @@ test("output controls agree with Core for own moves and foreign private replacem
   } finally { await f.close(); }
 });
 
-test("All describes selected sound including the actor's private self-play", async () => {
+test("Where it plays' one Volume is the band's, and moves the actor's private self-play", async () => {
   const f = await fixture();
   try {
     await f.play(f.actor, f.actorId, "Private");
     const before = f.actor.state;
     let accepted: Promise<boolean> | undefined;
-    const tree = WhereItPlays({ state: before, run: action => accepted = f.actor.command(action).then(result => result.ok) });
-    const all = control(tree, "All trim"); assert.ok(all?.onCommit); void all.onCommit(50);
+    const tree = WhereItPlays({ state: before, connected: true, run: action => accepted = f.actor.command(action).then(result => result.ok) });
+    const volume = control(tree, "Volume"); assert.ok(volume?.onCommit); void volume.onCommit(50);
     assert.equal(await accepted, true);
-    assert.equal(f.actor.state.mixTrim, 50);
+    assert.equal(f.actor.state.player.volume, 50);
+    assert.equal(f.actor.state.mixTrim, 100);
     assert.deepEqual(f.actor.state.outputs, before.outputs);
-    assert.deepEqual(f.actor.state.devices?.map(device => [device.volume, device.muted]), before.devices?.map(device => [device.volume, device.muted]));
-    const copy = JSON.stringify(tree);
-    assert.ok(copy.includes("Selected sound you can control"));
-    assert.ok(!copy.includes("selected shared sound"));
+    assert.equal(f.actor.state.devices?.find(device => device.id === f.actorId)?.volume, 50);
+    assert.equal(control(tree, "All trim"), undefined);
   } finally { await f.close(); }
 });
