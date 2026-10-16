@@ -16,7 +16,7 @@ import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
-import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
+import { LibraryEmpty, LibraryError, LibraryStatus, useRemovalFocus } from "./LibraryStatus";
 import { savedNotice } from "@/copy";
 import { isTvPresentation } from "@/session/presentation";
 
@@ -130,10 +130,10 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
 
   return <section ref={section} aria-labelledby="saved-favorites-heading">
     <h2 ref={heading} id="saved-favorites-heading" tabIndex={-1} className="sr-only">Channels &amp; stations</h2>
-    <SavedStatus connected={connected} loading={loading} />
-    {loadError && <SavedError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
-    {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !favorites.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Save a channel, playlist or station in Search or Live.</SavedEmpty>}
+    <LibraryStatus connected={connected} loading={loading} />
+    {loadError && <LibraryError message={loadError} onRetry={() => { void online.refetch(); void radio.refetch(); }} />}
+    {connected && failure && <LibraryError message={failure} />}
+    {connected && !loading && !loadError && !favorites.length && <LibraryEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Save a channel, playlist or station in Search or Live.</LibraryEmpty>}
     {!!favorites.length && <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <MediaList ref={list} aria-label="Channels & stations">
         {kinds.map((group, groupIndex) => <SortableContext key={groupIndex} items={group.map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>

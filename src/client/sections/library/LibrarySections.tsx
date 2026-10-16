@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 
 import type { Credentials } from "../../session/session";
 import { ForLaterSection } from "./ForLaterSection";
+import { PlayedSection } from "./PlayedSection";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";
 import { SavedPlaylists } from "@/components/SavedPlaylists";
 import { PageHeader } from "@/components/PageHeader";
@@ -15,19 +16,20 @@ import { forLaterQuery } from "@/api/for-later";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
 import { playlistsQuery } from "@/api/playlists";
+import { historyQuery } from "@/api/progress";
 import { deviceName } from "@/copy";
 
-export const savedTabs = ["later", "channels", "lists"] as const;
-export type SavedTab = typeof savedTabs[number];
+export const libraryTabs = ["later", "channels", "lists", "played"] as const;
+export type LibraryTab = typeof libraryTabs[number];
 
 /** Library's sections the way Settings shows its pages: a rail with a check on wide screens, a Select on narrow ones. */
-export function SavedSection({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
+export function LibrarySections({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
   state: ClientSessionState | null;
   credentials: Credentials;
   connected: boolean;
   canPlay: boolean;
-  tab: SavedTab;
-  onTabChange: (tab: SavedTab) => void;
+  tab: LibraryTab;
+  onTabChange: (tab: LibraryTab) => void;
   onFind: () => void;
 }) {
   const page = useRef<HTMLElement>(null);
@@ -46,15 +48,17 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
   const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
   const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const lists = useQuery({ ...playlistsQuery(credentials), enabled: connected });
+  const played = useQuery({ ...historyQuery(credentials), enabled: connected });
   const tabs = [
     ["later", "For later", later.data?.items.length],
     ["channels", "Channels & stations", online.data && radio.data && online.data.favorites.length + radio.data.favorites.length],
     ["lists", "Lists", lists.data?.playlists.length],
+    ["played", "Played", played.data?.items.length],
   ] as const;
   const shared = `Shared on ${deviceName(state?.installationName)}`;
 
   return <section ref={page} aria-label="Library" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
-    <Select value={tab} onValueChange={value => onTabChange(value as SavedTab)}>
+    <Select value={tab} onValueChange={value => onTabChange(value as LibraryTab)}>
       <SelectTrigger aria-label="Library section" data-page-first className="w-full md:hidden"><SelectValue /></SelectTrigger>
       <SelectContent><SelectGroup>
         <SelectLabel>{shared}</SelectLabel>
@@ -75,6 +79,7 @@ export function SavedSection({ state, credentials, connected, canPlay, tab, onTa
       {tab === "later" && <><PageHeader title="For later" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
       {tab === "channels" && <><PageHeader title="Channels & stations" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
       {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} />}
+      {tab === "played" && <><PageHeader title="Played" /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
     </div>
   </section>;
 }
