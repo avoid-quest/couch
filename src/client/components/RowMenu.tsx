@@ -20,8 +20,8 @@ function useShown(actions: MenuAction[]) {
 
 function Items({ actions, parts, on }: { actions: MenuAction[]; parts: MenuParts; on: (label: string) => string }) {
   const { Item } = parts;
-  return actions.map(action => action.node ? <Item key={action.label} asChild>{action.node}</Item>
-    : action.playOn ? <PlayOnGroup key={action.label} parts={parts} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} />
+  return actions.map((action, index) => action.node ? <Item key={action.label} asChild>{action.node}</Item>
+    : action.playOn ? <PlayOnGroup key={action.label} parts={parts} separated={index > 0} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} />
     : <Item key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label === "Play" || action.label === "Resume" ? on(action.label) : action.label}</Item>);
 }
 
