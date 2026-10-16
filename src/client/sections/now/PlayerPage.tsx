@@ -211,8 +211,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
-      {/* A large Paused reads from the sofa. */}
-      {player?.status === "paused" && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+      {/* A large Paused reads from the sofa over a picture; Now playing's meta line already says it. */}
+      {player?.status === "paused" && !artworkStage && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
         <div className="grid justify-items-center gap-2 bg-background px-6 py-4"><Pause aria-hidden="true" className="size-20 fill-current" /><span className="text-2xl font-medium">Paused</span></div>
       </div>}
       {current && (!picture || (active || ended) && audioOnly) && !status && <div data-player-summary className="player-summary">

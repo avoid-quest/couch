@@ -96,7 +96,7 @@ that transport slot when there is no seekable timeline), and Left and Right seek
 hides the controls; with them hidden it leaves the player for the page that
 opened it, and playback goes on in Home's hero and the now-playing bar.
 
-Paused shows a large Pause glyph and "Paused", and the controls stay up until
+Paused shows a large Pause glyph and "Paused" over a picture, and the controls stay up until
 Back hides them. Over a video, the top band shows and hides with the controls
 ([Player](player.md#controls-over-the-picture)). The TV's player has none of
 the pointer's Back arrow or the window's fullscreen; Details is in the Playback
