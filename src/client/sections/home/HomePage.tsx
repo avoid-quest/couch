@@ -10,13 +10,13 @@ import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/em
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaTile, tileAspect, tileShape, type TileShape } from "@/components/MediaTile";
+import { Shelf } from "@/components/Shelf";
 import { DurationBar, useDurationClock } from "@/components/DurationBar";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { PlaybackTransport } from "@/components/PlaybackTransport";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
 import { forLaterQuery } from "@/api/for-later";
-import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { QueuePanel } from "@/sections/now/QueuePanel";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
@@ -29,6 +29,7 @@ import { avoidRadioPlaylistId, isRadio, type RadioProgrammeDetails, type RadioSt
 import type { HistoryItem } from "../../../shared/viewing";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
+import { useOnAir } from "@/sections/live/on-air";
 import { useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
@@ -64,13 +65,7 @@ export function HomePage() {
   const historyShown = hasRow("continue") || hasRow("recent");
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && historyShown });
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
-  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && hasRow("radio") });
-  // Built-in stations fill the shelf, so a fresh Couch opens on something playable.
-  const builtIn = useQuery({ ...radioSearchQuery(credentials, "avoid radio", ""), enabled: connected && hasRow("radio") });
-  const allStations = [...shell.recentRadio, ...favorites.data?.favorites ?? [], ...builtIn.data?.stations ?? []].filter((station, index, all) => all.findIndex(other => other.id === station.id) === index);
-  const onAirShown = connected && hasRow("radio") && allStations.some(station => station.sourceId === avoidRadioPlaylistId);
-  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: onAirShown, refetchInterval: 60_000 });
-  const onAir = (id: string) => { const value = programmes.data?.[id]; return value && value.expiresAt > now ? value : undefined; };
+  const { stations: allStations, show: onAir, playing: playingStation, meta: showMeta, pending: radioPending, favorites, builtIn } = useOnAir(hasRow("radio"), shell.recentRadio);
   const resume = useMutation({
     mutationFn: ({ item, fromStart }: { item: HistoryItem; fromStart: boolean }) => play(on => shell.playHistory(item, { fromStart, on })),
     onError: (error: Error, { item }) => toast.error(error.message || `Couldn't play ${item.title}.`),
@@ -95,7 +90,6 @@ export function HomePage() {
 
   const past = history.data?.items ?? [];
   const unfinished = past.filter(item => item.position > 0 && !item.watched);
-  const radioPending = hasRow("radio") && (favorites.isPending || builtIn.isPending || onAirShown && programmes.isPending);
   const firstOnAir = allStations.find(station => onAir(station.id));
   // The hero waits for what decides it (undefined), so it never swaps under the focus; null when there is nothing to lead with.
   const hero: Hero | null | undefined = !state ? undefined
@@ -106,7 +100,6 @@ export function HomePage() {
     // A hidden Radio's queries are off, but their cache (and recents) still hold stations on air.
     : hasRow("radio") && firstOnAir ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
     : null;
-  const playingStation = (station: RadioStation) => current?.kind === "radio" && (current.source === `radio:${station.id}` || current.source === station.url);
   const playingMedia = current && past.find(item => item.queueEntryId === current.id)?.mediaId;
   // A hero verb disables while it plays, which drops the focus, and the playing hero then puts the transport where
   // From start was, so focus moves to its Open player when it leads (as page entry would) unless it went elsewhere.
@@ -123,7 +116,7 @@ export function HomePage() {
   const recent = useKeptOrder(past.filter(item => !(item.position > 0 && !item.watched)), item => item.mediaId, historyReady, playingMedia).slice(0, shelfLength);
   const listed = useKeptOrder(allStations, station => station.id, hero !== undefined && !radioPending, hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id).slice(0, shelfLength);
   const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [], item => item.id, hero !== undefined && !later.isPending);
-  const stationMeta = (station: RadioStation) => { const show = onAir(station.id); return [playingStation(station) && "Playing", show?.title, show?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode); };
+  const stationMeta = (station: RadioStation) => showMeta(station) || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode);
   const queries = [...(historyShown ? [history] : []), ...(hasRow("later") ? [later] : []), ...(hasRow("radio") ? [favorites] : [])];
   const filled: Record<HomeRowId, boolean> = { upNext: !!upcoming.length, continue: !!continued.length, radio: !!listed.length, later: !!savedMedia.length, recent: !!recent.length };
   const empty = hero === null && !builtIn.isLoading && queries.every(query => !query.isPending && !query.error) && !onHome.some(row => filled[row.id]);
@@ -233,18 +226,5 @@ function HomeHero({ thumbnail, shape, title, meta, time, children }: { thumbnail
       {time && <p className="text-2xl tabular-nums">{time}</p>}
       <div data-nav-row className="mt-4 flex flex-wrap items-center gap-1 max-md:[&>[data-page-first]]:w-full">{children}</div>
     </div>
-  </section>;
-}
-
-/** A shelf of MediaTiles under its heading: a plain overflow row that scrolls as focus moves along it. Its padding keeps the focus outline clear of the clip. */
-function Shelf({ title, label = title, time, action, children }: { title: string; label?: string; time?: string; action?: ReactNode; children: ReactNode }) {
-  return <section aria-label={title} className="grid min-w-0 gap-3">
-    <header className="flex min-h-8 items-baseline gap-3">
-      <h2 className="text-base font-medium">{title}</h2>
-      {time && <p className="text-sm text-muted-foreground tabular-nums">{time}</p>}
-      {/* The TV's tab bar reaches Live and Library and its now-playing bar Up next, so Up from a shelf meets only the shelves above it. */}
-      {action && <div className="-my-2 ml-auto -mr-2.5 tv:hidden">{action}</div>}
-    </header>
-    <ol data-nav-row aria-label={label} className="-m-1 flex scroll-px-1 gap-4 overflow-x-auto p-1 [scrollbar-width:thin] tv:[scrollbar-width:none]">{children}</ol>
   </section>;
 }
