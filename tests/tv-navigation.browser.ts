@@ -194,14 +194,20 @@ window.runTvNavigationRegression = async () => {
   await check("Remote can't drive this device's capture", sharingLocalOnly);
   await check("Cold delayed Saved Back retains its item opener", () => savedBack(true));
   await check("Warm Saved Back retains its item opener", () => savedBack(false));
-  await check("Saved Home tile opens Details, settles page focus and restores its opener", async () => {
+  await check("Saved Home tile opens Details on its primary verb, walks its verbs with Right and restores its opener", async () => {
     const tile = control('[data-saved-details] button');
     const label = tile.getAttribute("aria-label");
     assert(tile.parentElement?.querySelectorAll('button:not(:disabled),a[href]').length === 1, "Saved media has multiple stops");
     tile.focus(); tile.click();
     await until(() => location.pathname === "/item" && !!document.querySelector('[data-page="Item"] h1'));
     await wait(350);
-    assert(document.activeElement?.closest('[data-page="Item"]'), "Loaded Details lost page-entry focus");
+    assert(document.activeElement?.matches('[data-page="Item"] header [data-page-first]') && document.activeElement.textContent === "Play", "Loaded Details did not start on Play");
+    const verbs = [...document.querySelectorAll<HTMLElement>('[data-page="Item"] header [data-nav-row] button:not(:disabled)')];
+    assert(verbs.map(verb => verb.textContent || verb.getAttribute("aria-label")).join(", ").startsWith("Play, Queue"), "Saved Details lacks Play and Queue in its row");
+    for (const verb of verbs.slice(1)) {
+      await key("ArrowRight");
+      assert(document.activeElement === verb, "Right skipped a Details verb");
+    }
     await key("Escape");
     await until(() => location.pathname === "/" && document.activeElement?.getAttribute("aria-label") === label);
     assert(document.activeElement?.closest('[data-saved-details]'), "Details Back lost Home tile focus");

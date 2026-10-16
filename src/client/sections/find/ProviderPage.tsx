@@ -15,8 +15,10 @@ import { BrowsePagination } from "@/components/BrowsePagination";
 import { MediaTile } from "@/components/MediaTile";
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
-import { CollectionHeader, HitList, SourceProblems } from "./SearchPanel";
-import { providerNames, SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
+import { HitList, SourceProblems } from "./SearchPanel";
+import { providerNames, SearchOnlineResults, type SearchCollection, type SearchResultSummary } from "./SearchOnlineResults";
+import { DetailHeader } from "@/components/DetailHeader";
+import { tileShape, type TileShape } from "@/components/MediaTile";
 import { providerForUrl, type ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 
@@ -84,7 +86,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   return <section data-page="Collection" className="min-w-0 space-y-6">
     <SearchOnlineResults provider={provider} query="" url={url} cursor={cursor} context={search.context} paged onOpenCollection={openProvider} onResults={report} onPlayHistory={playHistory} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     <ContentBreadcrumb title={collection.title} provider={provider} collection={search.context ?? page?.item?.collection ?? page?.parent} />
-    <CollectionHeader collection={collection} canPlay={available} />
+    <CollectionHeader collection={collection} canPlay={available} shape={tileShape(providerNames[provider], !!collection.single && !!(search.context ?? page?.item?.collection))} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this collection.</p>}
     {emptyRoot && <EmptyRoot provider={provider} />}
     {!collection.single && !emptyRoot && <>
@@ -119,6 +121,17 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
     {collection.single && <RelatedCollection collection={search.context ?? page?.item?.collection} currentUrl={page?.item?.url ?? url} />}
   </section>;
+}
+
+function CollectionHeader({ collection: c, canPlay, shape }: { collection: SearchCollection; canPlay: boolean; shape: TileShape }) {
+  const disabled = !canPlay || c.disabled;
+  return <DetailHeader title={c.title} meta={c.subtitle} description={c.description} thumbnail={c.thumbnail} shape={shape} position={c.position} duration={c.position ? c.duration : undefined}
+    play={c.playAll && { label: c.playLabel ?? (c.single ? "Play" : "Play all"), run: c.playAll, disabled }}
+    fromStart={c.fromStart && { label: "From start", run: c.fromStart, disabled }}
+    queue={c.queueAll && { label: c.single ? "Queue" : "Queue all", run: c.queueAll, disabled: c.disabled }}
+    save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
+    playOn={c.playOn && { run: c.playOn, disabled }}
+    more={c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []} />;
 }
 
 // Sources without a home page of their own start from a search.

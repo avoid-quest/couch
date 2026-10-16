@@ -81,6 +81,8 @@
     await wait(() => document.querySelector("[role='menuitem']"), "item action menu");
     click("[role='menuitem']", label);
   };
+  // Details holds Queue in its row of verbs; rows keep it in their "…" menu.
+  const queue = title => location.pathname === "/item" ? click("[data-page='Item'] header button", "Queue") : menu(title, "Queue");
   const confirmation = title => {
     const queued = [...document.querySelectorAll("[data-sonner-toast]")].filter(node => node.querySelector("[data-title]")?.textContent.startsWith("Queued"));
     return queued.length === 1 && queued[0].querySelector("[data-title]").textContent === `Queued ${title}` && queued[0].querySelector("a")?.textContent === "Up next";
@@ -97,7 +99,7 @@
     }
     return item;
   };
-  window.couchPlaybackReview = { gate, wait, sleep, click, page, api, toasts, observe, results, check, quiet, run, pause, openSavedList, menu, confirmation, openItem,
+  window.couchPlaybackReview = { gate, wait, sleep, click, page, api, toasts, observe, results, check, quiet, run, pause, openSavedList, menu, queue, confirmation, openItem,
     async loadItems(savedId, mediaId) {
       savedItem = (await api("/api/for-later")).items.find(item => item.id === savedId);
       historyItem = (await api(`/api/progress/${encodeURIComponent(mediaId)}`)).item;
@@ -134,7 +136,7 @@
       const item = await openItem(surface);
       await quiet();
       const before = observe();
-      await menu(item.title, "Queue");
+      await queue(item.title);
       await wait(() => gate().state.queue.length === before.queue.length + 1, `actual ${surface} REST append`);
       await sleep(200);
       check(`${active ? "active" : "idle"} ${surface} Queue confirms exact title once and preserves playback`,
@@ -170,7 +172,7 @@
         return response;
       };
       try {
-        await menu(item.title, "Queue");
+        await queue(item.title);
         await wait(() => completed && gate().state.queue.length === before.queue.length + 1, "held successful actual REST append");
         if (kind === "credentials") { gate().setCredentials(null); await sleep(100); }
         else if (kind === "reconnect") gate().reconnect();
@@ -222,7 +224,7 @@
         return originalFetch(input, init);
       };
       try {
-        await menu(item.title, "Queue");
+        await queue(item.title);
         await wait(() => failure, "actual REST rejection");
         await sleep(200);
         const message = document.body.innerText;
@@ -250,7 +252,7 @@
       await wait(() => document.querySelector(`[data-saved-details='${item.id}']`), "saved row");
       await quiet();
       const before = gate().state.queue.length;
-      await menu(item.title, "Queue");
+      await queue(item.title);
       await wait(() => gate().state.queue.length === before + 1, "actual For later REST append");
       await sleep(200);
       check("idle For later row Queue confirms its exact title and Up next", confirmation(item.title));
