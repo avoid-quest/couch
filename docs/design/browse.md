@@ -2,11 +2,56 @@
 
 ## Search
 
-Search (`/search`) searches after one second without typing; Enter submits
-immediately. Its filters are Video, Music, Live, Radio and Channels. Music
-includes Bandcamp albums and tracks and SoundCloud tracks. With no query it
-lists the sources to browse (shared inputs, Bandcamp, SoundCloud, RaiPlay,
-StreamingCommunity, 123MoviesFree, YouTube, Twitch) and Add source.
+Search (`/search`) leads with its display-size field. It searches after one
+second without typing; Enter submits immediately. Its filters, From, What
+(Video, Music, Live, Radio and Channels) and Length, follow the field: a rail
+beside the results on wide screens, behind Filters on narrow ones. Music
+includes Bandcamp albums and tracks and SoundCloud tracks. A pasted link opens
+as a webpage or as direct media, with Open page for a source's own link. On the
+TV the field says "Type with Remote on your phone", and Remote's
+[Type on TV](remote.md#type-on-tv) fills it.
+
+Before a query, Search lists its Sources as divided rows: shared inputs, then
+YouTube, Twitch, RaiPlay, StreamingCommunity, 123MoviesFree, Bandcamp and
+SoundCloud, video before music. Each row opens that source's own home
+(`/collection?provider=…`). YouTube, Bandcamp and SoundCloud have no home page
+of their own, so theirs is an Empty with a search field scoped to them. Add
+source sits at the heading's right; the TV hides it, as Home hides its shelves'
+actions: its tab bar reaches Settings, and Down from the field meets the first
+source.
+
+## Details
+
+Item pages (`/item`: History, For later, a station, an Up next entry) and
+collection pages (`/collection`: a source's home, a series, season, album,
+channel, film or episode) open on one header, `DetailHeader`, laid out like
+Home's hero: contained artwork at the left at its own aspect ratio (stacked
+above it below `md`), the title at display size, one muted meta line, a
+`DurationBar` when the length is known ("Resume at …" once partly watched),
+the synopsis, then one row of verbs. A page without artwork has no artwork
+column. The catalog has no media header and Card breaks Flat, so it is a plain
+composition of Button and DropdownMenu, like Home's hero.
+
+The row holds, in order: Play (Play all for a list; Resume, with From start
+beside it, once partly watched), Queue (Queue all), Save or Saved, Play on
+while another device can play it, then one "…" menu for the rest. Each verb is
+one focus stop. The primary verb carries `data-page-first`, so the page starts
+on it; without one, the first verb does. Seasons, episodes, tracks and nearby
+items follow as divided MediaRows.
+
+Home's tiles do one verb, so Details holds the others for everything Home
+opens, where the item supports them:
+
+- **History:** Resume or Play, From start, Queue, Save and Play on; "…" holds
+  Remove from Continue. Save keeps the item's provider page in For later, and
+  Saved takes it out; an item without a provider page has no Save.
+- **For later:** Play, Queue and Play on; "…" holds Remove, with Undo, and on
+  the TV Move up and Move down. It is already saved, so it has no Save.
+- **A station:** Play, Queue, Save (a saved station) and Play on; "…" holds
+  Open show page.
+- **An Up next entry:** Play and Save.
+- **A source's page:** Play, Play all or Resume, From start, Queue or Queue
+  all, Save and Play on; "…" holds Play next.
 
 ## Live
 
