@@ -185,7 +185,7 @@ export function HomePage() {
     </Shelf>,
   };
 
-  return <section data-page="Home" aria-label="Home" className="grid gap-10 tv:gap-12">
+  return <section data-page="Home" aria-label="Home" className="grid gap-12">
     <h1 className="sr-only">Home</h1>
     {historyShown && history.error && <Alert variant="destructive"><AlertDescription>{hasRow("continue") ? "Couldn't load Continue." : "Couldn't load Played recently."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
@@ -216,7 +216,7 @@ export function HomePage() {
 function HomeHero({ thumbnail, shape, title, meta, time, children }: { thumbnail?: string; shape: TileShape; title: string; meta?: string; time?: string; children: ReactNode }) {
   return <section data-home-hero aria-label={title} className="grid gap-x-12 gap-y-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
     {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
-    <div aria-hidden="true" className="h-56 min-w-0 md:h-64 tv:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>
+    <div aria-hidden="true" className="h-56 min-w-0 md:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>
     <div className="grid min-w-0 gap-2">
       <h2 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{title}</h2>
       {meta && <p className="truncate text-sm text-muted-foreground">{meta}</p>}
