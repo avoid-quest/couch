@@ -16,7 +16,7 @@ export function connectRemoteText(report: (field: TextFocus | null) => void) {
       || element.closest('[hidden], [inert], [aria-hidden="true"], [data-tv-local-only]') || !element.checkVisibility({ visibilityProperty: true, opacityProperty: true })) return null;
     const kind = element.dataset.remoteField;
     if (!isRemoteField(kind) || element.id !== (kind === "find" ? "media-search" : "local-device-name")) return null;
-    if (location.pathname !== (kind === "find" ? "/find" : settingsPages.general.path)) return null;
+    if (location.pathname !== (kind === "find" ? "/search" : settingsPages.general.path)) return null;
     return { element, kind };
   };
   const update = () => {

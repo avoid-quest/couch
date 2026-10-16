@@ -31,7 +31,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   origin: string; token: string; connected: boolean; canPlay: boolean;
   /** Shown as the empty state's next step. */
   onFind?: () => void;
-  /** A visible section title (Find). Saved titles the tab with its PageHeader. */
+  /** A visible section title. Library titles the tab with its PageHeader. */
   showHeading?: boolean;
   /** Only video and music, for Home. */
   mediaOnly?: boolean;
@@ -96,7 +96,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     <SavedStatus connected={connected} loading={loading} />
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Find</Button>}>Nothing saved yet. Use Save on anything in Find.</SavedEmpty>}
+    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Use Save on anything in Search.</SavedEmpty>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       {!!items.length && <MediaList ref={list} aria-label="For later">
         <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>

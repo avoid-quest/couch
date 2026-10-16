@@ -58,16 +58,15 @@
   const run = async action => { if (!await gate().run(action)) throw new Error(`Failed command ${action.type}`); await sleep(100); };
   const pause = () => run({ type: "pause", playbackId: gate().state.player.playbackId, paused: true });
   const openSavedList = async id => {
-    await page("/saved");
-    await wait(() => document.querySelector("a[href='/saved?tab=lists']"), "Lists link");
-    await page("/saved?tab=lists");
+    await page("/library");
+    await wait(() => document.querySelector("a[href='/library?tab=lists']"), "Lists link");
+    await page("/library?tab=lists");
     await wait(() => document.querySelector(`[data-playlist-id='${id}']`), "saved list row");
     click(`[data-playlist-id='${id}'] button[aria-label^='Open ']`);
     await wait(() => [...document.querySelectorAll("section[aria-label='Lists'] button")].some(node => node.textContent === "Queue"), "saved list detail Queue");
   };
   const queueChannel = async name => {
-    await page("/find");
-    click("button[aria-label='Open Live TV']");
+    await page("/live");
     await wait(() => document.querySelector(`button[aria-label='Options for ${name}']`), "channel options");
     // Send Enter to the real Radix trigger; T3's click alone doesn't open it.
     document.querySelector(`button[aria-label='Options for ${name}']`).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
@@ -88,7 +87,7 @@
   };
   const openItem = async surface => {
     const item = surface.startsWith("history") ? historyItem : savedItem;
-    await page(surface === "saved-row" || surface === "saved-details" ? "/saved" : "/");
+    await page(surface === "saved-row" || surface === "saved-details" ? "/library" : "/");
     await wait(() => document.querySelector(`button[aria-label='Options for ${item.title}']`), `${surface} options`);
     if (surface.endsWith("details")) {
       click(`button[aria-label='Details ${item.title}']`);
@@ -245,7 +244,7 @@
       const entry = { id: crypto.randomUUID(), title: `For later row ${crypto.randomUUID()}`, source: mediaUrl + "?saved=" + crypto.randomUUID() };
       await run({ type: "enqueue", entry });
       const { item } = await api("/api/for-later", { reference: { kind: "queue", id: entry.id } });
-      await page("/saved");
+      await page("/library");
       await wait(() => document.querySelector(`[data-saved-details='${item.id}']`), "saved row");
       await quiet();
       const before = gate().state.queue.length;
@@ -266,10 +265,10 @@
       await run({ type: "enqueue", entry: entry("natural-first", "Natural first"), playNow: true, deviceId: own });
       await wait(() => location.pathname === "/now" && document.querySelector("video")?.readyState === 4, "explicit decoded video opens Now");
       await run({ type: "enqueue", entry: entry("natural-second", "Natural second") });
-      await page("/find");
+      await page("/search");
       await wait(() => gate().state.currentEntryId === prefix + "natural-second", "real video naturally advances");
       await pause();
-      check("natural advance preserves Find and clears actor", location.pathname === "/find" && !gate().state.playedBy && !gate().state.presentationId);
+      check("natural advance preserves Search and clears actor", location.pathname === "/search" && !gate().state.playedBy && !gate().state.presentationId);
       await run({ type: "output", deviceId: own, picture: false });
       await run({ type: "output", deviceId: own, picture: true });
       await sleep(200);
@@ -331,14 +330,14 @@
       return { failures: results.filter(result => !result.pass).length, results };
     },
     async radio(mediaUrl) {
-      await page("/find");
+      await page("/search");
       await run({ type: "enqueue", entry: { id: crypto.randomUUID(), title: "Decoded fixture radio", source: mediaUrl, kind: "radio", live: true }, playNow: true, deviceId: gate().identity.device.id });
       await wait(() => document.querySelector("video")?.readyState === 4, "decoded fixture radio");
-      check("decoded audio-only radio start preserves Find", location.pathname === "/find" && gate().state.playbacks.find(playback => playback.id === gate().state.playback)?.audioOnly);
+      check("decoded audio-only radio start preserves Search", location.pathname === "/search" && gate().state.playbacks.find(playback => playback.id === gate().state.playback)?.audioOnly);
       const initial = gate().state.player.playbackId;
       await wait(() => gate().state.radioRetry?.attempt > 0, "radio fixture naturally ends and schedules retry", 12_000);
       await wait(() => gate().state.player.playbackId !== initial && gate().state.presentationId === null && gate().state.player.status === "playing" && document.querySelector("video")?.readyState === 4, "radio retry decodes", 5_000);
-      check("actual decoded radio retry preserves Find", location.pathname === "/find");
+      check("actual decoded radio retry preserves Search", location.pathname === "/search");
       await run({ type: "stop", playbackId: gate().state.player.playbackId });
       return { failures: results.slice(-2).filter(result => !result.pass).length, results: results.slice(-2) };
     },

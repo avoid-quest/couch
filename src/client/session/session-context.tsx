@@ -80,7 +80,7 @@ export type SessionGateValue = SessionBag & {
   remoteControlEnabled: boolean;
   playerTarget?: { id: string; status: string };
   // The request to choose where a shared source plays that was last closed. It outlives the player
-  // surfaces, so moving between the mini player and Now Playing does not reopen it.
+  // surfaces, so moving between the now-playing bar and Now Playing does not reopen it.
   dismissedChooser: string | null;
   dismissChooser: (request: string) => void;
   // This window's own request to choose, after Play on a source's publisher that already plays (choosesHere).

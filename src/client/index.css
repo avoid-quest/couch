@@ -8,7 +8,7 @@
 @import "@fontsource-variable/inter-tight";
 
 @layer components {
-/* Keep scroll edges continuous with the black page, and focus clear of the sticky header and mini player. */
+/* Keep scroll edges continuous with the black page, and focus clear of the sticky header and the footer (now-playing bar, phone tabs). */
 html { background: var(--background); scroll-padding-top: calc(4rem * var(--interface-scale)); scroll-padding-bottom: calc(var(--bottom-bar, 0px) * var(--interface-scale)); }
 html, body { overscroll-behavior: none; }
 [hidden] { display: none !important; }
@@ -111,7 +111,7 @@ body { min-width: 0; }
 [data-media-tile]:focus-visible [data-tile-caption] { background: var(--foreground); color: var(--background); }
 html { view-transition-name: none; }
 
-/* The mini player grows into the player band and back. */
+/* The now-playing bar grows into the player band and back. */
 ::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 
 /* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window

@@ -34,7 +34,7 @@ type Props = {
 
 /**
  * Clock media row: thumbnail, title, meta and the length bar, with one main
- * verb and quiet secondary actions. Used by Home, Find and Saved; Up next has its own compact rows.
+ * verb and quiet secondary actions. Used by Home, Live, Search and Library; Up next has its own compact rows.
  */
 export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, tvSecondaryActions = false, compact = false, className, ...props }: Props) {
   const tv = isTvPresentation();

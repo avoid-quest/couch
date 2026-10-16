@@ -139,7 +139,7 @@ export function HomePage() {
   const at = playsOn(state);
   // Contained, so a poster or a station's artwork shows whole.
   const playingArtwork = programme?.playbackId === player?.playbackId && programme?.artworkUrl ? { thumbnail: programme.artworkUrl, title: programme.title } : current;
-  // Where it plays reads "on {name}" here too, as in the mini player and the player.
+  // Where it plays reads "on {name}" here too, as in the now-playing bar and the player.
   const playingStatus = !current ? "" : !connected ? offline(state?.installationName)
     : player?.status === "error" ? `Can't play ${current.title}`
     : [sourceLabel(current.source), player?.status === "paused" ? "Paused" : player?.status === "loading" ? "Loading…" : null, at?.elsewhere && `on ${at.name}${at.more ? ` +${at.more}` : ""}`].filter(Boolean).join(", ");
@@ -162,7 +162,7 @@ export function HomePage() {
     continue: <ContinueSection credentials={credentials} connected={connected} canPlay={available} feature={featureContinue} onPlay={shell.playHistory} onAdd={queueHistory} currentEntryId={hasRow("now") ? current?.id : undefined} />,
 
     radio: !!stations.length && <HomeRow title="Radio" time={stations.some(station => onAir(station.id)) ? "On air now" : plural(Math.min(stations.length, shown.radio), "station")}
-      action={<Button variant="ghost" onClick={() => void navigate({ href: "/find?browse=radio" })}>Browse</Button>}>
+      action={<Button variant="ghost" onClick={() => void navigate({ href: "/live" })}>Browse</Button>}>
       {tv ? <Shelf label="Radio stations">{listed.map((station, index) => <li key={station.id} className="shrink-0">
         <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl}
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} />
@@ -188,7 +188,7 @@ export function HomePage() {
       </>}
     </HomeRow>,
 
-    later: !!savedMedia.length && <HomeRow title="For later" time={`${savedMedia.length} saved`} action={<Button variant="ghost" onClick={() => shell.changeSection("Saved")}>Open Saved</Button>}>
+    later: !!savedMedia.length && <HomeRow title="For later" time={`${savedMedia.length} saved`} action={<Button variant="ghost" onClick={() => shell.changeSection("Library")}>Open Library</Button>}>
       {tv ? <Shelf label="For later">{savedMedia.slice(0, shown.shelf).map((item, index) => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile data-page-first={index === 0 || undefined} shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
           aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} />
@@ -215,8 +215,8 @@ export function HomePage() {
     {onHome.map(row => <Fragment key={row.id}>{rows[row.id]}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">
-      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
-      <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>
+      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Search for something to play</h2></EmptyTitle></EmptyHeader>
+      <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Search")}>Search</Button></EmptyContent>
     </Empty>}
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>

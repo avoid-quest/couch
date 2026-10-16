@@ -47,7 +47,7 @@ export const choosesHere = (action: Action, before: ClientSessionState | null, a
   && after.liveSources?.find(source => source.id === action.sourceId)?.deviceId === (action.deviceId ?? before?.controlling);
 
 // Radix Dialog's controlled open state: a changed defaultOpen would not open a mounted Sheet. The
-// session remembers the closed request, so the mini player and Now Playing each open it at most once.
+// session remembers the closed request, so the now-playing bar and Now Playing each open it at most once.
 // Core's request opens every window viewing the playback; this window's own request opens only here.
 function ChooserSheet({ request, playback, children }: { request: string | null; playback: string | null; children: ReactNode }) {
   const gate = useContext(SessionGateContext);
