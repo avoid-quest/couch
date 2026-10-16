@@ -11,7 +11,9 @@
 | Settings | `/settings` | the device's and the Couch's pages |
 | Remote | `/remote` | drives a TV; on non-TV devices while the Couch has one (`DeviceSummary.tv`, online or not) |
 
-`/item` and `/collection` belong to Search, and `/now` is the player.
+`/item` and `/collection` belong to Search, `/now` is the player, and
+`/where-it-plays` is Where it plays' overview, which opens from the picker
+and is not a tab ([Where it plays](where-it-plays.md#the-overview)).
 Earlier addresses redirect and keep their query, as `settingsAliases` does
 for Settings: `/find` opens `/search`, `/find?browse=radio` and
 `/find?browse=live-tv` open `/live`, and `/saved` opens `/library` on the
@@ -60,8 +62,9 @@ names the radio or collection (a link), the status and, below `lg`, the time.
 The TV and desktop then carry the band's controls in its order: Play/Pause,
 Stop and Next, the timeline or "Live", Volume, Where it plays and Up next.
 Phones keep Play/Pause and Where it plays; the player keeps the rest. It
-hides on the player and on Remote, and grows into the player band
-(`couch-player-band`) and back.
+hides on the player, on Remote and on Where it plays' overview, which shows
+the same Playback, and grows into the player band (`couch-player-band`) and
+back.
 
 The bar and the phone tab bar share the shell's footer, whose height is
 `--bottom-bar`: toasts and scroll padding clear it, and the player band
