@@ -28,53 +28,12 @@ type or copy rules.
 
 ## Where it plays
 
-People must never wonder whether a word names a device, a group or a place.
+The picker and its principles are built: [design/where-it-plays.md](design/where-it-plays.md).
+What remains is the overview.
 
-- **Only devices have names.** A Playback has no name: Couch shows it by its
-  artwork and title, and text refers to it by its title ("Playing avoid
-  radio"). Couch never asks anyone to name or group anything. Never show the
-  words zone, group, room, speaker or Playback.
 - **One device, one row.** A device is listed once, under the Playback it
   serves, since Core lets a device serve one Playback at a time.
-- **This device keeps its name.** Its status line starts with "This device".
-- **The host is just a device.** The Couch and its host share one name. The
-  Couch's name appears only where you choose which Couch to use (the Couch
-  switch and Couch connection), never in Where it plays.
-- **Hardware is not a device.** An HDMI display, a sound card or a Bluetooth
-  speaker is part of its device. It is chosen in Settings → The Couch →
-  Hardware and never listed beside devices.
-- **One level for the whole Playback.** The band's Volume and the picker's top
-  fader are one control. Each device's fader sits below it. No hidden level
-  may silence sound: if a stored trim below 100 survives, fold it into the
-  device levels or show it.
-- **Show what you can't change.** Private and offline devices stay listed and
-  dimmed, with disabled controls and a one-word status ("Private",
-  "Offline"). No explanatory paragraphs: at most one hint line per surface.
-
-**Picker** (the band's and the now-playing bar's Where it plays button, a
-bottom Sheet):
-
-```
-[art] avoid radio            Playing
-Volume  ───────────●──  72
-─────────────────────────────────────
-✓ Living room                ──●──  40
-✓ Francesco's phone          ────●  60      This device
-  Kitchen laptop             Playing Montalbano
-  Anna's tablet              Offline
-─────────────────────────────────────
-Every device
-```
-
-- Pressing a row adds or removes that device, picture and sound together as
-  its consent allows. Moving a busy device away from another Playback says so
-  in its row first, as today.
-- A row's "…" menu holds Picture, Mute and Only here.
-- "Sync … ms earlier" sits under a device's fader wherever its row appears,
-  only while that device plays in sync with others.
-- In sync (live inputs on several devices) is one switch under Volume, shown
-  only where it applies today.
-- "Every device" opens the overview.
+- "Every device", at the foot of the picker, opens the overview.
 
 **Overview** (`/where-it-plays`): each Playback that plays somewhere, shown as
 its artwork, title, status and end time, with its device rows below it. Then
@@ -103,7 +62,7 @@ release notes ([ci.md](ci.md)).
 | `browse` | Search everything and open each source from its own home | Search, source homes, details (landed) | `design/browse.md` |
 | `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library (landed) | `design/browse.md` |
 | `player` | Show the time and title over the playing picture | Player (landed) | `design/player.md` |
-| `where-it-plays` | Choose where it plays from a simple list of devices | rules model and tests; picker | `design/where-it-plays.md` |
+| `where-it-plays` | Choose where it plays from a simple list of devices | rules model and tests; picker (landed) | `design/where-it-plays.md` |
 | `devices` | See every device and what it plays on one page | overview | `design/where-it-plays.md` |
 | `remote` | Drive the TV from a classic remote on your phone | Remote; Settings fitted to the shell; delete this brief | `design/remote.md`, `design/settings.md` |
 
