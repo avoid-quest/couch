@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 
 // The app window follows the page's fullscreen, like any Chromium tab. The TV is always fullscreen.
 export function usePlayerFullscreen() {
