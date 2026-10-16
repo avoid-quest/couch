@@ -147,6 +147,7 @@ function useShellValue() {
   };
   useNavigation(() => {
     if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/search"); return; }
+    if (section === "Where it plays") { detailNavigation.back("/"); return; }
     if (section === "Now") leavePlayer();
     else if (section === "Search" && !tvPresentation && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
     else if (section !== "Home") changeSection("Home");
@@ -308,7 +309,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const localName = useLocalDeviceName();
   const tvName = localName ?? state?.devices?.find(device => device.id === deviceId())?.name ?? installationName;
   useRememberCouchName(installationName);
-  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && section !== "Now" && section !== "Remote";
+  // Where it plays' overview shows the same Playback, with its Volume.
+  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && !["Now", "Remote", "Where it plays"].includes(section);
   // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
   useBottomBar(footer, paired && !setupPending);
