@@ -9,8 +9,6 @@ import { DigitalClock } from "@/components/DigitalClock";
 import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
-import { SourceSetupDialog } from "@/components/SourceSetupDialog";
-import type { SourceKind } from "@/components/sourceTypes";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
@@ -69,12 +67,8 @@ function useShellValue() {
   useEffect(() => {
     if (section === "Now" && !playerTarget && state && !state.currentEntryId && location.search.queue !== true) router.history.replace(lastBrowsePath.current);
   }, [section, playerTarget?.id, state?.currentEntryId, state?.queue.length, !!state, location.search.queue, router]);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [setupSource, setSetupSource] = useState<SourceKind>("iptv");
-  const openSources = (source: typeof setupSource = "iptv") => { setSetupSource(source); setSourcesOpen(true); };
   const installationId = credentials?.installationId ?? details?.installationId;
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
-  useEffect(() => { setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
   // The app window titles itself with what's playing (useNativeWindowTitle).
@@ -203,9 +197,8 @@ function useShellValue() {
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(...lastBrowsePath.current.split("?") as [string, string?]) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
-    openSources, openProvider, setSourcesOpen,
+    openProvider,
     enqueueProvider, enqueueRadio, playHistory,
-    setupSource, sourcesOpen,
     sectionUrl: (name: string) => name === "Search" ? searchLocation(rememberedSearch.current) : pathForSection(name),
   };
 }
@@ -277,10 +270,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
-  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, error, setError } = useSessionGate();
+  const { nativeHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, error, setError } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
-  const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const setupPending = useLocalSetupPending(credentials);
   useEffect(() => {
     if (!tvPresentation) return;
@@ -345,7 +337,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {!paired ? <PairingPage /> : <>
             {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
             <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-6 pb-12")}>{children}</div>
-            <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
             <div ref={footer} className={cn("app-footer sticky bottom-0 z-20", onPlayer && "hidden")}>
               {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
               <SectionTabs bar className="hidden border-t bg-background touch:flex tv:hidden" />

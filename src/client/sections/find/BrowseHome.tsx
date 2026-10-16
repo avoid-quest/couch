@@ -1,7 +1,4 @@
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { useShell } from "@/sections/shell/AppShell";
-import { useSessionGate } from "@/session/session-context";
-import { Button } from "@/components/ui/button";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
 import type { ProviderId } from "../../../shared/providers";
@@ -21,15 +18,10 @@ const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
 // continue and what was saved for later live on Home.
 export function BrowseHome() {
   const navigation = useDetailNavigation();
-  const { connected } = useSessionGate();
-  const { openSources } = useShell();
   const shared = useLiveSourceHits("");
+  // As on Home's shelves, the heading has no action: the tabs reach Settings → Sources, and Down from the field meets the first source.
   return <section aria-label="Sources">
-    <div className="mb-2 flex min-h-8 items-center justify-between gap-4">
-      <h2 className="text-base font-medium">Sources</h2>
-      {/* As on Home's shelves, the TV's tab bar reaches Settings, so Down from the field meets the first source. */}
-      <Button variant="ghost" className="-mr-2.5 tv:hidden" disabled={!connected} onClick={() => openSources()}>Add source</Button>
-    </div>
+    <h2 className="mb-2 flex min-h-8 items-center text-base font-medium">Sources</h2>
     <MediaList>
       {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} tvMenu
         primary={{ label: hit.primary.label, disabled: hit.primary.disabled, onClick: hit.primary.run }}
