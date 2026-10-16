@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { collectionLocation } from "@/detail-navigation";
+import { collectionLocation, keepSection } from "@/detail-navigation";
 import { collectionLinks } from "@/collection-target";
 import { providerCollectionCursor } from "@/collection-pagination";
 import { useShell } from "@/sections/shell/shell-context";
@@ -17,7 +17,7 @@ export function RelatedCollection({ collection, currentUrl, currentTitle, provid
 }
 
 function RelatedItems({ target, collection, currentUrl, currentTitle }: { target: ProviderItem; collection?: MediaCollection; currentUrl?: string; currentTitle?: string }) {
-  const { credentials, available, openProvider } = useShell();
+  const { credentials, available, openProvider, section } = useShell();
   const { connected, run, videoQualityPreference } = useSessionGate();
   const [summary, setSummary] = useState<SearchResultSummary | null>(null);
   const report = useCallback((_: string, summary: SearchResultSummary) => setSummary(summary), []);
@@ -29,7 +29,7 @@ function RelatedItems({ target, collection, currentUrl, currentTitle }: { target
   const cursor = collection ? providerCollectionCursor(target.provider, collection) : undefined;
   const title = collection ? `More from ${collection.title}` : `Browse ${target.title}`;
   return <section aria-label={title} hidden={!!summary && !summary.loading && !summary.error && !nearby.length} className="mt-6 min-w-0 space-y-2">
-    <h2 className="text-sm text-muted-foreground"><Link to={collectionLocation(target)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">{title}</Link></h2>
+    <h2 className="text-sm text-muted-foreground"><Link to={keepSection(collectionLocation(target), section)} className="inline-flex min-h-8 items-center hover:text-foreground hover:underline">{title}</Link></h2>
     <SearchOnlineResults provider={target.provider} query="" url={target.url} cursor={cursor} paged onResults={report} onOpenCollection={openProvider} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to Couch to load this list.</p>}
     {summary?.loading && !hits.length && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3.5" />Loading items…</p>}

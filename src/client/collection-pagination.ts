@@ -1,5 +1,6 @@
 import { providerForUrl, type ProviderId } from "../shared/providers";
 import type { CollectionLink, MediaCollection } from "../shared/media";
+import { readFrom } from "../shared/page-paths";
 
 export const collectionPageSize = 24;
 export function readCollectionSearch(search: Record<string, unknown>) {
@@ -14,7 +15,8 @@ export function readCollectionSearch(search: Record<string, unknown>) {
   const context: MediaCollection | undefined = validLink(value) ? { title: value.title, url: value.url,
     ...("parent" in value && validLink(value.parent) ? { parent: value.parent } : {}),
     ...("index" in value && typeof value.index === "number" && Number.isSafeInteger(value.index) && value.index >= 0 && value.index <= 2400 ? { index: value.index } : {}) } : undefined;
-  return { provider, url, cursors, page, filter, ...(context ? { context } : {}) };
+  const from = readFrom(search.from);
+  return { provider, url, cursors, page, filter, ...(context ? { context } : {}), ...(from ? { from } : {}) };
 }
 
 export const providerCollectionCursor = (provider: ProviderId, collection: MediaCollection) =>

@@ -59,7 +59,7 @@ function useShellValue() {
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
-  const section = sectionForPath(location.pathname) ?? "Home";
+  const section = sectionForPath(location.pathname, location.searchStr) ?? "Home";
   const playerTransition = !useSyncExternalStore(subscribeReducedMotion, reducedMotion);
   const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "general" : null);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
@@ -146,7 +146,7 @@ function useShellValue() {
     if (to !== at) router.history.replace(to);
   };
   useNavigation(() => {
-    if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back("/search"); return; }
+    if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back(pathForSection(section)); return; }
     if (section === "Where it plays") { detailNavigation.back("/"); return; }
     if (section === "Now") leavePlayer();
     else if (section === "Search" && !tvPresentation && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
@@ -201,7 +201,7 @@ function useShellValue() {
   return {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
-    credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current.split("?")[0]!) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
+    credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(...lastBrowsePath.current.split("?") as [string, string?]) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setSourcesOpen,
     enqueueProvider, enqueueRadio, playHistory,

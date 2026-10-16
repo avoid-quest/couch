@@ -11,7 +11,11 @@
 | Settings | `/settings` | the device's and the Couch's pages |
 | Remote | `/remote` | drives a TV; on non-TV devices while the Couch has one (`DeviceSummary.tv`, online or not) |
 
-`/item` and `/collection` belong to Search, `/now` is the player, and
+`/item` and `/collection` belong to the section that opened them: their
+URL carries it as `from` (`home`, `live`, `search` or `library`), so the tab,
+the breadcrumb and a refresh keep it, and moving between details passes it
+on. Without one, a station's page belongs to Live and the rest to Search.
+`/now` is the player, and
 `/where-it-plays` is Where it plays' overview, which opens from the picker
 and is not a tab ([Where it plays](where-it-plays.md#the-overview)).
 Earlier addresses redirect and keep their query, as `settingsAliases` does
