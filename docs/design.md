@@ -76,7 +76,7 @@ the same typography and controls scale across screens.
 
 | Role | Classes |
 | --- | --- |
-| Display (search field) | `text-3xl font-semibold tracking-tight` |
+| Display (search field, Home's hero and Details titles) | `text-3xl font-semibold tracking-tight` |
 | Player artwork title | `text-2xl font-medium tracking-tight` |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
 | Section title | `text-base font-medium` |
@@ -104,6 +104,8 @@ Shared building blocks in `src/client/components`:
 - `SettingsRow` / `SettingsSection`: label and control on divided rows.
 - `PageHeader`: title with optional back and actions.
 - `ChoiceGroup`: inline choices with a check on the selected option.
+- `DetailHeader`: an item or collection page's artwork, title, meta, synopsis
+  and row of verbs ([Browse](design/browse.md#details)).
 
 Release notes use `react-markdown` with GitHub-flavoured Markdown because the
 [shadcn catalog](https://ui.shadcn.com/docs/components) has no Markdown renderer.

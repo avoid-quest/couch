@@ -113,7 +113,7 @@ Evaluate that bundle in the T3 preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
 focus and playback behavior: one Home station stop, Up and Down out of a shelf beside a tile with a longer or shorter caption, Home entry on the hero's
 primary verb and Up from its last shelf through each shelf and the hero to the
-current tab, pairing overlay → content
+current tab, Saved Details entry on Play and Right across its verbs, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
 the tab bar's scroll, Up and Back, repeated Home Back, five-point OK-to-adjust Volume, Saved removal/Undo/order,
 retained favorite and Live TV actions, and a Remote that can't choose or open this device's
