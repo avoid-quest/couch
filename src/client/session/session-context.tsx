@@ -14,7 +14,7 @@ import { useInterfaceSize } from "../interface-size";
 import { useVideoQualityPreference } from "../video-quality";
 import { playingOnDevice, useScreenWakeLock } from "../screen-wake-lock";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
-import { choosesHere } from "../sections/shell/Outputs";
+import { choosesHere } from "./where-it-plays";
 import { applyUndo, undoPlan } from "./undo";
 import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";

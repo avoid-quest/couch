@@ -2,17 +2,16 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
+import { playOnTargets } from "@/session/where-it-plays";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
 export function usePlayOn() {
   const session = useOptionalSessionGate();
   const state = session?.state;
   const here = deviceId();
-  const online = (state?.devices ?? []).filter(device => device.online && (device.id === here || device.sharing?.audio || device.sharing?.video)).sort((a, b) => Number(b.id === here) - Number(a.id === here));
   const target = state?.controlling && state.controlling !== here ? state.devices?.find(device => device.id === state.controlling) : undefined;
   return {
-    // With only this Device online, Play on would repeat Play.
-    devices: online.length > 1 ? online : [],
+    devices: playOnTargets(state, here),
     here,
     /** A Play label that names the controlled Device when Play goes elsewhere: "Play on Studio". */
     on: (label: string) => target ? `${label} on ${target.name}` : label,
