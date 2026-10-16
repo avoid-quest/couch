@@ -4,7 +4,7 @@ On a TV its faders take the arrows only after OK: [TV](tv.md#every-journey-step-
 
 ## The Sheet
 
-**Where it plays** is one icon button in the band and the mini player, a
+**Where it plays** is one icon button in the band and the now-playing bar, a
 mixer (`SlidersVertical`) with no Device name or DeviceIcon, so it can't be
 mistaken for the header's Couch switch. It opens a bottom Sheet of divided
 rows (`Item`).
@@ -73,13 +73,13 @@ output would stay; that row says Private.
 
 A shared source waiting for
 receivers opens Where it plays for each request to choose; dismissed, it
-stays closed through unrelated updates and when the mini player gives way to
+stays closed through unrelated updates and when the now-playing bar gives way to
 Now Playing, since the session, not the Sheet, remembers the dismissal. A pressed
 Only here still commits, so a publisher held out for its source stays out.
 
 ## Band volume
 
-The band and mini player volume shows the loudest in-sound Device's,
+The band and now-playing bar volume shows the loudest in-sound Device's,
 or 0 while All is at 0, and moves them all together (from All's 0, raising it
 only brings All back to 100 and lowering it does nothing); their Mute mutes
 them all, and so does M.
@@ -89,7 +89,7 @@ them all, and so does M.
 **Play on** in item menus offers This device and the other online Devices
 that share, hidden while this is the only one; the primary Play says "Play on
 {name}" while you control another Device, and a "Playing on {name}" toast
-confirms it. The mini player, the player's summary and Home's Now row say
+confirms it. The now-playing bar, the player's summary and Home's Now row say
 "on {name}" (+N) whenever the controlled Playback plays anywhere but only here.
 
 Its target rows in menus: [Browse](browse.md#play-on-targets-in-menus).

@@ -1,10 +1,18 @@
 # Browse
 
-## Find
+## Search
 
-Find searches after one second without typing; Enter submits immediately.
-Its filters are Video, Music, Live, Radio and Channels. Music includes
-Bandcamp albums and tracks and SoundCloud tracks.
+Search (`/search`) searches after one second without typing; Enter submits
+immediately. Its filters are Video, Music, Live, Radio and Channels. Music
+includes Bandcamp albums and tracks and SoundCloud tracks. With no query it
+lists the sources to browse (shared inputs, Bandcamp, SoundCloud, RaiPlay,
+StreamingCommunity, 123MoviesFree, YouTube, Twitch) and Add source.
+
+## Live
+
+Live (`/live`) shows the Radio browse (its sources, `radioSource`, `page` and
+`filter`), then Live TV's channels (`group`, `channelPage`, `channelFilter`)
+once a Live TV source has some. As section roots they carry no breadcrumb.
 
 ## Keep discovery context visible
 
@@ -35,14 +43,15 @@ a separate, explicit action, including on phones. StreamingCommunity's
 collections say Series or Season rather than List. Reuse PageHeader and existing media rows. Dialogs remain
 reserved for focused tasks such as pairing and source setup.
 
-## Saved
+## Library
 
-Saved's tabs use the section nav it shares with Settings: [Settings](settings.md#section-nav).
+Library (`/library`) holds Saved's tabs (`?tab=`), in the section nav it shares
+with Settings: [Settings](settings.md#section-nav).
 
 ## MediaRow / MediaList
 
 Thumbnail, title, meta, length bar, one main verb
-and actions revealed on hover or focus. Home, Find and Saved. Every media
+and actions revealed on hover or focus. Home, Live, Search and Library. Every media
 row ends with the same verbs (`BrowseActions`): a filled ▷ for Play (Resume
 on Continue), then one "…" menu with Play on, Queue, Save and its other verbs.
 On the TV a row is one focus stop: OK does its main verb (Play for stations,
@@ -82,8 +91,8 @@ links do, and a bordered field there would be a panel inside the pager.
 
 ## ContentBreadcrumb
 
-The path above a collection or item (Find, then Radio
-or the source, then the collection). It replaces a Back control, so its
+The path above a collection or item (Search, then
+the source, then the collection; a station's starts at Live). It replaces a Back control, so its
 links are `text-sm`, the controls' size, rather than Mira's `text-xs`
 caption size, and each is `min-h-11`, a 44px target on every screen.
 

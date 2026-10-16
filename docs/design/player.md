@@ -5,18 +5,19 @@ On a TV: [TV](tv.md#the-tv-player-answers-a-remote).
 
 ## The player is one tap away
 
-The mini dock opens the player through its
-artwork and title. The mini player and the player band hold one control
-order: Play/Pause, Stop and Next, the timeline, volume, Where it plays, Up
-next, then Expand (`ChevronUp`) in the mini player or Playback settings (a
-gear; Audio & subtitles lives inside) and fullscreen in the band, whose
-timeline takes its own row above. Every control there is an icon with an
+The now-playing bar opens the player through its
+artwork and title ([Shell](shell.md#now-playing-bar)). The bar and the player band hold one control
+order: Play/Pause, Stop and Next, the timeline, volume, Where it plays and Up
+next, then in the band Playback settings (a
+gear; Audio & subtitles lives inside) and fullscreen, whose
+timeline takes its own row above. On phones the bar keeps Play/Pause and
+Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
 
 ### Transport
 
 The transport is Play/Pause, Stop and Next wherever it appears: the band, the
-mini player, Home's Now row and the Remote. Each keeps its slot for every
+now-playing bar, Home's Now row and the Remote. Each keeps its slot for every
 kind of media: live media that can't pause keeps Pause, disabled, and Stop is
 enabled whenever something is loading, playing, paused, ended or failed.
 Stop clears the sequence and offers Undo; it lives in the transport, never
@@ -56,9 +57,9 @@ and the responsive queue workspace; controls reuse shadcn components.
 
 The ordinary player's fixed-height header uses a compact trail of the same
 collection links as [`ContentBreadcrumb`](browse.md#contentbreadcrumb), with single-line, truncated labels and at least `min-w-11`
-targets. Its title already appears in the player; Find and the provider remain
-in the full browse trail. Without a collection, the player links to Radio,
-its provider or Find. The Couch switch takes at most two fifths of the header's
+targets. Its title already appears in the player; Search and the provider remain
+in the full browse trail. Without a collection, the player links to Live,
+its provider or Search. The Couch switch takes at most two fifths of the header's
 content width so a long device name leaves room for the trail. The
 [shadcn Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
 supports composing links, but its wrapping default overlaps the switch on a
