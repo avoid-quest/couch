@@ -37,9 +37,9 @@ function Devices({ onPlay, disabled, sharingDeviceId, Item = DropdownMenuItem }:
 }
 
 /** "Play on" inside an item's menu, a dropdown's or a row's context menu; nothing when only this Device is online. */
-export function PlayOnGroup({ onPlay, disabled, sharingDeviceId, parts: { Item, Group, Label, Separator } = { Item: DropdownMenuItem, Group: DropdownMenuGroup, Label: DropdownMenuLabel, Separator: DropdownMenuSeparator } }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; parts?: MenuParts }) {
+export function PlayOnGroup({ onPlay, disabled, sharingDeviceId, separated = true, parts: { Item, Group, Label, Separator } = { Item: DropdownMenuItem, Group: DropdownMenuGroup, Label: DropdownMenuLabel, Separator: DropdownMenuSeparator } }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; separated?: boolean; parts?: MenuParts }) {
   if (!usePlayOn().devices.length) return null;
-  return <><Separator /><Group aria-label="Play on"><Label>Play on</Label><Devices Item={Item} onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} /></Group></>;
+  return <>{separated && <Separator />}<Group aria-label="Play on"><Label>Play on</Label><Devices Item={Item} onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} /></Group></>;
 }
 
 /** "Play on" beside a row's inline verbs. */
