@@ -148,12 +148,12 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
   const shell = useShell();
-  const { connected, tvPresentation, offerUndo, queue } = useSessionGate();
+  const { connected, offerUndo, queue } = useSessionGate();
   const navigation = useDetailNavigation();
   const client = useQueryClient();
   const action = useDetailAction();
   const { play } = usePlayOn();
-  const list = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected && tvPresentation });
+  const list = useQuery({ ...forLaterQuery(shell.credentials), enabled: connected });
   const items = list.data?.items ?? [];
   const index = items.findIndex(saved => saved.id === item.id);
   const refresh = () => client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
@@ -185,10 +185,8 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => load("play", on), deviceId)) }}
     more={[
-      ...(tvPresentation ? [
-        { label: "Move up", disabled: !connected || action.isPending || index <= 0, run: () => action.mutate(() => move(-1)) },
-        { label: "Move down", disabled: !connected || action.isPending || index < 0 || index >= items.length - 1, run: () => action.mutate(() => move(1)) },
-      ] : []),
+      { label: "Move up", disabled: !connected || action.isPending || index <= 0, run: () => action.mutate(() => move(-1)) },
+      { label: "Move down", disabled: !connected || action.isPending || index < 0 || index >= items.length - 1, run: () => action.mutate(() => move(1)) },
       { label: "Remove", disabled: !connected || action.isPending, run: () => action.mutate(remove) },
     ]}>{action.error && <p role="alert" className="text-sm text-destructive">{action.error.message}</p>}</DetailLayout><RelatedCollection collection={item.collection} currentUrl={item.url} /></>;
 }

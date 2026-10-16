@@ -330,24 +330,26 @@ window.runTvNavigationRegression = async () => {
     await click('[data-app-nav] a[href="/library"]');
     await click('a[href="/library?tab=channels"]');
     const rows = () => [...document.querySelectorAll<HTMLElement>('[aria-label="Channels & stations"] li')];
+    const options = (row?: HTMLElement) => row?.querySelector<HTMLElement>('button[aria-label^="Options"]');
+    const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === label);
     await until(() => rows().length >= 2);
-    const first = rows()[0]!;
-    const reorder = first.querySelector<HTMLElement>('button[aria-label^="Reorder"]');
-    assert(reorder, "Favorite lost Reorder");
-    const label = reorder!.getAttribute("aria-label");
-    reorder!.focus(); await key("Enter"); await key("ArrowDown"); await key("Enter");
-    await until(() => rows()[1]?.querySelector('button[aria-label^="Reorder"]')?.getAttribute("aria-label") === label);
-    const options = rows()[1]!.querySelector<HTMLElement>('button[aria-label^="Options"]');
-    assert(options, "Favorite lost Options");
-    options!.focus(); await key("Enter");
-    const remove = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === "Remove");
+    // A station's page holds no ordering or Remove, so its row's Options menu does.
+    const label = options(rows()[0])?.getAttribute("aria-label");
+    assert(label, "Favorite lost Options");
+    options(rows()[0])!.focus(); await key("Enter");
+    const down = menuItem("Move down");
+    assert(down && !down.hasAttribute("data-disabled"), "Favorite lost Move down");
+    down!.click();
+    await until(() => options(rows()[1])?.getAttribute("aria-label") === label);
+    options(rows()[1])!.focus(); await key("Enter");
+    const remove = menuItem("Remove");
     assert(remove, "Favorite lost Remove");
     remove!.click();
     await until(() => rows().length === 1);
     const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
     assert(undo && document.activeElement?.closest('[aria-label="Channels & stations"]'), "Favorite removal lost Undo or adjacent focus");
     // Undo saves the station again, then its order, so the list can briefly show the save alone.
-    const restored = () => rows().length === 2 && rows()[1]?.querySelector('button[aria-label^="Reorder"]')?.getAttribute("aria-label") === label;
+    const restored = () => rows().length === 2 && options(rows()[1])?.getAttribute("aria-label") === label;
     undo!.click(); await until(restored).catch(() => undefined);
     assert(restored(), "Favorite Undo lost saved order");
   });
