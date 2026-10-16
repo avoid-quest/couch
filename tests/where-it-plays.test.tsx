@@ -93,3 +93,27 @@ test("only a successful Play whose destination is the playing source's publisher
   expect(choosesHere({ ...play, deviceId: "mac" }, before, { ...playing, playback: "q" } as ClientSessionState)).toBe(false);
   expect(choosesHere({ ...play, deviceId: "mac" }, before, null)).toBe(false);
 });
+
+test("the picker shows the playback, its one Volume, then a check per device, with a fader and a … menu only while it is in", async () => {
+  const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
+  const { isValidElement } = await import("react");
+  type Props = { children?: ReactNode; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
+  const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
+  const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
+  const sent: unknown[] = [];
+  const state = { ...waiting(0), outputs: [{ deviceId: "tv", picture: true, sound: true }], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [{ deviceId: "tv", picture: true, sound: true }] }], liveSources: [] } as unknown as ClientSessionState;
+  const tree = WhereItPlays({ state, connected: true, run: async action => { sent.push(action); return true; } });
+  const all = elements(tree), labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
+  expect(all.filter(item => item.type === PlaybackVolume).length).toBe(1);
+  expect(labelled("All trim")).toEqual([]);
+  expect(text(tree)).toContain("Mac · Screen");
+  expect(text(tree)).not.toContain("Every device");
+  const checks = all.filter(item => item.props["data-device-check"]);
+  expect(checks.map(item => [item.props["aria-label"], item.props["aria-checked"]])).toEqual([["TV", true], ["Mac", false]]);
+  for (const label of ["TV volume", "Options for TV", "TV picture", "Mute TV", "Only on TV"]) expect(labelled(label).length).toBe(1);
+  for (const label of ["Mac volume", "Options for Mac", "Mac picture", "Mute Mac", "Only on Mac"]) expect(labelled(label)).toEqual([]);
+  // Pressing a row sends the model's own action: in, it leaves. Mac shares nothing, so its row is disabled.
+  checks[0]!.props.onClick!();
+  expect(sent).toEqual([{ type: "output", deviceId: "tv", picture: false, level: 0 }]);
+  expect(checks[1]!.props.disabled).toBe(true);
+});

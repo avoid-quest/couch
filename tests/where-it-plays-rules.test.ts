@@ -4,10 +4,10 @@ import { DeviceIcon, signalOf, type Signal } from "../src/client/components/Devi
 import { muted } from "../src/client/components/PlaybackTransport";
 import { playsOn } from "../src/client/session/device-id";
 import type { ClientSessionState } from "../src/client/session/session";
-import { chooserFor, chooserRequest, outputStatus, picker, playingOn, playOnTargets, reopens } from "../src/client/session/where-it-plays";
+import { chooserFor, chooserRequest, picker, playingOn, playOnTargets, reopens } from "../src/client/session/where-it-plays";
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
 
-// One rule per test, in the order of docs/design/where-it-plays.md. "here" is this device; every other device
+// One rule per test, in the order of docs/design/where-it-plays.md (src/client/session/where-it-plays.ts). "here" is this device; every other device
 // shares its speakers and screen unless a test says otherwise.
 const here = "here";
 const shared = { audio: true, video: true };
@@ -25,71 +25,142 @@ const row = (state: ClientSessionState, id: string) => rows(state).find(item => 
 const radio = (outputs: Output[]): PlaybackSummary => ({ id: "radio", title: "avoid radio", status: "paused", outputs, audioOnly: true });
 const screen = { id: "s", deviceId: "mac", name: "Mac · Screen", kind: "screen", audio: true, video: true } as const;
 
-describe("the Sheet", () => {
-  test("its title is what plays, or says nothing is playing", () => {
-    expect(picker(session(), { here }).title).toBe("Montalbano");
+describe("the picker's header", () => {
+  test("shows what plays and its status, or asks you to choose for a waiting source", () => {
+    expect(picker(session(), { here })).toMatchObject({ title: "Montalbano", status: "Playing" });
+    expect(picker(session({ film: { status: "idle" } }), { here }).status).toBe("Not playing");
     expect(picker(session({ currentEntryId: null }), { here }).title).toBeUndefined();
+    expect(picker(session({ film: { liveSourceId: "s", status: "paused" }, liveSources: [screen] }), { here }).status).toBe("Choose where it plays");
+  });
+
+  test("has one hint line, and only on the TV, where it says how faders take the arrows", () => {
+    expect(picker(session(), { here }).hint).toBeUndefined();
+    expect(picker(session(), { here, tv: true }).hint).toBe("Press OK to adjust a level, then OK or Back to finish.");
   });
 });
 
 describe("device rows", () => {
-  test("the playback's devices come first, then this device and the other online devices that share", () => {
-    const state = session({ outputs: [sound("kitchen")], devices: [device(here, { sharing: { audio: false, video: false } }), device("tv"), device("kitchen")] });
-    expect(rows(state).map(item => item.device.id)).toEqual(["kitchen", here, "tv"]);
+  test("lists every device once: the playback's first, then the others, offline ones last", () => {
+    const state = session({ outputs: [sound("kitchen")], devices: [device("away", { online: false }), device(here, { sharing: { audio: false, video: false } }), device("phone", { sharing: { audio: false, video: false } }), device("kitchen")] });
+    expect(rows(state).map(item => item.device.id)).toEqual(["kitchen", here, "phone", "away"]);
   });
 
-  test("this device is listed even when it shares neither, so it can add itself", () => {
-    const state = session({ devices: [device(here, { sharing: { audio: false, video: false } })] });
-    expect(rows(state).map(item => item.device.id)).toEqual([here]);
-    expect(row(state, here)).toMatchObject({ picture: { enabled: true }, level: { enabled: true } });
+  test("a device you can't change stays listed, its check disabled with a one-word status", () => {
+    const state = session({ devices: [device("phone", { sharing: { audio: false, video: false } }), device("away", { online: false })] });
+    expect(row(state, "phone")).toMatchObject({ status: "Private", check: { enabled: false, reason: "Private" } });
+    expect(row(state, "away")).toMatchObject({ status: "Offline", check: { enabled: false, reason: "Offline" } });
   });
 
-  test("another device that shares neither is listed only while it is an output", () => {
-    const quiet = device("phone", { sharing: { audio: false, video: false } });
-    expect(rows(session({ devices: [quiet] })).length).toBe(0);
-    expect(rows(session({ devices: [quiet], outputs: [both("phone", { local: true })] })).map(item => item.device.id)).toEqual(["phone"]);
-  });
-
-  test("an offline device is listed only while it is an output, dimmed with its controls disabled", () => {
-    expect(rows(session({ devices: [device("tv", { online: false })] })).length).toBe(0);
+  test("an offline output keeps its check, disabled, and every control", () => {
     const state = session({ devices: [device("tv", { online: false })], outputs: [both("tv")] });
-    expect(row(state, "tv")).toMatchObject({ status: "Offline", picture: { enabled: false }, level: { enabled: false }, mute: { enabled: false }, only: { enabled: false } });
-  });
-
-  test("a shared source's publisher is listed, even when it shares neither", () => {
-    const state = session({ devices: [device("mac", { sharing: { audio: false, video: false } }), device("tv")], outputs: [both("tv")], film: { liveSourceId: "s" }, liveSources: [screen] });
-    expect(rows(state).map(item => item.device.id)).toEqual(["tv", "mac"]);
+    expect(row(state, "tv")).toMatchObject({ status: "Offline", check: { enabled: false }, picture: { enabled: false, reason: "Offline" }, level: { enabled: false }, mute: { enabled: false }, only: { enabled: false } });
   });
 
   test("a row's picture is pressed while it shows the playback's picture, never for media without one", () => {
     expect(row(session({ outputs: [both("tv")] }), "tv").picture.on).toBe(true);
     expect(row(session({ outputs: [sound("tv")] }), "tv").picture.on).toBe(false);
-    expect(row(session({ outputs: [both("tv")], film: { audioOnly: true } }), "tv").picture).toEqual({ on: false, enabled: false });
+    expect(row(session({ outputs: [both("tv")], film: { audioOnly: true } }), "tv").picture).toEqual({ on: false, enabled: false, reason: "No picture" });
+  });
+});
+
+describe("the check", () => {
+  test("adds a device with picture and sound, at its own level", () => {
+    expect(row(session({ devices: [device("tv", { volume: 40 })] }), "tv").check).toEqual({ enabled: true, action: { type: "output", deviceId: "tv", picture: true, level: 40 } });
+  });
+
+  test("adds sound at 50 when the device's level is 0, since 0 would leave it out", () => {
+    expect(row(session({ devices: [device("tv", { volume: 0 })] }), "tv").check.action).toMatchObject({ level: 50 });
+  });
+
+  test("adds only what the device shares and the media has", () => {
+    const devices = [device("speaker", { sharing: { audio: true, video: false } }), device("screen", { sharing: { audio: false, video: true } }), device("tv")];
+    expect(row(session({ devices }), "speaker").check.action).toEqual({ type: "output", deviceId: "speaker", level: 50 });
+    expect(row(session({ devices }), "screen").check.action).toEqual({ type: "output", deviceId: "screen", picture: true });
+    expect(row(session({ devices, film: { audioOnly: true } }), "tv").check.action).toEqual({ type: "output", deviceId: "tv", level: 50 });
+    expect(row(session({ devices, film: { audioOnly: true } }), "screen").check).toEqual({ enabled: false, reason: "Private", action: undefined });
+    const silent = session({ devices: [device("mac"), ...devices], film: { liveSourceId: "s" }, liveSources: [{ ...screen, audio: false }] });
+    expect(row(silent, "tv").check.action).toEqual({ type: "output", deviceId: "tv", picture: true });
+  });
+
+  test("this device adds itself without sharing anything", () => {
+    expect(row(session(), here).check.action).toEqual({ type: "output", deviceId: here, picture: true, level: 50 });
+  });
+
+  test("removes a device by taking out each channel it plays here", () => {
+    expect(row(session({ outputs: [both("tv")] }), "tv").check.action).toEqual({ type: "output", deviceId: "tv", picture: false, level: 0 });
+    expect(row(session({ outputs: [sound("tv")] }), "tv").check.action).toEqual({ type: "output", deviceId: "tv", level: 0 });
+    expect(row(session({ outputs: [picture("tv")] }), "tv").check.action).toEqual({ type: "output", deviceId: "tv", picture: false });
+  });
+
+  test("can't take out another device's private channel, but its owner can", () => {
+    const devices = [device(here, { sharing: { audio: false, video: false } }), device("phone", { sharing: { audio: true, video: false } })];
+    expect(row(session({ devices, outputs: [both("phone", { local: true })] }), "phone")).toMatchObject({ status: "Private", check: { enabled: false, reason: "Private" } });
+    expect(row(session({ devices, outputs: [sound("phone", { local: true })] }), "phone").check.enabled).toBe(true);
+    expect(row(session({ devices, outputs: [both(here, { local: true })] }), here).check.enabled).toBe(true);
+  });
+
+  test("a device busy elsewhere moves here, unless its output there is private", () => {
+    expect(row(session({ others: [radio([sound("kitchen")])] }), "kitchen").check.enabled).toBe(true);
+    const state = session({ devices: [device("phone", { sharing: { audio: true, video: false } })], others: [{ id: "own", title: "Own", status: "playing", outputs: [both("phone", { local: true })] }] });
+    expect(row(state, "phone")).toMatchObject({ status: "Private", check: { enabled: false, reason: "Private" } });
+  });
+
+  test("a held publisher's private output counts as its place in that playback", () => {
+    const state = session({ devices: [device("phone", { sharing: { audio: true, video: false } })], others: [{ id: "src", title: "Screen", status: "playing", outputs: [], held: both("phone", { local: true }) }] });
+    expect(row(state, "phone")).toMatchObject({ status: "Private", check: { enabled: false, reason: "Private" } });
+  });
+
+  test("a shared source's publisher never plays it", () => {
+    const state = session({ devices: [device("mac"), device("tv")], outputs: [both("tv")], film: { liveSourceId: "s" }, liveSources: [screen] });
+    expect(row(state, "mac")).toMatchObject({ status: "Sharing this source", check: { enabled: false, reason: "Sharing this source" }, level: { enabled: false }, picture: { enabled: false }, only: { enabled: false } });
+  });
+
+  test("a channel only the host can play locks every device that isn't its output", () => {
+    const state = session({ outputs: [both("tv")], film: { hostOnly: true } });
+    expect(row(state, "kitchen")).toMatchObject({ status: "Can't play this channel", check: { enabled: false }, picture: { enabled: false }, level: { enabled: false }, mute: { enabled: false }, only: { enabled: false } });
+    expect(row(state, "tv")).toMatchObject({ check: { enabled: true }, level: { enabled: true } });
   });
 });
 
 describe("what a device is doing", () => {
-  test("a joined output keeps the current playback's factual status", () => {
-    for (const [status, text] of [["playing", "Playing"], ["paused", "Paused"], ["loading", "Loading"], ["ended", "Finished"], ["error", "Can't play"], ["idle", "Not playing here"], ["unavailable", "Unavailable"]] as const) {
-      expect(row(session({ outputs: [both("tv")], film: { status } }), "tv").status).toBe(text);
-    }
+  test("an output says what it plays here, Mute included, never whether it can be heard", () => {
+    const status = (output: Output, extra: Partial<DeviceSummary> = {}, film: Partial<PlaybackSummary> = {}) => row(session({ devices: [device("tv", extra)], outputs: [output], film }), "tv").status;
+    expect(status(both("tv"))).toBe("Picture and sound");
+    expect(status(sound("tv"))).toBe("Sound");
+    expect(status(picture("tv"))).toBe("Picture");
+    expect(status(sound("tv"), { muted: true })).toBe("Muted");
+    expect(status(both("tv"), { muted: true })).toBe("Picture, muted");
+    expect(status(both("tv"), {}, { audioOnly: true })).toBe("Sound");
+    expect(status(picture("tv"), {}, { audioOnly: true })).toBe("No picture");
+    expect(status(both("tv"), { volume: 0 })).toBe("Picture and sound");
   });
 
-  test("a device busy elsewhere names that playback before a move", () => {
-    const state = session({ others: [radio([sound("kitchen")])] });
-    expect(row(state, "kitchen").status).toBe("Paused avoid radio");
-    expect(outputStatus(session({ others: [{ ...radio([sound("kitchen")]), title: null }] }), device("kitchen"), "film")).toBe("Paused something else");
+  test("a live input's receiver says when it plays buffered, or can't play", () => {
+    const status = (output: Output) => row(session({ outputs: [output] }), "tv").status;
+    expect(status(both("tv", { buffered: true }))).toBe("Buffered");
+    expect(status(both("tv", { error: "stopped" }))).toBe("Can't play");
   });
 
-  test("an unused device is not playing here, and an offline one says so first", () => {
-    expect(row(session(), "tv").status).toBe("Not playing here");
-    expect(outputStatus(session({ outputs: [both("tv")] }), device("tv", { online: false }), "film")).toBe("Offline");
+  test("a device busy elsewhere names what it plays there before you press", () => {
+    expect(row(session({ others: [radio([sound("kitchen")])] }), "kitchen").status).toBe("Paused avoid radio");
+    expect(row(session({ others: [{ ...radio([sound("kitchen")]), status: "playing", title: null }] }), "kitchen").status).toBe("Playing something else");
+    expect(row(session({ others: [{ ...radio([sound("kitchen")]), status: "idle" }] }), "kitchen").status).toBe("Not playing");
   });
 
-  test("a shared source's publisher is sharing this source, and offers nothing that would make it receive", () => {
-    const state = session({ devices: [device("mac"), device("tv")], outputs: [both("tv")], film: { liveSourceId: "s" }, liveSources: [screen] });
-    expect(row(state, "mac")).toMatchObject({ capturing: true, status: "Sharing this source", picture: { enabled: false }, level: { enabled: false }, only: { enabled: false } });
-    expect(row(state, "tv").capturing).toBe(false);
+  test("a free device is not playing", () => {
+    expect(row(session(), "tv").status).toBe("Not playing");
+  });
+
+  test("this device's status starts with This device", () => {
+    expect(row(session(), here).status).toBe("This device · Not playing");
+    expect(row(session({ outputs: [sound(here)] }), here).status).toBe("This device · Sound");
+    expect(row(session({ devices: [device(here), device("mac")], film: { liveSourceId: "s" }, liveSources: [{ ...screen, deviceId: here }] }), here).status).toBe("This device · Sharing this source");
+  });
+
+  test("rows name only devices, never the Couch, a playback or a group", () => {
+    const state = session({ installationName: "Couch", outputs: [both("tv")], film: { hostOnly: true }, others: [radio([sound("kitchen")])] });
+    const text = picker(state, { here, tv: true });
+    expect(JSON.stringify(text)).not.toMatch(/\b(Couch|zone|group|room|speaker|Playback)\b/i);
   });
 });
 
@@ -98,39 +169,28 @@ describe("consent", () => {
 
   test("another device's private picture disables Picture for others, and its shared sound stays operable and mutable", () => {
     const state = session({ devices: foreign({ audio: true, video: false }), outputs: [both("phone", { local: true })] });
-    expect(row(state, "phone")).toMatchObject({ private: "picture", picture: { enabled: false }, level: { enabled: true }, mute: { enabled: true } });
+    expect(row(state, "phone")).toMatchObject({ picture: { enabled: false, reason: "Private" }, level: { enabled: true }, mute: { enabled: true } });
   });
 
   test("a private sound disables the fader and Mute for others", () => {
     const state = session({ devices: foreign({ audio: false, video: true }), outputs: [both("phone", { local: true })] });
-    expect(row(state, "phone")).toMatchObject({ private: "sound", picture: { enabled: true }, level: { enabled: false }, mute: { enabled: false } });
-    expect(row(session({ devices: foreign({ audio: false, video: false }), outputs: [both("phone", { local: true })] }), "phone").private).toBe("both");
+    expect(row(state, "phone")).toMatchObject({ picture: { enabled: true }, level: { enabled: false, reason: "Private" }, mute: { enabled: false, reason: "Private" } });
   });
 
   test("a device playing privately in another playback can't be moved here, but its shared sound can still be muted", () => {
     const state = session({ devices: foreign({ audio: true, video: false }), others: [{ id: "own", title: "Own", status: "playing", outputs: [both("phone", { local: true })] }] });
-    expect(row(state, "phone")).toMatchObject({ status: "Playing Own", private: "picture", picture: { enabled: false }, level: { enabled: false }, mute: { enabled: true }, only: { enabled: false } });
-  });
-
-  test("an unselected shared device busy elsewhere stays operable", () => {
-    const state = session({ others: [radio([sound("kitchen")])] });
-    expect(row(state, "kitchen")).toMatchObject({ level: { enabled: true }, picture: { enabled: true }, only: { enabled: true } });
-  });
-
-  test("a held publisher's private output counts as its place in that playback", () => {
-    const state = session({ devices: foreign({ audio: true, video: false }), others: [{ id: "src", title: "Screen", status: "playing", outputs: [], held: both("phone", { local: true }) }] });
-    expect(row(state, "phone")).toMatchObject({ status: "Not playing here", private: "picture", level: { enabled: false }, picture: { enabled: false } });
+    expect(row(state, "phone")).toMatchObject({ picture: { enabled: false }, level: { enabled: false, reason: "Private" }, mute: { enabled: true }, only: { enabled: false } });
   });
 
   test("this device keeps its own controls while viewing another playback, its private output included", () => {
     const own = session({ devices: [device(here, { sharing: { audio: false, video: false } }), device("tv")], outputs: [both("tv")], others: [{ id: "mine", title: "Mine", status: "playing", outputs: [both(here, { local: true })] }] });
-    expect(row(own, here)).toMatchObject({ mine: true, private: "both", picture: { enabled: true }, level: { enabled: true }, mute: { enabled: true }, only: { enabled: true } });
+    expect(row(own, here)).toMatchObject({ mine: true, status: "This device · Playing Mine", check: { enabled: true }, picture: { enabled: true }, level: { enabled: true }, mute: { enabled: true }, only: { enabled: true } });
   });
 
-  test("a device that doesn't share its speakers can't be muted by others, and one without a screen offers no Picture", () => {
+  test("a device that doesn't share its speakers can't be muted by others, and one without a shared screen offers no Picture", () => {
     const state = session({ devices: [device(here), device("phone", { sharing: { audio: false, video: true } }), device("speaker", { sharing: { audio: true, video: false } })] });
     expect(row(state, "phone")).toMatchObject({ mute: { enabled: false }, level: { enabled: false }, picture: { enabled: true } });
-    expect(row(state, "speaker")).toMatchObject({ mute: { enabled: true }, level: { enabled: true }, picture: { enabled: false } });
+    expect(row(state, "speaker")).toMatchObject({ mute: { enabled: true }, level: { enabled: true }, picture: { enabled: false, reason: "Private" } });
   });
 });
 
@@ -141,14 +201,10 @@ describe("fader and Sync", () => {
     expect(row(state, "kitchen").level).toEqual({ value: 0, sound: false, enabled: true });
   });
 
-  test("Sync is adjustable only while the device plays in sync, else it shows the saved value", () => {
-    expect(row(session({ outputs: [both("tv", { delay: 80, delayActive: true }), sound("kitchen")] }), "tv").sync).toEqual({ adjustable: true, delay: 80 });
-    expect(row(session({ outputs: [both("tv", { delay: 80 })] }), "tv").sync).toEqual({ adjustable: false, delay: 80 });
-  });
-
-  test("Sync shows only for sound that is in and that you may change", () => {
-    expect(row(session({ outputs: [picture("tv")] }), "tv").sync).toBeUndefined();
-    expect(row(session({ devices: [device("tv", { online: false })], outputs: [both("tv")] }), "tv").sync).toBeUndefined();
+  test("Sync shows only while the device's sound plays in sync with others", () => {
+    expect(row(session({ outputs: [both("tv", { delay: 80, delayActive: true }), sound("kitchen")] }), "tv").sync).toEqual({ delay: 80 });
+    expect(row(session({ outputs: [both("tv", { delay: 80 })] }), "tv").sync).toBeUndefined();
+    expect(row(session({ outputs: [picture("tv", { delayActive: true })] }), "tv").sync).toBeUndefined();
   });
 });
 
@@ -161,7 +217,7 @@ describe("Only here", () => {
 
   test("is unavailable everywhere while another device's private output plays in it", () => {
     const state = session({ devices: [device(here), device("tv"), device("phone", { sharing: { audio: false, video: false } })], outputs: [both("tv"), both("phone", { local: true })] });
-    expect(rows(state).map(item => [item.device.id, item.only.enabled])).toEqual([["tv", false], ["phone", false], [here, false]]);
+    expect(rows(state).map(item => [item.device.id, item.only.enabled, item.only.reason])).toEqual([["tv", false, "Private"], ["phone", false, "Private"], [here, false, "Private"]]);
   });
 
   test("is unavailable while a publisher's private output waits to return after its source", () => {
@@ -181,15 +237,6 @@ describe("Only here", () => {
   });
 });
 
-describe("a channel only the host can play", () => {
-  test("locks every device that isn't its output and names the host", () => {
-    const state = session({ outputs: [both("tv")], film: { hostOnly: true } });
-    expect(row(state, "kitchen")).toMatchObject({ picture: { enabled: false }, level: { enabled: false }, mute: { enabled: false }, only: { enabled: false } });
-    expect(row(state, "tv").level.enabled).toBe(true);
-    expect(picker(state, { here }).hint).toBe("This channel plays only on Tv.");
-  });
-});
-
 describe("live inputs", () => {
   const live = (outputs: Output[], film: Partial<PlaybackSummary> = {}, source = screen) => session({ devices: [device("mac"), device("tv"), device("kitchen")], outputs, film: { liveSourceId: "s", ...film }, liveSources: [source] });
 
@@ -200,18 +247,9 @@ describe("live inputs", () => {
     expect(picker(session({ outputs: [both("tv"), sound("kitchen")] }), { here }).inSync).toBeUndefined();
   });
 
-  test("a waiting source asks you to choose, and a silent one offers only Picture", () => {
-    expect(picker(live([]), { here }).hint).toBe("Choose where this source plays: raise a level or turn on Picture.");
+  test("a source without sound offers Picture, and its faders and Mute say it has no sound", () => {
     const silent = live([picture("tv")], {}, { ...screen, audio: false });
-    expect(picker(silent, { here }).hint).toBe("This source has no sound. Enable Picture on devices to watch it.");
-    expect(row(silent, "tv")).toMatchObject({ level: { enabled: false }, mute: { enabled: false }, picture: { enabled: true } });
-  });
-});
-
-describe("the hint", () => {
-  test("says how faders work, and on the TV how OK hands them the arrows", () => {
-    expect(picker(session(), { here }).hint).toBe("Raise a device level to add its sound; at 0 its sound is off.");
-    expect(picker(session(), { here, tv: true }).hint).toEndWith(" Press OK to adjust a level, then OK or Back to finish.");
+    expect(row(silent, "tv")).toMatchObject({ level: { enabled: false, reason: "No sound" }, mute: { enabled: false, reason: "No sound" }, picture: { enabled: true } });
   });
 });
 
@@ -287,8 +325,9 @@ describe("DeviceIcon", () => {
     expect(icon({})).toContain('aria-hidden="true"');
   });
 
-  test("reads a device's output in whichever playback it serves", () => {
-    const state = session({ devices: [device("kitchen", { volume: 30, muted: true })], others: [radio([sound("kitchen")])] });
+  test("reads a device's output in whichever playback it serves, with no picture for media that has none", () => {
+    const state = session({ devices: [device("kitchen", { volume: 30, muted: true })], others: [radio([both("kitchen")])] });
     expect(signalOf(state, "kitchen")).toEqual({ picture: false, sound: true, volume: 30, muted: true, online: true });
+    expect(signalOf(session({ outputs: [both("tv")] }), "tv")).toMatchObject({ picture: true, sound: true });
   });
 });
