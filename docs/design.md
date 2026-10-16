@@ -96,8 +96,10 @@ actions use its `actionButton` classes because its default height is 24px.
 
 ## Components
 
-Prefer shadcn components from `src/client/components/ui`. Their files are
-owned by Couch; the Mira defaults were changed only where Clock needs it:
+Prefer shadcn components from `src/client/components/ui`, and check the
+[catalog](https://ui.shadcn.com/docs/components) before building anything
+custom; record the gap that justifies a custom component in its surface doc.
+Their files are owned by Couch; the Mira defaults were changed only where Clock needs it:
 `text-sm` controls at `h-8`, flat left-rule `Alert`, left-aligned borderless
 `Empty`, no shadows.
 
@@ -166,3 +168,23 @@ Each surface's own layout and behaviour lives in its file:
 - [TV](design/tv.md): anything shown on a TV: remote navigation, the TV layout and the TV player.
 - [Remote](design/remote.md): the Remote section that drives a TV, and Type on TV.
 - [Settings](design/settings.md): Settings' two owners, its section nav, admin-only rows and device names.
+
+Not yet: `apps/web`, the couch.avoid.quest site, keeps its own pages; this
+structure hasn't reached it.
+
+## Changing a surface
+
+- **One tree.** A surface renders one component tree on every screen.
+  Express the TV's and touch's differences with the `tv:` and `touch:`
+  variants, and keep a `tvPresentation` branch only where behaviour differs,
+  such as focus stops or keys.
+- **Keep the hooks.** The browser checks (`tests/tv-navigation.browser.ts`,
+  `tests/tv-continue.browser.ts`) find elements by `data-*` attributes,
+  `aria-label`s and paths. A change that moves one updates those checks with
+  it.
+- **Seen on three screens.** Look at the change on a scratch Couch at
+  1920×1080 in TV presentation, through the
+  [TV override](design/tv.md#see-the-tv-in-a-browser), at 1440×900 on desktop
+  and at 390×844 on a phone.
+- **Docs follow code.** A surface's doc changes with its code, so it keeps
+  describing what is built.

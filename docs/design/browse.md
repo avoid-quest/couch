@@ -78,7 +78,8 @@ Home's shelves are:
   only while a Live TV source has some. If the sources fail to load, "Couldn't
   load Live TV." stands in for them, with Try again.
 
-There is no programme grid: that waits for a source that needs one. As a
+Not yet: a programme grid, and any Core endpoint it would need; it waits
+for a source that needs one. As a
 section root Live carries no breadcrumb.
 
 ## Keep discovery context visible
