@@ -55,9 +55,24 @@ opens, where the item supports them:
 
 ## Live
 
-Live (`/live`) shows the Radio browse (its sources, `radioSource`, `page` and
-`filter`), then Live TV's channels (`group`, `channelPage`, `channelFilter`)
-once a Live TV source has some. As section roots they carry no breadcrumb.
+Live (`/live`) is one page in three parts, each under a section heading, as
+Home's shelves are:
+
+- **On air:** a shelf of `MediaTile`s, the saved stations first, then the
+  built-in ones. Each tile reads the station, its current show and "Live"
+  (a `DurationBar`): a show's `expiresAt` is when its data refreshes, not when
+  it ends, so there is no "until" time. A tile plays its station. Home's
+  Radio shelf builds the same list (`useOnAir`, with Home's recents first).
+  The shelf waits for the shows, so no tile grows a line under the focus,
+  then keeps its order while Live stays open, as Home's shelves do. Its first
+  tile carries `data-page-first`.
+- **Stations:** every station, as the Radio browse was: its source choice
+  (`radioSource`), count, Filter (`filter`) and pager (`page`).
+- **Channels:** Live TV's channels (`group`, `channelPage`, `channelFilter`),
+  only while a Live TV source has some.
+
+There is no programme grid: that waits for a source that needs one. As a
+section root Live carries no breadcrumb.
 
 ## Keep discovery context visible
 
@@ -90,8 +105,15 @@ reserved for focused tasks such as pairing and source setup.
 
 ## Library
 
-Library (`/library`) holds Saved's tabs (`?tab=`), in the section nav it shares
-with Settings: [Settings](settings.md#section-nav).
+Library (`/library`) holds what you keep, one section per `?tab=`: For later,
+Channels & stations (saved channels, playlists and stations), Lists, and
+Played. The sections sit in the section nav Library shares with Settings, a
+rail on wide screens and a Select on phones: [Settings](settings.md#section-nav).
+
+Played (`?tab=played`) lists History, newest first, as divided MediaRows with
+their length bar ("Resume at …" once partly watched). Each row's one verb opens
+its History Details, which holds the others and Remove from Continue with Undo.
+Removing from For later or Channels & stations says "Removed … from Library."
 
 ## MediaRow / MediaList
 
@@ -116,12 +138,14 @@ keep their existing disabled state.
 
 One `Button` wrapping `MediaArtwork` (contained; 2:3 for films
 and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
-title and one meta line, plus a `DurationBar` on Continue. It is one focus
+title and one meta line, plus a `DurationBar` on Continue and On air. It is one focus
 stop whose press does the item's main verb. The catalog has no media tile
 and Card breaks Flat, so a tile is the smallest Button composition. Shelves
-(Home's) are plain overflow rows (`data-nav-row`):
+(`Shelf`: Home's, and Live's On air) are plain overflow rows (`data-nav-row`):
 Carousel's own arrow handling fights spatial navigation, and focus scrolls a
-plain row into view.
+plain row into view. On air's tiles take the shelf's height, so a station
+without a show stays level with the rest: a shorter tile's centre sits higher,
+and Up from its neighbour would pick it before the tab bar.
 
 ## BrowsePagination
 
