@@ -17,7 +17,7 @@ import { SearchOnlineResults, matchesFacet, providerNames, searchError, type Sea
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityOptions } from "../../video-quality";
 import { createId } from "../../session/session";
-import type { SourceSetupKind } from "@/components/SourceSetupDialog";
+import type { SourceKind } from "@/components/sourceTypes";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
@@ -27,7 +27,7 @@ export type Props = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   defaultQuality?: VideoQuality;
   onCommand?: (action: Action) => Promise<boolean>;
-  onManageSources?: (source?: SourceSetupKind) => void;
+  onManageSources?: (source?: SourceKind) => void;
   onOpenCollection?: (item: ProviderItem) => void;
   onQueryChange?: (query: string) => void;
   draftQuery?: string;
