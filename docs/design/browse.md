@@ -129,7 +129,7 @@ Thumbnail, title, meta and length bar, as one target on every screen: pressing
 the row (its artwork too, for a pointer) does its main verb, Play for stations,
 channels and live hits, else Open or Details. Live, Search and Library, and Up
 next's compact rows. Its other verbs (Play, Play on, Play next, Queue, Save,
-Move up, Move down, Remove) are one list, `MediaRow`'s `menu`, and its page
+Move up, Move down, Remove, and Open where a live hit's press plays) are one list, `MediaRow`'s `menu`, and its page
 holds them too: For later's Details keeps Remove with Undo and Move up/down.
 
 On desktop and phones, right-click or a long press opens that list as the
