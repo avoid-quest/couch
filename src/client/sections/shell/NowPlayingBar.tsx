@@ -33,7 +33,8 @@ export function useBottomBar(ref: RefObject<HTMLElement | null>, shown = true) {
     if (!element || !shown) return;
     const measure = () => { bars.set(element, element.offsetHeight); publishBars(); };
     const observer = new ResizeObserver(measure);
-    observer.observe(element);
+    // The border box: the player band drops its scrim's padding when Up next opens.
+    observer.observe(element, { box: "border-box" });
     measure();
     return () => { observer.disconnect(); bars.delete(element); publishBars(); };
   }, [ref, shown]);
