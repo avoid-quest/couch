@@ -91,7 +91,8 @@ OK, OK and pausable Stop is OK, Right, OK.
 
 ### Browser regression
 
-Use an isolated Core and data directory, a paired TV renderer, a 1920×1080
+Use an isolated Core and data directory, a paired TV renderer (the TV app's
+window, or a browser tab using the [TV override](design/tv.md#see-the-tv-in-a-browser)), a 1920×1080
 viewport and a paused finite video that supports byte-range seeking. Network
 sharing must be enabled for the pairing-dialog check. Save two videos for later
 to exercise the Home tile and asynchronous Details check. Reload the renderer before

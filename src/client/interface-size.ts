@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { couchApp } from "./session/native-context";
+import { isTvPresentation } from "./session/presentation";
 import { defaultTvAppearance, isInterfaceSize, type InterfaceSize, type TvAppearance } from "../shared/appearance";
 
 const key = "couch.remote-interface-size";
@@ -69,10 +70,10 @@ export function usePreviewSeconds(appearance: TvAppearance) {
   return expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : 0;
 }
 
-export function useInterfaceSize(tvPresentation: boolean, appearance = defaultTvAppearance) {
+export function useInterfaceSize(appearance = defaultTvAppearance) {
   const remote = useRemoteInterfaceSize();
   const seconds = usePreviewSeconds(appearance);
-  const size = tvPresentation ? appearance.preview && !seconds ? appearance.confirmedSize : appearance.size : remote;
+  const size = isTvPresentation() ? appearance.preview && !seconds ? appearance.confirmedSize : appearance.size : remote;
   // Keep persisted choices and remote scaling. The old wider TV steps
   // (1.35/1.75) predate the deduplicated scaling and read as bloat now.
   const scale = size;

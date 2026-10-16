@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
-import { couchApp, isNativeHost, isTvPresentation } from "./native-context";
+import { couchApp, isNativeHost } from "./native-context";
+import { isTvPresentation } from "./presentation";
 import { forgetConnection } from "./connection";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
@@ -175,7 +176,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     revisions.current = { client: queryClient, versions };
   }, [versions, connected, !!state, queryClient]);
 
-  useInterfaceSize(tvPresentation, state?.appearance);
+  useInterfaceSize(state?.appearance);
 
   useEffect(() => {
     if (localHost) return couchApp!.onAddresses(urls => setHost(current => current ? { ...current, urls } : current));

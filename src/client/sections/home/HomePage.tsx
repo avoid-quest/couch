@@ -25,7 +25,7 @@ import { ForLaterSection } from "@/sections/saved/ForLaterSection";
 import { QueuePanel } from "@/sections/now/QueuePanel";
 import { useShell } from "@/sections/shell/AppShell";
 import { useOptionalSessionGate, useSessionGate } from "@/session/session-context";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 import { savedSourceLabel } from "@/saved-source";
 import type { Credentials } from "../../session/session";
 import { sourceLabel } from "@/source-label";

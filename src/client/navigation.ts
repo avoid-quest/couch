@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
-import { isTvPresentation } from "./session/native-context";
+import { isTvPresentation } from "./session/presentation";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';

@@ -24,6 +24,25 @@ and the clock as plain text; the Couch choice lives in Settings → Couch connec
 Volume and every fader move 5 per press. Text fields say "Type with Remote on
 your phone": a phone's Remote is the TV's text entry.
 
+## See the TV in a browser
+
+`isTvPresentation()` (`src/client/session/presentation.ts`) is the one answer
+to "is this a TV?": the TV app's window, or a browser tab that opts in. Scratch
+and development builds let a tab opt in, so browser checks and screenshots see
+the TV. Release builds leave the override out.
+
+```sh
+COUCH_TV_OVERRIDE=1 bun run build
+COUCH_DATA_DIR=/tmp/couch-tv COUCH_PORT=4782 node build/core.mjs
+```
+
+Open `http://localhost:4782/?tv=1` and pair. The tab stays a TV across reloads
+until it closes or loads `?tv=0`. The development server (`bun run dev`) needs
+no flag: open `http://localhost:1420/?tv=1`. Core treats the tab as a TV, as it
+treats the app's window: once the tab shares its speakers or screen, another
+device's Remote drives it and types into it. Tabs on one origin are one device,
+so open that Remote in another browser profile.
+
 ## Every journey step works with a remote
 
 The TV has only arrows, Enter and
