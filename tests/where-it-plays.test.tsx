@@ -80,7 +80,7 @@ test("Play on a playing source's publisher opens only this window's Where it pla
 });
 
 test("only a successful Play whose destination is the playing source's publisher asks this window to choose", async () => {
-  const { choosesHere } = await import("../src/client/sections/shell/Outputs");
+  const { choosesHere } = await import("../src/client/session/where-it-plays");
   const playing = { playback: "p", controlling: "tv", playbacks: [{ id: "p", status: "playing", outputs: [{ deviceId: "tv", picture: true, sound: true }], liveSourceId: "s" }], liveSources: waiting(0).liveSources } as unknown as ClientSessionState;
   const before = { ...playing, controlling: "mac" } as ClientSessionState;
   const play = { type: "playLive", sourceId: "s" } as const;

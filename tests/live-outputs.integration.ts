@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
 import { isValidElement, type ReactNode } from "react";
 import type { PlaybackCommand } from "../src/shared/protocol";
-import { chooserRequest, choosesHere, outputStatus, reopens, WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { chooserRequest, choosesHere, outputStatus, reopens } from "../src/client/session/where-it-plays";
 import { liveFixture, until } from "./live-input.fixture";
 
 type Fixture = Awaited<ReturnType<typeof liveFixture>>;
