@@ -51,7 +51,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
     { hotkey: "Q", action: () => shell.openPlayer("queue") },
     { hotkey: "Shift+?", action: () => onOpenChange(true) },
   ]);
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Shortcuts work while browsing or playing. Typing and open panels keep their own controls. Space and arrow shortcuts leave focused controls alone.</DialogDescription></DialogHeader>
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Shortcuts work in the player, and while browsing. Typing and open panels keep their own keys, and Space and the arrows leave a focused control alone.</DialogDescription></DialogHeader>
     <dl className="divide-y text-sm">{help.map(([keys, label]) => <div key={keys} className="flex items-center justify-between gap-6 py-2"><dt>{label}</dt><dd className="shrink-0"><kbd className="font-sans text-muted-foreground">{keys}</kbd></dd></div>)}</dl>
   </DialogContent></Dialog>;
 }

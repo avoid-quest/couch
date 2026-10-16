@@ -87,6 +87,33 @@ viewport at every interface size. Plain playback glyphs keep artwork central;
 Playback settings use Sheets. Stage CSS handles native video bounds
 and the responsive queue workspace; controls reuse shadcn components.
 
+### The picture holds the keys
+
+On desktop and phones the player opens focused on its picture, as YouTube's
+does, so a key is a shortcut at once
+([Shell](shell.md#keyboard-control-stays-inside-couch)). The picture is one
+focus target covering the stage (`data-player-surface`, `tabindex="-1"`,
+named "Player: {title}"), for video and for audio Now playing alike. Focus
+returns to it whenever the player opens: from the now-playing bar, Home, the
+P key or a picture that starts; Back from Details still restores its opener,
+Playback. A key on the picture shows the controls for a while and leaves focus
+where it is; over a playing video they hide after 4 s while focus is on the
+picture, and stay up while the keyboard is in them.
+
+- **A click** on the picture plays or pauses; **a double-click** toggles
+  fullscreen and leaves play as it was.
+- **A pointer click in the band** does its job, then returns focus to the
+  picture, so the next key is a shortcut again; a click that opens something
+  (Volume, Where it plays, Playback, Up next) leaves focus there. A keyboard's
+  Enter or Space keeps focus where the keyboard put it.
+- **Tab** from the picture shows the controls and enters them in their order:
+  the top band's Back, then the timeline and the band. Escape behaves as
+  [Back on desktop and phones](#back-on-desktop-and-phones) says.
+- **On phones**, a tap shows or hides the controls; it never plays or pauses.
+
+The TV's player opens on the transport instead, for its remote
+([TV](tv.md#the-tv-player-answers-a-remote)).
+
 ## Back on desktop and phones
 
 A pointer has no Back key, so desktop and phones lead the top band with a Back

@@ -106,9 +106,17 @@ nothing; it never reopens the player.
 TanStack Hotkeys shares shortcuts
 between the browser and desktop window; Electron global shortcuts would also
 claim keys outside the app. The header's Keyboard shortcuts dialog is the
-user-facing reference. Keep transport shortcuts aligned with visible control
-capabilities, preserve Search's type-to-search, and let open panels, text entry,
-focused controls and TV navigation own their keys.
+user-facing reference: shortcuts work in the player, and while browsing. Keep
+transport shortcuts aligned with visible control capabilities, preserve
+Search's type-to-search, and let open panels, text entry, focused controls and
+TV navigation own their keys.
+
+Space and the player's arrows (`backgroundOnly`) act only when focus isn't on
+a control: with nothing focused, or on a focus target with `tabindex="-1"`,
+such as the player's picture, which holds focus when the player opens
+([Player](player.md#the-picture-holds-the-keys)), or a page's heading. Off the
+TV, arrows on the picture stay with its shortcuts and never move focus, even
+where they can't act (live media can't seek).
 
 ## First run names the computer
 
