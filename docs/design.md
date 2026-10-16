@@ -30,8 +30,9 @@ catalog provides interface icons, not brand identities.
   suggestions Couch picked. A source without a home page of its own (YouTube,
   Bandcamp, SoundCloud) opens on an Empty with a search field scoped to it.
 - **Time is the organising idea.** Every length is read as the clock time it
-  ends: "4:52, ends 10:29". The band and now-playing bar read "−3:24 ends 20:59";
-  live reads "Live", with no total.
+  ends: "4:52, ends 10:29". The now-playing bar reads "−3:24 ends 20:59"; the
+  player says "ends 20:59" once, in its top band or Now playing, and its band
+  keeps "−3:24". Live reads "Live", with no total.
 - **Colour only when it means something.** Destructive red is the only colour.
   Live is the word "Live", not a red badge.
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
@@ -76,8 +77,9 @@ the same typography and controls scale across screens.
 
 | Role | Classes |
 | --- | --- |
-| Display (search field, Home's hero and Details titles) | `text-3xl font-semibold tracking-tight` |
-| Player artwork title | `text-2xl font-medium tracking-tight` |
+| Display (search field, Home's hero, Details and Now playing titles) | `text-3xl font-semibold tracking-tight` |
+| Title over a video (the player's top band) | `text-2xl font-semibold tracking-tight` |
+| Departures line (the hero's and Now playing's end time) | `text-2xl tabular-nums` |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
 | Section title | `text-base font-medium` |
 | Row title, settings label | `text-base` |

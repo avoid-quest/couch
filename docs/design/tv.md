@@ -81,7 +81,7 @@ same arrow navigation.
 
 ## The TV player answers a remote
 
-With its controls hidden, OK shows them
+A Remote's Info key opens the player from any page. With its controls hidden, OK shows them
 on the first enabled transport slot, Up and Down show them on the timeline (or
 that transport slot when there is no seekable timeline), and Left and Right seek
 10 s and show the timeline (live media that can't seek only shows them). Back
@@ -89,8 +89,11 @@ hides the controls; with them hidden it leaves the player for the page that
 opened it, and playback goes on in Home's hero and the now-playing bar.
 
 Paused shows a large Pause glyph and "Paused", and the controls stay up until
-Back hides them. The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
-Details is in the Playback sheet. From hidden controls, Stop for pausable media
+Back hides them. Over a video, the top band shows and hides with the controls:
+the title and subtitle at the top left, the clock and the end time at the top
+right ([Player](player.md#controls-over-the-picture)). The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
+Details is in the Playback sheet, and the tab bar is hidden while it is open
+(the header takes the `hidden` attribute, since `tv:grid` would beat the class). From hidden controls, Stop for pausable media
 is OK, Right, OK. Nonpausable radio/live starts on Stop, so it is OK, OK.
 Home's hero uses that
 same transport rather than maintaining separate Play/Pause, Stop and Next logic.

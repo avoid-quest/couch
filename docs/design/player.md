@@ -30,6 +30,12 @@ timeline shows only where it means something: seekable media, or media with
 a length it will seek through once loaded. Live media that can't seek shows
 no bar, no position and no total, just "Live" in the timeline's slot.
 
+The player says when it ends once on screen: the top band over a video, or
+Now playing's departures line, reads "ends 21:42" (or "Live", with no end
+time), so the band's timeline keeps only its position and the time remaining
+("−3:24"), and live media leaves its slot empty. `useEndTime` is that line,
+in clock time.
+
 Volume across several Devices: [Where it plays](where-it-plays.md#band-volume).
 
 ### Layout
@@ -37,25 +43,53 @@ Volume across several Devices: [Where it plays](where-it-plays.md#band-volume).
 Audio and remote playback place contained artwork beside a persistent
 desktop queue. On phones, Up next replaces the artwork while transport stays
 available. Video uses the full viewport until Up next opens beside it; then the picture is letterboxed, never cropped.
+On phones, Up next replaces the picture too. Opened over a video, Up next and
+the picture start below the top band, which turns solid and publishes its
+height as `--player-top`.
 Queue navigation survives playback changes; track-specific settings reset.
 Transport, volume and tools share one bottom dock across media modes. Keep
 unavailable controls in their slots so loading and queue changes preserve
-muscle memory (the live timeline is the exception: it gives way to "Live");
+muscle memory (the live timeline is the exception: it gives way to "Live",
+which the player says in its top band or Now playing);
 adapt the rows to screen width, with content above the dock.
+
+### Now playing echoes Home's hero
+
+Audio (and media playing elsewhere) shows Now playing as
+[Home's hero](home.md#the-hero) does, stacked: the artwork contained at its own
+aspect ratio on black, set down on the copy below it (the box hugs the image up
+to a square, and short screens shrink it whole, never cropping it); the title
+at display size; one muted meta line, which reads the show's station, else the
+subtitle, else the source ("Radio" for a station), then Paused, Finished or
+where it plays ("on Kitchen +1"); then the departures line ("ends 21:42" or
+"Live") in tabular figures, the largest text after the title. A station's
+current track follows in muted ink.
 
 ### Controls over the picture
 
-Audio keeps its solid controls visible. Video controls fade over a transparent
-black scrim, preserving the picture bounds; the gradient exists only to keep
-overlaid text readable without an abrupt edge that resembles cropping. Hidden
-controls are inert and let pointer input reach the video. The player fits the
+Audio keeps its solid controls visible. Over a video, two bands show and hide
+together, like a media centre's on-screen display: the band at the bottom, and
+a top band. The top band holds, on desktop and phones, the
+[player header](#player-header) at the app header's height; then, at the
+left, the title (wrapping to two lines before it truncates) and the subtitle
+(series, episode, channel or source) in muted ink, and at the right the clock
+and the end time. Each of its two rows sizes itself, so a narrow screen gives
+the title all but the clock. The TV's top band has no header.
+
+Both bands shade the picture with one transparent black scrim, mirrored: it
+eases in over `--fade` (3.75rem, 1.75rem on short screens) to 88% where their
+text starts, so it is only as dark as that text needs and has no edge that
+reads as a crop. It preserves the picture bounds. Hidden bands are inert and
+let pointer input reach the video. The player fits the
 viewport at every interface size. Plain playback glyphs keep artwork central;
 Playback settings use Sheets. Stage CSS handles native video bounds
 and the responsive queue workspace; controls reuse shadcn components.
 
 ## Player header
 
-The ordinary player's fixed-height header uses a compact trail of the same
+On desktop and phones the header is the top band's first row, so the trail
+stays a short line above the title and fades with the controls. The ordinary
+player's fixed-height header uses a compact trail of the same
 collection links as [`ContentBreadcrumb`](browse.md#contentbreadcrumb), with single-line, truncated labels and at least `min-w-11`
 targets. Its title already appears in the player; Search and the provider remain
 in the full browse trail. Without a collection, the player links to Live,
