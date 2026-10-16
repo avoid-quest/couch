@@ -88,7 +88,7 @@ Stop for nonpausable radio. Up/Down reveals the timeline when available;
 Left/Right also seeks ten seconds when supported. Without a seekable timeline,
 arrows reveal the transport. Volume moves five points per press after OK enters
 adjustment; OK or Back ends adjustment before navigation resumes. The fixed
-Play/Pause, Stop, Next slots are shared with Home's Now row; radio Stop is
+Play/Pause, Stop, Next slots are shared with Home's hero; radio Stop is
 OK, OK and pausable Stop is OK, Right, OK.
 
 ### Browser regression
@@ -111,7 +111,9 @@ bun build tests/tv-navigation.browser.ts --target browser --format iife --minify
 
 Evaluate that bundle in the T3 preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
-focus and playback behavior: one Home station stop, pairing overlay → content
+focus and playback behavior: one Home station stop, Home entry on the hero's
+primary verb and Up from its last shelf through each shelf and the hero to the
+current tab, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
 the tab bar's scroll, Up and Back, repeated Home Back, five-point OK-to-adjust Volume, Saved removal/Undo/order,
 retained favorite and Live TV actions, and a Remote that can't choose or open this device's
@@ -125,10 +127,11 @@ and bubbling key events; also use T3 keyboard input to check actual D-pad
 navigation and capture screenshots. This browser evidence does not qualify
 native Main, Linux packaging or a physical TV remote.
 
-For Continue, stop a decoded finite video before completion on every output
-and keep the second shared output online. Build `tests/tv-continue.browser.ts` with the same browser
-command and run `await runContinueDetailsRegression()`. It requires sibling
-Resume/Details controls, a 44px Details target, inspection without playback,
+For Continue, stop two decoded finite videos before completion on every output
+(the first leads Home as its hero, the second sits in Continue's shelf) and keep
+the second shared output online. Build `tests/tv-continue.browser.ts` with the same browser
+command and run `await runContinueDetailsRegression()`. It requires the hero's
+Resume, From start and Details, the shelf's sibling Resume/Details controls, a 44px Details target, inspection without playback,
 the exact History item, Back to the usable Details opener, successful Queue,
 Remove/Undo, and usable focus after the removed opener disappears. Also verify
 primary Resume, From start and actual Play on selection with trusted TV keys;

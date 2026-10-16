@@ -4,7 +4,7 @@
 
 | Section | Path | Holds |
 | --- | --- | --- |
-| Home | `/` | what plays now, then Home's rows |
+| Home | `/` | one hero (what plays now, else what to continue, else what's on air), then shelves |
 | Live | `/live` | radio stations, then Live TV channels once a Live TV source has some |
 | Search | `/search` | the search field, results and sources |
 | Library | `/library` | For later, Channels & stations and Lists (`?tab=`) |
@@ -79,7 +79,7 @@ When Play, Resume or Play on, from
 any Device, starts an item with a picture on this Device, this Device opens
 its player from whatever page it shows, so video never plays unseen. Up next
 moving on, by itself or with Next, keeps the page, and so does audio-only
-media (radio, music), which Home's Now row and the now-playing bar carry. The
+media (radio, music), which Home's hero and the now-playing bar carry. The
 first sync after a reload keeps the requested page. Back on Home does
 nothing; it never reopens the player.
 

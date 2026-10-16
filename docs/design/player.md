@@ -17,7 +17,7 @@ Where it plays. Every control there is an icon with an
 ### Transport
 
 The transport is Play/Pause, Stop and Next wherever it appears: the band, the
-now-playing bar, Home's Now row and the Remote. Each keeps its slot for every
+now-playing bar, Home's hero and the Remote. Each keeps its slot for every
 kind of media: live media that can't pause keeps Pause, disabled, and Stop is
 enabled whenever something is loading, playing, paused, ended or failed.
 Stop clears the sequence and offers Undo; it lives in the transport, never
