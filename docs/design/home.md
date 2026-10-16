@@ -16,7 +16,8 @@ time it ends in tabular figures, the largest text after the title ("ends
 21:42", or "Live"); then its verbs. Its item is the first of:
 
 1. what you control, playing now: its meta reads the station or subtitle (else
-   the source), Paused or Loading…, and "on {device}" (+N) as the now-playing
+   the source, or "Radio" for a station, as the player's does, never a stream's
+   hostname), Paused or Loading…, and "on {device}" (+N) as the now-playing
    bar does; its verbs are Open player, then the player's
    [transport](player.md#transport);
 2. the first Continue item: Resume, From start and Details (Continue's Details
