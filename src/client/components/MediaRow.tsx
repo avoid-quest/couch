@@ -30,13 +30,15 @@ type Props = {
   tvSecondaryActions?: boolean;
   /** Browse rows keep artwork and secondary controls on the same line. */
   compact?: boolean;
+  /** The row's main verb is where its page starts (a source's home, whose header has no verbs). */
+  pageFirst?: boolean;
 } & Omit<ComponentProps<"li">, "title" | "children">;
 
 /**
  * Clock media row: thumbnail, title, meta and the length bar, with one main
  * verb and quiet secondary actions. Used by Home, Live, Search and Library; Up next has its own compact rows.
  */
-export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, tvSecondaryActions = false, compact = false, className, ...props }: Props) {
+export function MediaRow({ art, artFit = "cover", title, meta, children, description, primary, actions, tvSecondaryActions = false, compact = false, pageFirst = false, className, ...props }: Props) {
   const tv = isTvPresentation();
   const { on } = usePlayOn();
   const label = primary && (primary.label === "Play" || primary.label === "Resume" ? on(`${primary.label} ${title}`) : `${primary.label} ${title}`);
@@ -50,7 +52,7 @@ export function MediaRow({ art, artFit = "cover", title, meta, children, descrip
     <Item asChild size="xs" className={cn("grid gap-y-1 rounded-none border-0 border-b border-border px-0 py-2", compact ? "gap-x-3 grid-cols-[3rem_minmax(0,1fr)_auto]" : art ? "gap-x-4 grid-cols-[5rem_minmax(0,1fr)] @md:grid-cols-[7rem_minmax(0,1fr)] @3xl:grid-cols-[7rem_minmax(0,1fr)_auto]" : "gap-x-4 grid-cols-1 @3xl:grid-cols-[minmax(0,1fr)_auto]", className)}>
       <li data-nav-row {...props}>
         {art && <ItemMedia inert={tv && !!primary || undefined} aria-hidden={tv && !!primary || undefined} className={cn("w-full self-center overflow-hidden bg-muted *:size-full *:rounded-none", compact ? "aspect-square" : "aspect-video", artFit === "contain" ? "[&_img]:object-contain" : "[&_img]:object-cover")}>{art}</ItemMedia>}
-        {primary ? <Button asChild={!!primary.href} variant="ghost" data-play aria-label={label} title={label !== `${primary.label} ${title}` ? label : undefined} disabled={primary.disabled} onClick={event => {
+        {primary ? <Button asChild={!!primary.href} variant="ghost" data-play data-page-first={pageFirst || undefined} aria-label={label} title={label !== `${primary.label} ${title}` ? label : undefined} disabled={primary.disabled} onClick={event => {
           if (primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
           if (primary.href) event.preventDefault();
           primary.onClick();
