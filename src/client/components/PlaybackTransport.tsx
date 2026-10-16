@@ -124,7 +124,8 @@ export function PlaybackVolume({ state, connected, run, showSlider = true, showV
   return <div className={cn("flex min-w-0 items-center gap-2", showSlider && "min-w-40 flex-1", className)} data-volume role="group" aria-label="Volume">
     <Button variant="ghost" size="icon-lg" aria-label={silent ? "Unmute" : "Mute"} title={silent ? "Unmute" : "Mute"} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !silent })}>{silent ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button>
     {showSlider && <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady} onCommit={volume => run({ type: "volume", volume })} />}
-    {showValue && <span className="text-sm tabular-nums">{state.systemAudio?.volume === null ? "—" : `${Math.round(state.player.volume)}%`}</span>}
+    {/* Its number reads like each device fader's, with no "%". */}
+    {showValue && <span className="w-[3ch] shrink-0 text-right tabular-nums">{state.systemAudio?.volume === null ? "—" : Math.round(state.player.volume)}</span>}
   </div>;
 }
 

@@ -1,6 +1,6 @@
 import { useContext, useState, type ComponentProps, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Check, Ellipsis, SlidersVertical } from "lucide-react";
+import { Circle, CircleCheck, Ellipsis, SlidersVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
@@ -87,7 +87,8 @@ function deviceRow({ state, row, run, tv, sync = false, pageFirst = false }: Omi
   return <li key={device.id} data-nav-row className={cn(columns, "items-start py-2")}>
     <Button data-device-check data-page-first={pageFirst || undefined} variant="ghost" role="checkbox" aria-checked={!!output} aria-label={device.name} aria-describedby={`where-it-plays-${device.id}`} disabled={!check.enabled} onClick={() => { if (check.action) void run(check.action); }}
       className="-ml-2.5 h-auto min-h-11 min-w-0 justify-start gap-3 px-2.5 py-1.5 text-left font-normal whitespace-normal">
-      <Check aria-hidden="true" className={output ? undefined : "invisible"} />
+      {/* In, a filled check; out, its empty outline, so a row reads as a device you can add, as AirPlay's list does. */}
+      {output ? <CircleCheck aria-hidden="true" className="size-5 fill-foreground text-background" /> : <Circle aria-hidden="true" className="size-5 text-muted-foreground" />}
       <DeviceIcon {...signalOf(state, device.id)} />
       <span className="grid min-w-0">
         <span data-output-name className="text-base [overflow-wrap:anywhere]">{device.name}</span>
