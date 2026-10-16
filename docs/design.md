@@ -8,8 +8,14 @@ Everything on screen comes from one model: **Devices**, the **Playback** each
 one serves, and **Where it plays**, a Playback's Devices with their picture and
 sound. A Device that shares neither audio nor video only controls: it is never
 where something plays unless it plays on itself. A Device running Couch's TV
-presentation is a **TV**: it gets the TV layout, and the other Devices get a
+presentation is a **TV**: it is driven by a remote, and the other Devices get a
 **Remote** for it.
+
+**One layout.** The TV's layout is Couch's layout on every screen. A screen
+differs only where its input demands it: a pointer, touch reach and target
+size, typing, or the window itself (fullscreen, the Mac window's buttons).
+Phones keep a bottom tab bar for thumb reach; each surface doc names its other
+input exceptions.
 
 ## Brand mark
 
@@ -26,6 +32,9 @@ catalog provides interface icons, not brand identities.
   Settings, plus Remote on a Device that can drive a TV; a full-bleed player with a compact
   bottom control band; and the Device you control and where it plays one step
   away.
+- **One target per row and tile.** Pressing a media row or tile does its main
+  verb; its page holds every verb, and on a pointer or touch screen its
+  context menu holds the rest.
 - **Real content only.** A browse page shows what its source returns, never
   suggestions Couch picked. A source without a home page of its own (YouTube,
   Bandcamp, SoundCloud) opens on an Empty with a search field scoped to it.
@@ -112,6 +121,9 @@ Shared building blocks in `src/client/components`:
   and row of verbs ([Browse](design/browse.md#details)).
 - `Shelf`: a section heading over a plain overflow row of `MediaTile`s, for
   Home's shelves and Live's On air ([Browse](design/browse.md#mediatile)).
+- `RowMenu`: one list of verbs as a row's `RowContextMenu` (right-click or a
+  long press) or a visible "…" `OptionsMenu`, for Details' rest and the TV's
+  rows that keep theirs ([Browse](design/browse.md#mediarow--medialist)).
 
 Release notes use `react-markdown` with GitHub-flavoured Markdown because the
 [shadcn catalog](https://ui.shadcn.com/docs/components) has no Markdown renderer.
@@ -131,7 +143,9 @@ Messages:
 - **Status line** (`Spinner` and muted text) for work in progress.
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
   for confirmations; **Sheet** for player panels; **Popover** for the header's
-  Couch switch: the server this window shows, with its connection status.
+  Couch switch: the server this window shows, with its connection status;
+  **Context Menu** for a row's other verbs on right-click or a long press
+  ([Browse](design/browse.md#mediarow--medialist)).
 
 ## Copy
 
@@ -165,7 +179,7 @@ Each surface's own layout and behaviour lives in its file:
 - [Browse](design/browse.md): Search, Live, Library, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
 - [Player](design/player.md): the player band, transport, timeline, Up next and Playback settings.
 - [Where it plays](design/where-it-plays.md): its principles and rules model, the picker with its Volume, device rows and "…" menu, the overview of every device, Play on, DeviceIcon and outputs after a server switch.
-- [TV](design/tv.md): anything shown on a TV: remote navigation, the TV layout and the TV player.
+- [TV](design/tv.md): what a TV adds for its remote: remote navigation, Back, its header's name, and the TV player's keys.
 - [Remote](design/remote.md): the Remote section that drives a TV, and Type on TV.
 - [Settings](design/settings.md): Settings' two owners, its section nav, admin-only rows and device names.
 
@@ -174,10 +188,13 @@ structure hasn't reached it.
 
 ## Changing a surface
 
+- **The TV's layout is the layout.** Screens differ only where input demands
+  it: a pointer, touch reach and target size, typing, or the window itself.
+  Name each such difference as an exception in the surface's doc.
 - **One tree.** A surface renders one component tree on every screen.
-  Express the TV's and touch's differences with the `tv:` and `touch:`
-  variants, and keep a `tvPresentation` branch only where behaviour differs,
-  such as focus stops or keys.
+  Express input's differences with the `tv:` and `touch:` variants, and keep a
+  `tvPresentation` branch only where input differs, such as keys, focus stops,
+  typing, fullscreen or pointer-only controls.
 - **Keep the hooks.** The browser checks (`tests/tv-navigation.browser.ts`,
   `tests/tv-continue.browser.ts`) find elements by `data-*` attributes,
   `aria-label`s and paths. A change that moves one updates those checks with

@@ -15,10 +15,10 @@ Before a query, Search lists its Sources as divided rows: shared inputs, then
 YouTube, Twitch, RaiPlay, StreamingCommunity, 123MoviesFree, Bandcamp and
 SoundCloud, video before music. Each row opens that source's own home
 (`/collection?provider=…`). YouTube, Bandcamp and SoundCloud have no home page
-of their own, so theirs is an Empty with a search field scoped to them. Add
-source sits at the heading's right; the TV hides it, as Home hides its shelves'
-actions: its tab bar reaches Settings, and Down from the field meets the first
-source.
+of their own, so theirs is an Empty with a search field scoped to them. The
+heading has no action, as Home's shelves have none: the tabs reach Settings →
+Sources and This device → Sharing, which add sources, and Down from the field
+meets the first source.
 
 ## Details
 
@@ -48,8 +48,8 @@ opens, where the item supports them:
 - **History:** Resume or Play, From start, Queue, Save and Play on; "…" holds
   Remove from Continue. Save keeps the item's provider page in For later, and
   Saved takes it out; an item without a provider page has no Save.
-- **For later:** Play, Queue and Play on; "…" holds Remove, with Undo, and on
-  the TV Move up and Move down. It is already saved, so it has no Save.
+- **For later:** Play, Queue and Play on; "…" holds Move up, Move down and
+  Remove, with Undo. It is already saved, so it has no Save.
 - **A station:** Play, Queue, Save (a saved station) and Play on; "…" holds
   Open show page.
 - **An Up next entry:** Play and Save.
@@ -125,18 +125,31 @@ Removing from For later or Channels & stations says "Removed … from Library."
 
 ## MediaRow / MediaList
 
-Thumbnail, title, meta, length bar, one main verb
-and actions revealed on hover or focus. Live, Search and Library. Every media
-row ends with the same verbs (`BrowseActions`): a filled ▷ for Play, then one
-"…" menu with Play on, Queue, Save and its other verbs.
-On the TV a row is one focus stop: OK does its main verb (Play for stations,
-channels and episodes, else Open), and its other verbs wait on its page.
+Thumbnail, title, meta and length bar, as one target on every screen: pressing
+the row (its artwork too, for a pointer) does its main verb, Play for stations,
+channels and live hits, else Open or Details. Live, Search and Library, and Up
+next's compact rows. Its other verbs (Play, Play on, Play next, Queue, Save,
+Move up, Move down, Remove) are one list, `MediaRow`'s `menu`, and its page
+holds them too: For later's Details keeps Remove with Undo and Move up/down.
 
-For later's Details keeps Remove with Undo and Move up/down. Rows whose
-destination does not hold every operation keep their existing Options and
-ordering controls: saved channels/stations, Live TV, and search hits without
-complete details actions. These exceptions preserve reachable operations
-without adding destinations solely for a menu.
+On desktop and phones, right-click or a long press opens that list as the
+row's context menu (`RowContextMenu`). The TV can't open one, so a row whose
+destination doesn't hold every verb shows the list in a visible "…"
+(`OptionsMenu`, "Options for {title}") on the TV only: saved channels and
+stations, Live TV, search hits without complete details actions (a live hit, a
+station, or a video with Play next), and Up next's entries, whose page holds
+only Play and Save. These exceptions keep every verb reachable without adding
+destinations solely for a menu. A list's own entries have no main verb, so
+they keep Remove and their drag handle on the row on every screen.
+
+The row's menu is shadcn's
+[Context Menu](https://ui.shadcn.com/docs/components/radix/context-menu),
+in `components/ui/context-menu.tsx`, adjusted to Clock as the Dropdown Menu
+is: a hairline border and no shadow, `text-sm` items at `h-8` (44px under
+`touch:`) that invert when highlighted. Radix opens it at the pointer on
+right-click, on a long press for touch, and on the keyboard's menu key. One
+verb list renders through either menu, since Radix scopes each menu's items
+to its own root.
 
 A live hit uses Play only while it is enabled; otherwise it retains its
 original Open destination, including during a pending Save. Busy actions
@@ -173,10 +186,8 @@ tab: [Shell](shell.md#sections)), then the source, then the collection. It repla
 links are `text-sm`, the controls' size, rather than Mira's `text-xs`
 caption size, and each is `min-h-11`, a 44px target on every screen.
 
-The player's compact trail of the same links: [Player](player.md#player-header).
-
 ## Play on targets in menus
 
-Play on targets sit in a labelled group inside search result menus, with device names that can wrap. A nested flyout left too little width on a 320–390px phone at larger interface sizes. Use the standard dropdown Group and Label, and bound long menus to the available viewport height so keyboard and touch can reach every target. The separate inline Play on menu uses the same target rows.
+Play on targets sit in a labelled group inside row menus, with device names that can wrap. A nested flyout left too little width on a 320–390px phone at larger interface sizes. Use the menu's standard Group and Label, and bound long menus to the available viewport height so keyboard and touch can reach every target. The separate inline Play on menu uses the same target rows.
 
 What Play on offers and confirms: [Where it plays](where-it-plays.md#play-on).
