@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import type { NavigationKey } from "../../shared/protocol";
 import { cn } from "@/lib/utils";
 
-// Each arrow is a quarter of the ring, so a press anywhere on it counts, as on a remote's clickpad. Its mask leaves a gap
-// around OK (radius 38% of the ring's), so a focused quarter doesn't merge into it.
+// Each arrow is a quarter of the ring, so a press anywhere on it counts, as on a remote's clickpad. It sits in its
+// half of the ring, so its centre is its own, clipped to the quarter, with a mask that leaves a gap around OK
+// (radius 22% of the ring's) so a focused quarter stays apart from it.
 const quarters = {
-  up: "[clip-path:polygon(0_0,100%_0,50%_50%)] items-start",
-  right: "[clip-path:polygon(100%_0,100%_100%,50%_50%)] justify-end",
-  down: "[clip-path:polygon(0_100%,100%_100%,50%_50%)] items-end",
-  left: "[clip-path:polygon(0_0,0_100%,50%_50%)] justify-start",
+  up: "inset-x-0 top-0 h-1/2 items-start [clip-path:polygon(0_0,100%_0,50%_100%)] [mask-image:radial-gradient(circle_farthest-side_at_50%_100%,transparent_44%,black_44.5%)]",
+  right: "inset-y-0 right-0 h-auto w-1/2 justify-end [clip-path:polygon(100%_0,100%_100%,0_50%)] [mask-image:radial-gradient(circle_farthest-side_at_0_50%,transparent_44%,black_44.5%)]",
+  down: "inset-x-0 bottom-0 h-1/2 items-end [clip-path:polygon(0_100%,100%_100%,50%_0)] [mask-image:radial-gradient(circle_farthest-side_at_50%_0,transparent_44%,black_44.5%)]",
+  left: "inset-y-0 left-0 h-auto w-1/2 justify-start [clip-path:polygon(0_0,0_100%,100%_50%)] [mask-image:radial-gradient(circle_farthest-side_at_100%_50%,transparent_44%,black_44.5%)]",
 };
 
 /**
@@ -29,7 +30,7 @@ export function RemotePad({ connected, onNavigate }: { connected: boolean; onNav
     if (!event.repeat) navigate(key);
   };
   const arrow = (direction: keyof typeof quarters, icon: ReactNode) => <Button type="button" variant="ghost" aria-label={`TV ${direction}`} disabled={!connected} onClick={() => navigate(direction)}
-    className={cn("absolute inset-0 size-full rounded-none p-[9%] [mask-image:radial-gradient(circle_closest-side,transparent_44%,black_44.5%)] active:bg-foreground/15 [&_svg:not([class*='size-'])]:size-7", quarters[direction])}>{icon}</Button>;
+    className={cn("absolute rounded-none p-[9%] active:bg-foreground/15 [&_svg:not([class*='size-'])]:size-7", quarters[direction])}>{icon}</Button>;
   const button = (key: NavigationKey, label: string, icon: ReactNode) => <Button type="button" variant="outline" aria-label={`TV ${label}`} disabled={!connected} onClick={() => navigate(key)}
     className="h-16 touch:min-h-16 rounded-full text-base dark:bg-transparent active:bg-foreground/15 [&_svg:not([class*='size-'])]:size-5">{icon}{label}</Button>;
   return <div className="mx-auto grid w-full max-w-72 gap-6">

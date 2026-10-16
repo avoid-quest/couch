@@ -13,8 +13,9 @@ one; offline or private TVs cannot be controlled.
 The pad is a ring of four arrows around a round OK, and each press sends one
 key. Each arrow is a quarter of the ring, so a press anywhere on it counts, and
 every target is at least 64px at the base scale. The catalog has no direction
-pad, so it is `Button`s clipped to the ring's quarters; a mask keeps a gap
-around OK, so a focused quarter stays apart from it. Arrow keys and Home work
+pad, so it is `Button`s, each in its half of the ring so that its centre is
+its own (taps by assistive tools land there), clipped to its quarter; a mask
+keeps a gap around OK, so a focused quarter stays apart from it. Arrow keys and Home work
 while the pad has focus, and a hint line says so outside `touch:`. Back, Home
 and Info follow in a row of hairline pills; Info opens the TV's player.
 
