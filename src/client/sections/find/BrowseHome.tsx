@@ -2,7 +2,6 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { Button } from "@/components/ui/button";
-import { BrowseActions } from "./SearchPanel";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
 import type { ProviderId } from "../../../shared/providers";
@@ -22,7 +21,7 @@ const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
 // continue and what was saved for later live on Home.
 export function BrowseHome() {
   const navigation = useDetailNavigation();
-  const { connected, tvPresentation } = useSessionGate();
+  const { connected } = useSessionGate();
   const { openSources } = useShell();
   const shared = useLiveSourceHits("");
   return <section aria-label="Sources">
@@ -32,9 +31,9 @@ export function BrowseHome() {
       <Button variant="ghost" className="-mr-2.5 tv:hidden" disabled={!connected} onClick={() => openSources()}>Add source</Button>
     </div>
     <MediaList>
-      {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} tvSecondaryActions
+      {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} tvMenu
         primary={{ label: hit.primary.label, disabled: hit.primary.disabled, onClick: hit.primary.run }}
-        actions={<BrowseActions title={hit.title} actions={tvPresentation ? hit.actions.filter(action => action.label !== "Play") : hit.actions} />} />)}
+        menu={hit.actions.filter(action => action.label !== "Play")} />)}
       {catalogues.map(item => {
         const href = collectionLocation({ provider: item.provider, url: "" });
         return <MediaRow key={item.provider} title={item.title} meta={item.meta} primary={{ label: "Open", href, onClick: () => navigation.open(href) }} />;

@@ -151,7 +151,11 @@ window.runBusyLiveHitRegression = async () => {
     save!.click(); await until(() => !!saved); await wait(850);
     const open = row.querySelector<HTMLElement>('[data-play]')!;
     assert(open.getAttribute("aria-label")?.startsWith("Open ") && usable(open) && open.getAttribute("href") === `/item?kind=radio&id=${id}`, "Pending Save hid the original enabled Open destination");
-    assert(row.querySelector('button[aria-label^="Options"]') && row.querySelector('button[aria-label^="Play"]:disabled'), "Busy Play or secondary actions changed");
+    // The row's Options menu holds Play, disabled while busy.
+    row.querySelector<HTMLElement>('button[aria-label^="Options"]')!.focus(); await press("Enter");
+    const busyPlay = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => !element.closest('[role="group"]') && /^Play( on .+)?$/.test(element.textContent ?? ""));
+    assert(busyPlay?.hasAttribute("data-disabled"), "Busy Play or secondary actions changed");
+    await press("Escape");
     const paused = document.querySelector('video')?.paused;
     open.focus(); open.click();
     await until(() => new URLSearchParams(location.search).get("kind") === "radio" && new URLSearchParams(location.search).get("id") === id && !!document.querySelector('[data-page="Item"] [data-page-first]'));

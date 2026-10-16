@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,7 +19,9 @@ import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol"
 import type { Credentials } from "../../session/session";
 import { offline } from "@/copy";
 import { formatEndTime } from "@/time-format";
-import { QueueActions } from "./QueueActions";
+import { useQueueActions, type QueueActionsProps } from "./QueueActions";
+import { OptionsMenu, RowContextMenu } from "@/components/RowMenu";
+import { isTvPresentation } from "@/session/presentation";
 
 type Props = {
   state: ClientSessionState | null;
@@ -86,7 +88,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     const rows = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-queue-entry-id]") ?? [])];
     const row = rows.find(row => row.dataset.queueEntryId === focused.id);
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
-      ?? rows[Math.min(focused.index, rows.length - 1)]?.querySelector<HTMLElement>("[data-queue-menu]")
+      ?? rows[Math.min(focused.index, rows.length - 1)]?.querySelector<HTMLElement>("[data-row-options]")
       ?? panelRef.current?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-sheet]")?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-idle]")?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)")
@@ -122,7 +124,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         startsIn = startsIn == null || length == null ? null : startsIn + length;
         const meta = [entry.live ? "Live" : length == null ? null : duration(length), starts == null ? null : `starts ${formatEndTime(starts)}`, entry.addedBy && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
         return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
-          actions={<QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />;
+          verbs={{ credentials, entry, index: cursorIndex + 1 + index, queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />;
       })}</ul>
     </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Search.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Search")}>Search</Button></EmptyContent>}</Empty>}
     {state?.autoplay && <section aria-label="Autoplay" className="grid gap-2">
@@ -133,17 +135,20 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
       </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after Up next."}</p>}
     </section>}
     {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="justify-between px-0 text-muted-foreground">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
-      <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} actions={<QueueActions credentials={credentials} entry={entry} index={queue.indexOf(entry)} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />)}</ul>
+      <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} verbs={{ credentials, entry, index: queue.indexOf(entry), queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />)}</ul>
     </CollapsibleContent></Collapsible>}
   </section></Dialog>;
 }
 
 
-function QueueRow({ entry, meta, onPlay, disabled, actions }: { entry: QueueEntry; meta?: string; onPlay?: () => void; disabled?: boolean; actions?: ReactNode }) {
+// One target that plays the entry, with its other verbs in its context menu. An entry's page holds only Play and Save,
+// so the TV, which can't open a context menu, keeps them in a "…" on the row.
+function QueueRow({ entry, meta, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
+  const menu = useQueueActions(verbs);
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 gap-1"><span className="truncate text-sm font-medium">{entry.title}</span>{meta && <span className="truncate text-xs text-muted-foreground">{meta}</span>}</span></>;
-  return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} className="flex min-w-0 items-center gap-2 py-2">
+  return <RowContextMenu actions={menu}><li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} className="flex min-w-0 items-center gap-2 py-2">
     {onPlay ? <Button data-play variant="ghost" aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
-    {actions}
-  </li>;
+    {isTvPresentation() && <OptionsMenu title={entry.title} actions={menu} />}
+  </li></RowContextMenu>;
 }

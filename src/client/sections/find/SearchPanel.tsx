@@ -8,9 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SearchBar } from "@/components/SearchBar";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { MoreHorizontal, Play } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PlayOnMenu, PlayOnGroup, usePlayOn } from "@/components/PlayOn";
+import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
@@ -23,7 +21,6 @@ import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
-import { isTvPresentation } from "@/session/presentation";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 
 export type Props = {
@@ -167,38 +164,24 @@ function FilterGroup<T extends string>({ label, value, onChange, options }: { la
 
 /** Search hits as media rows under one time ruler. */
 export const HitList = memo(function HitList({ hits, label, timeline = true, currentId, pageFirst = false }: { hits: SearchHit[]; label: string; timeline?: boolean; currentId?: string; pageFirst?: boolean }) {
-  const tv = isTvPresentation();
   if (!hits.length) return null;
   return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
     {timeline && hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
     <MediaList aria-label={label}>{hits.map((hit, index) => {
-      const play = tv && hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
+      // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
+      const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
       return <MediaRow key={hit.id} compact={!timeline} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || hit.source === "StreamingCommunity" || hit.source === "123MoviesFree" ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
-      tvSecondaryActions={!hit.primary.href || hit.kind === "Radio" || hit.actions.some(action => action.label === "Play next")}
-      actions={<BrowseActions title={hit.title} actions={tv && (play || hit.primary.label === "Play") ? hit.actions.filter(action => action.label !== "Play") : hit.actions} />}>
+      menu={play || hit.primary.label === "Play" ? hit.actions.filter(action => action.label !== "Play") : hit.actions}
+      tvMenu={!hit.primary.href || hit.kind === "Radio" || hit.actions.some(action => action.label === "Play next")}>
       {hit.id === currentId && <span className="text-sm font-medium">Playing</span>}
       {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
     </MediaRow>;
     })}</MediaList>
   </div>;
 });
-
-/** Every media row's verbs: a filled ▷ for Play (or Resume), then one "…" menu with Play on, Queue, Save and the rest. */
-export function BrowseActions({ title, actions, size = "icon" }: { title: string; actions: SearchHit["actions"]; size?: "icon" | "icon-lg" }) {
-  const { devices, on } = usePlayOn();
-  const play = actions.find(action => action.label === "Play" || action.label === "Resume");
-  // Play on waits for a second online Device, so it alone doesn't open an empty menu.
-  const more = actions.filter(action => action !== play && (!action.playOn || devices.length > 0));
-  return <>
-    {play && <Button variant="ghost" size={size} aria-label={on(`${play.label} ${title}`)} title={on(play.label)} disabled={play.disabled} onClick={play.run}><Play aria-hidden="true" className="size-4 fill-current" /></Button>}
-    {!!more.length && <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size={size} aria-label={`Options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">{more.map(action => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem> : action.playOn ? <PlayOnGroup key={action.label} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} /> : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label}</DropdownMenuItem>)}</DropdownMenuContent>
-    </DropdownMenu>}
-  </>;
-}
 
 export function MoreResults({ summaries }: { summaries: Entry[] }) {
   const more = summaries.filter(([, summary]) => summary.more);
