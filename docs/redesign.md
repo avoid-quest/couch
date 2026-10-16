@@ -26,40 +26,6 @@ type or copy rules.
 - **Fewer exceptions.** A rule that needs an exception for one surface is a
   sign the structure is wrong. Prefer changing the structure.
 
-## Sections
-
-| Section | Path | Holds | Was |
-| --- | --- | --- | --- |
-| Home | `/` | hero, then shelves | Home |
-| Live | `/live` | radio stations and Live TV channels | Find's `?browse=radio` / `?browse=live-tv` |
-| Search | `/search` | the search field, results, sources | Find |
-| Library | `/library` | For later, Saved, playlists, Played | Saved |
-| Settings | `/settings` | unchanged owners and pages | Settings |
-| Remote | `/remote` | drives a TV; on non-TV devices while the Couch has a TV | Remote |
-
-Old paths redirect to their new ones, keeping their query, the way
-`settingsAliases` does for Settings. `/collection`, `/item` and `/now` stay.
-
-## Shell
-
-- **TV:** centred text tabs (Home, Live, Search, Library, Settings), the TV's
-  name at the left in muted ink, the clock at the right. The tab bar scrolls
-  away with the page; Up from a page's first row returns to it.
-- **Desktop and wide browsers:** tabs at the left, then Remote while the
-  Couch has a TV, then Settings. The Couch switch, Keyboard shortcuts and the
-  clock sit at the right. The header stays sticky.
-- **Phones** (`touch:` below 960px): a bottom tab bar with Home, Live,
-  Search, Library, and Remote while the Couch has a TV. A compact top bar has
-  the page title, the Couch switch and a Settings button.
-- **Current tab:** underlined. **Focused tab:** inverted, as every control is.
-- **Now-playing bar** (replaces the mini player): one row on every screen,
-  sitting above the phone tab bar. It shows artwork and title (opening the
-  player), then:
-  - TV and desktop: the full transport (Play/Pause, Stop, Next), the timeline
-    or "Live", Volume, Where it plays and Up next;
-  - phones: Play/Pause and Where it plays only. The player keeps the full
-    transport.
-
 ## Home
 
 - **Hero:** the first of
@@ -87,8 +53,9 @@ Old paths redirect to their new ones, keeping their query, the way
   show and "until" time, then every station (today's Radio browse). Then
   channels (today's Live TV browse), only when a Live TV source exists. No
   programme grid: that waits for a source that needs one.
-- **Library:** today's Saved sections, with the rail on wide screens and the
-  Select on phones.
+- **Library:** For later, Saved, playlists and Played: today's Saved
+  sections plus Played, with the rail on wide screens and the Select on
+  phones.
 - **Details:** a classic layout: contained artwork at the left, the title at
   display size, one meta line, the synopsis, then one row of verbs (Play or
   Resume, From start, Queue, Save, Play on). Seasons and episodes follow as
@@ -173,7 +140,7 @@ release notes ([ci.md](ci.md)).
 | --- | --- | --- | --- |
 | `spec` | Describe Couch's redesigned interface | this brief; design docs split by surface | `design.md`, `design/`, `AGENTS.md` |
 | `foundation` | Prepare the interface for its redesign | one presentation module; a TV presentation override for scratch and browser checks, unreachable in release builds; no visual change (landed) | `design/tv.md` |
-| `shell` | Navigate Couch with tabs and a now-playing bar | Shell; new section paths with redirects; existing pages render inside them | `design/shell.md` |
+| `shell` | Navigate Couch with tabs and a now-playing bar | Shell; new section paths with redirects; existing pages render inside them (landed) | `design/shell.md` |
 | `home` | Open Home on what you'll most likely play next | Home | `design/home.md` |
 | `browse` | Search everything and open each source from its own home | Search, source homes, details | `design/browse.md` |
 | `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library | `design/browse.md` |

@@ -19,8 +19,9 @@ restored, then takes any section to Home, where Back does nothing. Opening
 Up next changes the player URL without losing its opener. Settings' own OK
 and Back: [Settings](settings.md#section-nav).
 
-After every page change, focus is on the page's first control. The header holds the sections, the TV's name
-and the clock as plain text; the Couch choice lives in Settings → Couch connection.
+After every page change, focus is on the page's first control. The header holds the sections as centred tabs,
+the TV's name at the left and the clock at the right, as plain text; the Couch choice lives in Settings → Couch
+connection, and the TV has no Remote tab or Keyboard shortcuts. Layout per screen: [Shell](shell.md#header-and-section-nav).
 Volume and every fader move 5 per press. Text fields say "Type with Remote on
 your phone": a phone's Remote is the TV's text entry.
 
@@ -60,9 +61,12 @@ keeps Left/Right for seeking, and a seek's brief stall keeps the transport
 enabled so focus stays where it was.
 
 Spatial navigation places a
-slider by its whole track, not its moving thumb, reaches the sticky header
-and mini player only after the page's own controls, and keeps focus clear
-of both. After a page change the first key starts at the page's first
+slider by its whole track, not its moving thumb, reaches the header and the
+footer (the now-playing bar) only after the page's own controls, and keeps
+focus clear of the footer. The TV's tab bar is not sticky: it scrolls away
+with the page, as on Apple TV, so the page gets the screen. Up from a page's
+first row reaches it on the current tab, and Down from it returns to the
+page's first control. After a page change the first key starts at the page's first
 control. Screens shown before the shell (the first-run chooser) bring the
 same arrow navigation.
 
@@ -73,7 +77,7 @@ on the first enabled transport slot, Up and Down show them on the timeline (or
 that transport slot when there is no seekable timeline), and Left and Right seek
 10 s and show the timeline (live media that can't seek only shows them). Back
 hides the controls; with them hidden it leaves the player for the page that
-opened it, and playback goes on in Home's Now row and the mini player.
+opened it, and playback goes on in Home's Now row and the now-playing bar.
 
 Paused shows a large Pause glyph and "Paused", and the controls stay up until
 Back hides them. The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
