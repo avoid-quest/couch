@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PlaybackTransport } from "../src/client/components/PlaybackTransport";
+import { PlaybackTransport, useEndTime } from "../src/client/components/PlaybackTransport";
+import { formatEndTime } from "../src/client/time-format";
 import type { ClientSessionState } from "../src/client/session/session";
 import type { PlayerState, QueueEntry } from "../src/shared/protocol";
 
@@ -48,4 +49,16 @@ test("a page change's first key lands on the first enabled slot", () => {
   expect(first(radio, {})).toEqual(["Stop"]);
   expect(first(capture, {})).toEqual(["Stop"]);
   expect(first(capture, { status: "error" })).toEqual(["Try again"]);
+});
+
+test("the player's end time reads in clock time, Live for live media, and goes once the item ends", () => {
+  const endTime = (entry: QueueEntry, player: Partial<PlayerState>) => {
+    const state = { queue: [entry], currentEntryId: entry.id, player: { playbackId: "p1", status: "playing", position: 0, duration: null, volume: 50, seekable: false, error: null, ...player } } as unknown as ClientSessionState;
+    return renderToStaticMarkup(createElement(function EndTime() { return useEndTime(state) ?? "none"; }));
+  };
+  expect(endTime(film, {})).toBe(`ends ${formatEndTime(6000)}`);
+  expect(endTime(film, { speed: 2 })).toBe(`ends ${formatEndTime(3000)}`);
+  expect(endTime(radio, {})).toBe("Live");
+  expect(endTime(channel, { seekable: true })).toBe("Live");
+  expect(endTime(film, { status: "ended" })).toBe("none");
 });

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { deviceId } from "@/session/device-id";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { RangeControl } from "./RangeControl";
+import { useDurationClock } from "./DurationBar";
 
 type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 
@@ -35,6 +36,20 @@ export function playbackCapabilities(state: ClientSessionState | null, connected
 }
 
 /**
+ * The departures board's line for what plays: "ends 21:42" in clock time, or "Live" for live media; nothing without
+ * a length or once it has ended. The duration clock keeps a paused item's end time moving.
+ */
+export function useEndTime(state: ClientSessionState | null | undefined) {
+  const playbackClock = usePlaybackClock();
+  useDurationClock();
+  const current = state?.queue.find(entry => entry.id === state.currentEntryId);
+  if (!state || !current || state.player.status === "ended") return undefined;
+  if (current.live || isRadio(current)) return "Live";
+  const length = playbackClock.duration || current.duration || 0;
+  return length ? `ends ${formatEndTime((length - playbackClock.position) / (state.player.speed || 1))}` : undefined;
+}
+
+/**
  * Position, the timeline and "−3:24 ends 20:59", only where a timeline means something: media that seeks,
  * or has a length to seek through once loaded (the slider stays, disabled, meanwhile). Live media that
  * can't seek reads "Live" alone: no bar, no position, no total.
@@ -57,7 +72,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}</div>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
-      <span className="shrink-0">{live ? "Live" : length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
+      <span className="shrink-0">{live ? <span data-live>Live</span> : length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
     </div>
   </div>;
 }
