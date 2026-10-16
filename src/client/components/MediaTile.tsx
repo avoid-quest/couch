@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { cn } from "@/lib/utils";
 
-const shapes = { poster: "aspect-[2/3]", square: "aspect-square", video: "aspect-video" } as const;
-export type TileShape = keyof typeof shapes;
+export const tileAspect = { poster: "aspect-[2/3]", square: "aspect-square", video: "aspect-video" } as const;
+export type TileShape = keyof typeof tileAspect;
 
 /** Films and series are posters, stations and albums squares, videos and episodes 16:9 frames. */
 export function tileShape(source: string | undefined, episode: boolean): TileShape {
@@ -27,7 +27,7 @@ export function MediaTile({ title, meta, thumbnail, shape, children, className, 
   onClick?: MouseEventHandler<HTMLElement>;
 } & Omit<ComponentProps<typeof Button>, "title" | "children" | "asChild" | "onClick">) {
   const body = <>
-    <span data-tile-art className={cn("block h-44 overflow-hidden bg-muted", shapes[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className="aspect-auto size-full object-contain" /></span>
+    <span data-tile-art className={cn("block h-44 overflow-hidden bg-muted", tileAspect[shape])}><MediaArtwork thumbnail={thumbnail} title={title} className="aspect-auto size-full object-contain" /></span>
     {/* The caption takes the artwork's width. A DurationBar keeps one scale across tiles and wraps its label under the bar. */}
     <span data-tile-caption className="grid w-0 min-w-full gap-0.5 px-1 pb-1 [--duration-width:6.5rem] [&_span:has(>[data-slot=progress])]:flex-wrap [&_span:has(>[data-slot=progress])]:gap-y-1">
       <span className="line-clamp-2 text-base font-medium">{title}</span>

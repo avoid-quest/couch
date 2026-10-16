@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-// Home's rows, in the order a fresh device shows them. Each device keeps its own choice.
-export const homeRowLabels = { now: "Now", continue: "Continue", later: "For later", radio: "Radio", recent: "Played recently", upNext: "Up next" } as const;
+// Home's shelves, in the order a fresh device shows them. Each device keeps its own choice. What plays
+// is not one: it leads Home as its hero, and a saved "now" row is dropped as unknown.
+export const homeRowLabels = { continue: "Continue", later: "For later", radio: "Radio", recent: "Played recently", upNext: "Up next" } as const;
 export type HomeRowId = keyof typeof homeRowLabels;
 export type HomeRow = { id: HomeRowId; shown: boolean };
 export const defaultHomeRows: HomeRow[] = [
-  { id: "now", shown: true }, { id: "continue", shown: true }, { id: "later", shown: true },
+  { id: "continue", shown: true }, { id: "later", shown: true },
   { id: "radio", shown: true }, { id: "recent", shown: true }, { id: "upNext", shown: false },
 ];
 const storageKey = "couch.home-rows";
@@ -55,9 +56,13 @@ export function keptOrder<T>(order: readonly string[], items: readonly T[], key:
   return items.map((item, index) => ({ item, rank: rank.get(key(item)) ?? order.length + index })).sort((a, b) => a.rank - b.rank).map(({ item }) => item);
 }
 
-/** A row's order, taken once its data is ready, so nothing moves under the focus while Home stays open. */
-export function useKeptOrder<T>(items: T[], key: (item: T) => string, ready = true): T[] {
-  const order = useRef<string[] | null>(null);
-  if (!order.current && ready && items.length) order.current = items.map(key);
-  return order.current ? keptOrder(order.current, items, key) : items;
+/**
+ * A row's order, taken once its data is ready, so nothing moves under the focus while Home stays open.
+ * It leaves out the item that led Home then (`except`, the hero's) for as long: a later hero stays where it is.
+ */
+export function useKeptOrder<T>(items: T[], key: (item: T) => string, ready = true, except?: string): T[] {
+  const kept = useRef<{ order: string[]; except?: string } | null>(null);
+  if (!kept.current && ready) kept.current = { order: items.map(key).filter(id => id !== except), except };
+  const shown = items.filter(item => key(item) !== (kept.current ? kept.current.except : except));
+  return kept.current ? keptOrder(kept.current.order, shown, key) : shown;
 }

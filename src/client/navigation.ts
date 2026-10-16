@@ -76,10 +76,20 @@ function moveFocus(key: string) {
     const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
     return { element, forward, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1).sort((a, b) => a.score - b.score);
+  // Up and Down from a row reach the nearest row first, so Home's shelves are walked one by one, never
+  // skipped for a farther control that lines up. A row counts by its own box; ties keep the best score.
+  const reach = !horizontal && active.closest("[data-nav-row]") ? candidates.map(candidate => {
+    const row = candidate.element.closest<HTMLElement>("[data-nav-row]");
+    const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
+    return { row: unit, edge: Math.max(0, sign < 0 ? from.top - to.bottom : to.top - from.bottom) };
+  }) : [];
+  const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
+  const next = reach[nearest]?.row;
+  const best = next ? candidates.find(candidate => next.contains(candidate.element)) : candidates[0];
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
-  const tab = key === "ArrowUp" && later && candidates[0]?.element.closest(later)
+  const tab = key === "ArrowUp" && later && best?.element.closest(later)
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
-  focus(tab ?? candidates[0]?.element);
+  focus(tab ?? best?.element);
 }
 
 export function sendKey(target: HTMLElement, key: string) {
