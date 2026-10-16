@@ -70,14 +70,17 @@ Every device
   its consent allows. Moving a busy device away from another Playback says so
   in its row first, as today.
 - A row's "…" menu holds Picture, Mute and Only here.
+- "Sync … ms earlier" sits under a device's fader wherever its row appears,
+  only while that device plays in sync with others.
+- In sync (live inputs on several devices) is one switch under Volume, shown
+  only where it applies today.
 - "Every device" opens the overview.
 
 **Overview** (`/where-it-plays`): each Playback that plays somewhere, shown as
 its artwork, title, status and end time, with its device rows below it. Then
 "Not playing": free devices, each able to join the Playback you control.
-Offline devices come last. Rows here also hold "Sync … ms earlier" while a
-device plays in sync with others, and link to Settings → This device →
-Sharing for consent.
+Offline devices come last. Rows here use the picker's row, and link to
+Settings → This device → Sharing for consent.
 
 ## Deferred
 
