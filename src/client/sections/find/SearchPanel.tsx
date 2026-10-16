@@ -174,7 +174,8 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
       return <MediaRow key={hit.id} compact={!timeline} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"].includes(hit.source) ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
-      menu={play || hit.primary.label === "Play" ? hit.actions.filter(action => action.label !== "Play") : hit.actions}
+      // A press that plays keeps the hit's own destination (a station's page) in the menu as Open.
+      menu={play || hit.primary.label === "Play" ? [...play && hit.primary.label !== "Play" ? [{ label: hit.primary.label, disabled: hit.primary.disabled, run: hit.primary.run }] : [], ...hit.actions.filter(action => action.label !== "Play")] : hit.actions}
       tvMenu={!hit.primary.href || hit.kind === "Radio" || hit.actions.some(action => action.label === "Play next")}>
       {hit.id === currentId && <span className="text-sm font-medium">Playing</span>}
       {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
