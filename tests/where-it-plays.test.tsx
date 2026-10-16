@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import type { ComponentProps } from "react";
+import { isValidElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClientSessionState } from "../src/client/session/session";
 import type { SessionGateValue } from "../src/client/session/session-context";
@@ -9,7 +9,7 @@ const real = { ...await import("../src/client/components/ui/sheet") };
 type SheetProps = ComponentProps<typeof real.Sheet>;
 const sheets: SheetProps[] = [];
 mock.module("../src/client/components/ui/sheet", () => ({ ...real, Sheet: (props: SheetProps) => { sheets.push(props); return real.Sheet(props); } }));
-const { WhereItPlays } = await import("../src/client/sections/shell/Outputs");
+const { Overview, WhereItPlays } = await import("../src/client/sections/shell/Outputs");
 const { SessionGateContext } = await import("../src/client/session/gate-context");
 
 const devices = [{ id: "mac", name: "Mac", online: true, volume: 50, muted: false }, { id: "tv", name: "TV", online: true, volume: 50, muted: false, sharing: { audio: true, video: true } }];
@@ -94,20 +94,23 @@ test("only a successful Play whose destination is the playing source's publisher
   expect(choosesHere({ ...play, deviceId: "mac" }, before, null)).toBe(false);
 });
 
-test("the picker shows the playback, its one Volume, then a check per device, with a fader and a … menu only while it is in", async () => {
+type Props = { children?: ReactNode; id?: string; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "data-device-check"?: boolean; "data-page-first"?: boolean; disabled?: boolean; onClick?: () => void };
+const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
+const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
+const inSync = { deviceId: "tv", picture: true, sound: true, delay: 80, delayActive: true };
+
+test("the picker shows the playback, its one Volume, then a check per device, with a fader and a … menu only while it is in, and Every device at its foot", async () => {
   const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
-  const { isValidElement } = await import("react");
-  type Props = { children?: ReactNode; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
-  const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
-  const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
   const sent: unknown[] = [];
-  const state = { ...waiting(0), outputs: [{ deviceId: "tv", picture: true, sound: true }], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [{ deviceId: "tv", picture: true, sound: true }] }], liveSources: [] } as unknown as ClientSessionState;
+  const state = { ...waiting(0), outputs: [inSync], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [inSync] }], liveSources: [] } as unknown as ClientSessionState;
   const tree = WhereItPlays({ state, connected: true, run: async action => { sent.push(action); return true; } });
   const all = elements(tree), labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
   expect(all.filter(item => item.type === PlaybackVolume).length).toBe(1);
   expect(labelled("All trim")).toEqual([]);
   expect(text(tree)).toContain("Mac · Screen");
-  expect(text(tree)).not.toContain("Every device");
+  expect(text(tree)).toContain("Every device");
+  // Sync is the overview's, even while the TV plays in sync.
+  expect(labelled("TV sync")).toEqual([]);
   const checks = all.filter(item => item.props["data-device-check"]);
   expect(checks.map(item => [item.props["aria-label"], item.props["aria-checked"]])).toEqual([["TV", true], ["Mac", false]]);
   for (const label of ["TV volume", "Options for TV", "TV picture", "Mute TV", "Only on TV"]) expect(labelled(label).length).toBe(1);
@@ -116,4 +119,25 @@ test("the picker shows the playback, its one Volume, then a check per device, wi
   checks[0]!.props.onClick!();
   expect(sent).toEqual([{ type: "output", deviceId: "tv", picture: false, level: 0 }]);
   expect(checks[1]!.props.disabled).toBe(true);
+});
+
+test("the overview lists the Playback you control over its devices, with Sync under each in-sync row, then each other Playback, then Not playing", () => {
+  const device = (id: string, name: string, online = true) => ({ id, name, online, volume: 50, muted: false, sharing: { audio: true, video: true } });
+  const radio = { id: "r", title: "avoid radio", status: "playing", outputs: [{ deviceId: "phone", picture: false, sound: true }], live: true };
+  const state = { playback: "p", outputs: [inSync, { deviceId: "mac", picture: true, sound: true }], queue: [{ id: "e", title: "Montalbano", source: "x" }], currentEntryId: "e",
+    devices: [device("tablet", "Tablet", false), device("kitchen", "Kitchen"), device("phone", "Phone"), device("mac", "Mac"), device("tv", "TV")],
+    playbacks: [{ id: "p", title: "Montalbano", status: "playing", outputs: [inSync, { deviceId: "mac", picture: true, sound: true }] }, radio],
+    player: { playbackId: "x", status: "playing", position: 0, duration: null, volume: 50, seekable: false, error: null } } as unknown as ClientSessionState;
+  const tree = Overview({ state, connected: true, run: async () => true });
+  const all = elements(tree), checks = all.filter(item => item.props["data-device-check"]);
+  // Each Playback's heading, as a departures board's line, then Not playing's.
+  const headings = all.filter(item => "time" in item.props || item.props.id === "where-it-plays-free").map(item => (item.props as { title?: string }).title ?? text(item.props.children));
+  expect(headings).toEqual(["Montalbano", "avoid radio", "Not playing"]);
+  expect(checks.map(item => [item.props["aria-label"], item.props["aria-checked"]])).toEqual([["Mac", true], ["TV", true], ["Phone", false], ["Kitchen", false], ["Tablet", false]]);
+  // The TV starts on the first row; Sync shows under the row that plays in sync, and only there.
+  expect(checks.filter(item => item.props["data-page-first"]).map(item => item.props["aria-label"])).toEqual(["Mac"]);
+  expect(all.filter(item => /sync$/.test(item.props.label ?? "")).map(item => item.props.label)).toEqual(["TV sync"]);
+  expect(all.find(item => (item.props as { title?: string }).title === "avoid radio")?.props).toMatchObject({ status: "Playing", time: "Live" });
+  expect(text(tree)).toContain("Choose what this device shares");
+  expect(text(tree)).not.toMatch(/\b(zone|group|room|Playback)\b/i);
 });
