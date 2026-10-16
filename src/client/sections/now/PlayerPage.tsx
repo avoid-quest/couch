@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { MediaArtwork } from "@/components/MediaArtwork";
-import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities } from "@/components/PlaybackTransport";
+import { PlaybackTimeline, PlaybackTransport, VolumeButton, playbackCapabilities, useEndTime } from "@/components/PlaybackTransport";
+import { DigitalClock } from "@/components/DigitalClock";
 import { sourceLabel } from "@/source-label";
 import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
 import { deviceName, offline } from "@/copy";
@@ -18,7 +19,7 @@ import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
-import { PlaysOn, WhereItPlays } from "@/sections/shell/Outputs";
+import { WhereItPlays } from "@/sections/shell/Outputs";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
@@ -57,6 +58,13 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)') ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus();
   }, [setQueueOpen]);
   const band = useRef<HTMLDivElement>(null);
+  // Up next opened over a video starts below the top band (index.css), so the band publishes its height.
+  const topBand = useCallback((element: HTMLDivElement | null) => {
+    if (!element) return;
+    const observer = new ResizeObserver(() => element.parentElement?.style.setProperty("--player-top", `${element.offsetHeight}px`));
+    observer.observe(element, { box: "border-box" });
+    return () => observer.disconnect();
+  }, []);
   const panelTrigger = useRef<HTMLButtonElement>(null);
   const panelClose = useRef<HTMLButtonElement>(null);
   const [now, setNow] = useState(Date.now());
@@ -82,6 +90,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { if (panel) panelClose.current?.focus(); }, [panel]);
   useEffect(() => { if (queueOpen) (queueClose.current ?? root.current?.querySelector<HTMLElement>('[aria-label="Content path"] a'))?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
+  const ends = useEndTime(state);
   useEffect(() => {
     if (!tvPresentation || queueOpen) return;
     const frame = requestAnimationFrame(() => {
@@ -168,6 +177,12 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
+  const title = currentProgramme?.title || current?.title;
+  // As in Home's hero: a show's station, else the subtitle (series, episode or channel), else the source (a station's is its stream host).
+  const byline = !current ? "" : !connected ? offline(name) : (currentProgramme ? current.title : current.subtitle) || (radio ? "Radio" : source);
+  const osd = !!current && !artworkStage;
+  const where = elsewhere && at ? `on ${at.name}${at.more ? ` +${at.more}` : ""}` : separate && ["playing", "paused"].includes(player?.status ?? "") ? "in a separate window" : null;
+  const meta = !connected ? byline : [byline, ended ? findingNext ? "Finding the next item…" : "Finished" : player?.status === "paused" ? "Paused" : null, !ended && where].filter(Boolean).join(", ");
   const nowPlaying = player?.nowPlaying && [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ");
   const unavailable = connected && player?.status === "unavailable";
   const errorDetail = radio ? "The station stopped sending audio." : current?.live ? "This stream has ended." : "This video is unavailable.";
@@ -182,30 +197,39 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
-    {/* Same height and gutter as the app header, with its Couch switch. */}
-    {!tvPresentation && <div data-player-header inert={!shown} className={cn("player-header drag-region window-controls-inset absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-(--gutter) transition-opacity duration-200 motion-reduce:transition-none", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5", !shown && "opacity-0 pointer-events-none")}>
-      <div className="min-w-0 bg-background">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb compact title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
-      {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
-      {playerTarget && bufferingStatus}
-      <div className={cn("ml-auto flex shrink-0 items-center gap-2 bg-background", !playerTarget && !sharing && "max-w-2/5")}><LiveSharingStatus /><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
-    </div>}
+    {/* The top band shows and hides with the band. Desktop and phones keep the header's trail and Couch switch at the app header's
+        height; over a video, the title and subtitle follow at the left, the clock and the end time at the right. */}
+    <div ref={topBand} data-player-top={shown ? "shown" : "hidden"} inert={!shown} hidden={tvPresentation && !osd} className={cn("player-top absolute inset-x-0 top-0 z-20 grid transition-opacity duration-200 motion-reduce:transition-none tv:pt-6", osd && "player-video-controls", !shown && "opacity-0")}>
+      {!tvPresentation && <div data-player-header className={cn("player-header drag-region window-controls-inset flex h-14 items-center gap-3 px-(--gutter)", playerTarget && "max-sm:h-auto max-sm:flex-wrap max-sm:gap-y-0 max-sm:py-1.5")}>
+        <div className="min-w-0">{playerTarget ? <Button variant="ghost" className="min-h-11" aria-label="Back to Remote" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /><span className="max-sm:sr-only">Remote</span></Button> : <ContentBreadcrumb compact title={current?.title ?? "Player"} provider={provider} collection={current?.collection} radio={!!radio} />}</div>
+        {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
+        {playerTarget && bufferingStatus}
+        <div className={cn("ml-auto flex shrink-0 items-center gap-2", !playerTarget && !sharing && "max-w-2/5")}><LiveSharingStatus /><CouchSwitch credentials={credentials} connected={connected} status={shell.statusLabel} installationName={state?.installationName} /></div>
+      </div>}
+      {/* Two rows read as one board line: title and clock, then subtitle and the end time, said only here. Each row sizes
+          itself, so a narrow screen gives the title all but the clock. */}
+      {osd && <div data-player-heading className="grid px-(--gutter)">
+        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1"><h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1>{details}</div><DigitalClock className="shrink-0 text-sm text-muted-foreground" /></div>
+        {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl">{ends}</p>}</div>}
+      </div>}
+    </div>
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
       <div className="player-main">
-      {tvPresentation && player?.status === "paused" && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+      {/* Only the TV shows a large Paused: it reads from the sofa. */}
+      {player?.status === "paused" && <div data-player-paused role="status" className="pointer-events-none absolute inset-0 z-10 hidden place-items-center tv:grid">
         <div className="grid justify-items-center gap-2 bg-background px-6 py-4"><Pause aria-hidden="true" className="size-20 fill-current" /><span className="text-2xl font-medium">Paused</span></div>
       </div>}
       {current && (!picture || (active || ended) && audioOnly) && !status && <div data-player-summary className="player-summary">
-        <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 place-items-center overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
-        <div data-player-audio-copy className="grid min-w-0 max-w-xl gap-2 text-center">
-          <div className="flex min-w-0 items-center justify-center gap-1">
-            <h1 className="min-w-0 line-clamp-2 text-2xl font-medium tracking-tight break-words" title={currentProgramme?.title || current.title}>{currentProgramme?.title || current.title}</h1>
+        <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
+        {/* Home's hero, in its order: the title at display size, one muted meta line, then the departures board's line. */}
+        <div data-player-audio-copy className="grid min-w-0 gap-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <h1 className="min-w-0 line-clamp-2 text-3xl font-semibold tracking-tight break-words" title={title}>{title}</h1>
             {details}
           </div>
-          {ended && <p role="status" className="text-sm text-muted-foreground">{findingNext ? "Finding the next item…" : "Finished"}</p>}
-          {current.subtitle && !currentProgramme && <p className="truncate text-sm text-muted-foreground">{current.subtitle}</p>}
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground">{!ended && player?.status === "paused" && <span>Paused</span>}{!ended && (elsewhere && at ? <PlaysOn at={at} /> : separate && ["playing", "paused"].includes(player?.status ?? "") ? <span>{player?.status === "paused" ? "in a separate window" : "Playing in a separate window"}</span> : currentProgramme && <span>{current.title}</span>)}</p>
+          <p role="status" className="truncate text-sm text-muted-foreground">{meta}</p>
+          {ends && <p data-player-ends className="text-2xl tabular-nums">{ends}</p>}
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
-          {!connected && <p className="line-clamp-2 text-sm text-muted-foreground">{offline(name)}</p>}
         </div>
       </div>}
     {current && status && <div data-player-status className={cn("pointer-events-none absolute inset-0 z-10 grid place-items-center px-(--gutter)", !artworkStage && "pb-48")}>
@@ -229,10 +253,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     </div>
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
       {/* Gutter to gutter like the now-playing bar, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
-          A timeline takes its own row above (index.css); live that can't seek leaves "Live" in its slot. Every tool is an icon. */}
+          A timeline takes its own row above (index.css), without the end time or "Live" the top band or Now playing says. Every tool is an icon. */}
       <div className="grid gap-1">
-        {current && !artworkStage && <div data-player-heading className="flex min-w-0 items-center gap-3"><span className="flex min-w-0 items-center gap-1"><h1 title={current.title} className="truncate text-sm tv:text-2xl font-medium">{current.title}</h1>{details}</span>{current.subtitle && <span className="truncate text-xs text-muted-foreground">{current.subtitle}</span>}{tvPresentation && buffering && <span role="status" className="text-sm">Buffering…</span>}{!connected && <span className="truncate text-sm text-muted-foreground">{offline(name)}</span>}</div>}
-        {!tvPresentation && !playerTarget && bufferingStatus}
+        {!playerTarget && bufferingStatus}
         <div className="player-control-row">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
           {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}
