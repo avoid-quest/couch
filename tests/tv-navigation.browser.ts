@@ -336,8 +336,10 @@ window.runTvNavigationRegression = async () => {
     await until(() => rows().length === 1);
     const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
     assert(undo && document.activeElement?.closest('[aria-label="Channels & stations"]'), "Favorite removal lost Undo or adjacent focus");
-    undo!.click(); await until(() => rows().length === 2);
-    assert(rows()[1]?.querySelector('button[aria-label^="Reorder"]')?.getAttribute("aria-label") === label, "Favorite Undo lost saved order");
+    // Undo saves the station again, then its order, so the list can briefly show the save alone.
+    const restored = () => rows().length === 2 && rows()[1]?.querySelector('button[aria-label^="Reorder"]')?.getAttribute("aria-label") === label;
+    undo!.click(); await until(restored).catch(() => undefined);
+    assert(restored(), "Favorite Undo lost saved order");
   });
   await check("Live TV retains Queue and Play on without a Details destination", async () => {
     await click('[data-app-nav] a[href="/live"]');
@@ -372,7 +374,8 @@ window.runTvNavigationRegression = async () => {
       .find(item => item.querySelector("span")?.textContent === targetName);
     assert(recipient && !recipient.hasAttribute("data-disabled"), "Play on target disappeared after Queue");
     recipient!.click();
-    await until(() => !!document.querySelector('[data-now-playing] button[aria-label="Where it plays"]:not(:disabled)'));
+    // Where it plays opened before Play on lands closes as the bar moves to the recipient's Playback.
+    await until(() => !!document.querySelector('[data-now-playing] button[aria-label="Where it plays"]:not(:disabled)') && !!document.querySelector("[data-now-playing]")?.textContent?.includes(`on ${targetName}`));
     await click('[data-now-playing] button[aria-label="Where it plays"]');
     await until(() => document.querySelector(`[aria-label="Only on ${CSS.escape(targetName!)}"]`)?.getAttribute("aria-pressed") === "true");
     assert(control(`[aria-label="${CSS.escape(targetName!)} picture"]`).getAttribute("aria-pressed") === "true", "Play on did not select the recipient's picture");
