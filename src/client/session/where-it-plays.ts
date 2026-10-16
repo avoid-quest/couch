@@ -62,8 +62,6 @@ export type Row = {
 export type Picker = {
   title?: string;
   hint: string;
-  /** All's trim of the sound you may control. */
-  trim: number;
   /** In sync, where it applies: a live input on several devices, or already on. */
   inSync?: boolean;
   rows: Row[];
@@ -114,8 +112,7 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
   return {
     title: state.queue.find(entry => entry.id === state.currentEntryId)?.title,
     hint: host ? `This channel plays only on ${host}.` : waiting ? "Choose where this source plays: raise a level or turn on Picture." : source?.audio === false ? "This source has no sound. Enable Picture on devices to watch it."
-      : `Raise a device level to add its sound; at 0 its sound is off. All trims selected sound you can control and keeps device levels.${tv ? " Press OK to adjust a level, then OK or Back to finish." : ""}`,
-    trim: state.mixTrim ?? 100,
+      : `Raise a device level to add its sound; at 0 its sound is off.${tv ? " Press OK to adjust a level, then OK or Back to finish." : ""}`,
     // A live input plays directly on each device unless In sync is chosen (docs/adr/0001).
     inSync: source && (outputs.length > 1 || playback?.inSync) ? !!playback?.inSync : undefined,
     rows,

@@ -87,7 +87,7 @@ export function NowPlayingBar({ state, connected, run, onOpen }: { state: Client
     <PlaybackTimeline state={state} connected={connected} run={run} compact className="min-w-0 flex-1 max-lg:hidden [&_[data-current-chapter]]:hidden max-[1100px]:[&_[data-end-time]]:hidden [&_[data-slot=slider]]:min-h-4" />
     <div className="ml-auto flex shrink-0 items-center gap-0.5">
       <VolumeButton state={state} connected={connected} run={run} className={desktop} />
-      <WhereItPlays state={state} run={run} />
+      <WhereItPlays state={state} connected={connected} run={run} />
       <Button variant="ghost" size="icon-lg" className={desktop} aria-label="Up next" title="Up next" onClick={() => onOpen("queue")}><ListMusic aria-hidden="true" /></Button>
     </div>
   </footer>;

@@ -7,6 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import { Toggle } from "@/components/ui/toggle";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { RangeControl } from "@/components/RangeControl";
+import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
 import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
@@ -26,7 +27,7 @@ function ChooserSheet({ request, playback, children }: { request: string | null;
   return <Sheet open={open} onOpenChange={next => { setOpened(next); if (!next && requested) gate?.dismissChooser(requested); }}>{children}</Sheet>;
 }
 
-type Props = { state: ClientSessionState; run: (action: Action) => Promise<boolean> };
+type Props = { state: ClientSessionState; connected: boolean; run: (action: Action) => Promise<boolean> };
 // Pressed toggles invert, like focus: the default muted pressed state is nearly invisible on Clock's black.
 const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground data-[state=on]:text-background";
 
@@ -36,9 +37,9 @@ const inverts = "data-[state=on]:border-foreground data-[state=on]:bg-foreground
  * Sound on several Devices plays in sync over Sendspin. Each request to choose a shared source's
  * receivers opens it, so Play on the publisher leads here.
  */
-export function WhereItPlays({ state, run, className }: Props & { className?: string }) {
+export function WhereItPlays({ state, connected, run, className }: Props & { className?: string }) {
   const tv = isTvPresentation();
-  const { title, hint, trim, inSync, rows } = picker(state, { here: deviceId(), tv });
+  const { title, hint, inSync, rows } = picker(state, { here: deviceId(), tv });
   return <ChooserSheet key={state.playback} request={chooserRequest(state)} playback={state.playback ?? null}>
     {/* Device icons stand for individual devices; the mixer opens all output rows. */}
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
@@ -46,14 +47,8 @@ export function WhereItPlays({ state, run, className }: Props & { className?: st
       <SheetHeader className="shrink-0 gap-0.5 px-0 pr-12 pb-0"><SheetTitle>Where it plays</SheetTitle><SheetDescription className="[overflow-wrap:anywhere]">{title ?? "Nothing is playing."}</SheetDescription></SheetHeader>
       <p className="shrink-0 text-sm text-muted-foreground">{hint}</p>
       <ItemGroup className="shrink-0 gap-0 border-y">
-      {/* The same All command and stored trim; this row never recruits devices. */}
-      <Item role="listitem" className="grid grid-cols-1 gap-2 rounded-none border-0 px-0 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] md:gap-x-6">
-        <div><p className="text-base font-medium">All</p><p className="text-sm text-muted-foreground">Selected sound you can control</p></div>
-        <div data-volume className="flex min-h-11 min-w-0 items-center gap-3 md:col-span-2">
-          <RangeControl label="All trim" value={trim} max={100} disabled={!state.playback} keyboardStep={tv ? 5 : 1} onCommit={level => run({ type: "allSpeakers", level })} />
-          <span className="w-[3ch] shrink-0 text-right tabular-nums">{Math.round(trim)}</span>
-        </div>
-      </Item>
+      {/* The band's Volume: one level for the whole Playback, above each device's own. */}
+      <Item role="listitem" className="rounded-none border-0 px-0 py-4"><PlaybackVolume state={state} connected={connected} run={run} /></Item>
       {inSync !== undefined && <Item role="listitem" className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-none border-0 border-t px-0 py-4 md:gap-x-6">
         <div><p className="text-base font-medium">In sync</p><p className="text-sm text-muted-foreground">{inSync ? "Devices play together, a few seconds behind the source." : "Each device plays as soon as it receives the source, so devices can be slightly apart."}</p></div>
         <Toggle variant="outline" pressed={inSync} aria-label="Play in sync" onPressedChange={inSync => void run({ type: "inSync", inSync })} className={inverts}>In sync</Toggle>

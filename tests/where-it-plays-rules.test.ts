@@ -32,13 +32,6 @@ describe("the Sheet", () => {
   });
 });
 
-describe("All", () => {
-  test("shows the playback's trim, 100 until one is set", () => {
-    expect(picker(session(), { here }).trim).toBe(100);
-    expect(picker(session({ mixTrim: 0 }), { here }).trim).toBe(0);
-  });
-});
-
 describe("device rows", () => {
   test("the playback's devices come first, then this device and the other online devices that share", () => {
     const state = session({ outputs: [sound("kitchen")], devices: [device(here, { sharing: { audio: false, video: false } }), device("tv"), device("kitchen")] });
@@ -217,7 +210,7 @@ describe("live inputs", () => {
 
 describe("the hint", () => {
   test("says how faders work, and on the TV how OK hands them the arrows", () => {
-    expect(picker(session(), { here }).hint).toBe("Raise a device level to add its sound; at 0 its sound is off. All trims selected sound you can control and keeps device levels.");
+    expect(picker(session(), { here }).hint).toBe("Raise a device level to add its sound; at 0 its sound is off.");
     expect(picker(session(), { here, tv: true }).hint).toEndWith(" Press OK to adjust a level, then OK or Back to finish.");
   });
 });

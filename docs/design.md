@@ -139,7 +139,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | --- | --- |
 | the device's name, or Couch | host, playback host/computer/device, coordinator, installation |
 | This computer, This device | this installation, this app |
-| Where it plays, Picture, Only here, Mute, All | Mixer, Speakers panel, look at, host |
+| Where it plays, Volume, Picture, Only here, Mute | Mixer, Speakers panel, All, look at, host |
 | Play on {name}, Playing on {name} | Send to, Cast to |
 | device (a phone, browser, app window or TV) | remote (for a device), controller, client |
 | Remote (the section that drives a TV) | TV remote, remote control |
