@@ -8,7 +8,7 @@
 @import "@fontsource-variable/inter-tight";
 
 @layer components {
-/* Keep scroll edges continuous with the black page, and focus clear of the sticky header and the footer (now-playing bar, phone tabs). */
+/* Keep scroll edges continuous with the black page, and focus clear of the Mac window's sticky header and the footer (now-playing bar, phone tabs). */
 html { background: var(--background); scroll-padding-top: calc(4rem * var(--interface-scale)); scroll-padding-bottom: calc(var(--bottom-bar, 0px) * var(--interface-scale)); }
 html, body { overscroll-behavior: none; }
 [hidden] { display: none !important; }
@@ -122,8 +122,10 @@ html { view-transition-name: none; }
 @layer base { [data-window-controls] .drag-region > * { app-region: initial; } }
 [data-window-controls] :is(.drag-region :is(button, input, textarea, select, a), [data-slot$="-overlay"], [data-slot$="-content"]) { app-region: no-drag; }
 [data-window-controls] .window-controls-inset { padding-left: calc(90px / var(--interface-scale)); }
-/* 90pt is where the first control's box starts, so the nav keeps its hit area inside it. */
-[data-window-controls] .window-controls-inset > [data-app-nav] { margin-left: 0; }
+/* 90pt is where the first control's box starts, so the Couch switch keeps its hit area inside it. */
+[data-window-controls] .window-controls-inset > :first-child { margin-left: 0; }
+/* The header scrolls away with the page, except here: it holds the window's buttons and the region that drags it. */
+[data-window-controls] .app-header { position: sticky; top: 0; }
 
 /* The fixed player fills the viewport; app zoom must not add another viewport of scrolling. */
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }

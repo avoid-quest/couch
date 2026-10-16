@@ -322,19 +322,20 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          {/* The TV's tab bar scrolls away with the page (Up from its first row returns to it); elsewhere the header stays.
-              The player hides it with the attribute: tv:grid would beat the class and lay the TV's header over the picture. */}
-          <header hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-(--gutter) py-1.5 tv:static tv:grid tv:grid-cols-[1fr_auto_1fr]">
-            {/* The TV names itself at the left; a phone's top bar names the page. */}
-            {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : paired && <span className="hidden min-w-0 flex-1 truncate text-lg font-semibold tracking-tight touch:block">{section}</span>}
-            {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). */}
-            {paired && <SectionTabs className="-ml-2.5 flex min-w-0 items-center touch:hidden tv:ml-0 tv:flex" />}
-            <div data-app-status className="ml-auto flex min-w-0 items-center justify-end gap-1 tv:col-start-3">
+          {/* One header on every screen, the TV's: the Couch switch at the left where the TV names itself, the tabs centred,
+              the clock at the right. It scrolls away with the page; Up from a page's first row reaches it on the TV. */}
+          <header hidden={onPlayer} className="app-header drag-region window-controls-inset z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-2 bg-background px-(--gutter) py-1.5">
+            {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
+            {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+            {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
+                them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
+            {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex" />}
+            <div data-app-status className="col-start-3 flex min-w-0 items-center justify-end gap-1">
               <LiveSharingStatus />
-              {!tvPresentation && <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
               <span role="status" className="sr-only">{statusLabel}</span>
+              {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
-              {/* Phones open Settings from here: the tab bar keeps the sections people browse. */}
+              {/* Phones open Settings from where the clock is: the tab bar keeps the sections people browse. */}
               {paired && !tvPresentation && <Button asChild variant="ghost" size="icon" className="hidden touch:inline-flex"><Link to="/settings" aria-label="Settings" title="Settings" aria-current={section === "Settings" ? "page" : undefined}><SettingsIcon aria-hidden="true" /></Link></Button>}
               <DigitalClock className="ml-2 touch:hidden tv:inline" />
             </div>
