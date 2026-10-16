@@ -85,11 +85,13 @@
     const queued = [...document.querySelectorAll("[data-sonner-toast]")].filter(node => node.querySelector("[data-title]")?.textContent.startsWith("Queued"));
     return queued.length === 1 && queued[0].querySelector("[data-title]").textContent === `Queued ${title}` && queued[0].querySelector("a")?.textContent === "Up next";
   };
-  const openItem = async surface => {
+  // Home's tiles do one verb (Continue resumes, Played recently opens Details), so a history item's other verbs are on its Details.
+  const openItem = async (surface, verbs = true) => {
     const item = surface.startsWith("history") ? historyItem : savedItem;
+    const home = surface.startsWith("history");
     await page(surface === "saved-row" || surface === "saved-details" ? "/library" : "/");
-    await wait(() => document.querySelector(`button[aria-label='Options for ${item.title}']`), `${surface} options`);
-    if (surface.endsWith("details")) {
+    await wait(() => document.querySelector(`button[aria-label='${home ? "Details" : "Options for"} ${item.title}']`), `${surface} ${home ? "Details" : "options"}`);
+    if (surface.endsWith("details") || home && (verbs || surface === "history-recent")) {
       click(`button[aria-label='Details ${item.title}']`);
       await wait(() => location.pathname === "/item" && document.querySelector("h1")?.textContent === item.title, "item Details");
     }
@@ -193,10 +195,10 @@
     },
     async itemPlay(surface) {
       if (gate().state.currentEntryId) await run({ type: "stop", playbackId: gate().state.player.playbackId });
-      const item = await openItem(surface);
+      const item = await openItem(surface, false);
       await quiet();
       const before = gate().state.player.playbackId;
-      if (surface.endsWith("details")) click("[data-page='Item'] header button", surface.startsWith("history") ? "Resume" : "Play");
+      if (location.pathname === "/item") click("[data-page='Item'] header button", surface.startsWith("history") ? "Resume" : "Play");
       else click(`button[aria-label='${surface.startsWith("history") ? "Resume" : "Play"} ${item.title}']`);
       await wait(() => gate().state.player.playbackId !== before && gate().state.queue.find(entry => entry.id === gate().state.currentEntryId)?.title === item.title && document.querySelector("video")?.readyState === 4, "actual REST Play decodes");
       check(`${surface} actual Play has no Queued feedback`, !toasts().some(text => text.startsWith("Queued")));

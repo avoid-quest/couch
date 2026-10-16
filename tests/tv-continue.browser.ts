@@ -1,6 +1,7 @@
-// Run in a paired TV with a stopped, decoded finite video in Continue and a
-// second online shared output. Stop that item on every output first. See
-// docs/native-tv.md. Uses real handlers/APIs.
+// Run in a paired TV with two stopped, decoded finite videos in Continue (the
+// first leads Home, the second is in its shelf) and a second online shared
+// output. Stop them on every output first. See docs/native-tv.md. Uses real
+// handlers/APIs.
 declare global {
   interface Window {
     runContinueDetailsRegression: (unavailable?: boolean) => Promise<{ passed: boolean; error?: string }>;
@@ -24,8 +25,10 @@ const usable = (element: HTMLElement) => !element.matches(':disabled, [aria-disa
 window.runContinueDetailsRegression = async (unavailable = false) => {
   try {
     document.querySelector<HTMLElement>('[data-app-nav] a[href="/"]')!.click(); await wait();
+    const hero = document.querySelector<HTMLElement>('[data-home-hero]');
+    assert(hero?.querySelector('[data-page-first][aria-label^="Resume "]') && [...hero.querySelectorAll("button")].some(button => button.textContent === "From start") && hero.querySelector('button[aria-label^="Details "]'), "Continue's first item does not lead Home with Resume, From start and Details");
     const row = document.querySelector<HTMLElement>('[aria-label="Continue"] [data-history-details]')!;
-    assert(row, "Stop a real finite video before completion");
+    assert(row, "Stop two real finite videos before completion");
     const id = row.dataset.historyDetails!;
     const resume = row.querySelector<HTMLElement>('[data-media-tile]')!;
     const details = row.querySelector<HTMLElement>('button[aria-label^="Details "]')!;
@@ -82,8 +85,7 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
     await until(() => location.pathname === "/" && !document.querySelector(`[aria-label="Continue"] [data-history-details="${id}"]`));
     const fallback = document.activeElement as HTMLElement;
     assert(fallback?.closest('[data-page]') && usable(fallback), "Removed Continue opener lost usable page focus");
-    // Clearing resume can move the same History item to the last Recent shelf.
-    // Up has a destination there; Down is legitimately at the page boundary.
+    // The fallback is the hero's Resume; Up reaches the tab bar from there.
     await press("ArrowUp");
     const next = document.activeElement;
     assert(next !== fallback && next instanceof HTMLElement && usable(next), "Next arrow could not leave the removed opener fallback");
