@@ -45,7 +45,8 @@ catalog provides interface icons, not brand identities.
 - **Colour only when it means something.** Destructive red is the only colour.
   Live is the word "Live", not a red badge.
 - **Flat.** Open typography, whitespace and divided rows. No Cards, bordered
-  panels, shadows, gradients or blur.
+  panels, shadows, gradients or blur; only the player's bands shade a picture,
+  with a scrim ([Player](design/player.md#controls-over-the-picture)).
 - **One verb per job**, the same everywhere: Play, Pause, Stop, Next, Play
   next, Queue, Save, Open, Resume, From start, Remove.
 - **Undo, not confirm**, for shared actions. Destructive admin actions confirm
@@ -62,7 +63,7 @@ values in components.
 | `background` | `#000` | page, band, sheets |
 | `foreground` / `primary` | `#fff` | text, bars, primary button |
 | `muted` / `secondary` | `#171717` | inputs, thumbnail placeholders |
-| `muted-foreground` | `#a3a3a3` | metadata |
+| `muted-foreground` | `#a3a3a3` | metadata; in the player's bands over a picture, white at 64% (the same grey on black) |
 | `border` | white 16% | hairlines and row dividers |
 | `accent` | `#fff` / `#000` | menu highlight (inverts like focus) |
 | `radius` | `.25rem` | controls |
