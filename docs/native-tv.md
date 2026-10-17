@@ -120,7 +120,8 @@ primary verb and Up from its last shelf through each shelf and the hero to the
 current tab, Saved Details entry on Play and Right across its verbs, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
 the tab bar's scroll, Up and Back, repeated Home Back, five-point OK-to-adjust Volume, Where it plays'
-entry on its first device you can choose, Down to the next and Back to its button, Saved removal/Undo/order,
+entry on its first device you can choose, Down to the next and Back to its button, Down from a check past
+its Sync line (revealed by Sync… once the second output's sound joins) and from its fader onto it, Saved removal/Undo/order,
 a remote's Undo by Up past the tabs (Back leaves it, OK undoes and returns focus to the tab),
 retained favorite and Live TV actions, and a Remote that can't choose or open this device's
 capture on Sharing while its own pointer and keys still can (it drives the bundle's copy of
