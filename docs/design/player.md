@@ -91,11 +91,22 @@ and the responsive queue workspace; controls reuse shadcn components.
 
 A pointer has no Back key, so desktop and phones lead the top band with a Back
 arrow ("Back to {section}", or "Back to Remote" for a Remote's player): before
-the title over a video, and alone in the band over artwork, where the TV
-shows no top band. It returns to the page that opened the player, as Escape
-and a remote's Back do. A Remote's player keeps its TV's status beside it.
+the title over a video, and leading the band over artwork, where the TV
+shows no top band unless this device shares. It returns to the page that
+opened the player, as Escape and a remote's Back do. A Remote's player keeps
+its TV's status beside it.
 
 The player's transient Buffering status has its own row above the transport.
+
+## Stop sharing stays on screen
+
+While this device shares its screen or sound, the player's top band keeps
+"Sharing {screen}" and Stop sharing at its right, as the header does while
+browsing ([Live inputs](../live-inputs.md)): just before the clock over a
+video, and at the end of the band's row over artwork, where the TV then shows
+a top band too. Phones keep only Stop sharing, as in the header. While it
+shares, the bands don't hide on their own; a TV's Back still hides them, and
+OK shows them again.
 
 ## Up next is a deliberate list
 
