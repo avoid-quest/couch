@@ -104,7 +104,7 @@ sharing must be enabled for the pairing-dialog check. Save two videos for later
 to exercise the Home tile and asynchronous Details check. Reload the renderer before
 each run so the second Saved item’s Details query is cold; its check delays the
 real For later response by 800 ms. Run with the tab visible
-or a T3 recording active so Radix exit animations finish. Also save two radio
+or a T3 recording active so animation frames run (a removal moves focus in one). Also save two radio
 favorites, configure a local Live TV channel the second output can play (serve its
 stream with CORS), and pair a second online shared output for the favorite ordering/Undo
 and Live TV Queue/Play on checks. Queue skips a channel already anywhere in the queue,

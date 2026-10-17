@@ -110,7 +110,8 @@ or per-result request is needed.
 
 Source results
 pair artwork with available synopsis and episode metadata; collection
-headers contain their artwork instead of cropping covers. Missing artwork
+headers contain their artwork instead of cropping covers. Artwork fades in
+once it has loaded ([Motion](../design.md#motion)). Missing artwork
 keeps its frame as a hairline on the page's ground, with the title set in
 type sized to the frame (a container query) in muted ink, so it keeps a
 shelf's rhythm without reading as a picture; a collection shows a folder

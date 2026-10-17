@@ -117,7 +117,8 @@ own. Toasts sit at the top right ([Design](../design.md)). Transport details: [P
 ## Browsing stays grounded
 
 The header and scroll edges share the solid black page background. Native video alone clears
-its full-screen ancestors so the picture can show through.
+its full-screen ancestors so the picture can show through. A page fades in under the header as it
+arrives, which the player doesn't: its band grows from the now-playing bar ([Motion](../design.md#motion)).
 
 ## A picture you start opens the player
 
