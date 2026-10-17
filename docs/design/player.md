@@ -90,6 +90,16 @@ viewport at every interface size. Plain playback glyphs keep artwork central;
 Playback settings use Sheets. Stage CSS handles native video bounds
 and the responsive queue workspace; controls reuse shadcn components.
 
+Subtitles, the video's own text tracks, rise clear of the band while it shows
+and settle back as it hides, moving in step with its 0.2 s fade (at once with
+reduced motion). CSS moves the cue box
+(`video::-webkit-media-text-track-container`) up by the band's height,
+`--bottom-bar`, while the band is `data-player-band="shown"`; the cues keep the
+places their file gives them. Chromium (the TV and desktop apps) and WebKit
+expose that box; Firefox doesn't, so there subtitles stay put under the band.
+A cue placed at the top moves up too, where the top band would cover it
+anyway.
+
 ### The picture holds the keys
 
 On desktop and phones the player opens focused on its picture, as YouTube's

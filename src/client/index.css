@@ -138,6 +138,11 @@ html { view-transition-name: none; }
    the picture shows through the whole band. The top band mirrors the band. Their muted ink is the white ink made
    translucent: #a3a3a3 over black, lighter over a bright picture, so metadata stays legible on it. */
 .player-video-controls { --fade: 2.5rem; --scrim: transparent, rgb(0 0 0 / 6%) calc(var(--fade) * .2), rgb(0 0 0 / 19%) calc(var(--fade) * .4), rgb(0 0 0 / 36%) calc(var(--fade) * .6), rgb(0 0 0 / 49%) calc(var(--fade) * .8), rgb(0 0 0 / 55%) var(--fade), rgb(0 0 0 / 72%); --muted-foreground: rgb(255 255 255 / 64%); pointer-events: none; }
+/* The video's own subtitles rise clear of the band while it shows, and settle back as it hides. Chromium and WebKit
+   expose the cue box; Firefox doesn't and drops these rules, so there they stay put. */
+.player-video video::-webkit-media-text-track-container { transition: translate .2s ease-out; }
+.player-page:has(> [data-player-band="shown"]) video::-webkit-media-text-track-container { translate: 0 calc(-1 * var(--bottom-bar, 0px)); }
+@media (prefers-reduced-motion: reduce) { .player-video video::-webkit-media-text-track-container { transition: none; } }
 .player-band.player-video-controls { padding-top: var(--fade); background: linear-gradient(to bottom, var(--scrim)); }
 .player-top.player-video-controls { padding-bottom: var(--fade); background: linear-gradient(to top, var(--scrim)); }
 .player-video-controls > * { pointer-events: auto; }
