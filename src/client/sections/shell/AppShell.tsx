@@ -335,7 +335,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {onPlayer && error && <div className="window-controls-inset fixed inset-x-0 top-0 z-40 bg-background px-(--gutter) py-3"><ErrorAlert error={error} onDismiss={() => setError(null)} /></div>}
           {!paired ? <PairingPage /> : <>
             {!tvPresentation && section !== "Remote" && <KeyboardShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
-            <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-6 pb-12")}>{children}</div>
+            {/* A page fades in as it arrives: a new route mounts a new root, which starts transparent. A query or a page of its
+                own (Settings' pages, Saved's tabs) keeps the root and doesn't fade. The player arrives as the band grows. */}
+            <div className={cn("min-w-0 flex-1", !onPlayer && "px-(--gutter) pt-6 pb-12 motion-safe:*:transition-opacity motion-safe:*:duration-200 motion-safe:*:starting:opacity-0")}>{children}</div>
             <div ref={footer} className={cn("app-footer sticky bottom-0 z-20", onPlayer && "hidden")}>
               {nowPlaying && state && <NowPlayingBar state={state} connected={connected} run={run} onOpen={shell.openPlayer} />}
               <SectionTabs bar className="hidden border-t bg-background touch:flex tv:hidden" />
