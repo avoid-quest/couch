@@ -116,7 +116,7 @@ export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output =>
 
 /**
  * One "Playing on {name}" toast when a play this window started lands on another Device: its
- * picture and sound are elsewhere. A fixed id keeps it one toast when both the command and Play on announce it.
+ * picture and sound are elsewhere. Its kind keeps it one toast when both the command and Play on announce it.
  */
 export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
   const name = playingOn(state, target, deviceId());
