@@ -73,7 +73,7 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   const max = canSeek ? playbackClock.duration! : length;
   const disabled = !transportReady || !canSeek;
   // Touch has no hover; the TV's remote has none either (tv:hidden).
-  const track = (event: PointerEvent<HTMLDivElement>) => { if (event.pointerType === "touch") return; const { left, width } = event.currentTarget.getBoundingClientRect(); setHover(Math.min(1, Math.max(0, (event.clientX - left) / width))); };
+  const track = (event: PointerEvent<HTMLDivElement>) => { const { left, width } = event.currentTarget.getBoundingClientRect(); if (event.pointerType === "touch" || !width) return; setHover(Math.min(1, Math.max(0, (event.clientX - left) / width))); };
   return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
     <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled}
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
