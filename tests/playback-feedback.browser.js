@@ -236,7 +236,7 @@
       await openItem("saved-row");
       await quiet();
       await menu(savedItem.title, "Remove");
-      await wait(() => !document.querySelector(`[data-saved-details='${savedItem.id}']`) && toasts().some(text => text.includes(`Removed ${savedItem.title} from Saved.`) && text.includes("Undo")), "actual saved removal and Undo notice");
+      await wait(() => !document.querySelector(`[data-saved-details='${savedItem.id}']`) && toasts().some(text => text.includes(`Removed ${savedItem.title} from Library.`) && text.includes("Undo")), "actual saved removal and Undo notice");
       check("For later Remove preserves its notice and stays free of Queued", !toasts().some(text => text.startsWith("Queued")));
       click("[data-sonner-toast] button", "Undo");
       await wait(() => document.querySelector(`[data-saved-details='${savedItem.id}']`), "actual restored saved row");

@@ -9,7 +9,6 @@ import { collectionPageSize } from "@/collection-pagination";
 import { BrowsePagination } from "@/components/BrowsePagination";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { PageHeader } from "@/components/PageHeader";
 import { playOnQuery, usePlayOn } from "@/components/PlayOn";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -72,10 +71,10 @@ export function BrowseLiveTv() {
         { label: "Queue", disabled: !connected || action.isPending, run: () => run(false) },
       ]} />} />;
   };
-  return <section className="min-w-0 space-y-6" aria-label="Browse Live TV">
-    <PageHeader title="Live TV" as="h2" className="mb-0" />
+  return <section className="min-w-0 space-y-6" aria-labelledby="channels-heading">
+    <h2 id="channels-heading" className="mb-3 text-base font-medium">Channels</h2>
     {!connected && <p className="text-sm text-muted-foreground" role="status">{offline(state?.installationName)}</p>}
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><h2 id="live-tv-channels" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{guide.isLoading ? <><Spinner className="size-3.5" /><span role="status">Loading channels…</span></> : <>{total} {total === 1 ? "channel" : "channels"}</>}</h2>
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"><p id="live-tv-channels" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{guide.isLoading ? <><Spinner className="size-3.5" /><span role="status">Loading channels…</span></> : <>{total} {total === 1 ? "channel" : "channels"}</>}</p>
       <div className="flex flex-wrap items-center gap-4">
         {!!guide.data?.groups.length && <Select value={group || allGroups} onValueChange={value => go({ page: 1, group: value === allGroups ? "" : value }, true)}>
           <SelectTrigger aria-label="Group" className="h-8 w-auto border-0 bg-transparent px-0 text-muted-foreground shadow-none dark:bg-transparent"><SelectValue /></SelectTrigger>

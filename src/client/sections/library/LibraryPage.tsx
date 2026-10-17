@@ -1,5 +1,5 @@
 import { getRouteApi } from "@tanstack/react-router";
-import { SavedSection } from "./SavedSection";
+import { LibrarySections } from "./LibrarySections";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 
@@ -12,7 +12,7 @@ export function LibraryPage() {
   const navigate = route.useNavigate();
   return (
     <section data-page="Library">
-      <SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} tab={tab}
+      <LibrarySections state={state} credentials={credentials} connected={connected} canPlay={available} tab={tab}
         onTabChange={next => void navigate({ search: next === "later" ? {} : { tab: next }, replace: true })}
         onFind={() => changeSection("Search")} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} />
     </section>
