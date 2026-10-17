@@ -133,9 +133,16 @@ html { view-transition-name: none; }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
 .player-band { position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
-/* Video controls shade the picture only as dark as their text needs, easing in over --fade so no edge looks like a
-   crop; the top band mirrors the band. */
-.player-video-controls { --fade: 3.75rem; --scrim: transparent, rgb(0 0 0 / 10%) calc(var(--fade) * .25), rgb(0 0 0 / 35%) calc(var(--fade) * .5), rgb(0 0 0 / 70%) calc(var(--fade) * .8), rgb(0 0 0 / 88%) var(--fade), rgb(0 0 0 / 96%); pointer-events: none; }
+/* Video controls are an overlay on the picture: one ramp, eased so it has no edge that reads as a crop, rises over
+   --fade to 55% where their text starts (white text keeps 5:1 on a white picture) and to 72% at the screen's edge, so
+   the picture shows through the whole band. The top band mirrors the band. Their muted ink is the white ink made
+   translucent, 85% white: 4.5:1 over the scrim on a white frame, and still a step below the white ink. */
+.player-video-controls { --fade: 2.5rem; --scrim: transparent, rgb(0 0 0 / 7%) calc(var(--fade) * .2), rgb(0 0 0 / 21%) calc(var(--fade) * .4), rgb(0 0 0 / 39%) calc(var(--fade) * .6), rgb(0 0 0 / 53%) calc(var(--fade) * .8), rgb(0 0 0 / 60%) var(--fade), rgb(0 0 0 / 72%); --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; }
+/* The video's own subtitles rise clear of the band while it shows, and settle back as it hides. Chromium and WebKit
+   expose the cue box; Firefox doesn't and drops these rules, so there they stay put. */
+.player-video video::-webkit-media-text-track-container { transition: translate .2s ease-out; }
+.player-page:has(> [data-player-band="shown"]) video::-webkit-media-text-track-container { translate: 0 calc(-1 * var(--bottom-bar, 0px)); }
+@media (prefers-reduced-motion: reduce) { .player-video video::-webkit-media-text-track-container { transition: none; } }
 .player-band.player-video-controls { padding-top: var(--fade); background: linear-gradient(to bottom, var(--scrim)); }
 .player-top.player-video-controls { padding-bottom: var(--fade); background: linear-gradient(to top, var(--scrim)); }
 .player-video-controls > * { pointer-events: auto; }
@@ -195,7 +202,7 @@ html { view-transition-name: none; }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
   .player-header { padding-block: .25rem; }
   [data-player-band] { padding-block: .25rem; }
-  .player-video-controls { --fade: 1.75rem; }
+  .player-video-controls { --fade: 1.25rem; }
   .player-control-row { column-gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
   [data-player-audio-copy] :is(h1, [data-player-ends]) { font-size: 1.125rem; -webkit-line-clamp: 1; }

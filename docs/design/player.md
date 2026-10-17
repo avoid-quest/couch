@@ -37,6 +37,15 @@ time), so the band's timeline keeps only its position and the time remaining
 ("−3:24"), and live media leaves its slot empty. `useEndTime` is that line,
 in clock time.
 
+A pointer hovering a timeline (the band's, the now-playing bar's or the
+Remote's) reads the time under it in a small label above the bar, in the
+timeline's own format ("1:02:15"), black like the Buffering status. It follows
+the pointer, and through a drag too, centred over it and held inside the bar
+at either end; it goes when the pointer leaves. Touch and the TV's remote have
+no hover, so they never show it, and live media without a timeline has none.
+It is the shadcn Slider as it is plus a label driven by `pointermove`: the
+catalog has no slider with a hover readout.
+
 Volume across several Devices: [Where it plays](where-it-plays.md#volume).
 
 ### Layout
@@ -78,14 +87,29 @@ of its two rows sizes itself, so a narrow screen gives the title all but the
 clock. Paused shows a large Pause glyph and "Paused" over the picture, which
 reads from the sofa.
 
-Both bands shade the picture with one transparent black scrim, mirrored: it
-eases in over `--fade` (3.75rem, 1.75rem on short screens) to 88% where their
-text starts, so it is only as dark as that text needs and has no edge that
-reads as a crop. It preserves the picture bounds. Hidden bands are inert and
+Both bands are an overlay on the picture: one transparent black scrim,
+mirrored, eased so it has no edge that reads as a crop. It rises over `--fade`
+(2.5rem, 1.25rem on short screens) to 60% where their text starts, and to 72%
+at the screen's edge, so the picture shows through the whole band. Their muted
+ink is white at 85%: on a white picture both inks keep 4.5:1 over the scrim,
+and the muted one stays a step below the white. The
+scrim preserves the picture bounds. Hidden bands are inert and
 let pointer input reach the video. The player fits the
 viewport at every interface size. Plain playback glyphs keep artwork central;
 Playback settings use Sheets. Stage CSS handles native video bounds
 and the responsive queue workspace; controls reuse shadcn components.
+
+Subtitles, the video's own text tracks, rise clear of the band while it shows
+and settle back as it hides, moving in step with its 0.2 s fade (at once with
+reduced motion). CSS moves the cue box
+(`video::-webkit-media-text-track-container`) up by the band's height,
+`--bottom-bar`, while the band is `data-player-band="shown"`; the cues keep the
+places their file gives them. Chromium (the TV and desktop apps) and WebKit
+expose that box; Firefox doesn't, so there subtitles stay put under the band.
+A cue placed at the top moves up too, where the top band would cover it
+anyway. Subtitles burnt into the picture, as RaiPlay's for dialect are, are
+part of it and stay under the band, which the lighter scrim lets them read
+through.
 
 ### The picture holds the keys
 
