@@ -107,7 +107,9 @@ reduced motion). CSS moves the cue box
 places their file gives them. Chromium (the TV and desktop apps) and WebKit
 expose that box; Firefox doesn't, so there subtitles stay put under the band.
 A cue placed at the top moves up too, where the top band would cover it
-anyway.
+anyway. Subtitles burnt into the picture, as RaiPlay's for dialect are, are
+part of it and stay under the band, which the lighter scrim lets them read
+through.
 
 ### The picture holds the keys
 
