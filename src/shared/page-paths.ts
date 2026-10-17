@@ -1,11 +1,11 @@
 import { settingsAliases, settingsPageForPath, settingsPages } from "./settings-pages";
 
-// The sections, the player and Where it plays' overview. Sources are filters inside Search, not places.
+// The sections and the player. Sources are filters inside Search, not places.
 export const pagePaths: Record<string, string> = {
-  Home: "/", Now: "/now", Live: "/live", Search: "/search", Library: "/library", Settings: "/settings", Remote: "/remote", "Where it plays": "/where-it-plays",
+  Home: "/", Now: "/now", Live: "/live", Search: "/search", Library: "/library", Settings: "/settings", Remote: "/remote",
 };
-// Earlier sections, served so bookmarks reach their redirects (routes/find.tsx, routes/saved.tsx).
-const earlierPaths = ["/find", "/saved"];
+// Earlier pages, served so bookmarks reach their redirects (routes/find.tsx, routes/saved.tsx, routes/where-it-plays.tsx).
+const earlierPaths = ["/find", "/saved", "/where-it-plays"];
 
 export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...earlierPaths, ...Object.values(settingsPages).map(page => page.path), ...Object.keys(settingsAliases)];
 

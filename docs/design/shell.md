@@ -16,13 +16,12 @@ URL carries it as `from` (`home`, `live`, `search` or `library`), so the tab,
 the breadcrumb and a refresh keep it, and moving between details passes it
 on. A row's or tile's link carries it too, so a new tab opens in the same
 section. Without one, a station's page belongs to Live and the rest to Search.
-`/now` is the player, and
-`/where-it-plays` is Where it plays' overview, which opens from the picker
-and is not a tab ([Where it plays](where-it-plays.md#the-overview)).
+`/now` is the player. Where it plays has no page: it is the picker, a Sheet
+([Where it plays](where-it-plays.md#the-picker)).
 Earlier addresses redirect and keep their query, as `settingsAliases` does
 for Settings: `/find` opens `/search`, `/find?browse=radio` and
-`/find?browse=live-tv` open `/live`, and `/saved` opens `/library` on the
-same tab. Core serves every path in `src/shared/page-paths.ts`, the earlier
+`/find?browse=live-tv` open `/live`, `/saved` opens `/library` on the
+same tab, and `/where-it-plays`, its former overview, opens Home. Core serves every path in `src/shared/page-paths.ts`, the earlier
 ones included, so bookmarks reach their redirects.
 
 Radio and Live TV share Live's address, so Live TV's page and filter are
@@ -78,9 +77,8 @@ The bar then carries the band's controls in its order: Play/Pause, Stop and
 Next, the timeline or "Live", Volume, Where it plays and Up next. Phones, for
 their width and reach, keep Play/Pause and Where it plays; the player keeps
 the rest. It
-hides on the player, on Remote and on Where it plays' overview, which shows
-the same Playback, and grows into the player band (`couch-player-band`) and
-back.
+hides on the player and on Remote, and grows into the player band
+(`couch-player-band`) and back.
 
 The bar and the phone tab bar share the shell's footer, whose height is
 `--bottom-bar`: scroll padding clears it, and the player band publishes its
