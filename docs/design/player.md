@@ -78,10 +78,13 @@ of its two rows sizes itself, so a narrow screen gives the title all but the
 clock. Paused shows a large Pause glyph and "Paused" over the picture, which
 reads from the sofa.
 
-Both bands shade the picture with one transparent black scrim, mirrored: it
-eases in over `--fade` (3.75rem, 1.75rem on short screens) to 88% where their
-text starts, so it is only as dark as that text needs and has no edge that
-reads as a crop. It preserves the picture bounds. Hidden bands are inert and
+Both bands are an overlay on the picture: one transparent black scrim,
+mirrored, eased so it has no edge that reads as a crop. It rises over `--fade`
+(2.5rem, 1.25rem on short screens) to 55% where their text starts, enough for
+white text on a white picture, and to 72% at the screen's edge, so the picture
+shows through the whole band. Their muted ink is the white ink made
+translucent: the same #a3a3a3 over black, lighter over a bright picture. The
+scrim preserves the picture bounds. Hidden bands are inert and
 let pointer input reach the video. The player fits the
 viewport at every interface size. Plain playback glyphs keep artwork central;
 Playback settings use Sheets. Stage CSS handles native video bounds
