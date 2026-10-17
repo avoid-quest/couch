@@ -2,7 +2,8 @@ import { Fragment } from "react";
 import { Link } from "@tanstack/react-router";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { collectionLinks } from "@/collection-target";
-import { collectionLocation } from "@/detail-navigation";
+import { collectionLocation, keepSection } from "@/detail-navigation";
+import { useShell } from "@/sections/shell/shell-context";
 import type { MediaCollection } from "../../shared/media";
 import { providerForUrl, type ProviderId } from "../../shared/providers";
 import { providerNames } from "@/sections/find/SearchOnlineResults";
@@ -10,6 +11,7 @@ import { providerNames } from "@/sections/find/SearchOnlineResults";
 const linkClassName = "inline-flex min-h-11 items-center px-1";
 
 export function ContentBreadcrumb({ title, collection, provider, radio = false, compact = false }: { title: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean; compact?: boolean }) {
+  const { section, sectionUrl } = useShell();
   const source = provider ?? (collection ? providerForUrl(collection.url) : undefined);
   const collections = collectionLinks(collection);
   // The player already shows the title; keep its containing destinations beside the Couch switch.
@@ -27,11 +29,11 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false, 
   }
   return <Breadcrumb aria-label="Content path">
     <BreadcrumbList className="text-sm">
-      {/* A station belongs to Live, everything else to Search. */}
-      <BreadcrumbItem><BreadcrumbLink asChild><Link to={radio ? "/live" : "/search"} className={linkClassName}>{radio ? "Live" : "Search"}</Link></BreadcrumbLink></BreadcrumbItem>
-      {!radio && source && (title !== providerNames[source] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={collectionLocation({ provider: source, url: "" })} className={linkClassName}>{providerNames[source]}</Link></BreadcrumbLink></BreadcrumbItem></>}
+      {/* It starts at the section the page opened in (the shell's tab): a station's at Live, otherwise Search. */}
+      <BreadcrumbItem><BreadcrumbLink asChild><Link to={sectionUrl(section)} className={linkClassName}>{section}</Link></BreadcrumbLink></BreadcrumbItem>
+      {!radio && source && (title !== providerNames[source] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={keepSection(collectionLocation({ provider: source, url: "" }), section)} className={linkClassName}>{providerNames[source]}</Link></BreadcrumbLink></BreadcrumbItem></>}
       {collections.map(item => <Fragment key={item.url}>
-        <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={collectionLocation(item)} className={`${linkClassName} break-words`}>{item.title}</Link></BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbLink asChild><Link to={keepSection(collectionLocation(item), section)} className={`${linkClassName} break-words`}>{item.title}</Link></BreadcrumbLink></BreadcrumbItem>
       </Fragment>)}
       <BreadcrumbSeparator /><BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate">{title}</BreadcrumbPage></BreadcrumbItem>
     </BreadcrumbList>

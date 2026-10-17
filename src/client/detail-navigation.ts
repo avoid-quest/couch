@@ -4,6 +4,7 @@ import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { QueueEntry } from "../shared/protocol";
 import { isTvPresentation } from "./session/presentation";
 import { focusPageControl } from "./navigation";
+import { detailFrom, sectionForPath } from "../shared/page-paths";
 
 type FocusTarget = { selector: string; index: number };
 type PageOpener = { href: string; index: number };
@@ -14,6 +15,15 @@ declare module "@tanstack/react-router" {
 export const itemLocation = (kind: "history" | "saved" | "radio" | "queue", id: string) => `/item${defaultStringifySearch({ kind, id })}`;
 export const collectionLocation = (item: Pick<ProviderItem, "provider" | "url" | "collection">, search: { cursors?: string[]; page?: number; filter?: string } = {}) => `/collection${defaultStringifySearch({ provider: item.provider, url: item.url, ...(item.collection ? { context: item.collection } : {}),
   ...(search.cursors?.length ? { cursors: search.cursors } : {}), ...(search.page && search.page > 1 ? { page: search.page } : {}), ...(search.filter ? { filter: search.filter } : {}) })}`;
+
+/** An item or collection page's address, carrying the section it opens in (`from`) unless it already has one. */
+export function keepSection(href: string, section: string | undefined) {
+  const from = detailFrom(section);
+  return from && /^\/(?:item|collection)\?/.test(href) && !/[?&]from=/.test(href) ? `${href}&from=${from}` : href;
+}
+
+/** A detail link as rendered: a new tab (Ctrl/Cmd-click, middle-click) skips open(), so the link itself keeps the section. */
+export const detailHref = (href: string) => typeof location === "undefined" ? href : keepSection(href, sectionForPath(location.pathname, location.search));
 
 export function queueItemLocation(entry: Pick<QueueEntry, "id" | "source" | "collection">) {
   const url = entry.source.replace(/^web:/, ""), provider = providerForUrl(url);
@@ -48,7 +58,8 @@ export function useDetailNavigation() {
         router.history.replace(location.href, { ...location.state, detailFocus: focus });
         router.history.flush();
       }
-      void router.navigate({ href, viewTransition, state: { pageOpener: { href: location.href, index: location.state.__TSR_index } } });
+      // An item or collection page keeps the section it was opened from: its tab, breadcrumb and Back's fallback.
+      void router.navigate({ href: keepSection(href, sectionForPath(location.pathname, location.searchStr)), viewTransition, state: { pageOpener: { href: location.href, index: location.state.__TSR_index } } });
     },
     back(fallback = "/search") {
       if (!router) return;

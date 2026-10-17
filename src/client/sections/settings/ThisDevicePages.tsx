@@ -67,8 +67,8 @@ export function ViewingPage() {
 export function HomePage() {
   const layout = useHomeRows();
   return <SettingsLayout section="home">
-    <SettingsSection description="Choose the rows and their order on this device. Empty rows stay hidden.">
-      <ol aria-label="Home rows">
+    <SettingsSection description="Choose Home's shelves and their order on this device. An empty shelf stays hidden.">
+      <ol aria-label="Home shelves">
         {layout.rows.map((row, index) => <li key={row.id}>
           <SettingsRow label={homeRowLabels[row.id]} className="[&_label]:touch:min-h-11 [&_label]:items-center" htmlFor={`home-row-${row.id}`}>
             <Switch id={`home-row-${row.id}`} checked={row.shown} onCheckedChange={checked => layout.toggle(row.id, checked)} />

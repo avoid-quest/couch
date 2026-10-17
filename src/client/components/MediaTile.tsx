@@ -2,6 +2,7 @@ import type { ComponentProps, MouseEventHandler, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { cn } from "@/lib/utils";
+import { detailHref } from "@/detail-navigation";
 
 export const tileAspect = { poster: "aspect-[2/3]", square: "aspect-square", video: "aspect-video" } as const;
 export type TileShape = keyof typeof tileAspect;
@@ -42,6 +43,6 @@ export function MediaTile({ title, meta, thumbnail, shape, children, className, 
     }
     onClick?.(event);
   }}>
-    {href && !disabled ? <a href={href}>{body}</a> : body}
+    {href && !disabled ? <a href={detailHref(href)}>{body}</a> : body}
   </Button>;
 }

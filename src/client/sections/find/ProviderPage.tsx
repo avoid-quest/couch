@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
-import { collectionLocation } from "@/detail-navigation";
+import { collectionLocation, keepSection } from "@/detail-navigation";
 import { searchLocation } from "@/search";
 import { SearchBar } from "@/components/SearchBar";
 import { useShell } from "@/sections/shell/AppShell";
@@ -34,7 +34,7 @@ export function ProviderPage() {
 }
 
 function CollectionPage({ provider, url, search }: { provider: ProviderId; url: string; search: ReturnType<typeof readCollectionSearch> }) {
-  const { credentials, available, openProvider, current, playHistory } = useShell();
+  const { credentials, available, openProvider, current, playHistory, section } = useShell();
   const { connected, run, videoQualityPreference } = useSessionGate();
   const navigate = useNavigate();
   const cursor = search.cursors.at(-1);
@@ -94,28 +94,29 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h2 id="collection-items" tabIndex={-1} className="flex items-center gap-2 text-sm text-muted-foreground outline-none">{summary?.loading ? <><Spinner className="size-3.5" /><span role="status">Loading items…</span></> : <>{hits.length} {noun.toLocaleLowerCase().replace(/s$/, hits.length === 1 ? "" : "s")}{paging.remote && " on this page"}</>}</h2>
         <div className="flex flex-wrap items-center gap-4">
-          {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: "https://www.twitch.tv/directory" })}>Categories</Link></Button>}
+          {provider === "twitch" && !url && <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: "https://www.twitch.tv/directory" }), section)}>Categories</Link></Button>}
           {provider === "movies123" && posterCatalogue && <>
-            <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` })}>Movies</Link></Button>
-            <Button variant="ghost" asChild><Link to={collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` })}>TV series</Link></Button>
+            <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/movies/` }), section)}>Movies</Link></Button>
+            <Button variant="ghost" asChild><Link to={keepSection(collectionLocation({ provider, url: `${url ? new URL(url).origin : movies123Origin}/tv-series/` }), section)}>TV series</Link></Button>
           </>}
           <Input type="search" aria-label={paging.remote ? "Filter this page" : `Filter ${noun.toLocaleLowerCase()}`} placeholder="Filter" className="h-8 w-32 border-0 bg-transparent px-0 shadow-none dark:bg-transparent sm:w-40" value={search.filter}
             onChange={event => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: event.target.value }), replace: true, resetScroll: false })} />
           {(paging.remote || (paging.pages ?? 1) > 1) && pager}
         </div>
       </div>
+      {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
       {posterCatalogue ? <>
         <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="hidden list-none grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-4 gap-y-2 p-0 md:grid">
-          {hits.slice(paging.start, paging.end).map(hit => {
+          {hits.slice(paging.start, paging.end).map((hit, index) => {
             const item = page?.items.find(item => item.url === hit.url);
             return item && <li key={hit.id} className="min-w-0">
-              <MediaTile title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} shape="poster" className="[&_[data-tile-art]]:h-36" aria-label={`Open ${hit.title}`} data-hit-id={hit.id}
+              <MediaTile data-page-first={index === 0 || undefined} title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} shape="poster" className="[&_[data-tile-art]]:h-36" aria-label={`Open ${hit.title}`} data-hit-id={hit.id}
                 href={collectionLocation(item)} onClick={() => openProvider(item)} />
             </li>;
           })}
         </ul>
-        <div className="md:hidden"><HitList hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} /></div>
-      </> : <HitList hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
+        <div className="md:hidden"><HitList pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} /></div>
+      </> : <HitList pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: "" }), replace: true })}>Clear filter</Button>}</Empty>}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
@@ -142,6 +143,6 @@ function EmptyRoot({ provider }: { provider: ProviderId }) {
   const open = () => { const query = value.trim(); if (query) void navigate({ href: providerForUrl(query) === provider ? collectionLocation({ provider, url: query }) : searchLocation({ query, source: name }) }); };
   return <Empty className="py-0">
     <EmptyHeader><EmptyDescription>{provider === "youtube" ? "Search YouTube or paste a channel, playlist or video link." : `Search ${name} or paste a ${name} link.`}</EmptyDescription></EmptyHeader>
-    <EmptyContent><SearchBar id="collection-search" className="w-full" ariaLabel={`Search ${name}`} value={value} onValueChange={setValue} onSubmit={open} onClear={() => setValue("")} /></EmptyContent>
+    <EmptyContent><SearchBar id="collection-search" pageFirst className="w-full" ariaLabel={`Search ${name}`} value={value} onValueChange={setValue} onSubmit={open} onClear={() => setValue("")} /></EmptyContent>
   </Empty>;
 }

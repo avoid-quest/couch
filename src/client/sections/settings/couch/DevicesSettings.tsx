@@ -51,16 +51,15 @@ export function DevicesSettings({ credentials, connected, urls, identity, remote
     if (!claiming.isPending) claiming.mutate(code.trim());
   }
 
-  // Pairing, then the paired Devices (like Bluetooth), then the rare admin handover.
+  // Pairing, then the paired Devices (like Bluetooth), then the rare admin handover. Pairing heads the list's rows:
+  // an untitled section of its own would leave a gap that reads as an empty row.
   return <>
-    <SettingsSection>
+    <SettingsSection data-devices>
       <SettingsRow label="New device" description={!manager ? "Only an admin can pair devices." : !remoteControlEnabled ? "Turn on Share on network in Network first."
         : `Show a code to scan or type on the new device.${host && !administratorClaimed && paired === false ? " The first device you pair becomes the admin." : ""}`}>
         {manager && <Button ref={pairingRef} data-page-first variant="outline" disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a device</Button>}
       </SettingsRow>
       {manager && <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen && remoteControlEnabled} onOpenChange={setPairingOpen} openerRef={pairingRef} />}
-    </SettingsSection>
-    <SettingsSection data-devices>
       {devices.isSuccess && !host && manager && !devices.data.some(device => device.role === "host") && <SettingsRow label={hostName} description="Runs this Couch">
         <RenameCouch credentials={credentials} connected={connected} name={hostName} onRenamed={refreshDevices} />
       </SettingsRow>}
