@@ -209,7 +209,8 @@ export async function createHub(options: HubOptions) {
     choosing?: number; held?: Output; entered?: () => void;
     // inSync: its live inputs play buffered in its Sendspin group when they span Devices (docs/adr/0001).
     // bufferFailure: the buffered stream its relayed receivers waited for failed during this item.
-    inSync?: boolean; bufferFailure?: { playbackId: string; error: string } };
+    // silenced: the levels its Volume last brought to 0, so raising it again restores their proportion.
+    inSync?: boolean; bufferFailure?: { playbackId: string; error: string }; silenced?: Map<string, number> };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
@@ -849,12 +850,14 @@ export async function createHub(options: HubOptions) {
     broadcast();
   };
   // Several Devices move together: the loudest reaches `volume`, the others keep their proportion.
-  // In a Playback they move from what they play at, its trim included, and keep their proportion even from a trim at 0.
+  // In a Playback they move from what they play at, its trim included, and keep their proportion even from a trim at 0,
+  // or from a Volume at 0: that remembers the levels it silenced, since the 0 it gives each Device holds no proportion.
   const setVolume = async (deviceIds: string[], volume: number, authorize: () => void, actor: string, playback?: Playback) => {
-    const at = deviceIds.map(id => playsAt(playback, id)), own = deviceIds.map(id => soundOf(id).volume);
-    const levels = Math.max(0, ...at) ? at : own, loudest = Math.max(0, ...levels);
+    const at = deviceIds.map(id => playsAt(playback, id)), own = deviceIds.map(id => soundOf(id).volume), silenced = deviceIds.map(id => playback?.silenced?.get(id) ?? 0);
+    const levels = [at, own, silenced].find(levels => Math.max(0, ...levels)) ?? at, loudest = Math.max(0, ...levels);
     const volumes = levels.map(level => loudest ? Math.round(level * volume / loudest) : volume);
     for (const [index, id] of deviceIds.entries()) await setSound(id, { volume: volumes[index] }, authorize, actor);
+    if (playback && !volume && loudest) playback.silenced = new Map(deviceIds.map((id, index) => [id, levels[index]!]));
   };
   // All changes only sound the actor may control; private speakers retain their chosen attenuation.
   // Outputs and their consent are runtime state. Restart restores queues and All without outputs.

@@ -60,7 +60,9 @@ The first row is the band's Volume (`PlaybackVolume`, Mute and its fader):
 one level for the whole Playback, with each device's fader below it, its
 number in the same column. It shows the loudest level the Playback's sound
 plays at and moves the sound you may control so the loudest reaches it,
-keeping their proportion; its Mute mutes them all, and so does M.
+keeping their proportion. At 0 each device's fader reads 0, and the Volume
+remembers their proportion, so raising it again restores it rather than
+levelling them. Its Mute mutes them all, and so does M.
 
 Couch had two group levels: this Volume, which scaled device levels, and
 All, a stored trim that kept them. The Volume stays because it needs fewer
