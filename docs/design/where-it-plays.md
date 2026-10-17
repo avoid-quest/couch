@@ -58,11 +58,15 @@ to finish.", is its one hint line; elsewhere it has none.
 
 The first row is the band's Volume (`PlaybackVolume`, Mute and its fader):
 one level for the whole Playback, with each device's fader below it, its
-number in the same column. It shows the loudest level the Playback's sound
-plays at and moves the sound you may control so the loudest reaches it,
-keeping their proportion. At 0 each device's fader reads 0, and the Volume
-remembers their proportion, so raising it again restores it rather than
-levelling them. Its Mute mutes them all, and so does M.
+number in the same column. It acts on the Playback's sound that you may
+control: it shows the loudest level that sound plays at and moves it so the
+loudest reaches the new level, keeping their proportion. Another device's
+private sound neither moves nor counts, so it never holds the Volume above
+where you set it; with only private sound, the Volume shows its level and
+can't change it. At 0 each device's fader reads 0, and the Volume remembers
+their proportion, so raising it again restores it rather than levelling
+them. Its Mute mutes them all and reads muted when they all are, and so
+does M.
 
 Couch had two group levels: this Volume, which scaled device levels, and
 All, a stored trim that kept them. The Volume stays because it needs fewer

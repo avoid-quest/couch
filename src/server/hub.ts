@@ -382,6 +382,8 @@ export async function createHub(options: HubOptions) {
   const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(playback, output) }] : []);
   // The Devices a volume without a Device acts on: those in the Playback's sound, else the window's own.
   const sounding = (playback: Playback | undefined, deviceId: string) => { const ids = playback?.outputs.flatMap(output => output.sound ? [output.deviceId] : []) ?? []; return ids.length ? ids : [deviceId]; };
+  // Of those, the sound an actor's Volume shows and moves: what its Device may control, as outputFor grants it.
+  const controlled = (playback: Playback | undefined, actor: string) => sounding(playback, selected(actor)).filter(id => id === actor || sharingOf(id).audio);
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
   const deliver = (playback: Playback, command: PlaybackCommand) => {
     if (mpvPlayback === playback) mpv.send(command);
@@ -949,9 +951,10 @@ export async function createHub(options: HubOptions) {
     const delays = (playback: Playback | undefined) => (playback?.outputs ?? []).map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback!); return { ...output, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
-      const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket));
-      // The one Volume: the loudest level the Playback's sound plays at, kept while muted like each Device's fader.
-      const volume = Math.round(Math.max(0, ...sounding(playback, device).map(id => playsAt(playback, id)))), view = `${playback?.id}:${device}:${volume}`;
+      const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket)), moves = controlled(playback, deviceOf(socket));
+      // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
+      // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
+      const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => playsAt(playback, id)))), view = `${playback?.id}:${device}:${volume}`;
       if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
@@ -1794,7 +1797,7 @@ export async function createHub(options: HubOptions) {
             }
           } else if (action.type === "volume" || action.type === "mute") {
             // Without a Device, the group changes only the speakers this device may control.
-            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : sounding(target, selected(deviceId)).filter(id => outputFor(id, deviceId).sound);
+            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : controlled(target, deviceId);
             const inSound = (id: string) => !!target?.outputs.some(output => output.deviceId === id && output.sound);
             if (action.type === "volume" && !action.deviceId) {
               // The one Volume: the loudest sound you may control reaches it, and a trim older clients set (All) folds

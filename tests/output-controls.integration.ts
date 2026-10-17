@@ -174,3 +174,26 @@ test("Where it plays' one Volume is the band's, and moves the actor's private se
     assert.equal(control(tree, "All trim"), undefined);
   } finally { await f.close(); }
 });
+
+test("the one Volume shows the sound it may move, so another device's louder private sound never holds it back", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.actor, hostId, "Mix");
+    await f.actor.command({ type: "output", deviceId: hostId, level: 40 });
+    // Other adds its own sound, private to the actor, at 80.
+    await f.other.command({ type: "output", deviceId: otherId, level: 80 });
+    await until(() => f.actor.state.outputs?.some(output => output.deviceId === otherId && output.sound) === true);
+    const level = (id: string) => f.actor.state.devices?.find(device => device.id === id)?.volume;
+    assert.equal(f.actor.state.player.volume, 40);
+    assert.equal(f.other.state.player.volume, 80);
+    let accepted: Promise<boolean> | undefined;
+    const volume = control(WhereItPlays({ state: f.actor.state, connected: true, run: action => accepted = f.actor.command(action).then(result => result.ok) }), "Volume");
+    assert.equal((volume as { value?: number }).value, 40);
+    void volume!.onCommit!(50);
+    assert.equal(await accepted, true);
+    assert.deepEqual([f.actor.state.player.volume, level(hostId), level(otherId)], [50, 50, 80]);
+    // With only private sound left, it shows the level that plays, which it can't change.
+    await f.actor.command({ type: "output", deviceId: hostId, level: 0 });
+    assert.equal(f.actor.state.player.volume, 80);
+  } finally { await f.close(); }
+});
