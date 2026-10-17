@@ -19,6 +19,7 @@ import { useSessionGate } from "@/session/session-context";
 import { renderInto } from "@/session/renderer";
 import { playsOn, showsPicture } from "@/session/device-id";
 import { WhereItPlays } from "@/sections/shell/Outputs";
+import { LiveSharingStatus } from "@/sections/shell/LiveSharingStatus";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
 import { isRadio } from "../../../shared/radio";
@@ -80,6 +81,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const artworkStage = audioOnly || !picture;
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   const sharing = !!localLiveSourceId;
+  // While this device shares, the bands stay up, so the top band's Stop sharing stays on screen.
   const autoHide = playing && !artworkStage && !sharing;
   useBottomBar(band, !!current && shown);
   useEffect(() => { setPanelState(null); }, [active, player?.playbackId]);
@@ -195,17 +197,18 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
     </div>
     {/* The top band shows and hides with the band. Over a video it reads as one board line: the title and subtitle at the
-        left, the clock and the end time at the right. Without a video only desktop and phones show it, for Back and a
-        Remote's TV status. */}
-    <div ref={topBand} data-player-top={shown ? "shown" : "hidden"} inert={!shown} hidden={!osd && !back} className={cn("player-top absolute inset-x-0 top-0 z-20 grid pt-6 transition-opacity duration-200 motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
+        left, the clock and the end time at the right. Without a video desktop and phones show it for Back and a Remote's
+        TV status, and every screen while this device shares, for Stop sharing (docs/live-inputs.md). */}
+    <div ref={topBand} data-player-top={shown ? "shown" : "hidden"} inert={!shown} hidden={!osd && !back && !sharing} className={cn("player-top absolute inset-x-0 top-0 z-20 grid pt-6 transition-opacity duration-200 motion-reduce:transition-none", osd && "player-video-controls", !shown && "opacity-0")}>
       {!osd && <div data-player-header className={cn("player-header drag-region window-controls-inset flex min-h-11 items-center gap-3 px-(--gutter)", playerTarget && "max-sm:flex-wrap max-sm:gap-y-0")}>
         {back}
         {playerTarget && <p role="status" title={playerTarget.status} className="min-w-0 truncate bg-background text-sm text-muted-foreground max-sm:order-last max-sm:w-full">{playerTarget.status}</p>}
         {playerTarget && bufferingStatus}
+        <LiveSharingStatus className="ml-auto" />
       </div>}
       {/* Two rows, each sizing itself, so a narrow screen gives the title all but the clock. */}
       {osd && <div data-player-heading className="drag-region window-controls-inset grid px-(--gutter)">
-        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><DigitalClock className="shrink-0 text-sm text-muted-foreground" /></div>
+        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><div className="flex shrink-0 items-baseline gap-4"><LiveSharingStatus /><DigitalClock className="text-sm text-muted-foreground" /></div></div>
         {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl">{ends}</p>}</div>}
       </div>}
     </div>

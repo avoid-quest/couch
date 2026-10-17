@@ -34,7 +34,9 @@ One header on every screen, on a three-column grid: at the left, the Couch
 switch in muted ink (the TV names itself there instead, as plain muted text,
 since it has no switch); in the middle, centred text tabs (Home, Live, Search,
 Library, then Remote while the Couch has a TV, then Settings); at the right,
-the clock. The header scrolls away with the page, so the page gets the screen;
+Stop sharing while this device shares its screen or sound (the player's top
+band keeps it: [Player](player.md#stop-sharing-stays-on-screen)), then the
+clock. The header scrolls away with the page, so the page gets the screen;
 on the TV, Up from a page's first row reaches it
 ([TV](tv.md#every-journey-step-works-with-a-remote)). The current tab names
 the page, so section roots carry no visible title of their own. The current
