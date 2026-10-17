@@ -1,8 +1,10 @@
 import type { CollectionLink, MediaCollection, MediaShape } from "./media";
 import { isStreamingCommunityHost } from "./streamingcommunity";
+import { isAnimeSaturnHost, animeSaturnPageUrl } from "./animesaturn";
+import { isAnimeUnityHost, animeUnityPageUrl } from "./animeunity";
 import { isMovies123Host, movies123Origin, movies123PageUrl } from "./movies123";
 
-export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity" | "movies123";
+export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "soundcloud" | "streamingcommunity" | "movies123" | "animesaturn" | "animeunity";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export type ProviderItem = {
@@ -54,6 +56,8 @@ export function providerForUrl(value: string): ProviderId | undefined {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
     if (isStreamingCommunityHost(url.hostname)) return "streamingcommunity";
     if (isMovies123Host(url.hostname)) return "movies123";
+    if (isAnimeSaturnHost(url.hostname)) return "animesaturn";
+    if (isAnimeUnityHost(url.hostname)) return "animeunity";
     const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"], soundcloud: ["soundcloud.com"] };
     return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
   } catch { return; }
@@ -66,6 +70,14 @@ export function publicProviderMediaUrl(value: string): string | undefined {
     const url = new URL(value), provider = providerForUrl(value);
     if (!provider || url.port || url.hash) return;
     const path = url.pathname.replace(/\/$/, "");
+    if (provider === "animesaturn") {
+      const page = animeSaturnPageUrl(value);
+      return page && !page.pathname.startsWith("/anime/") ? page.href : undefined;
+    }
+    if (provider === "animeunity") {
+      const page = animeUnityPageUrl(value);
+      return page && /^\/anime\/[^/]+\/\d+$/.test(page.pathname) ? page.href : undefined;
+    }
     if (provider === "movies123") {
       const page = movies123PageUrl(value);
       return page && (page.pathname.startsWith("/movie/") || page.searchParams.has("episode")) ? `${movies123Origin}${page.pathname}${page.search}` : undefined;

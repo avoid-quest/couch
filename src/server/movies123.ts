@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { createCipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
 import { movies123PageUrl } from "../shared/movies123";
 import { movies123Title } from "./providers/movies123";
@@ -61,7 +62,7 @@ async function playerSubtitles(id: string, episode: number, preferred: string, s
   } catch { signal?.throwIfAborted(); return []; }
 }
 
-export async function resolveMovies123Link(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch, subtitleLanguage = ""): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
+export async function resolveMovies123Link(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch, subtitleLanguage = ""): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
   signal?.throwIfAborted();
   const url = movies123PageUrl(value);
   if (!url) throw new ProviderError("Choose a 123MoviesFree film or episode link.", 400);

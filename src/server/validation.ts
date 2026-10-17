@@ -7,7 +7,7 @@ import { safePlaybackError } from "./playback-log";
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
-const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123"]);
+const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123", "animesaturn", "animeunity"]);
 const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) => value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
 const playOptions = (value: Record<string, unknown>) => (value.playNow === undefined || typeof value.playNow === "boolean")
@@ -50,7 +50,7 @@ function validAction(value: unknown): value is Action {
       && playOptions(value) && videoQuality(value.quality)
       && (value.collection === undefined || object(value.collection) && collectionLink(value.collection, value.provider) && providerForUrl(value.url) === value.provider
         && (value.collection.parent === undefined || collectionLink(value.collection.parent, value.provider))
-        && (value.collection.index === undefined || number(value.collection.index, 499) && Number.isInteger(value.collection.index)))
+        && (value.collection.index === undefined || number(value.collection.index, 2400) && Number.isInteger(value.collection.index)))
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail));
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)

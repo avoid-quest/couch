@@ -10,9 +10,10 @@ import { QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 import type { PlaybackContinuation } from "./continuation";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "duration" | "live" | "kind" | "subtitle" | "description" | "collection"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { publicNetwork?: boolean; audioOnly?: boolean; mpegts?: boolean; mpv?: boolean; hls?: boolean; source: string; audioSource?: string; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
+  prepareRecoveredSource?: (media: WebMediaSource, playbackId: string, signal: AbortSignal) => Promise<MediaSource>;
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
   // Settings and history belong to every Playback; Core's revision per domain lives in the hub.
@@ -264,10 +265,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     };
     try { send({ type: "stop" }); } catch { return true; }
     broadcast();
-    void Promise.resolve().then(() => { if (!current()) return null; return recover(controller.signal); }).then(fresh => {
+    void Promise.resolve().then(() => { if (!current()) return null; return recover(controller.signal); }).then(async fresh => !current() ? null : fresh && options.prepareRecoveredSource ? options.prepareRecoveredSource(fresh, playbackId, controller.signal) : fresh).then(fresh => {
       if (!current()) return;
       if (!fresh) throw new Error(failure.error || "This stream failed without a confirmed expiry. Play the track to try again.");
-      const { metadata: _metadata, expiry: _expiry, headers: _headers, ...media } = fresh;
+      const { metadata: _metadata, expiry: _expiry, headers: _headers, publicNetwork: _publicNetwork, ...media } = fresh as MediaSource & { headers?: Record<string, string> };
       webRecovery = null;
       webRetried = true;
       pendingPause = recovery.paused;

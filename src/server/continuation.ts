@@ -1,7 +1,7 @@
 import type { QueueEntry } from "../shared/protocol";
 import { movies123PageUrl } from "../shared/movies123";
-import { isYouTubePlaylistUrl, providerForUrl } from "../shared/providers";
-import { providerMetadata } from "./provider-metadata";
+import { isYouTubePlaylistUrl, providerForUrl, publicProviderMediaUrl } from "../shared/providers";
+import { providerMetadata, resolveProviderMetadata } from "./provider-metadata";
 import { loadProviderList } from "./providers";
 import { streamingCommunityWatchContext } from "./streamingcommunity";
 
@@ -24,10 +24,11 @@ export function createContinuationResolver(loadList = loadProviderList) {
     const url = entry.source.slice(4), episode = streamingEpisode(url), movies123 = movies123PageUrl(url);
     const watch = !entry.collection && episode ? await streamingCommunityWatchContext(url, signal) : null;
     const season = movies123?.searchParams.has("episode") ? { title: entry.title, url: `${movies123.origin}${movies123.pathname}`, index: undefined } : null;
-    let collection = entry.collection ?? (watch ? { title: watch.title, url: watch.titleUrl, index: undefined } : season);
-    if (!collection) return null;
     const provider = providerForUrl(url);
-    if (!provider || provider !== providerForUrl(collection.url) || !["youtube", "bandcamp", "streamingcommunity", "movies123"].includes(provider)
+    const anime = !entry.collection && (provider === "animesaturn" || provider === "animeunity") ? await resolveProviderMetadata(url, signal) : undefined;
+    let collection = entry.collection ?? anime?.collection ?? (watch ? { title: watch.title, url: watch.titleUrl, index: undefined } : season);
+    if (!collection) return null;
+    if (!provider || provider !== providerForUrl(collection.url) || !["youtube", "bandcamp", "streamingcommunity", "movies123", "animesaturn", "animeunity"].includes(provider)
       || provider === "youtube" && !isYouTubePlaylistUrl(collection.url)) return null;
     if (episode) {
       const container = new URL(collection.url);
@@ -41,7 +42,8 @@ export function createContinuationResolver(loadList = loadProviderList) {
     signal.throwIfAborted();
     const sameItem = (candidate: string) => {
       const next = episode && streamingEpisode(candidate);
-      return candidate === url || !!movies123 && movies123PageUrl(candidate)?.href === movies123.href
+      return candidate === url || (provider === "animesaturn" || provider === "animeunity") && !!publicProviderMediaUrl(url) && publicProviderMediaUrl(candidate) === publicProviderMediaUrl(url)
+        || !!movies123 && movies123PageUrl(candidate)?.href === movies123.href
         || !!next && next.origin === episode!.origin && next.title === episode!.title && next.episode === episode!.episode;
     };
     const matches = page.items.flatMap((item, index) => sameItem(item.url) ? [index] : []);

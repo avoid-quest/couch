@@ -44,7 +44,9 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   // Use the provider's canonical catalogue route; title and season pages keep their rows.
   const path = url ? new URL(page?.item?.url ?? url).pathname : "";
   const posterCatalogue = provider === "streamingcommunity" && (!url || /^\/(?:[a-z]{2}\/)?(?:archive|browse\/genre)\/?$/.test(path))
-    || provider === "movies123" && (!url || path === "/" || /^\/(?:(?:movies|tv-series)(?:\/{1,2}[1-9]\d{0,3})?|home)\/?$/.test(path));
+    || provider === "movies123" && (!url || path === "/" || /^\/(?:(?:movies|tv-series)(?:\/{1,2}[1-9]\d{0,3})?|home)\/?$/.test(path))
+    || provider === "animesaturn" && (!url || path === "/" || /^\/anime(?:\/page\/[1-9]\d*)?\/?$/.test(path))
+    || provider === "animeunity" && (!url || path === "/" || /^\/archivio\/?$/.test(path));
   useEffect(() => {
     // Back can restore focus while the cached results are still mounting; scroll once they settle.
     if (!posterCatalogue) return;
@@ -60,7 +62,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
   const currentId = hits.find(hit => hit.url === source)?.id;
   const emptyRoot = !url && connected && !!summary && !summary.loading && !summary.error && !summary.hits?.length;
   const episodeList = provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path) || /\/season-\d+|\/ContentSet-/.test(url)
-    || provider === "streamingcommunity" && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media");
+    || ["streamingcommunity", "animesaturn", "animeunity"].includes(provider) && page?.item?.kind === "collection" && !!page.items.length && page.items.every(item => item.kind === "media");
   const seasonList = provider === "streamingcommunity" && /\/titles\/\d+/.test(url) && !!page?.items.length && page.items.every(item => item.kind === "collection");
   let noun = "Items";
   if (provider === "bandcamp") noun = url ? "Tracks" : "Albums";

@@ -26,6 +26,8 @@ for (const url of [
   "https://soundcloud.com/arsiderprod/track",
   "https://www.twitch.tv/videos/12345",
   "https://ww8.123moviesfree.net/movie/example-123/",
+  "https://animesaturn.ro/example-episode-2/",
+  "https://www.animeunity.so/anime/12-one-piece/5987",
   "https://ww8.123moviesfree.net/season/example-season-1-123/?episode=2",
 ]) test(`history exposes only the public provider page: ${url}`, async () => {
   const item = await history(`web:${url}`);
@@ -49,6 +51,12 @@ for (const source of [
   "web:https://ww8.123moviesfree.net/season/example-season-1-123/?episode=2&token=PRIVATE",
   "web:https://ww8.123moviesfree.net/movie/example-123/?token=PRIVATE",
   "web:https://ww8.123moviesfree.net/hls/PRIVATE/master.m3u8",
+  "web:https://animesaturn.ro/anime/example/",
+  "web:https://animesaturn.ro/example-episode-2/?token=PRIVATE",
+  "web:https://animesaturn.ro/wp-content/themes/animestream-child/player/?url=PRIVATE",
+  "web:https://www.animeunity.so/anime/12-one-piece",
+  "web:https://www.animeunity.so/anime/12-one-piece/5987?token=PRIVATE",
+  "web:https://vixcloud.co/playlist/5987?token=PRIVATE",
   "web:https://user:password@www.youtube.com/watch?v=abcdefghijk",
   "web:https://www.youtube.com:444/watch?v=abcdefghijk",
   "web:https://www.youtube.com/watch?v=abcdefghijk#PRIVATE",

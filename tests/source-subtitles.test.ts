@@ -1,13 +1,11 @@
-import { afterAll, afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, test } from "bun:test";
 import { createSubtitles, sourceSubtitle, subtitleSizeLimit } from "../src/server/subtitles";
 
 const upstream = "https://subtitles.example/captions.srt";
 const address = () => new URL(sourceSubtitle(upstream), "http://couch.local");
-const subtitles = createSubtitles(() => undefined, () => {});
-const fetchUpstream = globalThis.fetch;
-const request = spyOn(globalThis, "fetch");
+const request = mock<typeof fetch>();
+const subtitles = createSubtitles(() => undefined, () => {}, request);
 afterEach(() => request.mockReset());
-afterAll(() => request.mockRestore());
 const cue = "1\n00:00:00,000 --> 00:00:01,000\nCiao\n";
 
 test("source subtitles convert SRT and reject a changed signed URL before fetching", async () => {
@@ -21,20 +19,21 @@ test("source subtitles convert SRT and reject a changed signed URL before fetchi
   expect(request).toHaveBeenCalledTimes(1);
 });
 
-test("source subtitles reject redirects without requesting the destination", async () => {
-  let destinationRequests = 0;
+test("source subtitles reject a local upstream before contacting its redirect server", async () => {
+  const protectedSubtitles = createSubtitles(() => undefined, () => {});
+  let sourceRequests = 0, destinationRequests = 0;
   const destination = Bun.serve({
     hostname: "127.0.0.1", port: 0,
     fetch() { destinationRequests++; return new Response(cue); },
   });
   const source = Bun.serve({
     hostname: "127.0.0.1", port: 0,
-    fetch() { return new Response(null, { status: 302, headers: { Location: destination.url.href } }); },
+    fetch() { sourceRequests++; return new Response(null, { status: 302, headers: { Location: destination.url.href } }); },
   });
   try {
-    request.mockImplementation(fetchUpstream);
-    const response = await subtitles.serve(new URL(sourceSubtitle(source.url.href), "http://couch.local"));
+    const response = await protectedSubtitles.serve(new URL(sourceSubtitle(source.url.href), "http://couch.local"));
     expect(response.status).toBe(502);
+    expect(sourceRequests).toBe(0);
     expect(destinationRequests).toBe(0);
   } finally { source.stop(true); destination.stop(true); }
 });

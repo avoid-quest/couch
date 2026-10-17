@@ -8,7 +8,7 @@ export type TileShape = keyof typeof shapes;
 
 /** Films and series are posters, stations and albums squares, videos and episodes 16:9 frames. */
 export function tileShape(source: string | undefined, episode: boolean): TileShape {
-  return source === "Radio" || source === "Bandcamp" ? "square" : (source === "StreamingCommunity" || source === "123MoviesFree") && !episode ? "poster" : "video";
+  return source === "Radio" || source === "Bandcamp" ? "square" : ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"].includes(source ?? "") && !episode ? "poster" : "video";
 }
 
 /**

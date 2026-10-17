@@ -1,3 +1,4 @@
+import { publicFetch } from "../public-network";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { isMovies123Host, movies123Origin, movies123PageUrl } from "../../shared/movies123";
 import { ProviderError, providerItemId, providerJson, readProviderText } from "./http";
@@ -22,7 +23,7 @@ function attributes(tag: string): Record<string, string> {
   return Object.fromEntries([...tag.matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(match => [match[1]!.toLowerCase(), text(match[2] ?? match[3] ?? match[4] ?? "")]));
 }
 
-export async function movies123Text(url: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<string> {
+export async function movies123Text(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<string> {
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12_000)]);
   const response = await request(url, { signal: cancellation, credentials: "omit", redirect: "error", headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0" } });
   if (!response.ok) {
@@ -38,7 +39,7 @@ function item(url: URL, title: string, metadata: Partial<ProviderItem> = {}): Pr
 
 const poster = (slug: string) => `https://img.icdn.my.id/thumb/w_200/h_300/${slug}.jpg`;
 
-export async function movies123Title(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<{ item: ProviderItem; episodes: number[]; id: string; servers: number[] }> {
+export async function movies123Title(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<{ item: ProviderItem; episodes: number[]; id: string; servers: number[] }> {
   const url = movies123PageUrl(value);
   if (!url) throw new ProviderError("Choose a 123MoviesFree film or season link.", 400);
   const episode = Number(url.searchParams.get("episode") ?? 0);
@@ -104,7 +105,7 @@ function catalogPage(html: string, url: URL): ProviderPage {
   return { title: url.pathname.startsWith("/tv-series/") ? "123MoviesFree · TV series" : "123MoviesFree · Movies", items: [...items.values()], ...(nextCursor ? { nextCursor } : {}) };
 }
 
-export async function browseMovies123(request: BrowseRequest, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function browseMovies123(request: BrowseRequest, signal?: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   const query = request.query?.trim();
   if (request.cursor !== undefined && !(query ? /^\d{1,6}$/.test(request.cursor) && Number(request.cursor) <= 240_000 : /^[1-9]\d{0,3}$/.test(request.cursor))) throw new ProviderError("Invalid 123MoviesFree page cursor.", 400);
@@ -144,7 +145,7 @@ export async function browseMovies123(request: BrowseRequest, signal?: AbortSign
   return catalogPage(await movies123Text(target.href, signal, fetchPage), target);
 }
 
-export async function loadMovies123List(value: string, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function loadMovies123List(value: string, signal?: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<ProviderPage> {
   if (!movies123PageUrl(value)) throw new ProviderError("Choose a 123MoviesFree film or season to queue.", 400);
   return browseMovies123({ url: value }, signal, fetchPage);
 }

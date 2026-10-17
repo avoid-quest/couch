@@ -26,7 +26,7 @@ export type SavedFavoriteActions = {
   onOpenProvider: (item: ProviderItem) => void;
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
-const providers = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" };
+const providers = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";

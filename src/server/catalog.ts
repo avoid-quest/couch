@@ -75,7 +75,7 @@ export function createCatalog({ radio, viewing }: Services) {
     const saved = viewing!.store.historySource(item.mediaId);
     const source = queueEntry ? { ...queueEntry, ...(saved?.source === queueEntry.source ? { subtitle: saved.subtitle ?? queueEntry.subtitle, description: saved.description ?? queueEntry.description, thumbnail: saved.thumbnail ?? queueEntry.thumbnail, collection: queueEntry.collection ?? (saved.id === queueEntry.id ? saved.collection : undefined) } : {}) } : saved;
     const provider = source && providerForUrl(source.source.replace(/^web:/, ""));
-    const sourceLabel = provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" }[provider] : "Online";
+    const sourceLabel = provider ? { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" }[provider] : "Online";
     const url = source?.source.startsWith("web:") && !source.live && source.kind !== "radio" ? publicProviderMediaUrl(source.source.slice(4)) : undefined;
     return { ...item, ...(url ? { url } : {}), ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, subtitle: source.subtitle, description: source.description, collection: source.collection, sourceLabel } : {}) };
   };
@@ -116,7 +116,7 @@ export function createCatalog({ radio, viewing }: Services) {
           const current = queue.find(entry => entry.id === currentEntryId);
           if (current) queued.set(playbackMediaId(current), current);
           const provider = searchParams.get("provider");
-          if (provider !== null && !["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123"].includes(provider)) throw new RequestError("Invalid provider.");
+          if (provider !== null && !["youtube", "twitch", "raiplay", "bandcamp", "soundcloud", "streamingcommunity", "movies123", "animesaturn", "animeunity"].includes(provider)) throw new RequestError("Invalid provider.");
           const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100), mediaId => {
             if (!provider) return true;
             const source = queued.get(mediaId) ?? viewing.store.historySource(mediaId);

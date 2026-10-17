@@ -18,7 +18,7 @@ import { formatDuration } from "@/time-format";
 import { SavedEmpty, SavedError, SavedStatus } from "@/sections/saved/SavedStatus";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
 
-const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" };
+const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
 const summary = (list: SavedPlaylistSummary) => [
   list.source && providerLabels[list.source.provider],
   `${list.entryCount} ${list.entryCount === 1 ? "item" : "items"}`,
