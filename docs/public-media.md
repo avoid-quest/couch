@@ -22,6 +22,8 @@ yt-dlp downloads another.
 Resolved web media always uses Core's protected relay, even when the upstream
 allows browser CORS. Every HLS variant, segment, key, map and rendition is rewritten
 through the same boundary. Playlist reloads and redirects remain protected.
+Signed relay paths preserve media extensions so native HLS checks still apply
+when the upstream URL has signed query parameters.
 Extensionless playlists with an incorrect MIME type are detected from their
 prefix. Non-HTTP references, variable substitution and content steering fail closed.
 Source subtitles use the same public-only HTTP transport.

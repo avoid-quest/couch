@@ -111,6 +111,28 @@ test("a protected request failure never hands public media or its children to th
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
+test("signed upstream queries preserve authenticated native media extensions", async () => {
+  const f = fixture();
+  const segment = "https://media.example/segment.ts?expires=123&token=opaque";
+  const init = "https://media.example/init.mp4?token=opaque";
+  f.manifest(source, `#EXTM3U\n#EXT-X-MAP:URI="${init}"\n#EXTINF:6,\n${segment}\n#EXT-X-ENDLIST\n`);
+  const media = await f.prepare();
+  expect(new URL(media.source).pathname).toEndWith(".m3u8");
+  const text = await (await f.serve(media.source)).text();
+  const child = text.split("\n").find(line => line && !line.startsWith("#"))!;
+  const map = /URI="([^"]+)"/.exec(text)![1]!;
+  expect(new URL(child).pathname).toEndWith(".ts");
+  expect(new URL(map).pathname).toEndWith(".mp4");
+  destination(child, "bytes", segment);
+  const tampered = new URL(child);
+  tampered.pathname = tampered.pathname.replace(/\.ts$/, ".mp4");
+  const calls = f.requests.length;
+  expect((await f.serve(tampered.href)).status).toBe(404);
+  tampered.searchParams.delete("url");
+  expect((await f.serve(tampered.href)).status).toBe(404);
+  expect(f.requests).toHaveLength(calls);
+});
+
 for (const reference of ["file:///etc/passwd", "data:text/plain,private", "ftp://127.0.0.1/private", "tcp://127.0.0.1:1234", "https://user:password@media.example/private"]) {
   test(`public HLS rejects unsupported destination ${reference.split(":")[0]}`, async () => {
     const f = fixture();

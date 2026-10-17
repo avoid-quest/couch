@@ -17,6 +17,12 @@ const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type 
 // Tags whose URI is another playlist; every other URI is a segment, key or map.
 const playlistTag = /^#EXT-X-(?:MEDIA|I-FRAME-STREAM-INF|RENDITION-REPORT):/;
 const forwarded = ["content-type", "content-length", "content-range", "accept-ranges", "cache-control", "last-modified", "etag"];
+// Native HLS decoders check segment extensions before reading bytes. Preserve a
+// media suffix outside the encoded upstream query (which may end in a token).
+const mediaExtension = (url: string) => {
+  try { return /\.(aac|ac3|eac3|flac|m4a|m4s|m4v|mp3|mp4|mpeg|mpg|mts|m2ts|ts|ogg|opus|oga|ogv|wav|webm|vtt|srt|key|m3u8)$/i.exec(new URL(url).pathname)?.[1]?.toLowerCase() ?? "ts"; }
+  catch { return "ts"; } // Malformed unsigned requests still fail capability validation.
+};
 
 // A server can mislabel an extensionless playlist. Inspect a small prefix before
 // giving bytes to a decoder, which otherwise may follow the original HLS URIs.
@@ -70,7 +76,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
   const relays = new Map<string, Relay>();
   let internal: Promise<Listener> | undefined;
   let closed = false;
-  const sign = (playbackId: string, kind: string, url: string) => createHmac("sha256", key).update(`${playbackId}\n${kind}\n${url}`).digest("base64url");
+  const sign = (playbackId: string, kind: string, url: string) => `${createHmac("sha256", key).update(`${playbackId}\n${kind}\n${url}`).digest("base64url")}.${kind === "playlist" ? "m3u8" : mediaExtension(url)}`;
   const link = (playbackId: string, relay: Relay, kind: Kind, url: string) => `${relay.target.origin}/api/relay/${playbackId}/${kind}/${sign(playbackId, kind, url)}?${new URLSearchParams({ url })}`;
 
   async function rewrite(text: string, base: string, playbackId: string, relay: Relay) {

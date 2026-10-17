@@ -15,7 +15,7 @@ function forwarded(headers: IncomingHttpHeaders): IncomingHttpHeaders {
 export async function createPublicMediaProxy(signal: AbortSignal, localRelay?: string, lookup: typeof lookupPublic = lookupPublic): Promise<{ url: string; close: () => Promise<void> }> {
   signal.throwIfAborted();
   const local = localRelay ? new URL(localRelay) : undefined;
-  const playback = local && /^\/api\/relay\/([\w-]{1,80})\/(?:playlist|bytes)\/[\w-]+$/.exec(local.pathname)?.[1];
+  const playback = local && /^\/api\/relay\/([\w-]{1,80})\/(?:playlist|bytes)\/[\w-]+(?:\.[a-z0-9]+)?$/.exec(local.pathname)?.[1];
   if (local && (local.protocol !== "http:" || !["127.0.0.1", "[::1]"].includes(local.hostname) || local.username || local.password || local.hash || !playback)) throw new Error("Use a signed loopback playback relay.");
   const password = randomBytes(32).toString("base64url");
   const authorization = Buffer.from(`Basic ${Buffer.from(`couch:${password}`).toString("base64")}`);

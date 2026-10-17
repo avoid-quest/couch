@@ -121,7 +121,7 @@ test("a native task may reach only its configured loopback relay playback subtre
   } finally { await proxy.close(); await stop(upstream); }
 });
 
-test("FFmpeg follows an extensionless signed relay but cannot follow its private HLS child", { skip: !process.env.COUCH_TEST_FFMPEG }, async () => {
+test("FFmpeg follows named signed relays with encoded upstream tokens but cannot follow private HLS children", { skip: !process.env.COUCH_TEST_FFMPEG }, async () => {
   const ffmpeg = process.env.COUCH_TEST_FFMPEG!;
   const segment = execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "0.1", "-c:a", "aac", "-f", "mpegts", "pipe:1"]);
   let privateContacts = 0;
@@ -131,10 +131,10 @@ test("FFmpeg follows an extensionless signed relay but cannot follow its private
   const gateway = createServer((req, response) => {
     if (req.url?.startsWith("/api/relay/current/bytes/")) { response.writeHead(200, { "Content-Type": "video/mp2t" }); response.end(segment); return; }
     response.writeHead(200, { "Content-Type": "application/vnd.apple.mpegurl" });
-    response.end(`#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.1,\n${malicious ? `http://127.0.0.1:${privatePort}/secret.ts` : `http://127.0.0.1:${port}/api/relay/current/bytes/segment-signature?url=https%3A%2F%2Fpublic.test%2Fsegment.ts`}\n#EXT-X-ENDLIST\n`);
+    response.end(`#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.1,\n${malicious ? `http://127.0.0.1:${privatePort}/secret.ts` : `http://127.0.0.1:${port}/api/relay/current/bytes/segment-signature.ts?${new URLSearchParams({ url: "https://public.test/segment.ts?expires=1999999999&token=fixture" })}`}\n#EXT-X-ENDLIST\n`);
   });
   const port = await listen(gateway);
-  const relay = `http://127.0.0.1:${port}/api/relay/current/playlist/signature?url=https%3A%2F%2Fpublic.test%2Fmaster.m3u8`;
+  const relay = `http://127.0.0.1:${port}/api/relay/current/playlist/signature.m3u8?url=https%3A%2F%2Fpublic.test%2Fmaster.m3u8`;
   const checked: string[] = [];
   const proxy = await createPublicMediaProxy(new AbortController().signal, relay, async hostname => { checked.push(hostname); return lookupPublic(hostname); });
   const decode = () => new Promise<{ code: number | string; stderr: string }>(resolve => execFile(ffmpeg, ["-hide_banner", "-nostdin", "-loglevel", "error", "-protocol_whitelist", "http,https,tcp,tls,crypto,httpproxy", "-rw_timeout", "3000000", "-http_proxy", proxy.url, "-format_whitelist", "aac,ac3,aiff,ape,asf,flac,flv,hls,matroska,webm,mov,mp3,mpeg,mpegts,ogg,wav,wv", "-i", relay, "-t", "0.05", "-f", "null", "-"], { signal: AbortSignal.timeout(8000), env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, NO_PROXY: "", no_proxy: "" } }, (error, _stdout, stderr) => resolve({ code: error?.code ?? 0, stderr })));
