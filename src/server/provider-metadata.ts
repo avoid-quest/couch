@@ -4,6 +4,8 @@ import type { QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
 import { streamingCommunityList, streamingCommunityWatchContext } from "./streamingcommunity";
 import { movies123Title } from "./providers/movies123";
+import { animeSaturnTitle } from "./providers/animesaturn";
+import { animeUnityTitle } from "./providers/animeunity";
 
 export type ProviderMetadata = Pick<QueueEntry, "subtitle" | "description" | "thumbnail" | "collection">;
 
@@ -23,7 +25,9 @@ export function providerMetadata(item?: ProviderItem, selectedCollection = false
 }
 
 export async function resolveProviderMetadata(url: string, signal: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderMetadata> {
-  if (providerForUrl(url) === "movies123") return providerMetadata((await movies123Title(url, signal, fetchPage)).item);
+  const provider = providerForUrl(url);
+  const title = provider === "movies123" ? movies123Title : provider === "animesaturn" ? animeSaturnTitle : provider === "animeunity" ? animeUnityTitle : undefined;
+  if (title) return providerMetadata((await title(url, signal, fetchPage)).item);
   if (providerForUrl(url) !== "streamingcommunity") return {};
   const context = /\/titles\/\d+-[\w-]+$/.test(new URL(url).pathname) ? { titleUrl: url, seasonUrl: undefined, episodeId: undefined } : await streamingCommunityWatchContext(url, signal, fetchPage);
   const page = await streamingCommunityList(context.seasonUrl ?? context.titleUrl, signal, fetchPage);
@@ -53,7 +57,7 @@ export function createProviderMetadata({ store, cachedItem, resolve = resolvePro
     if (known) return Promise.resolve(known);
     const existing = pending.get(url);
     if (existing) return existing;
-    if (shutdown.signal.aborted || pending.size >= 100 || !["streamingcommunity", "movies123"].includes(providerForUrl(url) ?? "")) return Promise.resolve({});
+    if (shutdown.signal.aborted || pending.size >= 100 || !["streamingcommunity", "movies123", "animesaturn", "animeunity"].includes(providerForUrl(url) ?? "")) return Promise.resolve({});
     const task = Promise.withResolvers<ProviderMetadata>();
     const start = () => {
       if (shutdown.signal.aborted) { pending.delete(url); task.resolve({}); return; }

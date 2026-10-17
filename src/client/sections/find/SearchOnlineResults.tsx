@@ -39,7 +39,7 @@ export type SearchPlaybackProps = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   onCommand?: (action: Action) => Promise<boolean>;
 };
-export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" };
+export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
 export const searchError = (reason: unknown) => reason instanceof Error ? reason.message : "Didn't respond.";
 function collectionLabel(item: ProviderItem): SearchHit["collection"] {
   if (item.kind === "media") return;
@@ -47,6 +47,7 @@ function collectionLabel(item: ProviderItem): SearchHit["collection"] {
   const path = new URL(item.url).pathname;
   if (item.provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path)) return "Season";
   if (item.provider === "streamingcommunity") return /\/season-\d+$/.test(path) ? "Season" : "Series";
+  if (item.provider === "animesaturn" || item.provider === "animeunity") return "Series";
   return "List";
 }
 function webThumbnail(value?: string) {
@@ -132,12 +133,17 @@ function OnlineResults(props: Props) {
     void action(async signal => {
       if (item.kind === "media") {
         const existing = savedWeb(item);
-        if (!existing && item.collection?.index !== undefined) {
-          const fresh = await client.fetchQuery({ ...providerPageQuery(props, provider, { url: item.collection.url, cursor: providerCollectionCursor(provider, item.collection) }), staleTime: 0 });
+        let collection = item.collection;
+        if (!existing && collection?.index !== undefined) {
+          // AnimeUnity pages use displayed number ranges, which can combine several episodes.
+          const episodePage = provider === "animeunity";
+          const fresh = await client.fetchQuery({ ...providerPageQuery(props, provider, episodePage ? { url: item.url } : { url: collection.url, cursor: providerCollectionCursor(provider, collection) }), staleTime: 0 });
           signal.throwIfAborted();
-          if (!fresh.items.some(candidate => candidate.url === item.url && candidate.collection?.url === item.collection?.url && candidate.collection?.index === item.collection?.index)) throw new Error("This collection changed. Refresh it before saving this item.");
+          const current = fresh.items.find(candidate => candidate.url === item.url && candidate.collection?.url === collection?.url && (episodePage || candidate.collection?.index === collection?.index));
+          if (!current) throw new Error("This collection changed. Refresh it before saving this item.");
+          collection = current.collection;
         }
-        await readSearch(props, existing ? `/api/for-later/${encodeURIComponent(existing.id)}` : "/api/for-later", signal, { method: existing ? "DELETE" : "POST", ...(existing ? {} : { body: JSON.stringify({ reference: { kind: "web", url: item.url, title: item.title, ...(item.collection ? { collection: { url: item.collection.url, ...(item.collection.index === undefined ? {} : { index: item.collection.index }) } } : {}), thumbnail: webThumbnail(item.thumbnail), duration: typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration >= 0 && item.duration <= 86400 ? item.duration : undefined } }) }) });
+        await readSearch(props, existing ? `/api/for-later/${encodeURIComponent(existing.id)}` : "/api/for-later", signal, { method: existing ? "DELETE" : "POST", ...(existing ? {} : { body: JSON.stringify({ reference: { kind: "web", url: item.url, title: item.title, ...(collection ? { collection: { url: collection.url, ...(collection.index === undefined ? {} : { index: collection.index }) } } : {}), thumbnail: webThumbnail(item.thumbnail), duration: typeof item.duration === "number" && Number.isFinite(item.duration) && item.duration >= 0 && item.duration <= 86400 ? item.duration : undefined } }) }) });
         if (!signal.aborted) await client.invalidateQueries({ queryKey: ["for-later"] });
       } else {
         await readSearch(props, saved ? `/api/providers/favorites/${encodeURIComponent(item.id)}` : "/api/providers/favorites", signal, { method: saved ? "DELETE" : "POST", ...(saved ? {} : { body: JSON.stringify({ item }) }) });
@@ -174,9 +180,12 @@ function OnlineResults(props: Props) {
     };
     const episodeList = selected?.kind === "collection" && !!page?.items.length && page.items.every(item => item.kind === "media")
       && (provider === "streamingcommunity" && /\/titles\/\d+(?:-[\w-]+)?$/.test(new URL(selected.url).pathname)
-        || provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(new URL(selected.url).pathname));
-    const start = selected?.kind === "media" ? selected : episodeList ? nextEpisode(page!.items, history.data?.items ?? []) : undefined;
-    const progress = start ? progressFor(start, history.data?.items ?? []) : selected ? seriesResumeFor(selected, history.data?.items ?? []) : undefined;
+        || provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(new URL(selected.url).pathname)
+        || provider === "animesaturn" || provider === "animeunity");
+    const historyItems = history.data?.items ?? [];
+    const start = selected?.kind === "media" ? selected : episodeList ? nextEpisode(page!.items, historyItems) : undefined;
+    const animeResume = selected && ["animesaturn", "animeunity"].includes(provider) ? seriesResumeFor(selected, historyItems) : undefined;
+    const progress = animeResume ?? (start ? progressFor(start, historyItems) : selected ? seriesResumeFor(selected, historyItems) : undefined);
     const resume = progress?.playable && !progress.watched && progress.position > 0 ? progress : undefined;
     const startItem = (fromStart = false, deviceId?: string) => {
       if (resume && props.onPlayHistory) void action(() => playOn.play(on => props.onPlayHistory!(resume, { fromStart, on }), deviceId));
