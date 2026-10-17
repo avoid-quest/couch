@@ -21,7 +21,8 @@ Home's hero and shelves: [Home](home.md). Discover, Search and Details: [Browse]
 
 Focus is
 the only highlight; no hover style applies on the TV. The TV has no hover: under `.tv-presentation` the `hover` variant
-never applies, so a stray pointer can't compete with focus.
+never applies, so a stray pointer can't compete with focus. Focus inverts at once and fades only as it leaves, so a
+held arrow moves it at every repeat and leaves a short trail ([Motion](../design.md#motion)).
 
 Back closes an open
 overlay, then leaves a detail page for the page
