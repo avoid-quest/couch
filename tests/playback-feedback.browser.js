@@ -85,7 +85,7 @@
   const queue = title => location.pathname === "/item" ? click("[data-page='Item'] header button", "Queue") : menu(title, "Queue");
   const confirmation = title => {
     const queued = [...document.querySelectorAll("[data-sonner-toast]")].filter(node => node.querySelector("[data-title]")?.textContent.startsWith("Queued"));
-    return queued.length === 1 && queued[0].querySelector("[data-title]").textContent === `Queued ${title}` && queued[0].querySelector("a")?.textContent === "Up next";
+    return queued.length === 1 && queued[0].querySelector("[data-title]").textContent === `Queued ${title}` && queued[0].querySelector("[data-button]")?.textContent === "Up next";
   };
   // Home's tiles do one verb (Continue resumes, Played recently opens Details), so a history item's other verbs are on its Details.
   const openItem = async (surface, verbs = true) => {
@@ -311,8 +311,8 @@
       await wait(() => gate().state.queue.length > before, "active Saved list append");
       await sleep(200);
       check("active Saved list Queue confirms once", toasts().filter(text => text.includes(`Queued ${savedPlaylist.name}`)).length === 1);
-      click("a[href='/now?queue=true']");
-      await wait(() => location.pathname + location.search === "/now?queue=true", "Saved Up next link");
+      click("[data-sonner-toast] [data-button]", "Up next");
+      await wait(() => location.pathname + location.search === "/now?queue=true", "Saved Up next action");
       check("actual Saved confirmation Up next opens queue", true);
       await quiet();
       await run({ type: "stop", playbackId: gate().state.player.playbackId });
@@ -324,8 +324,8 @@
       await pause();
       await queueChannel(channelName);
       check("active actual Live TV Queue confirms once", !!gate().state.currentEntryId && toasts().filter(text => text.startsWith(`Queued ${channelName}`)).length === 1);
-      click("a[href='/now?queue=true']");
-      await wait(() => location.pathname + location.search === "/now?queue=true", "Live TV Up next link");
+      click("[data-sonner-toast] [data-button]", "Up next");
+      await wait(() => location.pathname + location.search === "/now?queue=true", "Live TV Up next action");
       check("actual Live TV Up next opens queue", true);
       await quiet();
       const count = gate().state.queue.length;
