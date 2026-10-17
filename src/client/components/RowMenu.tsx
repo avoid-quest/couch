@@ -1,7 +1,7 @@
-import { useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode, type TouchEvent } from "react";
+import { Fragment, useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode, type TouchEvent } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { startHold } from "@/hold";
 import { PlayOnGroup, usePlayOn } from "./PlayOn";
@@ -9,9 +9,10 @@ import { PlayOnGroup, usePlayOn } from "./PlayOn";
 /** One verb in a menu. playOn makes it "Play on", a group of the online Devices; node is its own item, such as a link. */
 export type MenuAction = { label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; sharingDeviceId?: string };
 
+// Play on's devices are a labelled group, set apart from the verbs on either side.
 function Items({ actions, on }: { actions: MenuAction[]; on: (label: string) => string }) {
   return actions.map((action, index) => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem>
-    : action.playOn ? <PlayOnGroup key={action.label} separated={index > 0} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} />
+    : action.playOn ? <Fragment key={action.label}><PlayOnGroup separated={index > 0} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} />{index < actions.length - 1 && <DropdownMenuSeparator />}</Fragment>
     : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label === "Play" || action.label === "Resume" ? on(action.label) : action.label}</DropdownMenuItem>);
 }
 
