@@ -61,10 +61,13 @@ function moveFocus(key: string) {
   }
   const from = box(active);
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
-  const row = key === "ArrowRight" ? active.closest("[data-nav-row]") : null;
+  const own = active.closest("[data-nav-row]");
+  const row = key === "ArrowRight" ? own : null;
   const destinations = row ? controls.filter(element => row.contains(element)) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
+  // How far a box starts past the active's top (Up) or bottom (Down) edge.
+  const past = (to: DOMRect) => sign < 0 ? from.top - to.bottom : to.top - from.bottom;
   // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
   const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
@@ -74,12 +77,25 @@ function moveFocus(key: string) {
     const forward = (horizontal ? dx : dy) * sign;
     // The sideways gap between the edges, not the centres, so a wide row under a short title is in line with it.
     const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
-    return { element, forward, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
-  }).filter(candidate => candidate.forward > 1).sort((a, b) => a.score - b.score);
+    // Up and Down reach a control in the active's own row only past its edge (a wrapped line, Continue's Details),
+    // never one beside it, though a shorter or taller caption moves that one's centre.
+    const beside = !horizontal && !!own?.contains(element) && past(to) < 0;
+    return { element, forward, beside, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
+  }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
+  // Up and Down from a row reach the nearest row first, so Home's shelves are walked one by one, never
+  // skipped for a farther control that lines up. A row counts by its own box; ties keep the best score.
+  const reach = !horizontal && own ? candidates.map(candidate => {
+    const row = candidate.element.closest<HTMLElement>("[data-nav-row]");
+    const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
+    return { row: unit, edge: Math.max(0, past(to)) };
+  }) : [];
+  const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
+  const next = reach[nearest]?.row;
+  const best = next ? candidates.find(candidate => next.contains(candidate.element)) : candidates[0];
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
-  const tab = key === "ArrowUp" && later && candidates[0]?.element.closest(later)
+  const tab = key === "ArrowUp" && later && best?.element.closest(later)
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
-  focus(tab ?? candidates[0]?.element);
+  focus(tab ?? best?.element);
 }
 
 export function sendKey(target: HTMLElement, key: string) {

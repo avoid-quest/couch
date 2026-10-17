@@ -78,6 +78,9 @@ export function DetailFocusRestoration() {
       if (tv && !returning) {
         const page = document.querySelector<HTMLElement>("[data-page]");
         if (page) focusPageControl(page);
+        // A page's first control can render after later ones (Home's hero waits for its data), so focus
+        // elsewhere stays provisional and moves to it when it appears, unless a key or pointer came first.
+        if (!document.activeElement?.matches("[data-page-first]")) fallbackFocus = document.activeElement;
         return !!page?.contains(document.activeElement) && document.activeElement !== document.body;
       }
       if (restoreDetailFocus(target)) return true;
