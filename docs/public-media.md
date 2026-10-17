@@ -27,7 +27,9 @@ including its scheme and port. Cross-origin children, separate audio sources and
 redirects receive only media negotiation, provider context (User-Agent, Referer
 and Origin) and body-framing headers; authorization, cookies and custom API-key
 headers stay at the original origin. A redirected playlist cannot grant its new
-origin access to those credentials.
+origin access to those credentials. Cross-origin Referer values are reduced to
+their HTTP(S) origin, removing credentials, paths, queries and fragments; invalid
+or non-HTTP(S) values are omitted. Same-origin requests retain the source context.
 Signed relay paths preserve media extensions so native HLS checks still apply
 when the upstream URL has signed query parameters.
 Extensionless playlists with an incorrect MIME type are detected from their
@@ -56,4 +58,5 @@ Implementation references: [Node HTTP request options](https://nodejs.org/api/ht
 [Node DNS lookup](https://nodejs.org/api/dns.html#dnslookuphostname-options-callback),
 [yt-dlp network options](https://github.com/yt-dlp/yt-dlp#network-options),
 [FFmpeg HTTP and TLS protocols](https://ffmpeg.org/ffmpeg-protocols.html),
+[W3C origin-only referrers](https://www.w3.org/TR/referrer-policy/#referrer-policy-origin),
 and [HLS URI rules](https://www.rfc-editor.org/rfc/rfc8216).

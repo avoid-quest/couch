@@ -210,7 +210,7 @@ test("redirects cannot reach private literals, credentials or a rebound DNS answ
 
 test("public redirects strip credentials, change POST to GET, and expose the final URL", async t => {
   const calls = transport(t, call => call.url.hostname === "public.test" ? { status: 303, headers: { Location: "https://cdn.public.test/final" } } : { body: "done" });
-  const response = await publicFetch("https://public.test/start", { method: "POST", body: "payload", headers: { Authorization: "Bearer private", Cookie: "session=private", "Proxy-Authorization": "Basic private", "X-Api-Key": "private key", "X-Auth-Token": "private token", Referer: "https://provider.test/", "User-Agent": "Couch fixture", Range: "bytes=0-10" } });
+  const response = await publicFetch("https://public.test/start", { method: "POST", body: "payload", headers: { Authorization: "Bearer private", Cookie: "session=private", "Proxy-Authorization": "Basic private", "X-Api-Key": "private key", "X-Auth-Token": "private token", Referer: "https://user:password@provider.test/private-path?token=private#private-fragment", "User-Agent": "Couch fixture", Range: "bytes=0-10" } });
   assert.equal(await response.text(), "done");
   assert.equal(response.url, "https://cdn.public.test/final");
   assert.equal(response.redirected, true);
@@ -233,17 +233,37 @@ test("redirects keep same-origin credentials but never restore them after an ori
     const next = call.url.pathname === "/start" ? "/same" : call.url.pathname === "/same" ? "https://cdn.public.test/away" : call.url.pathname === "/away" ? "https://public.test/final" : undefined;
     return next ? { status: 307, headers: { Location: next } } : { body: "done" };
   });
-  const response = await publicFetch("https://public.test/start", { method: "POST", body: "{}", headers: { Authorization: "Bearer private", "X-Api-Key": "private key", "Content-Type": "application/json" } });
+  const referer = "https://user:password@provider.test/private-path?token=private#private-fragment";
+  const response = await publicFetch("https://public.test/start", { method: "POST", body: "{}", headers: { Authorization: "Bearer private", "X-Api-Key": "private key", "Content-Type": "application/json", Referer: referer } });
   assert.equal(await response.text(), "done");
   assert.equal(calls.length, 4);
   for (const [index, call] of calls.entries()) {
     const headers = call.options.headers as Record<string, string>;
     assert.equal(headers.authorization, index < 2 ? "Bearer private" : undefined);
     assert.equal(headers["x-api-key"], index < 2 ? "private key" : undefined);
+    assert.equal(headers.referer, index < 2 ? referer : "https://provider.test/");
     assert.equal(headers["content-type"], "application/json");
     assert.equal(call.upload, "{}");
   }
 });
+
+for (const [label, referer, expected] of [
+  ["HTTP origin and port", "http://user:password@provider.test:8080/private-path?token=private#private-fragment", "http://provider.test:8080/"],
+  ["malformed URL", "not a URL", undefined],
+  ["relative URL", "/private-path?token=private", undefined],
+  ["FTP URL", "ftp://user:password@provider.test/private-path?token=private#private-fragment", undefined],
+  ["file URL", "file:///private-path", undefined],
+  ["data URL", "data:text/plain,private", undefined],
+  ["blob URL", "blob:https://provider.test/private", undefined],
+  ["empty value", "", undefined],
+] as const) {
+  test(`cross-origin redirects sanitize referrers containing ${label}`, async t => {
+    const calls = transport(t, call => call.url.hostname === "public.test" ? { status: 307, headers: { Location: "https://cdn.public.test/final" } } : { body: "done" });
+    assert.equal(await (await publicFetch("https://public.test/start", { headers: { rEfErEr: referer } })).text(), "done");
+    assert.equal((calls[0]?.options.headers as Record<string, string>).referer, referer);
+    assert.equal((calls[1]?.options.headers as Record<string, string>).referer, expected);
+  });
+}
 
 test("manual and forbidden redirects do not issue another request; loops are bounded", async t => {
   const calls = transport(t, () => ({ status: 302, headers: { Location: "/next" } }));

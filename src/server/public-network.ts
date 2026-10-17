@@ -113,6 +113,14 @@ function response(incoming: http.IncomingMessage, url: URL, method: string, redi
 const crossOriginHeaders = new Set(["user-agent", "accept", "accept-language", "accept-encoding", "referer", "origin", "range", "content-type", "content-length"]);
 export function stripCrossOriginHeaders(headers: Headers): void {
   for (const name of [...headers.keys()]) if (!crossOriginHeaders.has(name)) headers.delete(name);
+  const referer = headers.get("referer");
+  if (referer === null) return;
+  // Keep public provider context without disclosing a token in the URL.
+  try {
+    const url = new URL(referer);
+    if (/^https?:$/.test(url.protocol)) { headers.set("referer", `${url.origin}/`); return; }
+  } catch { /* Malformed referrers carry no safe provider context. */ }
+  headers.delete("referer");
 }
 
 /** Fetch for untrusted internet media. Every socket and redirect stays public. */

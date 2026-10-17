@@ -5,7 +5,7 @@ const origin = "https://couch.local";
 const target = { origin, userAgent: "Browser fixture" };
 const source = "https://media.example/master.m3u8";
 const credentials = { AuThOrIzAtIoN: "Bearer auth fixture", CoOkIe: "session=cookie-fixture", "PrOxY-AuThOrIzAtIoN": "Basic proxy fixture", "X-Api-Key": "api fixture", "x-AUTH-token": "token fixture" };
-const providerHeaders = { ...credentials, "user-agent": "Provider fixture", referer: "https://player.example/" };
+const providerHeaders = { ...credentials, "user-agent": "Provider fixture", referer: "https://user:password@player.example/private-path?token=private#private-fragment" };
 const signal = () => AbortSignal.timeout(3000);
 const rawRequest = spyOn(globalThis, "fetch");
 beforeEach(() => { rawRequest.mockReset(); rawRequest.mockRejectedValue(new Error("Public media used an unprotected request.")); });
@@ -45,7 +45,7 @@ function destination(value: string, kind: "playlist" | "bytes", upstream: string
 function sourceHeaders(headers: Headers, authorized: boolean) {
   for (const [name, value] of Object.entries(credentials)) expect(headers.get(name)).toBe(authorized ? value : null);
   expect(headers.get("user-agent")).toBe(providerHeaders["user-agent"]);
-  expect(headers.get("referer")).toBe(providerHeaders.referer);
+  expect(headers.get("referer")).toBe(authorized ? providerHeaders.referer : "https://player.example/");
   expect(headers.get("accept-encoding")).toBe("identity");
 }
 
