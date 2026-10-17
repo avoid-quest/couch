@@ -1,5 +1,5 @@
 import { usePlaybackClock } from "@/session/playback-clock";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
@@ -108,6 +108,15 @@ export function HomePage() {
     : null;
   const playingStation = (station: RadioStation) => current?.kind === "radio" && (current.source === `radio:${station.id}` || current.source === station.url);
   const playingMedia = current && past.find(item => item.queueEntryId === current.id)?.mediaId;
+  // A hero verb disables while it plays, which drops the focus, and the playing hero then puts the transport where
+  // From start was, so focus moves to its Open player when it leads (as page entry would) unless it went elsewhere.
+  const leading = useRef(false);
+  const playHero = (item: HistoryItem, fromStart: boolean) => { leading.current = true; resume.mutate({ item, fromStart }, { onSettled: ok => { if (!ok) leading.current = false; } }); };
+  useEffect(() => {
+    if (hero?.kind !== "playing" || !leading.current) return;
+    leading.current = false;
+    if (document.activeElement === document.body) document.querySelector<HTMLElement>("[data-home-hero] [data-page-first]")?.focus();
+  }, [hero?.kind]);
   // Shelves keep the order Home opened with, less the item that led it then, so nothing moves under the focus: a station that starts playing stays where it is, marked Playing.
   const historyReady = hero !== undefined && !history.isPending;
   const continued = useKeptOrder(unfinished, item => item.mediaId, historyReady, hero?.kind === "continue" ? hero.item.mediaId : playingMedia).slice(0, shelfLength);
@@ -134,8 +143,8 @@ export function HomePage() {
     </HomeHero>
     : hero.kind === "continue" ? <HomeHero thumbnail={hero.item.thumbnail} shape={tileShape(hero.item.sourceLabel, !!hero.item.collection)} title={hero.item.title} meta={historyMeta(hero.item)}
       time={hero.item.duration ? `ends ${formatEndTime(hero.item.duration - hero.item.position, now)}` : undefined}>
-      <Button data-page-first size="lg" aria-label={on(`Resume ${hero.item.title}`)} disabled={!resumable(hero.item)} onClick={() => resume.mutate({ item: hero.item, fromStart: false })}>{on("Resume")}</Button>
-      <Button variant="ghost" size="lg" disabled={!resumable(hero.item)} onClick={() => resume.mutate({ item: hero.item, fromStart: true })}>From start</Button>
+      <Button data-page-first size="lg" aria-label={on(`Resume ${hero.item.title}`)} disabled={!resumable(hero.item)} onClick={() => playHero(hero.item, false)}>{on("Resume")}</Button>
+      <Button variant="ghost" size="lg" disabled={!resumable(hero.item)} onClick={() => playHero(hero.item, true)}>From start</Button>
       {/* Resume's playback destination lacks the history actions, so Continue keeps a Details stop. */}
       <Button variant="ghost" size="lg" aria-label={`Details ${hero.item.title}`} onClick={() => details.open(itemLocation("history", hero.item.mediaId))}>Details</Button>
     </HomeHero>
