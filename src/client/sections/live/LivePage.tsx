@@ -11,7 +11,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { useKeptOrder } from "@/sections/home/home-rows";
 import { TRY_AGAIN } from "@/copy";
-import { useOnAir } from "./on-air";
+import { useOnAir, useStationMenu } from "./on-air";
 
 /** Live: what's on air at the saved and built-in stations, then every station, then the channels once a Live TV source has some. */
 export function LivePage() {
@@ -20,6 +20,7 @@ export function LivePage() {
   const { on } = usePlayOn();
   const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected });
   const onAir = useOnAir();
+  const stationMenu = useStationMenu();
   // As on Home, the shelf keeps the order it opened with, so a refetch or a new favourite never moves a tile under the focus.
   const stations = useKeptOrder(onAir.stations, station => station.id, !onAir.pending);
   return <section data-page="Live" aria-label="Live" className="grid min-w-0 gap-12">
@@ -28,8 +29,8 @@ export function LivePage() {
     {!onAir.pending && !!stations.length && <Shelf title="On air" time={`${stations.length} ${stations.length === 1 ? "station" : "stations"}`}>
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
       {stations.map((station, index) => <li key={station.id} className="flex shrink-0">
-        <MediaTile data-page-first={index === 0 || undefined} className="justify-start" shape="square" title={station.name} meta={onAir.meta(station) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
-          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} />
+        <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
+          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>}
     {/* A failed list leaves its stations out, so say so; missing shows only cost the tiles their meta line. */}

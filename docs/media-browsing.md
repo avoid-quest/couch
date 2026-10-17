@@ -34,13 +34,13 @@ heading that links to the full list. Hide this section when there are no nearby
 items. Browser history restores the collection page and scroll position.
 
 Collection rows are one target that opens details; their other verbs, Play
-included, wait in the row's context menu ([Browse](design/browse.md#mediarow--medialist)). The existing
+included, wait in the row's menu ([Menus](design.md#menus)). The existing
 Search results, action layout, and time ruler remain as they are. Use one compact
 pager with Previous, "Page N of M" and Next in fixed slots, disabling unavailable directions.
 
 Use the official shadcn [Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
 and [Pagination](https://ui.shadcn.com/docs/components/radix/pagination), together
-with Couch's existing Button, Input, Select, Collapsible, Dropdown Menu, Context Menu
+with Couch's existing Button, Input, Select, Collapsible, Dropdown Menu
 and media rows. The only extra composition is the provider-aware breadcrumb and browsing
 toolbar; the catalog has no media-domain equivalent. Provider cursors are
 opaque and do not report totals, so pagination only links to pages whose cursors
@@ -66,8 +66,8 @@ Logo   Channel name
 
 Rows are compact MediaRows with the channel logo as artwork. The meta line
 carries what's on now and next from the XMLTV guide, and the group while no
-group is picked. Pressing the row plays the channel; its menu (the context
-menu, or the TV's "…") offers Play on and Queue.
+group is picked. Pressing the row plays the channel; its menu (its "…", right-click,
+a long press or a held OK) offers Play on and Queue.
 The group Select, Filter and page live in the route (`/live?group=…&channelFilter=…&channelPage=…`),
 so history restores them. A source without a guide still lists its channels.
 

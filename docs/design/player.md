@@ -165,11 +165,11 @@ OK shows them again.
 
 Keep Playing separate and Played collapsed.
 Compact artwork rows are one target that plays the entry, with one menu for
-Details, Play next, ordering, Save for later and Remove: the row's context menu
-on desktop and phones, and on the TV a "…" beside the title, since an entry's
-page holds only Play and Save ([Browse](browse.md#mediarow--medialist)).
-Removal leaves focus on the adjacent row, so a keyboard keeps editing: on its
-"…" on the TV, else on the row itself. Save as list asks for a name and
+Details, Play next, ordering, Save for later and Remove, behind a "…" at the
+row's end, since an entry's page holds only Play and Save
+([Menus](../design.md#menus)). Removal leaves focus on the adjacent row, so a
+keyboard keeps editing: on its "…" when the "…" opened the menu, else on the
+row itself. Save as list asks for a name and
 preserves errors there for retry. shadcn/Radix menus supply keyboard
 navigation and typeahead.
 

@@ -68,7 +68,8 @@ seconds or the TV returns to its saved size. Client size stays separate.
 Home presents one primary focus stop per media item: Continue resumes, a radio station
 or channel plays, and a saved film or collection opens Details. Continue adds
 one secondary Details stop for its existing History actions, including inspection
-and removal when Resume is unavailable. The tab bar keeps
+and removal when Resume is unavailable. Holding OK on a media item opens its menu of
+other verbs; a short OK acts on release. The tab bar keeps
 Home, Live, Search, Library and Settings between the TV's name and the clock,
 and scrolls away with the page; Up from a page's first row returns to it. Settings OK moves
 into the selected page's first enabled control. Back closes an overlay and
@@ -115,7 +116,7 @@ bun build tests/tv-navigation.browser.ts --target browser --format iife --minify
 
 Evaluate that bundle in the T3 preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
-focus and playback behavior: one Home station stop, Up and Down out of a shelf beside a tile with a longer or shorter caption, Home entry on the hero's
+focus and playback behavior: one Home station stop, a held OK opening a Home tile's menu (Back returns to the tile, a short OK acts on release, and the Remote's held OK does the same), Up and Down out of a shelf beside a tile with a longer or shorter caption, Home entry on the hero's
 primary verb and Up from its last shelf through each shelf and the hero to the
 current tab, Saved Details entry on Play and Right across its verbs, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,

@@ -112,7 +112,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
           {hits.slice(paging.start, paging.end).map((hit, index) => {
             const item = page?.items.find(item => item.url === hit.url);
             return item && <li key={hit.id} className="min-w-0">
-              <MediaTile data-page-first={index === 0 || undefined} title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} shape="poster" className="[&_[data-tile-art]]:h-36" aria-label={`Open ${hit.title}`} data-hit-id={hit.id}
+              <MediaTile data-page-first={index === 0 || undefined} title={hit.title} meta={item.subtitle} thumbnail={hit.thumbnail} shape="poster" aria-label={`Open ${hit.title}`} data-hit-id={hit.id} menu={hit.actions}
                 href={collectionLocation(item)} onClick={() => openProvider(item)} />
             </li>;
           })}

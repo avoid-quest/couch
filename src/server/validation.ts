@@ -43,7 +43,7 @@ function validAction(value: unknown): value is Action {
     case "inSync": return typeof value.inSync === "boolean";
     case "control": return id(value.deviceId);
     case "text": return id(value.deviceId) && id(value.token) && typeof value.text === "string" && value.text.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value.text) && (value.submit === undefined || typeof value.submit === "boolean");
-    case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
+    case "navigate": return (value.deviceId === undefined || id(value.deviceId)) && typeof value.key === "string" && ["up", "down", "left", "right", "select", "menu", "back", "home", "info"].includes(value.key);
     case "enqueue": return validEntry(value.entry) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)

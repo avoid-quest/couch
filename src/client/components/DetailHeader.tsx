@@ -4,7 +4,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { tileAspect, type TileShape } from "@/components/MediaTile";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { OptionsMenu, type MenuAction } from "@/components/RowMenu";
+import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
@@ -28,6 +28,7 @@ export function DetailHeader({ title, meta, description, thumbnail, shape = "vid
   children?: ReactNode;
 }) {
   const { on } = usePlayOn();
+  const rest = useItemMenu(more);
   // Navigation passes disabled controls by, so the page starts on the first verb you can press.
   const first = [!play?.disabled && play && "play", !queue?.disabled && queue && "queue", !save?.disabled && save && "save"].find(Boolean);
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
@@ -46,7 +47,8 @@ export function DetailHeader({ title, meta, description, thumbnail, shape = "vid
         {save && <Button data-page-first={first === "save" || undefined} variant="ghost" size="lg" aria-pressed={save.saved} disabled={save.disabled} onClick={save.run}>{save.saved ? "Saved" : "Save"}</Button>}
         {/* Play on waits for another device that can play it. */}
         {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
-        <OptionsMenu size="icon-lg" title={title} actions={more} />
+        {/* The page's own "…", always shown: the header is no item that reveals it. */}
+        <ItemMenu menu={rest} size="icon-lg" title={title} className="opacity-100" />
       </div>}
       {children}
     </div>

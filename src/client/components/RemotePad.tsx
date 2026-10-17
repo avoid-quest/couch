@@ -1,8 +1,9 @@
-import { type KeyboardEvent, type ReactNode } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { NavigationKey } from "../../shared/protocol";
 import { cn } from "@/lib/utils";
+import { startHold } from "@/hold";
 
 // Each arrow is a quarter of the ring, so a press anywhere on it counts, as on a remote's clickpad. It sits in its
 // half of the ring, so its centre is its own, clipped to the quarter, with a mask that leaves a gap around OK
@@ -20,6 +21,8 @@ const quarters = {
  */
 export function RemotePad({ connected, onNavigate }: { connected: boolean; onNavigate: (key: NavigationKey) => Promise<boolean> }) {
   const navigate = (key: NavigationKey) => { if (connected) void onNavigate(key); };
+  // OK held opens the focused item's menu on the TV, as a remote's held OK does; a short press is OK, sent on release.
+  const ok = useRef<ReturnType<typeof startHold>>(null);
   const keydown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
     const keys: Record<string, NavigationKey> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", Home: "home" };
@@ -39,7 +42,8 @@ export function RemotePad({ connected, onNavigate }: { connected: boolean; onNav
       {arrow("right", <ChevronRight aria-hidden="true" />)}
       {arrow("down", <ChevronDown aria-hidden="true" />)}
       {arrow("left", <ChevronLeft aria-hidden="true" />)}
-      <Button type="button" aria-label="TV OK" disabled={!connected} onClick={() => navigate("select")} className="absolute inset-[31%] h-auto rounded-full text-lg">OK</Button>
+      <Button type="button" aria-label="TV OK" disabled={!connected} onPointerDown={() => { ok.current = startHold(() => navigate("menu")); }} onPointerCancel={() => { ok.current?.release(); ok.current = null; }}
+        onClick={() => { if (ok.current?.release() ?? true) navigate("select"); ok.current = null; }} className="absolute inset-[31%] h-auto rounded-full text-lg">OK</Button>
     </section>
     <div className="grid grid-cols-3 gap-2">
       {button("back", "Back", <ArrowLeft aria-hidden="true" />)}
