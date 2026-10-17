@@ -1,6 +1,5 @@
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
 import { Settings2 } from "lucide-react";
 import { useSessionGate } from "@/session/session-context";
 import type { GuideSource } from "../../shared/iptv";
@@ -11,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ADMIN_ONLY, deviceName } from "@/copy";
+import { notice } from "@/toasts";
 
 export type GuideRequest = (path: string, init?: RequestInit) => Promise<Response>;
 type Props = { inline?: boolean; request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean };
@@ -34,9 +34,11 @@ export function GuideSources({ inline = false, request, sources, host, connected
     try {
       const response = await request(path, { method, body: value === undefined ? undefined : JSON.stringify(value) });
       const { source, skipped } = method === "POST" ? await response.json().catch(() => ({})) as { source?: GuideSource; skipped?: { headers: number; duplicates: number } } : {};
-      if (source && skipped && skipped.headers + skipped.duplicates) toast(`${source.channelCount} channel${source.channelCount === 1 ? "" : "s"} added, ${skipped.headers + skipped.duplicates} skipped`, {
-        description: !skipped.duplicates ? "They need custom headers or DRM." : !skipped.headers ? "They repeat a tvg-id." : "Some need custom headers or DRM; some repeat a tvg-id.",
-      });
+      // The list shows what was added; only what was left out is unexpected.
+      if (source && skipped && skipped.headers + skipped.duplicates) {
+        const count = skipped.headers + skipped.duplicates, channels = `${count} channel${count === 1 ? "" : "s"}`;
+        notice(!skipped.duplicates ? `Skipped ${channels} needing custom headers or DRM.` : !skipped.headers ? `Skipped ${channels} with a repeated tvg-id.` : `Skipped ${channels}: custom headers, DRM or a repeated tvg-id.`);
+      }
       return true;
     } catch (reason) { setError({ at, message: reason instanceof Error ? reason.message : "Couldn't update this source." }); return false; }
     finally { setBusy(false); }

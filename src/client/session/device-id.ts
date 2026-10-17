@@ -1,10 +1,10 @@
 import { loadSendspinClientIdentity, type SendspinStorage } from "@sendspin/sendspin-js";
 import { useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import type { SessionState } from "../../shared/protocol";
 import { normalizeDeviceName } from "../../shared/devices";
 import { couchApp } from "./native-context";
 import { fromSavedCouch } from "./connection";
+import * as toasts from "../toasts";
 import { defaultDeviceSharing, isDeviceSharing, type DeviceSharing } from "../../shared/device-sharing";
 import { playingOn } from "./where-it-plays";
 
@@ -116,9 +116,9 @@ export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output =>
 
 /**
  * One "Playing on {name}" toast when a play this window started lands on another Device: its
- * picture and sound are elsewhere. A fixed id keeps it one toast when both the command and Play on announce it.
+ * picture and sound are elsewhere. Its kind keeps it one toast when both the command and Play on announce it.
  */
 export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
   const name = playingOn(state, target, deviceId());
-  if (name) toast(`Playing on ${name}`, { id: "playing-on" });
+  if (name) toasts.playingOn(name);
 }

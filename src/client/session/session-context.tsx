@@ -1,8 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { Button } from "../components/ui/button";
 import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
 import { applyTvNavigation } from "../navigation";
 import { couchApp, isNativeHost } from "./native-context";
@@ -20,6 +17,7 @@ import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
 import { announcePlay, deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "./device-id";
 import { apiSend } from "../api/client";
+import { dismiss, dismissUndo, queued, undoable } from "../toasts";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -97,7 +95,8 @@ export function useOptionalSessionGate(): SessionGateValue | null {
   return useContext(SessionGateContext);
 }
 
-export function SessionGate({ children }: PropsWithChildren) {
+// upNext opens Up next for a confirmed Queue; main.tsx owns the router that does it.
+export function SessionGate({ children, upNext }: PropsWithChildren<{ upNext: (targetDeviceId?: string) => void }>) {
   const device = usePlaybackDevice();
   // In Full mode this page is this computer's Core and connects as its host.
   const localHost = nativeHost && device?.mode === "local";
@@ -203,28 +202,20 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const currentCredentials = useRef(credentials);
   const commandAttempt = useRef(0);
-  const undoToast = useRef<string | number | null>(null);
   currentCredentials.current = credentials;
 
-  const dismissUndo = useCallback(() => {
-    if (undoToast.current !== null) toast.dismiss(undoToast.current);
-    undoToast.current = null;
-  }, []);
-  useEffect(() => { dismissUndo(); toast.dismiss("queued"); setRequestedChooser(null); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
+  useEffect(() => { dismissUndo(); dismiss("queued"); setRequestedChooser(null); return () => void dismissUndo(); }, [credentials?.origin, credentials?.token, credentials?.installationId]);
   // A request belongs to the playback it was made for; viewing another one retires it.
   useEffect(() => setRequestedChooser(request => request?.startsWith(`${state?.playback}:`) ? request : null), [state?.playback]);
 
-  const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration = 6_000) => {
-    dismissUndo();
+  const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration?: number) => {
     const owner = currentCredentials.current;
-    const id = toast(text, { duration, onDismiss: () => { if (undoToast.current === id) undoToast.current = null; }, action: { label: "Undo", onClick: () => {
-      undoToast.current = null;
+    undoable(text, () => {
       if (!owner || owner !== currentCredentials.current) return;
       setError(null);
       undo().catch(reason => { if (owner === currentCredentials.current) setError(errorText(reason)); });
-    } } });
-    undoToast.current = id;
-  }, [dismissUndo]);
+    }, duration);
+  }, []);
 
   // Confirm the requesting action, including REST callers, under its original connection and target.
   const queue = useCallback(async <T,>(title: string | (() => string | undefined), work: () => Promise<T>, attempt = ++commandAttempt.current, targetDeviceId?: string) => {
@@ -234,10 +225,10 @@ export function SessionGate({ children }: PropsWithChildren) {
     const after = readObservation();
     if (result !== false && result !== null && owner && owner === currentCredentials.current && attempt === commandAttempt.current && before && after && after.controlling === before.controlling) {
       const label = typeof title === "function" ? title() : title;
-      toast(label ? `Queued ${label}` : "Queued", { id: "queued", action: <Button asChild variant="secondary" size="sm"><Link to="/now" search={{ queue: true, targetDeviceId }}>Up next</Link></Button> });
+      queued(label, () => upNext(targetDeviceId));
     }
     return result;
-  }, [readObservation]);
+  }, [readObservation, upNext]);
 
   const run = useCallback(async (action: Action, targetDeviceId?: string) => {
     const owner = currentCredentials.current;
@@ -283,7 +274,7 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (current() && attempt === commandAttempt.current) setError(errorText(reason));
       return false;
     }
-  }, [command, dismissUndo, offerUndo, queue, readObservation]);
+  }, [command, offerUndo, queue, readObservation]);
 
   const seekBy = useCallback((seconds: number, targetDeviceId?: string) => {
     const player = readObservation()?.player;

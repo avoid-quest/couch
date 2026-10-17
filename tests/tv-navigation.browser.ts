@@ -326,6 +326,34 @@ window.runTvNavigationRegression = async () => {
     await until(() => rows()[0]?.dataset.savedDetails === id);
     assert(document.activeElement === next, "Saved Undo stole deliberate focus");
   });
+  await check("A remote reaches a removal's Undo by Up past the tabs, Back leaves it, and OK undoes", async () => {
+    await click('[data-app-nav] a[href="/library"]');
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[data-saved-details]')];
+    const toasts = () => document.querySelectorAll("[data-sonner-toast]").length;
+    for (let attempt = 0; attempt < 80 && toasts(); attempt++) await wait(100);
+    assert(!toasts() && rows().length >= 2, "Save two video fixtures, and let earlier toasts close, before running");
+    const remote = async (key: Parameters<typeof applyTvNavigation>[0]) => { applyTvNavigation(key); await wait(350); };
+    const id = rows()[0]!.dataset.savedDetails!;
+    await click(`[data-saved-details="${id}"] button[aria-label^="Details"]`);
+    await until(() => !!document.querySelector('[data-page="Item"] button[aria-label^="Options"]'));
+    control('[data-page="Item"] button[aria-label^="Options"]').focus(); await remote("select");
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent?.trim() === "Remove")!.focus();
+    await remote("select");
+    await until(() => location.pathname === "/library" && !document.querySelector(`[data-saved-details="${id}"]`));
+    const undo = () => [...document.querySelectorAll<HTMLElement>("[data-sonner-toast] [data-button]")].find(element => element.textContent === "Undo");
+    assert(undo() && !document.activeElement?.closest("[data-sonner-toaster]"), "The removal's Undo is missing or took focus");
+    const up = async () => { for (let step = 0; step < 8 && !document.activeElement?.closest("[data-sonner-toaster]"); step++) await remote("up"); };
+    await up();
+    assert(document.activeElement === undo(), "Up past the tabs did not reach Undo");
+    await remote("back");
+    const tab = document.activeElement;
+    assert(tab?.matches('.app-header [aria-current="page"]') && location.pathname === "/library", "Back on Undo did not return to the tab");
+    await up();
+    await remote("select");
+    await until(() => rows()[0]?.dataset.savedDetails === id && !undo());
+    await wait(350);
+    assert(document.activeElement === tab, "Undo did not return focus to the tab it came from");
+  });
   await check("Saved favorites retain remote ordering, Remove and Undo", async () => {
     await click('[data-app-nav] a[href="/library"]');
     await click('a[href="/library?tab=channels"]');

@@ -83,8 +83,8 @@ the same Playback, and grows into the player band (`couch-player-band`) and
 back.
 
 The bar and the phone tab bar share the shell's footer, whose height is
-`--bottom-bar`: toasts and scroll padding clear it, and the player band
-publishes its own. Transport details: [Player](player.md#the-player-is-one-tap-away).
+`--bottom-bar`: scroll padding clears it, and the player band publishes its
+own. Toasts sit at the top right ([Design](../design.md)). Transport details: [Player](player.md#the-player-is-one-tap-away).
 
 ## Browsing stays grounded
 
