@@ -12,7 +12,7 @@ items keep the order they had when Home opened; a station that starts
 playing is marked Playing where it is.
 
 Settings → Home controls each device's row visibility and order. Saved
-visibility always applies; Up next stays reachable from the mini player and the player band.
+visibility always applies; Up next stays reachable from the now-playing bar and the player band.
 Home ends with its content. Up next is off by default and, when enabled,
 appears as one ruler split by each entry's length.
 

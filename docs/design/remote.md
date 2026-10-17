@@ -11,11 +11,11 @@ Select picks one; offline or private TVs cannot be controlled. A D-pad of
 The shared transport, timeline and volume controls act on that TV; Up next
 retains the same target for queue actions, shortcuts and Undo. Commands
 reject a disconnected, revoked or reassigned target rather than act on a
-different TV. The mini player hides on Remote.
+different TV. The now-playing bar hides on Remote.
 
 ## Type on TV
 
-Type on TV is an `InputGroup` for the TV's focused Find field or its own
+Type on TV is an `InputGroup` for the TV's focused Search field or its own
 Device name. Send replaces the draft; Clear sends an empty draft. Only
 Enter on TV submits the existing search or name form. Typing and reconnecting
 do not send an unsaved draft, and no field is chosen automatically. Pairing

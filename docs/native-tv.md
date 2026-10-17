@@ -57,8 +57,9 @@ for the pairing QR and six-digit code. The first device you pair becomes the
 admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
 phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
-**Home** shows what plays now and Up next, **Find** holds search and sources,
-**Saved** holds lists and favorites, and **Settings** the rest. TV **Settings > Display > Text size** offers Default,
+**Home** shows what plays now and Up next, **Live** holds radio and Live TV,
+**Search** holds search and sources, **Library** holds lists and favorites, and
+**Settings** the rest. TV **Settings > Display > Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
@@ -67,8 +68,9 @@ seconds or the TV returns to its saved size. Client size stays separate.
 Home presents one primary focus stop per media item: Continue resumes, a radio station
 or channel plays, and a saved film or collection opens Details. Continue adds
 one secondary Details stop for its existing History actions, including inspection
-and removal when Resume is unavailable. The header keeps
-Home, Find, Saved and Settings, the TV's name and the clock. Settings OK moves
+and removal when Resume is unavailable. The tab bar keeps
+Home, Live, Search, Library and Settings between the TV's name and the clock,
+and scrolls away with the page; Up from a page's first row returns to it. Settings OK moves
 into the selected page's first enabled control. Back closes an overlay and
 restores its opener; from Settings content it restores the visible rail entry
 or narrow Settings page selector,
@@ -111,7 +113,7 @@ Evaluate that bundle in the T3 preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
 focus and playback behavior: one Home station stop, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
-repeated Home Back, five-point OK-to-adjust Volume, Saved removal/Undo/order,
+the tab bar's scroll, Up and Back, repeated Home Back, five-point OK-to-adjust Volume, Saved removal/Undo/order,
 retained favorite and Live TV actions, and a Remote that can't choose or open this device's
 capture on Sharing while its own pointer and keys still can (it drives the bundle's copy of
 `applyTvNavigation`, the path Remote keys take; `runSharingLocalOnlyRegression()` runs it alone). Cold and warm Saved Back retain the

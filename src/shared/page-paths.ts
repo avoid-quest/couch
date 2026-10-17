@@ -1,17 +1,19 @@
 import { settingsAliases, settingsPageForPath, settingsPages } from "./settings-pages";
 
-// Main destinations and the player. Sources are filters inside Find, not places.
+// The sections and the player. Sources are filters inside Search, not places.
 export const pagePaths: Record<string, string> = {
-  Home: "/", Now: "/now", Find: "/find", Saved: "/saved", Settings: "/settings", Remote: "/remote",
+  Home: "/", Now: "/now", Live: "/live", Search: "/search", Library: "/library", Settings: "/settings", Remote: "/remote",
 };
+// Earlier sections, served so bookmarks reach their redirects (routes/find.tsx, routes/saved.tsx).
+const earlierPaths = ["/find", "/saved"];
 
-export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...Object.values(settingsPages).map(page => page.path), ...Object.keys(settingsAliases)];
+export const frontendPaths = ["/item", "/collection", ...Object.values(pagePaths), ...earlierPaths, ...Object.values(settingsPages).map(page => page.path), ...Object.keys(settingsAliases)];
 
 export const sectionForPath = (pathname: string): string | undefined => {
   const clean = pathname.replace(/\/$/, "") || "/";
-  if (clean === "/item" || clean === "/collection") return "Find";
+  if (clean === "/item" || clean === "/collection") return "Search";
   const section = Object.keys(pagePaths).find(name => pagePaths[name] === clean);
   if (section) return section;
   return settingsPageForPath(pathname) ? "Settings" : undefined;
 };
-export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Saved" : section] ?? "/";
+export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Library" : section] ?? "/";

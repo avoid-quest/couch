@@ -63,11 +63,12 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
 }
 
 /**
- * Play/Pause, Stop and Next, each in its slot for every kind of media: the band (`prominent`, larger), the mini player and the remote pad.
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band (`prominent`, larger), the now-playing bar and the remote pad.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
+ * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones.
  */
-export function PlaybackTransport({ state, connected, run, pageFirst = false, prominent = false }: Props & { pageFirst?: boolean; prominent?: boolean }) {
+export function PlaybackTransport({ state, connected, run, pageFirst = false, prominent = false, moreClassName }: Props & { pageFirst?: boolean; prominent?: boolean; moreClassName?: string }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { available, transportReady, pausable, stoppable, nextReady, hasNext } = playbackCapabilities(state, connected);
@@ -77,7 +78,7 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, pr
   const label = ended ? "Replay" : failed ? "Try again" : pause ? "Pause" : "Play";
   const enabled = [ended || failed ? available : transportReady && pausable, stoppable, nextReady && hasNext];
   const first = (slot: number) => pageFirst && enabled.indexOf(true) === slot || undefined;
-  const size = prominent ? "size-11 [&_svg]:size-5" : undefined;
+  const size = cn(prominent && "size-11 [&_svg]:size-5", moreClassName);
   return <div className={cn("flex shrink-0 items-center gap-0.5", prominent && "player-transport")} role="group" aria-label="Playback controls">
     <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" className={prominent ? "size-12 touch:size-11 [&_svg]:size-6" : undefined} aria-label={label} title={label} disabled={!enabled[0]}
       onClick={() => { if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
@@ -108,7 +109,7 @@ export function PlaybackVolume({ state, connected, run, showSlider = true, showV
   </div>;
 }
 
-/** The band's and mini player's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
+/** The band's and now-playing bar's volume: a speaker that opens the slider and Mute in a Popover, so the dock stays icons. */
 export function VolumeButton({ state, connected, run, className }: Props & { className?: string }) {
   return <Popover>
     <PopoverTrigger asChild><Button variant="ghost" size="icon-lg" className={className} aria-label="Volume" title="Volume">{muted(state) ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button></PopoverTrigger>

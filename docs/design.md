@@ -22,15 +22,15 @@ catalog provides interface icons, not brand identities.
 
 ## Principles
 
-- **Conventional structure, quiet style.** Home, Find, Saved and Settings, plus
-  Remote on a Device that can drive a TV; a full-bleed player with a compact
+- **Conventional structure, quiet style.** Home, Live, Search, Library and
+  Settings, plus Remote on a Device that can drive a TV; a full-bleed player with a compact
   bottom control band; and the Device you control and where it plays one step
   away.
 - **Real content only.** A browse page shows what its source returns, never
   suggestions Couch picked. A source without a home page of its own (YouTube,
   Bandcamp, SoundCloud) opens on an Empty with a search field scoped to it.
 - **Time is the organising idea.** Every length is read as the clock time it
-  ends: "4:52, ends 10:29". The band and mini player read "−3:24 ends 20:59";
+  ends: "4:52, ends 10:29". The band and now-playing bar read "−3:24 ends 20:59";
   live reads "Live", with no total.
 - **Colour only when it means something.** Destructive red is the only colour.
   Live is the word "Live", not a red badge.
@@ -141,6 +141,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | admin, Make admin, Become admin | administrator, Claim administration |
 | Up next (the list), Queue (the verb) | shared queue, Add to Up next |
 | Saved, Save / Saved | Kept, Keep, favorites |
+| Live, Search, Library (the sections) | Find, Saved (earlier sections) |
 | Live TV, Radio playlists | IPTV, TV guide |
 | Try again | Retry, Reload, Refresh |
 | Couldn't load X. | Could not…, Check the connection and… |
@@ -151,9 +152,9 @@ Sentence case, short, no filler. Say what happened and what to do next.
 
 Each surface's own layout and behaviour lives in its file:
 
-- [Shell](design/shell.md): the header and section nav, the Couch switch, the mini player, keyboard shortcuts, first run and pairing, and when a picture opens the player.
+- [Shell](design/shell.md): the sections and their paths, the header and tab bars, the Couch switch, the now-playing bar, keyboard shortcuts, first run and pairing, and when a picture opens the player.
 - [Home](design/home.md): Home's timetable rows and its tiles on the TV.
-- [Browse](design/browse.md): Find, Saved, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
+- [Browse](design/browse.md): Search, Live, Library, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
 - [Player](design/player.md): the player band, transport, timeline, Up next and Playback settings.
 - [Where it plays](design/where-it-plays.md): the Where it plays Sheet, its faders and Only here, Play on, DeviceIcon and outputs after a server switch.
 - [TV](design/tv.md): anything shown on a TV: remote navigation, the TV layout and the TV player.

@@ -34,7 +34,8 @@ export function RemotePage() {
   const volumeState = state && target ? { ...state, outputs: [{ deviceId: target.id, sound: true, picture: false }], systemAudio: undefined, player: { ...state.player, volume: target.volume } } : null;
   if (tvPresentation) return <><PageHeader title="Remote" /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
   return <div data-remote-page className="mx-auto w-full max-w-4xl">
-    <PageHeader title="Remote" />
+    {/* A phone's top bar already names the page. */}
+    <PageHeader title="Remote" className="touch:sr-only" />
     <div className="mb-6 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-4">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>
         <SelectTrigger aria-label="TV to control" className="min-h-11 w-full sm:w-72"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
@@ -97,6 +98,6 @@ function RemoteText({ field, connected, send }: { field: RemoteTextField | null;
       <InputGroupAddon align="inline-end"><InputGroupButton className="min-h-11 min-w-11" disabled={disabled} onClick={() => void submit(false)}>Send</InputGroupButton></InputGroupAddon>
     </InputGroup>
     <div className="flex gap-2"><Button variant="ghost" className="min-h-11" disabled={disabled || !draft} onClick={() => void submit(false, "")}>Clear</Button><Button variant="outline" className="min-h-11" disabled={disabled || !field?.submit} onClick={() => void submit(true)}>Enter on TV</Button></div>
-    <p className="text-sm text-muted-foreground" role="status">{!field ? "Select a field on the TV first. Find and Device name accept text." : field.kind === "device-name" ? "Send replaces the name. Choose Save on the TV or Enter on TV to save it." : "Send replaces the field. Enter on TV searches or opens the link."}{field && sent && " Sent."}</p>
+    <p className="text-sm text-muted-foreground" role="status">{!field ? "Select a field on the TV first. Search and Device name accept text." : field.kind === "device-name" ? "Send replaces the name. Choose Save on the TV or Enter on TV to save it." : "Send replaces the field. Enter on TV searches or opens the link."}{field && sent && " Sent."}</p>
   </section>;
 }

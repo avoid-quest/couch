@@ -2,7 +2,7 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 // Couch: one placement at the page gutter, above whatever bar is at the
-// bottom (the mini player or the player band publish --bottom-bar).
+// bottom (the shell footer or the player band publish --bottom-bar).
 const offset = { left: "var(--gutter)", right: "var(--gutter)", bottom: "calc(var(--bottom-bar, 0px) + 1rem)" }
 
 const Toaster = ({ ...props }: ToasterProps) => {

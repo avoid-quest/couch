@@ -50,7 +50,7 @@ export function useDetailNavigation() {
       }
       void router.navigate({ href, viewTransition, state: { pageOpener: { href: location.href, index: location.state.__TSR_index } } });
     },
-    back(fallback = "/find") {
+    back(fallback = "/search") {
       if (!router) return;
       const target = router.state.location.state.pageOpener;
       const distance = target && target.index - router.state.location.state.__TSR_index;
