@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
 import { isValidElement, type ReactNode } from "react";
 import type { PlaybackCommand } from "../src/shared/protocol";
-import { Overview, WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { WhereItPlays } from "../src/client/sections/shell/Outputs";
 import { chooserRequest, choosesHere, picker, reopens } from "../src/client/session/where-it-plays";
 import { deviceId } from "../src/client/session/device-id";
 import { liveFixture, until } from "./live-input.fixture";
@@ -515,12 +515,11 @@ test("Only here goes direct, and sync adjustment keeps its value but applies onl
     assert.deepEqual(f.publisher.state.preferences, preferences, "audio-versus-video offset is a separate preference");
     assert.deepEqual([sound(f.publisher, f.receiver.id), sound(f.publisher, other.id)], volumes);
     assert.deepEqual(consent(f.publisher, f.receiver.id), { audio: true, video: true });
-    // Joining again restores the group and the saved value applies; the overview offers Sync, and the picker leaves it there.
+    // Joining again restores the group and the saved value applies, with Sync under its fader in Where it plays.
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delayActive === true);
     assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delay, 80);
-    assert.ok(control(Overview({ state: f.publisher.state, run: async () => true }), "Receiver sync"));
-    assert.equal(control(WhereItPlays({ state: f.publisher.state, run: async () => true }), "Receiver sync"), undefined);
+    assert.ok(control(WhereItPlays({ state: f.publisher.state, connected: true, run: async () => true }), "Receiver sync"));
   } finally { await f.close(); }
 });
 
@@ -547,8 +546,8 @@ test("a saved sync adjustment shows on a Direct output after Core restarts, with
     assert.equal(output.delay, 80, "the saved value shows");
     assert.equal(output.delayActive, undefined, "Direct playback stays Direct");
     assert.equal(receiver.load()!.follow, undefined);
-    // Sync, in the overview, shows only while the device plays in sync with others.
-    assert.equal(control(Overview({ state: receiver.state, connected: true, run: async () => true }), "Receiver sync"), undefined, "no operative control while it cannot apply");
+    // Sync shows only while the device plays in sync with others.
+    assert.equal(control(WhereItPlays({ state: receiver.state, connected: true, run: async () => true }), "Receiver sync"), undefined, "no operative control while it cannot apply");
   } finally { await f.close(); }
 });
 

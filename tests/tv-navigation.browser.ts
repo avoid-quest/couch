@@ -279,15 +279,16 @@ window.runTvNavigationRegression = async () => {
     await key("Escape"); await key("Escape");
     assert(location.pathname === "/", "Volume overlay lost Home opener");
   });
-  await check("Every device opens Where it plays' overview on its first device, and Back returns to the picker's button", async () => {
+  await check("Where it plays opens on its first device you can choose, Down walks its devices, and Back returns to its button", async () => {
     await click('[data-app-nav] a[href="/"]');
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    await until(() => !!document.querySelector('[role="dialog"] [data-device-check]'));
-    [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(button => button.textContent === "Every device")!.click();
-    await until(() => location.pathname === "/where-it-plays" && !!document.activeElement?.matches('[data-page="Where it plays"] [data-device-check][data-page-first]'));
-    assert(!document.querySelector('[role="dialog"][data-state="open"]') && !document.querySelector("[data-now-playing]"), "The picker or the now-playing bar stayed over the overview");
+    const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
+    await until(() => !!document.activeElement && document.activeElement === checks()[0]);
+    assert(checks().length >= 2, "Pair a second online shared output before running");
+    await key("ArrowDown");
+    assert(document.activeElement === checks()[1], "Down did not reach the next device");
     await key("Escape");
-    await until(() => location.pathname === "/" && !!document.activeElement?.matches('[data-now-playing] button[aria-label="Where it plays"]'));
+    await until(() => !document.querySelector('[role="dialog"][data-state="open"]') && !!document.activeElement?.matches('[data-now-playing] button[aria-label="Where it plays"]'));
   });
   await check("Saved Details keeps Remove, Undo and ordering reachable with one row stop", async () => {
     await click('[data-app-nav] a[href="/library"]');
