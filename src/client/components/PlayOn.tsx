@@ -43,9 +43,9 @@ export function PlayOnGroup({ onPlay, disabled, sharingDeviceId }: { onPlay: (de
 }
 
 /** "Play on" beside a row's inline verbs. */
-export function PlayOnMenu({ title, onPlay, disabled, sharingDeviceId }: { title: string; onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
+export function PlayOnMenu({ title, onPlay, disabled, sharingDeviceId, size }: { title: string; onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; size?: "default" | "lg" }) {
   if (!usePlayOn().devices.length) return null;
-  return <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" disabled={disabled} aria-label={`Play ${title} on`}>Play on</Button></DropdownMenuTrigger>
+  return <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size={size} disabled={disabled} aria-label={`Play ${title} on`}>Play on</Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end"><Devices onPlay={onPlay} sharingDeviceId={sharingDeviceId} /></DropdownMenuContent>
   </DropdownMenu>;
 }
