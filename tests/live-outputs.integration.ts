@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer, type ServerResponse } from "node:http";
 import { isValidElement, type ReactNode } from "react";
 import type { PlaybackCommand } from "../src/shared/protocol";
-import { WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { Overview, WhereItPlays } from "../src/client/sections/shell/Outputs";
 import { chooserRequest, choosesHere, picker, reopens } from "../src/client/session/where-it-plays";
 import { deviceId } from "../src/client/session/device-id";
 import { liveFixture, until } from "./live-input.fixture";
@@ -515,10 +515,12 @@ test("Only here goes direct, and sync adjustment keeps its value but applies onl
     assert.deepEqual(f.publisher.state.preferences, preferences, "audio-versus-video offset is a separate preference");
     assert.deepEqual([sound(f.publisher, f.receiver.id), sound(f.publisher, other.id)], volumes);
     assert.deepEqual(consent(f.publisher, f.receiver.id), { audio: true, video: true });
-    // Joining again restores the group and the saved value applies.
+    // Joining again restores the group and the saved value applies; the overview offers Sync, and the picker leaves it there.
     assert.equal((await f.publisher.command({ type: "output", deviceId: other.id, level: 50, picture: true })).ok, true);
     await until(() => f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delayActive === true);
     assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.delay, 80);
+    assert.ok(control(Overview({ state: f.publisher.state, run: async () => true }), "Receiver sync"));
+    assert.equal(control(WhereItPlays({ state: f.publisher.state, run: async () => true }), "Receiver sync"), undefined);
   } finally { await f.close(); }
 });
 
@@ -545,10 +547,8 @@ test("a saved sync adjustment shows on a Direct output after Core restarts, with
     assert.equal(output.delay, 80, "the saved value shows");
     assert.equal(output.delayActive, undefined, "Direct playback stays Direct");
     assert.equal(receiver.load()!.follow, undefined);
-    const rows = WhereItPlays({ state: receiver.state, connected: true, run: async () => true });
-    // Sync shows only while the device plays in sync with others.
-    assert.equal(control(rows, "Receiver sync"), undefined, "no operative control while it cannot apply");
-    assert.doesNotMatch(JSON.stringify(rows, (_key, value) => typeof value === "function" || _key === "_owner" ? undefined : value), /Sync 80 ms earlier/);
+    // Sync, in the overview, shows only while the device plays in sync with others.
+    assert.equal(control(Overview({ state: receiver.state, connected: true, run: async () => true }), "Receiver sync"), undefined, "no operative control while it cannot apply");
   } finally { await f.close(); }
 });
 

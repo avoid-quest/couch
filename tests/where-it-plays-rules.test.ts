@@ -4,7 +4,7 @@ import { DeviceIcon, signalOf, type Signal } from "../src/client/components/Devi
 import { muted } from "../src/client/components/PlaybackTransport";
 import { playsOn } from "../src/client/session/device-id";
 import type { ClientSessionState } from "../src/client/session/session";
-import { chooserFor, chooserRequest, picker, playingOn, playOnTargets, reopens } from "../src/client/session/where-it-plays";
+import { chooserFor, chooserRequest, overview, picker, playingOn, playOnTargets, reopens } from "../src/client/session/where-it-plays";
 import type { DeviceSummary, Output, PlaybackSummary } from "../src/shared/protocol";
 
 // One rule per test, in the order of docs/design/where-it-plays.md (src/client/session/where-it-plays.ts). "here" is this device; every other device
@@ -280,6 +280,58 @@ describe("the chooser", () => {
     expect(chooserFor(null, "film", "film:here:1")).toBe("film:here:1");
     expect(chooserFor(null, "other", "film:here:1")).toBeNull();
     expect(chooserFor(null, null, "film:here:1")).toBeNull();
+  });
+});
+
+describe("the overview", () => {
+  const ids = (rows: { device: DeviceSummary }[]) => rows.map(item => item.device.id);
+  // This device and the TV play the film; the kitchen plays the radio, the phone a show; the laptop is free and the tablet offline.
+  const devices = [device("tablet", { online: false }), device("laptop"), device("phone"), device("kitchen"), device("tv"), device(here)];
+  const show: PlaybackSummary = { id: "show", title: "Il commissario Montalbano", status: "playing", outputs: [both("phone")] };
+  const state = session({ devices, outputs: [both("tv"), sound(here)], others: [radio([sound("kitchen")]), show] });
+
+  test("lists the Playback you control first, then the other Playbacks, then free devices, offline ones last", () => {
+    const { rows, elsewhere, free } = overview(state, { here });
+    expect(ids(rows)).toEqual(["tv", here]);
+    expect(elsewhere.map(group => [group.playback.id, group.status, ids(group.rows)])).toEqual([["radio", "Paused", ["kitchen"]], ["show", "Playing", ["phone"]]]);
+    expect(ids(free)).toEqual(["laptop", "tablet"]);
+  });
+
+  test("keeps the picker's header, and lists every device once, as the picker's row", () => {
+    const { rows, elsewhere, free, controls, ...header } = overview(state, { here, tv: true });
+    expect(controls).toBe(true);
+    const { rows: all, ...picked } = picker(state, { here, tv: true });
+    expect(header).toEqual(picked);
+    expect([...rows, ...elsewhere.flatMap(group => group.rows), ...free].sort((a, b) => a.device.id.localeCompare(b.device.id))).toEqual([...all].sort((a, b) => a.device.id.localeCompare(b.device.id)));
+  });
+
+  test("a row's check still means in the Playback you control: a device playing elsewhere moves here, and says what it plays there", () => {
+    const kitchen = overview(state, { here }).elsewhere[0]!.rows[0]!;
+    expect(kitchen).toMatchObject({ output: undefined, status: "Paused avoid radio", check: { enabled: true, action: { type: "output", deviceId: "kitchen", picture: true, level: 50 } } });
+  });
+
+  test("an output of the Playback you control stays under it while offline", () => {
+    const { rows, free } = overview(session({ devices: [device("tv", { online: false }), device("kitchen")], outputs: [both("tv")] }), { here });
+    expect([ids(rows), ids(free)]).toEqual([["tv"], ["kitchen"]]);
+  });
+
+  test("another Playback keeps its offline devices under it while an online one plays it", () => {
+    const { elsewhere, free } = overview(session({ devices: [device("kitchen"), device("phone", { online: false }), device("laptop")], outputs: [both(here)], others: [{ ...show, outputs: [both("kitchen"), both("phone")] }] }), { here });
+    expect(elsewhere.map(group => [group.playback.id, ids(group.rows)])).toEqual([["show", ["kitchen", "phone"]]]);
+    expect(ids(free)).toEqual(["laptop"]);
+  });
+
+  test("with no Playback to control, nothing can join it: Volume goes and every check is off, while rows still say what they play", () => {
+    const idle = overview(session({ devices: [device("kitchen"), device("laptop")], others: [radio([sound("kitchen")])], playback: null, currentEntryId: null }), { here });
+    expect(idle.controls).toBe(false);
+    expect([...idle.elsewhere.flatMap(group => group.rows), ...idle.free].map(item => [item.device.id, item.status, item.check.enabled])).toEqual([["kitchen", "Paused avoid radio", false], ["laptop", "Not playing", false]]);
+  });
+
+  test("a Playback that has stopped, or plays only on offline devices, isn't listed: its devices are free or offline", () => {
+    const stopped = session({ devices: [device("kitchen"), device("phone", { online: false })], others: [{ ...radio([sound("kitchen")]), status: "idle" }, { ...show, outputs: [both("phone")] }] });
+    const { elsewhere, free } = overview(stopped, { here });
+    expect(elsewhere).toEqual([]);
+    expect(free.map(item => [item.device.id, item.status])).toEqual([["kitchen", "Not playing"], ["phone", "Offline"]]);
   });
 });
 

@@ -26,21 +26,6 @@ type or copy rules.
 - **Fewer exceptions.** A rule that needs an exception for one surface is a
   sign the structure is wrong. Prefer changing the structure.
 
-## Where it plays
-
-The picker and its principles are built: [design/where-it-plays.md](design/where-it-plays.md).
-What remains is the overview.
-
-- **One device, one row.** A device is listed once, under the Playback it
-  serves, since Core lets a device serve one Playback at a time.
-- "Every device", at the foot of the picker, opens the overview.
-
-**Overview** (`/where-it-plays`): each Playback that plays somewhere, shown as
-its artwork, title, status and end time, with its device rows below it. Then
-"Not playing": free devices, each able to join the Playback you control.
-Offline devices come last. Rows here use the picker's row, and link to
-Settings → This device → Sharing for consent.
-
 ## Deferred
 
 - A Live TV programme grid, and any Core endpoint it would need.
@@ -63,7 +48,7 @@ release notes ([ci.md](ci.md)).
 | `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library (landed) | `design/browse.md` |
 | `player` | Show the time and title over the playing picture | Player (landed) | `design/player.md` |
 | `where-it-plays` | Choose where it plays from a simple list of devices | rules model and tests; picker (landed) | `design/where-it-plays.md` |
-| `devices` | See every device and what it plays on one page | overview | `design/where-it-plays.md` |
+| `devices` | See every device and what it plays on one page | overview (landed) | `design/where-it-plays.md` |
 | `remote` | Drive the TV from a classic remote on your phone | Remote; Settings fitted to the shell; delete this brief | `design/remote.md`, `design/settings.md` |
 
 ## Every layer
