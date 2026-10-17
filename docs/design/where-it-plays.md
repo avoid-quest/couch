@@ -1,8 +1,7 @@
 # Where it plays
 
-Two surfaces: the picker, a Sheet for the Playback you control, and the
-[overview](#the-overview), every device on one page. Their rules live in one
-module without React,
+One surface: the picker, a Sheet for the Playback you control, and the one
+place to choose where it plays. Its rules live in one module without React,
 [`src/client/session/where-it-plays.ts`](../../src/client/session/where-it-plays.ts),
 with a unit test per rule in `tests/where-it-plays-rules.test.ts`. On a TV its
 faders take the arrows only after OK: [TV](tv.md#every-journey-step-works-with-a-remote).
@@ -15,9 +14,8 @@ People never wonder whether a word names a device, a group or a place.
   artwork and title, and text refers to it by its title ("Playing avoid
   radio"). Couch never asks anyone to name or group anything, and Where it
   plays never says zone, group, room, speaker or Playback.
-- **One device, one row.** The picker lists every paired device once, and the
-  overview lists it under the Playback it serves, since Core lets a device
-  serve one Playback at a time.
+- **One device, one row.** The picker lists every paired device once, since
+  Core lets a device serve one Playback at a time.
 - **This device keeps its name.** Its status line starts with "This device".
 - **The host is just a device.** The Couch and its host share one name, which
   appears only where you choose which Couch to use (the Couch switch and Couch
@@ -30,7 +28,7 @@ People never wonder whether a word names a device, a group or a place.
   silences sound ([Volume](#volume)).
 - **Show what you can't change.** A device you can't change stays listed and
   dimmed, its check disabled, with a one-word status. No explanatory
-  paragraphs: the picker and the overview each have at most one hint line.
+  paragraphs: the picker has at most one hint line.
 
 ## The picker
 
@@ -39,97 +37,62 @@ mixer (`SlidersVertical`) with no device name or DeviceIcon, so it can't be
 mistaken for the header's Couch switch. It opens a bottom Sheet:
 
 ```
-[art] avoid radio            Playing
+[art] Montalbano
+      Playing
 [mute] ──────────────●──  72
 ─────────────────────────────────────
 ◉ ▣ Living room TV       ───●───  40  …
     Picture and sound
+    Sync 40 ms earlier   ──●─────
 ◉ ▣ Francesco's phone    ──────●  60  …
     This device · Sound
+    Sync 0 ms earlier    ●───────
+─────────────────────────────────────
+
+Other devices
+─────────────────────────────────────
 ○ ▣ Kitchen laptop
-    Playing Montalbano
-○ ▣ Anna's tablet
-    Offline
-─────────────────────────────────────
-Every device
-```
-
-Its header is the Playback's artwork, title and status ("Choose where it
-plays" while a shared source waits for receivers). Then the
-[Volume](#volume), then In sync where it applies, then one divided row per
-device, and **Every device** at its foot, which opens the
-[overview](#the-overview). On the TV the fader hint, "Press OK to adjust a
-level, then OK or Back to finish.", is its one hint line; elsewhere it has
-none.
-
-## The overview
-
-`/where-it-plays`, opened by Every device: the picker grouped by where each
-device plays now. Core lets a window act only on the Playback it controls
-(`control` targets only TVs), so a row's check still means "in the Playback
-you control", and checking a device under another Playback moves it here.
-
-```
-[art] Montalbano                     ends 21:42
-      Playing
-[mute] ──────────────●──  72
-─────────────────────────────────────
-◉ ▣ Living room TV       ───●───  40  …
-    This device · Picture and sound
-                         Sync 40 ms earlier
-                         ───●──────────
-─────────────────────────────────────
-[art] avoid radio                          Live
-      Playing
-─────────────────────────────────────
-○ ▣ Francesco's phone
     Playing avoid radio
-─────────────────────────────────────
-Not playing
-─────────────────────────────────────
-○ ▣ Kitchen laptop
+○ ▣ Garden
     Not playing
 ○ ▣ Anna's tablet
     Offline
-Choose what this device shares
+─────────────────────────────────────
 ```
 
-- **The Playback you control** comes first: its artwork, title and status, and
-  its end time at the right as a departures board's line ("ends 21:42", or
-  "Live"); then its Volume and In sync, as in the picker; then its devices,
-  offline outputs included.
-- **Each other Playback that plays somewhere**, in Core's order: the same
-  heading over its devices' rows, unchecked, offline outputs included, since
-  they rejoin it on reconnect. As in the picker, a row's status names what it
-  plays now before you press. A Playback that has stopped, or plays only on
-  offline devices, isn't listed; its devices are free.
-- **While you control no Playback**, the first heading reads "Nothing is
-  playing" without Volume or In sync, and every check is off, since there is
-  nothing to add a device to; each row still says what its device plays.
-- **Not playing:** free devices, offline ones last, dimmed.
+- **Its header** is the Playback's artwork, title and status ("Choose where
+  it plays" while a shared source waits for receivers).
+- **Its levels:** the [Volume](#volume), then [In sync](#in-sync) where it
+  applies. On the TV the fader hint, "Press OK to adjust a level, then OK or
+  Back to finish.", follows them, where the faders start; it is the Sheet's
+  one hint line, and elsewhere it has none.
+- **The devices it plays on,** each with its fader, Sync under it while it
+  plays in sync, and "…".
+- **Other devices,** under that one heading, each saying what it plays now
+  ("Playing avoid radio", "Not playing", "Offline"), offline ones last. The
+  heading shows only beside devices it plays on, so a long list still shows
+  where the faders end; a shared source waiting for receivers lists every
+  device without it.
 
-Every row is the picker's: `deviceRow` in `sections/shell/Outputs.tsx`
-renders it for both surfaces, and both are called without hooks, so the
-integration tests find their controls by label without a DOM. The grouping is
-the model's `overview()`. Its one hint line is the TV's fader hint, and
-**Choose what this device shares** at its foot opens Settings → This device
-→ Sharing, since each device gives its own consent.
+Core lets a window act only on the Playback it controls (`control` targets
+only TVs), so a check always means "in this playback": checking a device
+that plays something else moves it here, which its status names before you
+press.
 
-Each heading repeats the picker header's markup rather than the catalog's
-`Item`, whose title clamps to one line and whose media is a small cropped
-cover: titles here wrap, and artwork stays contained at its own ratio.
+It replaced an overview page, `/where-it-plays`, that grouped every device
+under the Playback it played. Its address now opens Home, for bookmarks. The
+picker kept its Sync, as a line of each in-sync row; the rest was left out:
 
-Another Playback's artwork and end time come with Core's Playback summary
-(`thumbnail`, `live`, `ends`). Core sends `ends` only while it plays, since a
-paused item's end time moves, so a paused Playback elsewhere shows none.
+- each other Playback's artwork and end time, since a row's status already
+  names what that device plays;
+- a link to Settings → This device → Sharing, since each device gives its
+  own consent on itself, and this device needs none to play here;
+- the list while nothing plays, since there is then no Playback to add a
+  device to, and no now-playing bar to open it from.
 
-It isn't a tab, so it shows its title on every screen. The now-playing bar
-hides there, since the overview shows the same Playback with its Volume. Back
-returns to the page that opened the picker, with focus on the picker's button
-([TV](tv.md#the-tv-is-driven-by-a-remote)): the page's Back button for a
-pointer, which the TV hides, or a remote's Back. On the TV it opens on
-the first device you can choose, whose check carries `data-page-first`; Up
-reaches the Volume.
+`deviceRow` in `sections/shell/Outputs.tsx` renders each row, and the picker
+is called without hooks, so the integration tests find its controls by label
+without a DOM.
 
 ## Volume
 
@@ -157,10 +120,11 @@ private sound keeps its own attenuation, as All always left it.
 
 ## Device rows
 
-Every device is listed once: the Playback's devices first, then the others,
-offline ones last. A row is a check (in or out), the DeviceIcon, the
-device's name and a one-line status; while the device is in, its fader with
-its number and a "…" menu follow. The check is a filled circle with a check
+Every device is listed once: the Playback's devices first, then the others
+under Other devices, offline ones last. A row is a check (in or out), the
+DeviceIcon, the device's name and a one-line status; while the device is in,
+its fader with its number, Sync while it plays in sync, and a "…" menu
+follow. The check is a filled circle with a check
 while the device is in and its empty outline while it is out, so a row reads
 as a device you can add, as AirPlay's list does; a focused row inverts like
 every control, checked or not.
@@ -202,10 +166,11 @@ viewing another Playback.
 
 The fader is the device's one volume while its sound is in, else 0 (its
 number reads "–"): 0 takes its sound out and raising it puts it in. "Sync …
-ms earlier", under the fader in the overview, shows only while its sound
-plays in sync with other devices; it plays a late speaker sooner (Sendspin's
-static delay). The picker leaves it out, keeping each row to the check, the
-fader and "…".
+ms earlier" shows only while its sound plays in sync with other devices; it
+plays a late speaker sooner (Sendspin's static delay). It is a line of the
+row's own grid (CSS subgrid): its words under the status, its slider under
+the fader and as long, so the row still reads as one device. On phones it
+takes its own line, words then slider.
 "Delay" read as the opposite, and "Sync" keeps it apart from Playback's
 audio delay against the picture.
 
@@ -235,10 +200,11 @@ opens it only in the window that asked.
 
 ## On a TV and on phones
 
-On a TV a row's check is its focus stop; Up and Down move between rows. Right
-reaches the fader, which takes the arrows only after OK, then "…". The Sheet
-opens on the first device you can choose, Down from its last row reaches
-Every device, and Back closes it with focus back on its button.
+On a TV a row's check is its focus stop; Up and Down move between rows,
+past the Other devices heading. Right reaches the fader, which takes the
+arrows only after OK, then "…"; Down from the fader reaches its Sync. The
+Sheet opens on the first device you can choose, Up from the first row reaches
+the Volume, and Back closes it with focus back on its button.
 
 On phones the fader and number take a line below the name, with "…" beside
 the name. Names and titles wrap without ellipses, and the Sheet scrolls. Its

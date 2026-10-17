@@ -23,7 +23,7 @@ the only highlight; no hover style applies on the TV. The TV has no hover: under
 never applies, so a stray pointer can't compete with focus.
 
 Back closes an open
-overlay, then leaves a detail page or Where it plays' overview for the page
+overlay, then leaves a detail page for the page
 that opened it with its focus restored, then takes any section to Home, where
 Back does nothing. Opening
 Up next changes the player URL without losing its opener. Settings' own OK

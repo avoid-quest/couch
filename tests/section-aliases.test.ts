@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { Route as find } from "../src/client/routes/find";
 import { Route as saved } from "../src/client/routes/saved";
+import { Route as whereItPlays } from "../src/client/routes/where-it-plays";
 import { frontendPaths, pathForSection, sectionForPath } from "../src/shared/page-paths";
 import { detailHref } from "../src/client/detail-navigation";
 
-function open(route: typeof find | typeof saved, searchStr: string) {
+function open(route: typeof find | typeof saved | typeof whereItPlays, searchStr: string) {
   try { route.options.beforeLoad!({ location: { pathname: "/", searchStr } } as never); }
   catch (redirect) { return (redirect as { options: { href: string } }).options.href; }
 }
@@ -23,7 +24,12 @@ test("Saved's addresses open Library on the same tab", () => {
   expect(open(saved, "?tab=channels")).toBe("/library?tab=channels");
 });
 
-test("Core serves the sections, Where it plays' overview and the earlier addresses that redirect to them", () => {
+test("Where it plays' overview became the picker alone, so its address opens Home", () => {
+  expect(open(whereItPlays, "")).toBe("/");
+  expect(sectionForPath("/where-it-plays")).toBeUndefined();
+});
+
+test("Core serves the sections and the earlier addresses that redirect to them", () => {
   for (const path of ["/live", "/search", "/library", "/where-it-plays", "/find", "/saved"]) expect(frontendPaths).toContain(path);
   expect(sectionForPath("/live/")).toBe("Live");
   expect(sectionForPath("/collection")).toBe("Search");
