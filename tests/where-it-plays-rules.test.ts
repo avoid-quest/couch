@@ -251,6 +251,13 @@ describe("live inputs", () => {
     const silent = live([picture("tv")], {}, { ...screen, audio: false });
     expect(row(silent, "tv")).toMatchObject({ level: { enabled: false, reason: "No sound" }, mute: { enabled: false, reason: "No sound" }, picture: { enabled: true } });
   });
+
+  test("a source without sound plays none on a device that chose sound, though its check still takes the sound out", () => {
+    const silent = live([both("tv"), sound("kitchen")], {}, { ...screen, audio: false });
+    expect(row(silent, "tv")).toMatchObject({ status: "Picture", level: { value: 0, sound: false, enabled: false, reason: "No sound" }, check: { action: { type: "output", deviceId: "tv", picture: false, level: 0 } } });
+    expect(row(silent, "kitchen").status).toBe("No sound");
+    expect(signalOf(silent, "tv")).toMatchObject({ picture: true, sound: false });
+  });
 });
 
 describe("the chooser", () => {

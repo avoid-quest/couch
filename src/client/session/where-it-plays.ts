@@ -59,11 +59,12 @@ export type Picker = {
 };
 
 const control = (reason: Reason | false | undefined): Control => reason ? { enabled: false, reason } : { enabled: true };
-// What an output plays here, never whether it can be heard: Mute is the device's, so it shows.
-function plays(output: Output, device: DeviceSummary, audioOnly: boolean) {
+// What an output plays here, never whether it can be heard: Mute is the device's, so it shows. A channel the
+// media lacks plays nothing.
+function plays(output: Output, device: DeviceSummary, audioOnly: boolean, silent: boolean) {
   const picture = output.picture && !audioOnly;
-  if (output.sound) return picture ? device.muted ? "Picture, muted" : "Picture and sound" : device.muted ? "Muted" : "Sound";
-  return picture ? "Picture" : "No picture";
+  if (output.sound && !silent) return picture ? device.muted ? "Picture, muted" : "Picture and sound" : device.muted ? "Muted" : "Sound";
+  return picture ? "Picture" : output.picture ? "No picture" : "No sound";
 }
 
 /** Where it plays for the playback `state` looks at, as seen from device `here`. */
@@ -72,7 +73,8 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
   const output = (id: string) => outputs.find(item => item.deviceId === id);
   const playback = state.playbacks?.find(item => item.id === state.playback);
   const source = state.liveSources?.find(item => item.id === playback?.liveSourceId);
-  const audioOnly = !!playback?.audioOnly;
+  // A live input without sound keeps each output's sound, as the device chose it, but plays none.
+  const audioOnly = !!playback?.audioOnly, silent = source?.audio === false;
   const sharingOf = (id: string) => state.devices?.find(device => device.id === id)?.sharing;
   // Only here is exclusive, so another device's private output in this playback, or a held publisher's
   // that returns after its source, makes it unavailable.
@@ -88,7 +90,7 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
     // The publisher controls its capture and never plays it (docs/live-inputs.md).
     const capturing = source?.deviceId === device.id;
     const speakers = mine || device.sharing?.audio === true, screen = mine || device.sharing?.video === true;
-    const audio = source?.audio !== false && !capturing && speakers, video = !capturing && screen && !audioOnly;
+    const audio = !silent && !capturing && speakers, video = !capturing && screen && !audioOnly;
     // An mpv channel plays only on the server's own Device, its one output.
     const hostOnly = !!playback?.hostOnly && !current;
     // A held publisher's output is its place in that playback, here or elsewhere, as Core's replacement check counts it.
@@ -105,15 +107,15 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
       : { type: "output", deviceId: device.id, ...video ? { picture: true } : {}, ...audio ? { level: device.volume || 50 } : {} };
     const busy = elsewhere && occupied.outputs.some(item => item.deviceId === device.id) ? occupied : undefined;
     const status = offline || sharing || (current
-      ? current.error ? "Can't play" : !check.enabled ? check.reason! : current.buffered ? "Buffered" : plays(current, device, audioOnly)
+      ? current.error ? "Can't play" : !check.enabled ? check.reason! : current.buffered ? "Buffered" : plays(current, device, audioOnly, silent)
       : !check.enabled ? check.reason! : busy ? busy.status === "idle" ? statusText.idle : `${statusText[busy.status]} ${busy.title ?? "something else"}` : statusText.idle);
-    const silent = source?.audio === false && "No sound";
+    const sound = !!current?.sound && !silent;
     return {
       device, output: current, mine, status: mine ? `This device · ${status}` : status,
       check: { ...check, action },
-      level: { value: current?.sound ? device.volume : 0, sound: !!current?.sound, ...control(lock || sharing || silent || !speakers && "Private" || moved) },
+      level: { value: sound ? device.volume : 0, sound, ...control(lock || sharing || silent && "No sound" || !speakers && "Private" || moved) },
       picture: { on: !!current?.picture && !audioOnly, ...control(lock || sharing || audioOnly && "No picture" || !screen && "Private" || moved) },
-      mute: { on: device.muted, ...control(lock || silent || !speakers && "Private") },
+      mute: { on: device.muted, ...control(lock || silent && "No sound" || !speakers && "Private") },
       only: { on: outputs.length > 0 && outputs.every(item => item.deviceId === device.id), ...control(lock || sharing || (!audio && !video || privateOutput && !mine || privately.some(item => item.deviceId !== device.id)) && "Private") },
       sync: audio && current?.sound && current.delayActive ? { delay: current.delay ?? 0 } : undefined,
     };

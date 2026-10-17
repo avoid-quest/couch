@@ -93,7 +93,9 @@ plays here. This device needs no consent to add itself.
 - in: "Can't play" when its buffered stream failed, "Private" when you may
   not take one of its channels out, "Buffered", or what it plays here:
   "Picture and sound", "Sound", "Picture", "Muted", "Picture, muted", or "No
-  picture" for a picture output on media without one;
+  picture" for a picture output on media without one. A channel the media
+  lacks plays nothing: on a live input without sound, a device that chose
+  sound reads "Picture", or "No sound" without a picture, its fader at 0;
 - out: "Can't play this channel" while only the host can play it, "Private"
   when it shares no channel the media uses or plays privately elsewhere, the
   other Playback's status and title ("Playing Montalbano", "Not playing" once
@@ -184,6 +186,6 @@ like Spotify's device picker. Device icons stand only for devices: Where it
 plays' opener is a mixer icon and the "on {name}" status line is plain text.
 Picture and sound: `MonitorSpeaker`; picture: `Monitor`; sound: `Volume`,
 `Volume1` or `Volume2` by its volume (0, up to 50, above); muted: `VolumeX`.
-Media without a picture shows no picture. Idle, a plain `Monitor` in muted
-ink; offline, dimmer still. `aria-hidden`. It replaced a custom two-cell
-glyph that people couldn't read.
+Media without a picture shows no picture, and without sound, no sound. Idle,
+a plain `Monitor` in muted ink; offline, dimmer still. `aria-hidden`. It
+replaced a custom two-cell glyph that people couldn't read.
