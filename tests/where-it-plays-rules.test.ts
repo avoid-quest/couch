@@ -298,7 +298,8 @@ describe("the overview", () => {
   });
 
   test("keeps the picker's header, and lists every device once, as the picker's row", () => {
-    const { rows, elsewhere, free, ...header } = overview(state, { here, tv: true });
+    const { rows, elsewhere, free, controls, ...header } = overview(state, { here, tv: true });
+    expect(controls).toBe(true);
     const { rows: all, ...picked } = picker(state, { here, tv: true });
     expect(header).toEqual(picked);
     expect([...rows, ...elsewhere.flatMap(group => group.rows), ...free].sort((a, b) => a.device.id.localeCompare(b.device.id))).toEqual([...all].sort((a, b) => a.device.id.localeCompare(b.device.id)));
@@ -312,6 +313,18 @@ describe("the overview", () => {
   test("an output of the Playback you control stays under it while offline", () => {
     const { rows, free } = overview(session({ devices: [device("tv", { online: false }), device("kitchen")], outputs: [both("tv")] }), { here });
     expect([ids(rows), ids(free)]).toEqual([["tv"], ["kitchen"]]);
+  });
+
+  test("another Playback keeps its offline devices under it while an online one plays it", () => {
+    const { elsewhere, free } = overview(session({ devices: [device("kitchen"), device("phone", { online: false }), device("laptop")], outputs: [both(here)], others: [{ ...show, outputs: [both("kitchen"), both("phone")] }] }), { here });
+    expect(elsewhere.map(group => [group.playback.id, ids(group.rows)])).toEqual([["show", ["kitchen", "phone"]]]);
+    expect(ids(free)).toEqual(["laptop"]);
+  });
+
+  test("with no Playback to control, nothing can join it: Volume goes and every check is off, while rows still say what they play", () => {
+    const idle = overview(session({ devices: [device("kitchen"), device("laptop")], others: [radio([sound("kitchen")])], playback: null, currentEntryId: null }), { here });
+    expect(idle.controls).toBe(false);
+    expect([...idle.elsewhere.flatMap(group => group.rows), ...idle.free].map(item => [item.device.id, item.status, item.check.enabled])).toEqual([["kitchen", "Paused avoid radio", false], ["laptop", "Not playing", false]]);
   });
 
   test("a Playback that has stopped, or plays only on offline devices, isn't listed: its devices are free or offline", () => {

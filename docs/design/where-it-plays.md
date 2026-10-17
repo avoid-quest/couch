@@ -99,9 +99,13 @@ Choose what this device shares
   "Live"); then its Volume and In sync, as in the picker; then its devices,
   offline outputs included.
 - **Each other Playback that plays somewhere**, in Core's order: the same
-  heading over its devices' rows, unchecked. As in the picker, a row's status
-  names what it plays now before you press. A Playback that has stopped, or
-  plays only on offline devices, isn't listed; its devices are free.
+  heading over its devices' rows, unchecked, offline outputs included, since
+  they rejoin it on reconnect. As in the picker, a row's status names what it
+  plays now before you press. A Playback that has stopped, or plays only on
+  offline devices, isn't listed; its devices are free.
+- **While you control no Playback**, the first heading reads "Nothing is
+  playing" without Volume or In sync, and every check is off, since there is
+  nothing to add a device to; each row still says what its device plays.
 - **Not playing:** free devices, offline ones last, dimmed.
 
 Every row is the picker's: `deviceRow` in `sections/shell/Outputs.tsx`

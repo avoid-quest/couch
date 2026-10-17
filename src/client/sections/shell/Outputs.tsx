@@ -129,7 +129,7 @@ function EveryDevice(props: ComponentProps<typeof Button>) {
  */
 export function Overview({ state, connected, run }: Props) {
   const tv = isTvPresentation();
-  const { title, status, hint, inSync, rows, elsewhere, free } = overview(state, { here: deviceId(), tv });
+  const { title, status, hint, inSync, controls, rows, elsewhere, free } = overview(state, { here: deviceId(), tv });
   const entry = state.queue.find(item => item.id === state.currentEntryId);
   // The TV starts on the first device you can choose; Up reaches the Volume.
   const first = [...rows, ...elsewhere.flatMap(group => group.rows), ...free].find(row => row.check.enabled)?.device.id;
@@ -137,7 +137,8 @@ export function Overview({ state, connected, run }: Props) {
   return <div className="grid w-full max-w-4xl gap-12 [&_[data-slot=slider]]:min-h-11">
     <section>
       <Heading id="where-it-plays-here" thumbnail={entry?.thumbnail} title={title ?? "Nothing is playing"} status={status} time={<EndTime state={state} />} />
-      {levels({ state, connected, run, inSync })}
+      {/* Volume acts on the Playback you control; without one Core would turn the device itself. */}
+      {controls && levels({ state, connected, run, inSync })}
       {list("where-it-plays-here", rows)}
     </section>
     {elsewhere.map(({ playback, status, rows }) => <section key={playback.id}>

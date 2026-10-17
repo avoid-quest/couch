@@ -133,19 +133,25 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
 /** Another Playback in the overview: its summary and status over the devices it plays on now. */
 export type Elsewhere = { playback: PlaybackSummary; status: string; rows: Row[] };
 /** The overview: the picker's header over the devices in the Playback you control, then `elsewhere`, then `free`. */
-export type Overview = Picker & { elsewhere: Elsewhere[]; free: Row[] };
+export type Overview = Picker & { elsewhere: Elsewhere[]; free: Row[]; /** A Playback you control, for Volume, In sync and the checks. */ controls: boolean };
 
 /**
  * The overview: the picker grouped by where each device plays now, since a window acts only on the Playback it
  * controls. That Playback's devices come first, then each other Playback that plays on an online device, in Core's
- * order, then the free devices, offline ones last. A row's check still means "in the Playback you control".
+ * order, with all its devices, then the free devices, offline ones last. A row's check still means "in the Playback
+ * you control", so while you control none every check is off.
  */
 export function overview(state: ClientSessionState, options: { here: string; tv?: boolean }): Overview {
-  const { rows, ...header } = picker(state, options);
-  // A Playback that hasn't stopped, where an online device out of yours plays now; a stopped one leaves it free.
-  const playing = ({ device, output }: Row) => output || !device.online ? undefined : state.playbacks?.find(playback => playback.id !== state.playback && playback.status !== "idle" && playback.outputs.some(item => item.deviceId === device.id));
-  const elsewhere = (state.playbacks ?? []).map(playback => ({ playback, status: statusText[playback.status], rows: rows.filter(row => playing(row) === playback) })).filter(group => group.rows.length);
-  return { ...header, rows: rows.filter(row => row.output), elsewhere, free: rows.filter(row => !row.output && !playing(row)) };
+  const { rows: all, ...header } = picker(state, options);
+  // With no Playback to control, a check has nothing to add its device to (Core answers "Play something first."); each row still says what it plays.
+  const controls = !!state.playbacks?.some(playback => playback.id === state.playback);
+  const rows = controls ? all : all.map(row => ({ ...row, check: { enabled: false } }));
+  // Another Playback that hasn't stopped, while an online device out of yours plays it; a stopped one leaves its devices free.
+  // Its offline devices stay under it, as yours do, since they rejoin it when they reconnect.
+  const others = (state.playbacks ?? []).filter(playback => playback.id !== state.playback && playback.status !== "idle" && rows.some(({ device, output }) => !output && device.online && playback.outputs.some(item => item.deviceId === device.id)));
+  const playing = ({ device, output }: Row) => output ? undefined : others.find(playback => playback.outputs.some(item => item.deviceId === device.id));
+  const elsewhere = others.map(playback => ({ playback, status: statusText[playback.status], rows: rows.filter(row => playing(row) === playback) })).filter(group => group.rows.length);
+  return { ...header, controls, rows: rows.filter(row => row.output), elsewhere, free: rows.filter(row => !row.output && !playing(row)) };
 }
 
 /** Play on's targets: this device first, then the other online devices that share; none while this is the only one. */
