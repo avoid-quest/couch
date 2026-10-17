@@ -100,8 +100,9 @@ Playback. A key on the picture shows the controls for a while and leaves focus
 where it is; over a playing video they hide after 4 s while focus is on the
 picture, and stay up while the keyboard is in them.
 
-- **A click** on the picture plays or pauses; **a double-click** toggles
-  fullscreen and leaves play as it was.
+- **A click** on a video plays or pauses; on audio Now playing it does
+  nothing, so a stray click never stops the music. **A double-click**
+  toggles fullscreen and leaves play as it was.
 - **A pointer click in the band** does its job, then returns focus to the
   picture, so the next key is a shortcut again; a click that opens something
   (Volume, Where it plays, Playback, Up next) leaves focus there. A keyboard's
