@@ -157,6 +157,18 @@ window.runTvNavigationRegression = async () => {
     applyTvNavigation("back"); await wait(350);
     assert(!menu() && document.activeElement === tile, "The Remote's Back did not close the menu onto its tile");
   });
+  await check("Details from a Home tile's menu keeps Home, and Back returns to the tile", async () => {
+    await click('[data-app-nav] a[href="/"]');
+    const tile = control('[aria-label="Radio stations"] [data-media-tile][data-item-menu]:not(:disabled)');
+    const label = tile.getAttribute("aria-label");
+    tile.focus(); applyTvNavigation("menu"); await wait(350);
+    assert(document.activeElement?.textContent === "Details", "The station's menu did not start on Details");
+    applyTvNavigation("select");
+    await until(() => location.pathname === "/item");
+    assert(new URLSearchParams(location.search).get("from") === "home" && document.querySelector('.app-header [aria-current="page"][href="/"]'), "Details from Home's menu left Home");
+    await key("Escape");
+    await until(() => location.pathname === "/" && document.activeElement?.getAttribute("aria-label") === label).catch(() => { throw new Error("Back did not return to the tile"); });
+  });
   await check("Home starts on the hero's primary verb, and Up from its last shelf passes each shelf and the hero to the current tab", async () => {
     await click('[data-app-nav] a[href="/live"]');
     await click('[data-app-nav] a[href="/"]');

@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode, type TouchEvent } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type ComponentProps, type HTMLAttributes, type MouseEvent, type PointerEvent, type ReactNode, type TouchEvent } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -10,10 +10,10 @@ import { PlayOnGroup, usePlayOn } from "./PlayOn";
 export type MenuAction = { label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; sharingDeviceId?: string };
 
 // Play on's devices are a labelled group, set apart from the verbs on either side.
-function Items({ actions, on }: { actions: MenuAction[]; on: (label: string) => string }) {
+function Items({ actions, on, select }: { actions: MenuAction[]; on: (label: string) => string; select: (run?: () => void) => void }) {
   return actions.map((action, index) => action.node ? <DropdownMenuItem key={action.label} asChild>{action.node}</DropdownMenuItem>
     : action.playOn ? <Fragment key={action.label}><PlayOnGroup separated={index > 0} disabled={action.disabled} onPlay={action.playOn} sharingDeviceId={action.sharingDeviceId} />{index < actions.length - 1 && <DropdownMenuSeparator />}</Fragment>
-    : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={action.run}>{action.label === "Play" || action.label === "Resume" ? on(action.label) : action.label}</DropdownMenuItem>);
+    : <DropdownMenuItem key={action.label} disabled={action.disabled} onSelect={() => select(action.run)}>{action.label === "Play" || action.label === "Resume" ? on(action.label) : action.label}</DropdownMenuItem>);
 }
 
 const own = (event: { currentTarget: Element; target: EventTarget }) => event.target instanceof Node && event.currentTarget.contains(event.target);
@@ -70,6 +70,21 @@ export function useItemMenu(actions: MenuAction[]) {
 export function ItemMenu({ menu, title, hidden = false, className, ...props }: { menu: ReturnType<typeof useItemMenu>; title: string; hidden?: boolean } & ComponentProps<typeof Button>) {
   const trigger = useRef<HTMLButtonElement>(null);
   const outside = useRef(false);
+  const acted = useRef(false);
+  // A verb runs from the item, not the closing menu, so what it records (Details' opener, Up next's removal) is the item.
+  const select = (run?: () => void) => { (menu.opener.current ?? trigger.current)?.focus(); acted.current = true; run?.(); };
+  // A verb that takes its own item away (Remove, Saved) leaves focus with the item's neighbour in its list or shelf, on
+  // the same control where it has one; a list with its own rule (Up next, Library) has moved it already.
+  useLayoutEffect(() => () => {
+    const from = menu.opener.current ?? trigger.current, item = from?.closest("li"), list = item?.parentElement;
+    if (!acted.current || !item || !list || !item.contains(document.activeElement)) return;
+    const index = [...list.children].indexOf(item), same = from!.matches("[data-row-options]") ? "[data-row-options]" : "[data-item-menu]";
+    requestAnimationFrame(() => {
+      if (!list.isConnected || document.activeElement !== document.body) return;
+      const next = list.children[Math.min(index, list.children.length - 1)], stop = ":is(button, a[href]):not(:disabled):not([tabindex='-1'])";
+      (next?.querySelector<HTMLElement>(same + stop) ?? next?.querySelector<HTMLElement>(stop))?.focus();
+    });
+  }, []);
   if (!menu.shown.length) return null;
   return <DropdownMenu modal={false} open={menu.open} onOpenChange={open => { if (open) menu.opener.current = null; menu.setOpen(open); }}>
     <DropdownMenuTrigger asChild>{hidden ? <span aria-hidden="true" aria-label={`Options for ${title}`} className="pointer-events-none absolute inset-0" />
@@ -81,6 +96,6 @@ export function ItemMenu({ menu, title, hidden = false, className, ...props }: {
       const to = menu.opener.current ?? trigger.current;
       if (!outside.current && to?.isConnected) to.focus();
       outside.current = false;
-    }}><Items actions={menu.shown} on={menu.on} /></DropdownMenuContent>
+    }}><Items actions={menu.shown} on={menu.on} select={select} /></DropdownMenuContent>
   </DropdownMenu>;
 }

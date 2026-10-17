@@ -163,12 +163,14 @@ place with the same verbs whatever opened it:
 | Pointer | The "…", shown while the item is hovered or holds focus; right-click |
 | Touch | The "…", always shown; a long press held still (500 ms), with no text selection or link preview |
 | Keyboard | The "…" (a Tab stop on rows and tiles); the menu key or Shift+F10 on the item |
-| TV remote | OK held for 500 ms on the item, which acts on release when pressed shortly; Right to a row's "…" (a tile's is no stop, so Up and Down still go shelf to shelf, but it shows in the focused tile's caption) |
+| TV remote | OK held for 500 ms on the item, which acts on release when pressed shortly; Right to a row's "…" (a tile's is no stop, so Up and Down still go shelf to shelf, but it shows in the focused tile's caption; it is the tile's one stop while the press is disabled) |
 | Remote section | OK held on the pad, sent to the TV as a held OK |
 
 A keyboard or a remote lands on the menu's first verb. Esc and Back close it
-and return focus to what opened it, the item or its "…". A Remove that takes
-the row away leaves focus on the adjacent row instead.
+and return focus to what opened it, the item or its "…"; a verb runs from there,
+so Details records the item for Back. A verb that takes its item away (Remove,
+Saved on a station shown only as a favourite) leaves focus on the neighbouring
+row or tile in its list or shelf instead.
 
 ## Copy
 
