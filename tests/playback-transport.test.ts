@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PlaybackTransport, useEndTime } from "../src/client/components/PlaybackTransport";
@@ -56,9 +56,12 @@ test("the player's end time reads in clock time, Live for live media, and goes o
     const state = { queue: [entry], currentEntryId: entry.id, player: { playbackId: "p1", status: "playing", position: 0, duration: null, volume: 50, seekable: false, error: null, ...player } } as unknown as ClientSessionState;
     return renderToStaticMarkup(createElement(function EndTime() { return useEndTime(state) ?? "none"; }));
   };
+  // The hook and the expected times each read the clock, so a minute turning between them must not fail the test.
+  setSystemTime(new Date("2026-10-17T20:00:30"));
   expect(endTime(film, {})).toBe(`ends ${formatEndTime(6000)}`);
   expect(endTime(film, { speed: 2 })).toBe(`ends ${formatEndTime(3000)}`);
   expect(endTime(radio, {})).toBe("Live");
   expect(endTime(channel, { seekable: true })).toBe("Live");
   expect(endTime(film, { status: "ended" })).toBe("none");
+  setSystemTime();
 });
