@@ -35,7 +35,9 @@ function opener(selector?: string): FocusTarget | undefined {
   if (selector) return { selector, index: 0 };
   if (!(active instanceof HTMLElement) || active === document.body) return;
   const label = active.getAttribute("aria-label");
-  selector = active.id ? `#${CSS.escape(active.id)}` : label ? `${active.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]` : undefined;
+  // Radix's generated ids (a menu's "…") change when the page mounts again, so those controls go by their label.
+  const id = active.id.startsWith("radix-") ? "" : active.id;
+  selector = id ? `#${CSS.escape(id)}` : label ? `${active.tagName.toLowerCase()}[aria-label="${CSS.escape(label)}"]` : undefined;
   if (!selector) return;
   return { selector, index: [...document.querySelectorAll(selector)].indexOf(active) };
 }
