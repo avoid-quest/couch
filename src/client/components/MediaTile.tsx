@@ -54,9 +54,10 @@ export function MediaTile({ title, meta, thumbnail, shape, children, className, 
     </Button>
     {/* A "…" can't sit inside the tile's button, so it lies over the end of the title's first line (which leaves it
         room), its dots flush with the text, and inverts with the caption. On the TV it is no focus stop, so Up and
-        Down still go shelf to shelf; a held OK opens the menu. It is the line's height, so the caption keeps its
+        Down still go shelf to shelf and a held OK opens the menu, unless the press is disabled (nothing can play): then
+        it is the tile's one stop, so its other verbs stay in reach. It is the line's height, so the caption keeps its
         own; on touch its ::after makes the 44px target. */}
-    <ItemMenu menu={options} title={title} tabIndex={isTvPresentation() ? -1 : undefined}
+    <ItemMenu menu={options} title={title} tabIndex={isTvPresentation() && !disabled ? -1 : undefined}
       className="absolute top-[calc(var(--tile-art)+0.5rem)] right-0 size-6 peer-focus-visible:text-background touch:size-6 touch:after:absolute touch:after:-inset-2.5" />
   </div>;
 }
