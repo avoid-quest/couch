@@ -208,6 +208,25 @@ test("The one Volume folds a trim into device levels, keeping their proportion e
     await a!.command({ type: "volume", volume: 0 });
     assert.deepEqual(volumes(), [0, 0]);
     assert.equal(a!.state.mixTrim, 100);
+    await a!.command({ type: "volume", volume: 70 });
+    assert.deepEqual(volumes(), [70, 40]);
+  } finally { await f.close(); }
+});
+
+test("The one Volume at 0 keeps the devices' proportion for when it rises again", { timeout: 15_000 }, async () => {
+  const f = await fixture(), [a, b] = f.devices;
+  try {
+    await a!.command(f.queue("mix"));
+    await a!.command({ type: "output", deviceId: b!.id, level: 40 });
+    const volumes = () => [a, b].map(device => a!.state.devices?.find(item => item.id === device!.id)?.volume);
+    // 70 and 40 each go to 0, as their faders show, and come back at 35 and 20 rather than 35 each.
+    await a!.command({ type: "volume", volume: 0 });
+    assert.deepEqual(volumes(), [0, 0]);
+    assert.equal(a!.state.player.volume, 0);
+    await a!.command({ type: "volume", volume: 0 });
+    await a!.command({ type: "volume", volume: 35 });
+    assert.deepEqual(volumes(), [35, 20]);
+    assert.equal(a!.state.player.volume, 35);
   } finally { await f.close(); }
 });
 
