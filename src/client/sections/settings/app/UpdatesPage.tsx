@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { couchApp } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 import { updateApp } from "@/session/native-updates";
 import { useSessionGate } from "@/session/session-context";
 import type { UpdateAction, UpdateChannel, UpdateState, UpdateTarget } from "../../../../shared/updates";
@@ -96,7 +97,7 @@ export function DeviceUpdatesPage() {
   return <SettingsLayout section="device-updates">
     {!couchApp?.updates ? <p className="text-sm text-muted-foreground">Only in the Couch app.</p>
       : host ? <p className="text-sm text-muted-foreground">This app runs {couch}. Update it in <Link className="underline underline-offset-4" to={settingsPages.updates.path}>{couch} → Updates</Link>.</p>
-      : <UpdateControls name="This app" tv={couchApp.tvPresentation} />}
+      : <UpdateControls name="This app" tv={isTvPresentation()} />}
   </SettingsLayout>;
 }
 
@@ -114,7 +115,7 @@ export function CouchUpdatesPage() {
   return <SettingsLayout section="updates">
     {!administrator ? <p className="text-sm text-muted-foreground">Only an admin can update Couch apps.</p> : <>
       {targets.length > 1 && <SettingsSection><SettingsRow label="Couch app" htmlFor="update-target"><Select value={target?.id} onValueChange={setSelected}><SelectTrigger id="update-target" className="w-56"><SelectValue /></SelectTrigger><SelectContent>{targets.map(target => <SelectItem key={target.id} value={target.id}>{label(target)}</SelectItem>)}</SelectContent></Select></SettingsRow></SettingsSection>}
-      {local ? <UpdateControls name={`${couch} (this device)`} tv={couchApp!.tvPresentation} />
+      {local ? <UpdateControls name={`${couch} (this device)`} tv={isTvPresentation()} />
         : target && credentials && <UpdateControls key={target.id} credentials={credentials} target={target.id} name={target.name} tv={target.tv} />}
       {query.error && <Alert variant="destructive"><AlertDescription>{query.error.message}</AlertDescription></Alert>}
       {!target && !query.isPending && <p className="text-sm text-muted-foreground">Waiting for a Couch app to connect…</p>}

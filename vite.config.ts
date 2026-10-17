@@ -62,6 +62,9 @@ export default defineConfig(({ command }) => ({
   ],
   define: {
     "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version, revision: null, dataFormat: 1, packaged: false }) : buildInfo),
+    // Lets a browser tab opt into the TV presentation (src/client/session/presentation.ts) in development
+    // and scratch builds only; a release build leaves the override out.
+    "COUCH_TV_OVERRIDE": JSON.stringify(command === "serve" || process.env.COUCH_TV_OVERRIDE === "1"),
   },
   // Browser clients are same-origin with Core; the dev proxy supplies that
   // origin so `vite` (and browser-driven loops) pair with `bun run server:dev`.

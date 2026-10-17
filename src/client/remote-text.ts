@@ -1,4 +1,4 @@
-import { isTvPresentation } from "./session/native-context";
+import { isTvPresentation } from "./session/presentation";
 import { flushSync } from "react-dom";
 import { isRemoteField, remoteFields, type TextFocus } from "../shared/remote";
 import type { ServerMessage } from "../shared/protocol";

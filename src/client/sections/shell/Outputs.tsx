@@ -10,7 +10,7 @@ import { RangeControl } from "@/components/RangeControl";
 import { cn } from "@/lib/utils";
 import { deviceName } from "@/copy";
 import { deviceId, type playsOn } from "@/session/device-id";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
 import type { Action, DeviceSummary, PlaybackSummary } from "../../../shared/protocol";

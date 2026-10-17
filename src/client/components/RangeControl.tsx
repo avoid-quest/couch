@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 
 // A remote moves volume and faders 5 per press; the playback position passes its own 10 s step.
 export function RangeControl({ label, value, max, disabled, onCommit, showValue = true, keyboardStep = isTvPresentation() ? 5 : 1, pageFirst = false, orientation }: {

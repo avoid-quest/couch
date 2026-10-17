@@ -24,7 +24,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar, DurationRuler } from "@/components/DurationBar";
 import { formatDuration } from "@/time-format";
 import { Progress } from "@/components/ui/progress";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 import { useLiveSourceHits } from "./useLiveSourceHits";
 
 export type Props = {
