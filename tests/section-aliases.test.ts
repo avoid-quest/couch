@@ -31,9 +31,10 @@ test("An empty search is Discover; a query stays on its results", () => {
   expect(open(search, "?q=jazz")).toBeUndefined();
 });
 
-test("Live opens Discover, and Library opens Saved on the same tab", () => {
+test("Live opens Discover, or the Stations or Channels page it was on, and Library opens Saved on the same tab", () => {
   expect(open(live, "")).toBe("/discover");
-  expect(open(live, "?radioSource=Radio+directory")).toBe("/discover");
+  expect(open(live, "?radioSource=Radio+directory&page=2")).toBe("/discover/radio?radioSource=Radio+directory&page=2");
+  expect(open(live, "?group=News&channelPage=3&channelFilter=rai")).toBe("/discover/live-tv?group=News&page=3&filter=rai");
   expect(open(library, "")).toBe("/saved");
   expect(open(library, "?tab=channels")).toBe("/saved?tab=channels");
 });
