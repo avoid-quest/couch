@@ -168,7 +168,8 @@ over the end of the title's first line, which leaves it room, with its dots
 flush with the text. The "…" can't sit inside the tile's button, so it is a
 sibling laid over the caption, the line's height so the tile grows no taller,
 and it inverts with the focused caption; on touch a larger hit area makes its
-44px target. On the TV it is no focus stop. A tile's menu holds its Details'
+44px target. On the TV it is no focus stop, unless the press is disabled (nothing
+can play): then it is the tile's one stop, so its menu stays in reach. A tile's menu holds its Details'
 verbs, with Details first where the press plays:
 
 - **Continue** (press resumes): Details, From start, Queue, Play on. Its
