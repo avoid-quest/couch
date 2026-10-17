@@ -63,7 +63,7 @@ values in components.
 | `background` | `#000` | page, band, sheets |
 | `foreground` / `primary` | `#fff` | text, bars, primary button |
 | `muted` / `secondary` | `#171717` | inputs, thumbnail placeholders |
-| `muted-foreground` | `#a3a3a3` | metadata; in the player's bands over a picture, white at 64% (the same grey on black) |
+| `muted-foreground` | `#a3a3a3` | metadata; in the player's bands over a picture, white at 85%, so small text keeps 4.5:1 over the scrim on a white frame |
 | `border` | white 16% | hairlines and row dividers |
 | `accent` | `#fff` / `#000` | menu highlight (inverts like focus) |
 | `radius` | `.25rem` | controls |

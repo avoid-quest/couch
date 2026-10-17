@@ -89,10 +89,10 @@ reads from the sofa.
 
 Both bands are an overlay on the picture: one transparent black scrim,
 mirrored, eased so it has no edge that reads as a crop. It rises over `--fade`
-(2.5rem, 1.25rem on short screens) to 55% where their text starts, enough for
-white text on a white picture, and to 72% at the screen's edge, so the picture
-shows through the whole band. Their muted ink is the white ink made
-translucent: the same #a3a3a3 over black, lighter over a bright picture. The
+(2.5rem, 1.25rem on short screens) to 60% where their text starts, and to 72%
+at the screen's edge, so the picture shows through the whole band. Their muted
+ink is white at 85%: on a white picture both inks keep 4.5:1 over the scrim,
+and the muted one stays a step below the white. The
 scrim preserves the picture bounds. Hidden bands are inert and
 let pointer input reach the video. The player fits the
 viewport at every interface size. Plain playback glyphs keep artwork central;
