@@ -37,7 +37,8 @@ COUCH_DATA_DIR=/tmp/couch-tv COUCH_PORT=4782 node build/core.mjs
 ```
 
 Open `http://localhost:4782/?tv=1` and pair. The tab stays a TV across reloads
-until it closes or loads `?tv=0`. The development server (`bun run dev`) needs
+until it closes or loads `?tv=0`; where the browser blocks session storage, only
+a page loaded with `?tv=1` is a TV. The development server (`bun run dev`) needs
 no flag: open `http://localhost:1420/?tv=1`. Core treats the tab as a TV, as it
 treats the app's window: once the tab shares its speakers or screen, another
 device's Remote drives it and types into it. Tabs on one origin are one device,
