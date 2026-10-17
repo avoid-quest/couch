@@ -113,7 +113,7 @@ export function HomePage() {
   const continued = useKeptOrder(unfinished, item => item.mediaId, historyReady, hero?.kind === "continue" ? hero.item.mediaId : playingMedia).slice(0, shelfLength);
   const recent = useKeptOrder(past.filter(item => !(item.position > 0 && !item.watched)), item => item.mediaId, historyReady, playingMedia).slice(0, shelfLength);
   const listed = useKeptOrder(allStations, station => station.id, hero !== undefined && !radioPending, hero?.kind === "radio" ? hero.station.id : allStations.find(playingStation)?.id).slice(0, shelfLength);
-  const savedMedia = later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [];
+  const savedMedia = useKeptOrder(later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [], item => item.id, hero !== undefined && !later.isPending);
   const stationMeta = (station: RadioStation) => { const show = onAir(station.id); return [playingStation(station) && "Playing", show?.title, show?.genre].filter(Boolean).join(" · ") || (station.sourceId === avoidRadioPlaylistId ? "Live" : station.groupTitle || station.countryCode); };
   const queries = [...(historyShown ? [history] : []), ...(hasRow("later") ? [later] : []), ...(hasRow("radio") ? [favorites] : [])];
   const filled: Record<HomeRowId, boolean> = { upNext: !!upcoming.length, continue: !!continued.length, radio: !!listed.length, later: !!savedMedia.length, recent: !!recent.length };
