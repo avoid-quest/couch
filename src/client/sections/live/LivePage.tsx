@@ -37,5 +37,6 @@ export function LivePage() {
     {(onAir.favorites.error || onAir.builtIn.error) && <Alert variant="destructive"><AlertDescription>Couldn't load On air.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     <BrowseRadio origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Live"} onCommand={run} />
     {iptv.data?.sources.some(source => source.channelCount) && <BrowseLiveTv />}
+    {iptv.error && !iptv.data && <Alert variant="destructive"><AlertDescription>Couldn't load Live TV.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void iptv.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
   </section>;
 }
