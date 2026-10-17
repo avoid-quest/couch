@@ -23,26 +23,25 @@ Artwork    Season title     Play all  …
 
 24 episodes             Filter       ‹ 2 / 4 ›
 ------------------------------------------------
-Episode artwork   Name and length       Play  …
+Episode artwork   Name and length
 ------------------------------------------------
 ```
 
-Playback keeps named series, season, album or radio destinations visible once.
 Library items open a full detail page, including inspection from playback and
 Up next. Details offer the same breadcrumb; there is no item-detail dialog or
 separate related-content sheet. Nearby items use four divided rows and a small
 heading that links to the full list. Hide this section when there are no nearby
 items. Browser history restores the collection page and scroll position.
 
-Collection rows open details through their title; a small Play control stays
-available, and secondary verbs use Couch's existing Dropdown Menu. The existing
+Collection rows are one target that opens details; their other verbs, Play
+included, wait in the row's context menu ([Browse](design/browse.md#mediarow--medialist)). The existing
 Search results, action layout, and time ruler remain as they are. Use one compact
 pager with Previous, "Page N of M" and Next in fixed slots, disabling unavailable directions.
 
 Use the official shadcn [Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
 and [Pagination](https://ui.shadcn.com/docs/components/radix/pagination), together
-with Couch's existing Button, Input, Select, Collapsible, Dropdown Menu and media
-rows. The only extra composition is the provider-aware breadcrumb and browsing
+with Couch's existing Button, Input, Select, Collapsible, Dropdown Menu, Context Menu
+and media rows. The only extra composition is the provider-aware breadcrumb and browsing
 toolbar; the catalog has no media-domain equivalent. Provider cursors are
 opaque and do not report totals, so pagination only links to pages whose cursors
 are known; it never invents a last page. Full season and album lists can be paged
@@ -60,29 +59,27 @@ Live TV
 
 305 channels      All groups   Filter       ‹ 2 / 13 ›
 ------------------------------------------------------
-Logo   Channel name                             ▷  …
+Logo   Channel name
        Now title · 21:00 Next title · Group
 ------------------------------------------------------
 ```
 
 Rows are compact MediaRows with the channel logo as artwork. The meta line
 carries what's on now and next from the XMLTV guide, and the group while no
-group is picked. Play plays the channel; the menu offers Play on and Queue.
+group is picked. Pressing the row plays the channel; its menu (the context
+menu, or the TV's "…") offers Play on and Queue.
 The group Select, Filter and page live in the route (`/live?group=…&channelFilter=…&channelPage=…`),
 so history restores them. A source without a guide still lists its channels.
 
 ## Shared sources
 
-A device's live input uses the same Sources setup, Search's source rows, search results
-and Play on menu as other media. Configure capture in Settings → This device → Sharing,
-or open Search → Add source → This device. Capture always belongs to the
-device running that form, including for paired users without administrator access.
-The source picker uses two columns so its four tabs fit narrow dialogs without
-overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.
+A device's live input uses the same Search source rows, search results and Play on
+menu as other media. Configure capture in Settings → This device → Sharing.
+Capture always belongs to the device running that form, including for paired users
+without administrator access. It reuses the existing shadcn Select and Field controls.
 
 Active inputs appear as rows in Search's Sources list and in search results, under
-the Shared sources source filter and the Live kind filter. Their player
-breadcrumb returns to Search (`/search`). Playback uses the same Now
+the Shared sources source filter and the Live kind filter. Playback uses the same Now
 Playing page, now-playing bar, Playback settings, Up next and Where it plays controls
 as TV and radio. The usual picture stage displays video; audio-only inputs use
 the usual artwork stage. There is no separate live player or visualizer.

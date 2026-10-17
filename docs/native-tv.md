@@ -76,8 +76,8 @@ restores its opener; from Settings content it restores the visible rail entry
 or narrow Settings page selector,
 then returns Home. A source page first returns to Sources.
 
-The TV player has its own controls without the desktop breadcrumb, Couch
-switch or fullscreen button. Details lives in Playback. A paused picture shows
+The TV player has the same controls as every screen, without the Back arrow
+and fullscreen button a pointer and a window need. Details lives in Playback. A paused picture shows
 a large Pause glyph and “Paused”. Back hides the controls, then returns to the
 page that opened the player; Back on Home does nothing. Up next and Details
 preserve this route even after the queue changes the player URL. Playback

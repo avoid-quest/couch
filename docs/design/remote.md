@@ -5,7 +5,8 @@ What the TV does with each press: [TV](tv.md).
 ## The Remote section
 
 **Remote** is a section on Devices that aren't TVs, laid out like the remote
-it stands in for, phone first, in one column: the TV and its status, the pad,
+it stands in for, phone first, in one column, its name left to the current tab
+as Home's and Live's are: the TV and its status, the pad,
 Back, Home and Info, what plays, then Type on TV. It selects a TV to control
 without joining or moving its outputs. With two or more TVs, a Select picks
 one; offline or private TVs cannot be controlled.

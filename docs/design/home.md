@@ -4,8 +4,8 @@
 
 Home opens on one large item, the hero, then shelves of tiles, the way Apple
 TV and Infuse do. The TV, the desktop window and phones render the same tree
-(`HomePage`); they differ in layout (`tv:` classes, and `md:` where narrow
-screens stack), not in which components they render.
+(`HomePage`) with the same layout; narrow screens stack the hero (`md:`), and
+a pointer gets the shelves' scrollbars, which the TV hides.
 
 ## The hero
 
@@ -45,10 +45,10 @@ Home ends with its content.
 
 Each shelf's heading names it, then, in muted ink, the time it matters at: "3
 unfinished", "On air now", "2 saved", "4 titles", "until 23:10" (Up next ends
-then). Its action (Edit for Up next, Browse for Radio, Open Library for For
-later) sits at the heading's right on desktop and phones. The TV hides it: its
-tab bar reaches Live and Library and its now-playing bar Up next, so Up from a
-shelf meets only the shelves above it.
+then). A shelf has no action: the tabs reach Live and Library and the
+now-playing bar Up next, so Up from a shelf meets only the shelves above it.
+Up next's shelf ends with "N more" when it holds more than fits, which opens
+Up next beside Home.
 
 A shelf takes its order once its data and the hero are known, and keeps it
 while Home stays open, so nothing moves under the focus. It leaves out the
@@ -68,5 +68,5 @@ its history actions. It opens History Details without playing, even when
 Resume is unavailable. Up next tiles read their length and the clock time
 each ends ("4:52, ends 21:47").
 
-Shelves are plain overflow rows (`data-nav-row`); the TV hides their
-scrollbar. How the TV walks them: [TV](tv.md#every-journey-step-works-with-a-remote).
+Shelves are plain overflow rows (`data-nav-row`); a pointer scrolls them by
+their thin scrollbar, which the TV hides. How the TV walks them: [TV](tv.md#every-journey-step-works-with-a-remote).

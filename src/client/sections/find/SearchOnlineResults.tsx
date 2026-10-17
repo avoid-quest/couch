@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { collectionLocation } from "@/detail-navigation";
@@ -12,6 +12,7 @@ import { forLaterQuery } from "@/api/for-later";
 import { apiFetch } from "@/api/client";
 import { historyQuery } from "@/api/progress";
 import { usePlayOn } from "@/components/PlayOn";
+import type { MenuAction } from "@/components/RowMenu";
 import { nextEpisode, progressFor, seriesResumeFor } from "./provider-progress";
 import type { HistoryItem } from "../../../shared/viewing";
 
@@ -25,8 +26,8 @@ export type SearchHit = SearchFacet & {
   collection?: "Channel" | "List" | "Series" | "Season";
   thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
-  /** playOn makes the action "Play on", a menu of the online Devices. */
-  actions: Array<{ label: string; disabled?: boolean; pressed?: boolean; run?: () => void; node?: ReactNode; playOn?: (deviceId: string) => void; sharingDeviceId?: string }>;
+  /** Every verb, the primary's included; MediaRow's menu holds the rest. */
+  actions: MenuAction[];
 };
 export type SearchCollection = { title: string; source: string; thumbnail?: string; description?: string; subtitle?: string; single?: boolean; playLabel?: string; position?: number; duration?: number | null; fromStart?: () => void; playAll?: () => void; playOn?: (deviceId: string) => void; playNext?: () => void; queueAll?: () => void; save?: () => void; saved?: boolean; saveDisabled?: boolean; disabled?: boolean };
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean; errorMessage?: string; retry?: () => void; warning?: string; more?: () => void; moreDisabled?: boolean; facets?: SearchFacet[]; hits?: SearchHit[]; collection?: SearchCollection; page?: ProviderSearchPage };

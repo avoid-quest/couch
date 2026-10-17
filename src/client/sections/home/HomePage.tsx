@@ -1,7 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -55,7 +54,6 @@ export function HomePage() {
   const { on, play } = usePlayOn();
   const { credentials, available, current, programme } = shell;
   const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
-  const navigate = useNavigate();
   const details = useDetailNavigation();
   const now = useDurationClock();
   const [queueOpen, setQueueOpen] = useState(false);
@@ -157,8 +155,7 @@ export function HomePage() {
       </li>)}
     </Shelf>,
 
-    upNext: !!upcoming.length && <Shelf title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}
-      action={<Button variant="ghost" data-panel="queue" onClick={() => setQueueOpen(true)}>Edit</Button>}>
+    upNext: !!upcoming.length && <Shelf title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}>
       {plan.slice(0, shelfLength).map(({ entry, starts, seconds }) => <li key={entry.id} className="shrink-0">
         <MediaTile shape={entryShape(entry)} title={entry.title} thumbnail={entry.thumbnail} aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}
           meta={seconds == null ? entry.live ? "Live" : undefined : [formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`].filter(Boolean).join(", ")} />
@@ -166,15 +163,14 @@ export function HomePage() {
       {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
     </Shelf>,
 
-    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" time={allStations.some(station => onAir(station.id)) ? "On air now" : plural(listed.length, "station")}
-      action={<Button variant="ghost" onClick={() => void navigate({ href: "/live" })}>Browse</Button>}>
+    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" time={allStations.some(station => onAir(station.id)) ? "On air now" : plural(listed.length, "station")}>
       {listed.map(station => <li key={station.id} className="shrink-0">
         <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl}
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} />
       </li>)}
     </Shelf>,
 
-    later: !!savedMedia.length && <Shelf title="For later" time={`${savedMedia.length} saved`} action={<Button variant="ghost" onClick={() => shell.changeSection("Library")}>Open Library</Button>}>
+    later: !!savedMedia.length && <Shelf title="For later" time={`${savedMedia.length} saved`}>
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
           aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} />
@@ -189,7 +185,7 @@ export function HomePage() {
     </Shelf>,
   };
 
-  return <section data-page="Home" aria-label="Home" className="grid gap-10 tv:gap-12">
+  return <section data-page="Home" aria-label="Home" className="grid gap-12">
     <h1 className="sr-only">Home</h1>
     {historyShown && history.error && <Alert variant="destructive"><AlertDescription>{hasRow("continue") ? "Couldn't load Continue." : "Couldn't load Played recently."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {hasRow("later") && later.error && <Alert variant="destructive"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
@@ -220,7 +216,7 @@ export function HomePage() {
 function HomeHero({ thumbnail, shape, title, meta, time, children }: { thumbnail?: string; shape: TileShape; title: string; meta?: string; time?: string; children: ReactNode }) {
   return <section data-home-hero aria-label={title} className="grid gap-x-12 gap-y-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
     {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
-    <div aria-hidden="true" className="h-56 min-w-0 md:h-64 tv:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>
+    <div aria-hidden="true" className="h-56 min-w-0 md:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>
     <div className="grid min-w-0 gap-2">
       <h2 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{title}</h2>
       {meta && <p className="truncate text-sm text-muted-foreground">{meta}</p>}

@@ -4,8 +4,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
 import { tileAspect, type TileShape } from "@/components/MediaTile";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
-import { BrowseActions } from "@/sections/find/SearchPanel";
-import type { SearchHit } from "@/sections/find/SearchOnlineResults";
+import { OptionsMenu, type MenuAction } from "@/components/RowMenu";
 import { cn } from "@/lib/utils";
 
 type Verb = { label: string; run: () => void; disabled?: boolean };
@@ -25,7 +24,7 @@ export function DetailHeader({ title, meta, description, thumbnail, shape = "vid
   save?: { saved: boolean; run: () => void; disabled?: boolean };
   playOn?: { run: (deviceId: string) => void; disabled?: boolean };
   /** Every other verb (Play next, Remove, ordering), in one "…" menu. */
-  more?: SearchHit["actions"];
+  more?: MenuAction[];
   children?: ReactNode;
 }) {
   const { on } = usePlayOn();
@@ -34,7 +33,7 @@ export function DetailHeader({ title, meta, description, thumbnail, shape = "vid
   const verbs = !!(play || fromStart || queue || save || playOn || more.length);
   return <header className="grid gap-x-12 gap-y-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-start">
     {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
-    {thumbnail && <div aria-hidden="true" className="h-56 min-w-0 md:h-64 tv:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>}
+    {thumbnail && <div aria-hidden="true" className="h-56 min-w-0 md:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>}
     <div className="grid min-w-0 content-start gap-2 [--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
       <h1 tabIndex={-1} className="text-3xl font-semibold tracking-tight break-words outline-none">{title}</h1>
       {meta && <p className="text-sm text-muted-foreground">{meta}</p>}
@@ -47,7 +46,7 @@ export function DetailHeader({ title, meta, description, thumbnail, shape = "vid
         {save && <Button data-page-first={first === "save" || undefined} variant="ghost" size="lg" aria-pressed={save.saved} disabled={save.disabled} onClick={save.run}>{save.saved ? "Saved" : "Save"}</Button>}
         {/* Play on waits for another device that can play it. */}
         {playOn && <PlayOnMenu size="lg" title={title} disabled={playOn.disabled} onPlay={playOn.run} />}
-        <BrowseActions size="icon-lg" title={title} actions={more} />
+        <OptionsMenu size="icon-lg" title={title} actions={more} />
       </div>}
       {children}
     </div>
