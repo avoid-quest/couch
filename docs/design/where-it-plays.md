@@ -46,7 +46,6 @@ mistaken for the header's Couch switch. It opens a bottom Sheet:
     Sync 40 ms earlier   ──●─────
 ◉ ▣ Francesco's phone    ──────●  60  …
     This device · Sound
-    Sync 0 ms earlier    ●───────
 ─────────────────────────────────────
 
 Other devices
@@ -66,8 +65,8 @@ Other devices
   applies. On the TV the fader hint, "Press OK to adjust a level, then OK or
   Back to finish.", follows them, where the faders start; it is the Sheet's
   one hint line, and elsewhere it has none.
-- **The devices it plays on,** each with its fader, Sync under it while it
-  plays in sync, and "…".
+- **The devices it plays on,** each with its fader and "…", and
+  [Sync](#fader-and-sync) under the fader where it means something.
 - **Other devices,** under that one heading, each saying what it plays now
   ("Playing avoid radio", "Not playing", "Offline"), offline ones last. The
   heading shows only beside devices it plays on, so a long list still shows
@@ -81,7 +80,7 @@ press.
 
 It replaced an overview page, `/where-it-plays`, that grouped every device
 under the Playback it played. Its address now opens Home, for bookmarks. The
-picker kept its Sync, as a line of each in-sync row; the rest was left out:
+picker kept its Sync, in each in-sync row; the rest was left out:
 
 - each other Playback's artwork and end time, since a row's status already
   names what that device plays;
@@ -123,8 +122,8 @@ private sound keeps its own attenuation, as All always left it.
 Every device is listed once: the Playback's devices first, then the others
 under Other devices, offline ones last. A row is a check (in or out), the
 DeviceIcon, the device's name and a one-line status; while the device is in,
-its fader with its number, Sync while it plays in sync, and a "…" menu
-follow. The check is a filled circle with a check
+its fader with its number and a "…" menu follow, with Sync under the fader
+where it means something. The check is a filled circle with a check
 while the device is in and its empty outline while it is out, so a row reads
 as a device you can add, as AirPlay's list does; a focused row inverts like
 every control, checked or not.
@@ -165,9 +164,15 @@ viewing another Playback.
 ## Fader and Sync
 
 The fader is the device's one volume while its sound is in, else 0 (its
-number reads "–"): 0 takes its sound out and raising it puts it in. "Sync …
-ms earlier" shows only while its sound plays in sync with other devices; it
-plays a late speaker sooner (Sendspin's static delay). It is a line of the
+number reads "–"): 0 takes its sound out and raising it puts it in.
+
+"Sync … ms earlier" plays a late speaker sooner (Sendspin's static delay).
+It applies only while the device's sound plays in sync with other devices,
+and few people touch it, so a row shows its Sync line only while its delay
+isn't 0. Otherwise **Sync…** in the row's "…", there while Sync applies,
+reveals the line and moves focus to its slider; Back or Esc on the slider,
+or closing the Sheet, hides it again while the delay is still 0. That
+reveal is the open Sheet's own state, not Core's. The line is part of the
 row's own grid (CSS subgrid): its words under the status, its slider under
 the fader and as long, so the row still reads as one device. On phones it
 takes its own line, words then slider.
@@ -176,7 +181,8 @@ audio delay against the picture.
 
 ## The "…" menu
 
-**Picture**, **Mute** and **Only here**, each a checked item. Only here
+**Picture**, **Mute** and **Only here**, each a checked item, then
+**Sync…** while Sync applies ([Fader and Sync](#fader-and-sync)). Only here
 (formerly Solo) keeps the Playback only on that device, with its picture
 when the Playback has one. It is unavailable while another device's private
 output plays in it, or a publisher's private output waits to return after
@@ -202,9 +208,12 @@ opens it only in the window that asked.
 
 On a TV a row's check is its focus stop; Up and Down move between rows,
 past the Other devices heading. Right reaches the fader, which takes the
-arrows only after OK, then "…"; Down from the fader reaches its Sync. The
-Sheet opens on the first device you can choose, Up from the first row reaches
-the Volume, and Back closes it with focus back on its button.
+arrows only after OK, then "…"; Down from the fader reaches its Sync line
+when it shows. Sync… in "…" puts focus on that line's slider, a fader like
+the others: OK hands it the arrows and Back ends that; Back again hides a
+line still at 0, with focus back on "…". The Sheet opens on the first device
+you can choose, Up from the first row reaches the Volume, and Back closes it
+with focus back on its button.
 
 On phones the fader and number take a line below the name, with "…" beside
 the name. Names and titles wrap without ellipses, and the Sheet scrolls. Its

@@ -1,7 +1,7 @@
-import { useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Circle, CircleCheck, Ellipsis, SlidersVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
@@ -54,7 +54,7 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
     {/* It opens on the first device you can choose; Up reaches the Volume. */}
     <SheetContent side="bottom" onOpenAutoFocus={event => { const check = (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-device-check]:not(:disabled)"); if (check) { event.preventDefault(); check.focus(); } }}
       className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
-      <div className="grid w-full max-w-4xl">
+      <SyncScope><div className="grid w-full max-w-4xl">
         <SheetHeader className="flex-row items-center gap-4 p-0 pr-12">
           <div className="size-14 shrink-0 overflow-hidden bg-muted [&>*]:size-full [&_img]:object-contain">{entry && <MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />}</div>
           <div className="grid min-w-0 gap-0.5"><SheetTitle className="text-base font-medium [overflow-wrap:anywhere]">{title ?? "Nothing is playing"}</SheetTitle><SheetDescription>{status}</SheetDescription></div>
@@ -65,7 +65,7 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
         {list("Playing", playing)}
         {playing.length > 0 && others.length > 0 && <h3 className="pt-8 pb-2 text-base font-medium">Other devices</h3>}
         {list(playing.length ? "Other devices" : "Devices", others)}
-      </div>
+      </div></SyncScope>
     </SheetContent>
   </ChooserSheet>;
 }
@@ -81,8 +81,8 @@ function levels({ state, connected, run, inSync }: Props & { inSync?: boolean })
 
 /**
  * A device's row: a check (in or out) that adds or removes the device, then while it is in its fader and number,
- * Sync under them while it plays in sync, and a "…" menu with Picture, Mute and Only here. Called rather than
- * rendered, so tests can walk its controls without a DOM.
+ * its Sync line while it plays in sync (see Delay), and a "…" menu with Picture, Mute, Only here and Sync…. Called
+ * rather than rendered, so tests can walk its controls without a DOM.
  */
 function deviceRow({ state, row, run, tv }: Omit<Props, "connected"> & { row: Row; tv: boolean }) {
   const { device, output, status, check, level, picture, mute, only } = row;
@@ -101,17 +101,40 @@ function deviceRow({ state, row, run, tv }: Omit<Props, "connected"> & { row: Ro
       <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} keyboardStep={tv ? 5 : 1} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} />
       <span className="w-[3ch] shrink-0 text-right tabular-nums">{level.sound ? Math.round(level.value) : "–"}</span>
     </div>}
-    {row.sync && <Delay label={`${device.name} sync`} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+    {row.sync && <Delay id={device.id} label={`${device.name} sync`} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
     {output && <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-2 row-start-1 mt-0.5 justify-self-end md:col-start-3" aria-label={`Options for ${device.name}`} title="Options"><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <Options id={device.id} sync={!!row.sync}>
         <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, picture: on })}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem aria-label={`Mute ${device.name}`} checked={mute.on} disabled={!mute.enabled} onCheckedChange={muted => void run({ type: "mute", deviceId: device.id, muted })}>Mute<Why {...mute} /></DropdownMenuCheckboxItem>
         {/* Pressed again it still commits: a publisher held out for its own capture would otherwise return. */}
         <DropdownMenuCheckboxItem aria-label={`Only on ${device.name}`} checked={only.on} disabled={!only.enabled} onSelect={() => void run({ type: "solo", deviceId: device.id })}>Only here<Why {...only} /></DropdownMenuCheckboxItem>
-      </DropdownMenuContent>
+      </Options>
     </DropdownMenu>}
   </li>;
+}
+
+// The Sync line a row's "Sync…" revealed. Local to the open Sheet, so closing it hides the line again.
+const RevealedSync = createContext<{ id: string | null; reveal: (id: string | null) => void }>({ id: null, reveal: () => {} });
+function SyncScope({ children }: { children: ReactNode }) {
+  const [id, reveal] = useState<string | null>(null);
+  return <RevealedSync value={{ id, reveal }}>{children}</RevealedSync>;
+}
+
+// A row's "…": its items, then Sync… while Sync applies, which reveals the row's Sync line and moves focus to its
+// slider rather than back to "…". The items stay children, so tests walk them without a DOM.
+function Options({ id, sync, children }: { id: string; sync: boolean; children: ReactNode }) {
+  const { reveal } = useContext(RevealedSync);
+  const picked = useRef(false);
+  return <DropdownMenuContent align="end" onCloseAutoFocus={event => {
+    if (!picked.current) return;
+    picked.current = false;
+    event.preventDefault();
+    document.querySelector<HTMLElement>(`[data-sync-line="${id}"] [role="slider"]`)?.focus();
+  }}>
+    {children}
+    {sync && <><DropdownMenuSeparator /><DropdownMenuItem className="pl-8" onSelect={() => { picked.current = true; reveal(id); }}>Sync…</DropdownMenuItem></>}
+  </DropdownMenuContent>;
 }
 
 /** A disabled menu item's one-word reason, at its end. */
@@ -125,12 +148,30 @@ export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> })
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other
 // devices: Sendspin's static delay. It reads "earlier", because "Delay" suggested the opposite (#644 ticket 12),
 // and "Sync" so it isn't mistaken for Playback's audio delay against the picture.
-// It shows only while the device plays in sync, and its own value while focused, so arrow keys keep stepping from it.
+// It applies only while the device plays in sync, and its own value shows while focused, so arrow keys keep stepping
+// from it. Few people touch it, so a row shows it only while it isn't 0, or once its "…" revealed it.
 // A line of the row's own grid (subgrid): its words under the device's status, its slider under the fader, as long.
-function Delay({ label, delay, onCommit }: { label: string; delay: number; onCommit: (delay: number) => void }) {
+function Delay({ id, label, delay, onCommit }: { id: string; label: string; delay: number; onCommit: (delay: number) => void }) {
+  const revealed = useContext(RevealedSync);
   const [draft, setDraft] = useState<number | null>(null);
   const value = draft ?? delay;
-  return <div data-volume className="col-span-2 flex min-h-11 min-w-0 items-center gap-3 md:grid md:grid-cols-subgrid">
+  const hides = revealed.id === id && !delay;
+  // Back or Esc on a revealed slider still at 0 hides it, with focus back on "…", rather than closing the Sheet.
+  // Radix listens on the document, so this listens on the window first, after the TV fader's own Back has had its turn.
+  useEffect(() => {
+    if (!hides) return;
+    const hide = (event: KeyboardEvent) => {
+      const slider = event.target instanceof HTMLElement ? event.target.closest(`[data-sync-line="${id}"] [role="slider"]`) : null;
+      if (event.key !== "Escape" || event.defaultPrevented || !slider) return;
+      event.preventDefault(); event.stopPropagation();
+      slider.closest("li")?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+      revealed.reveal(null);
+    };
+    window.addEventListener("keydown", hide, true);
+    return () => window.removeEventListener("keydown", hide, true);
+  }, [hides, id]);
+  if (!delay && revealed.id !== id) return null;
+  return <div data-volume data-sync-line={id} className="col-span-2 flex min-h-11 min-w-0 items-center gap-3 md:grid md:grid-cols-subgrid">
     <span className="shrink-0 text-sm text-muted-foreground tabular-nums md:pl-15">Sync {value} ms earlier</span>
     <div className="flex min-w-0 flex-1 items-center gap-3">
       <Slider aria-label={label} aria-valuetext={`${value} milliseconds earlier`} value={[value]} min={0} max={500} step={10} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => onCommit(next!)} onBlur={() => setDraft(null)} />

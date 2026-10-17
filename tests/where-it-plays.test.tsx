@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { isValidElement, type ComponentProps, type ReactNode } from "react";
+import { createElement, isValidElement, type ComponentProps, type FunctionComponent, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClientSessionState } from "../src/client/session/session";
 import type { SessionGateValue } from "../src/client/session/session-context";
@@ -116,8 +116,13 @@ test("the picker shows the playback, its one Volume, then its devices, each with
   expect(all.filter(item => item.type === "h3").map(item => text(item.props.children))).toEqual(["Other devices"]);
   expect(text(tree)).toContain("Playing avoid radio");
   expect(text(tree)).not.toMatch(/\b(zone|group|room|Playback)\b/i);
-  // Sync shows under the row that plays in sync, and only there.
-  expect(all.filter(item => /sync$/.test(item.props.label ?? "")).map(item => item.props.label)).toEqual(["TV sync"]);
+  // Sync belongs to the row that plays in sync, and only there: its "…" offers Sync…, and its line shows while it isn't 0.
+  const syncs = all.filter(item => /sync$/.test(item.props.label ?? ""));
+  expect(syncs.map(item => item.props.label)).toEqual(["TV sync"]);
+  expect(all.filter(item => (item.props as { sync?: boolean }).sync).length).toBe(1);
+  const line = (delay: number) => renderToStaticMarkup(createElement(syncs[0]!.type as FunctionComponent, { ...syncs[0]!.props, delay }));
+  expect(line(80)).toContain("Sync 80 ms earlier");
+  expect(line(0)).toBe("");
   const checks = all.filter(item => item.props["data-device-check"]);
   expect(checks.map(item => [item.props["aria-label"], item.props["aria-checked"]])).toEqual([["TV", true], ["Mac", false], ["Phone", false]]);
   for (const label of ["TV volume", "Options for TV", "TV picture", "Mute TV", "Only on TV"]) expect(labelled(label).length).toBe(1);
