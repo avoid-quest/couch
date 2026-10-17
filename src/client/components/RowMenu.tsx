@@ -72,7 +72,7 @@ export function ItemMenu({ menu, title, hidden = false, className, ...props }: {
   const outside = useRef(false);
   if (!menu.shown.length) return null;
   return <DropdownMenu modal={false} open={menu.open} onOpenChange={open => { if (open) menu.opener.current = null; menu.setOpen(open); }}>
-    <DropdownMenuTrigger asChild>{hidden ? <span aria-hidden="true" className="pointer-events-none absolute inset-0" />
+    <DropdownMenuTrigger asChild>{hidden ? <span aria-hidden="true" aria-label={`Options for ${title}`} className="pointer-events-none absolute inset-0" />
       : <Button ref={trigger} data-row-options variant="ghost" size="icon" aria-label={`Options for ${title}`} className={cn("opacity-0 group-hover/menu:opacity-100 group-focus-within/menu:opacity-100 data-[state=open]:opacity-100 touch:opacity-100", className)} {...props}><MoreHorizontal aria-hidden="true" /></Button>}</DropdownMenuTrigger>
     {/* Radix lands a keyboard or a remote (whose keys it hears) on the first verb, and leaves a pointer on the menu itself. */}
     <DropdownMenuContent align="end" onInteractOutside={() => { outside.current = true; }} onCloseAutoFocus={event => {

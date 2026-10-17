@@ -42,7 +42,7 @@ export function RemotePad({ connected, onNavigate }: { connected: boolean; onNav
       {arrow("right", <ChevronRight aria-hidden="true" />)}
       {arrow("down", <ChevronDown aria-hidden="true" />)}
       {arrow("left", <ChevronLeft aria-hidden="true" />)}
-      <Button type="button" aria-label="TV OK" disabled={!connected} onPointerDown={() => { ok.current = startHold(() => navigate("menu")); }} onPointerCancel={() => { ok.current?.release(); ok.current = null; }}
+      <Button type="button" aria-label="TV OK" disabled={!connected} onPointerDown={event => { if (event.button === 0) ok.current = startHold(() => navigate("menu")); }} onPointerCancel={() => { ok.current?.release(); ok.current = null; }}
         onClick={() => { if (ok.current?.release() ?? true) navigate("select"); ok.current = null; }} className="absolute inset-[31%] h-auto rounded-full text-lg">OK</Button>
     </section>
     <div className="grid grid-cols-3 gap-2">

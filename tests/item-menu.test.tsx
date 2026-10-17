@@ -30,15 +30,16 @@ test("a press released before the hold acts once on release; one held opens the 
   expect(held).toBe(1);
 });
 
-const options = (html: string) => html.match(/aria-label="Options for [^"]*"/g) ?? [];
+// The visible "…" buttons; a row whose page holds its verbs keeps only a hidden anchor, named the same.
+const options = (html: string) => html.match(/<button[^>]*data-row-options[^>]*>/g)?.map(button => /aria-label="([^"]*)"/.exec(button)?.[1]) ?? [];
 const row = (props: Partial<Parameters<typeof MediaRow>[0]>) => renderToStaticMarkup(<ul><MediaRow title="Montalbano" primary={{ label: "Open", onClick: () => {} }} {...props} /></ul>);
 const tile = (props: Partial<Parameters<typeof MediaTile>[0]>) => renderToStaticMarkup(<MediaTile title="Radio 3" shape="square" onClick={() => {}} {...props} />);
 
 test("a row or tile with verbs shows one \"…\", and its primary target is marked for a held OK", () => {
   const queue = [{ label: "Queue", run: () => {} }];
-  expect(options(row({ menu: queue }))).toEqual(['aria-label="Options for Montalbano"']);
+  expect(options(row({ menu: queue }))).toEqual(["Options for Montalbano"]);
   expect(row({ menu: queue })).toContain("data-item-menu");
-  expect(options(tile({ menu: queue }))).toEqual(['aria-label="Options for Radio 3"']);
+  expect(options(tile({ menu: queue }))).toEqual(["Options for Radio 3"]);
   expect(tile({ menu: queue })).toContain("data-item-menu");
 });
 
