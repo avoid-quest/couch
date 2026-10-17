@@ -6,10 +6,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { offline, TRY_AGAIN } from "@/copy";
 import { useOptionalSessionGate } from "@/session/session-context";
 
-// The messages every Library tab shows around its rows (docs/design.md "Messages").
+// The messages every Saved tab shows around its rows (docs/design.md "Messages").
 
 /** Status line while offline or loading. */
-export function LibraryStatus({ connected, loading }: { connected: boolean; loading: boolean }) {
+export function SavedStatus({ connected, loading }: { connected: boolean; loading: boolean }) {
   const name = useOptionalSessionGate()?.state?.installationName;
   if (connected && !loading) return null;
   return <p role="status" className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
@@ -18,7 +18,7 @@ export function LibraryStatus({ connected, loading }: { connected: boolean; load
 }
 
 /** A load or action error, with Try again when the page can retry. */
-export function LibraryError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function SavedError({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return <Alert variant="destructive" className="mb-4">
     <AlertDescription>{message}</AlertDescription>
     {onRetry && <AlertAction><Button variant="outline" size="sm" onClick={onRetry}>{TRY_AGAIN}</Button></AlertAction>}
@@ -26,7 +26,7 @@ export function LibraryError({ message, onRetry }: { message: string; onRetry?: 
 }
 
 /** An empty tab: what goes here and the next step. */
-export function LibraryEmpty({ children, action }: { children: ReactNode; action?: ReactNode }) {
+export function SavedEmpty({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return <Empty className="pt-0">
     <EmptyHeader><EmptyDescription>{children}</EmptyDescription></EmptyHeader>
     {action && <EmptyContent>{action}</EmptyContent>}

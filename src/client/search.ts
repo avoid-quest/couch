@@ -24,3 +24,8 @@ export function searchLocation(state: SearchRouteState) {
   if (state.length && searchLengths.includes(state.length)) params.set("length", state.length);
   return `/search${params.size ? `?${params}` : ""}`;
 }
+/** A pasted web address, which opens as a page or as media rather than searching. */
+export const isLink = (value: string) => {
+  try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
+  catch { return false; }
+};

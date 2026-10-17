@@ -57,9 +57,10 @@ for the pairing QR and six-digit code. The first device you pair becomes the
 admin. If no paired device is admin later,
 Devices shows a one-use code under **Make a device the admin**; enter it in the
 phone's **Settings > Devices** under **Admin code** and choose **Become admin**.
-**Home** shows what plays now and Up next, **Live** holds radio and Live TV,
-**Search** holds search and sources, **Library** holds lists and favorites, and
-**Settings** the rest. TV **Settings > Display > Text size** offers Default,
+**Home** shows what plays now and Up next, **Discover** holds what's on air,
+Live TV and each source's own home, **Saved** holds For later, lists and
+favorites, the header's search field searches every source, and **Settings**
+the rest. TV **Settings > Display > Text size** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20
 seconds or the TV returns to its saved size. Client size stays separate.
 
@@ -69,9 +70,10 @@ Home presents one primary focus stop per media item: Continue resumes, a radio s
 or channel plays, and a saved film or collection opens Details. Continue adds
 one secondary Details stop for its existing History actions, including inspection
 and removal when Resume is unavailable. Holding OK on a media item opens its menu of
-other verbs; a short OK acts on release. The tab bar keeps
-Home, Live, Search, Library and Settings between the TV's name and the clock,
-and scrolls away with the page; Up from a page's first row returns to it. Settings OK moves
+other verbs; a short OK acts on release. The header keeps
+Home, Discover, Saved and Settings between the TV's name and its search field
+and clock, and stays at the top while the page scrolls; Up from a page's first
+row returns to it. Settings OK moves
 into the selected page's first enabled control. Back closes an overlay and
 restores its opener; from Settings content it restores the visible rail entry
 or narrow Settings page selector,
@@ -120,7 +122,7 @@ focus and playback behavior: one Home station stop, a held OK opening a Home til
 primary verb and Up from its last shelf through each shelf and the hero to the
 current tab, Saved Details entry on Play and Right across its verbs, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
-the tab bar's scroll, Up and Back, repeated Home Back, five-point OK-to-adjust Volume, Where it plays'
+the sticky header, Up past a shelf's heading and Back, repeated Home Back, five-point OK-to-adjust Volume, Where it plays'
 entry on its first device you can choose, Down to the next and Back to its button, Down from a check past
 its Sync line (revealed by Sync… once the second output's sound joins) and from its fader onto it, Saved removal/Undo/order,
 a remote's Undo by Up past the tabs (Back leaves it, OK undoes and returns focus to the tab),

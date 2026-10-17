@@ -16,7 +16,7 @@ export function ContentBreadcrumb({ title, collection, provider, radio = false }
   const collections = collectionLinks(collection);
   return <Breadcrumb aria-label="Content path">
     <BreadcrumbList className="text-sm">
-      {/* It starts at the section the page opened in (the shell's tab): a station's at Live, otherwise Search. */}
+      {/* It starts at the section the page opened in (the shell's tab), else Discover. */}
       <BreadcrumbItem><BreadcrumbLink asChild><Link to={sectionUrl(section)} className={linkClassName}>{section}</Link></BreadcrumbLink></BreadcrumbItem>
       {!radio && source && (title !== providerNames[source] || collection) && <><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink asChild><Link to={keepSection(collectionLocation({ provider: source, url: "" }), section)} className={linkClassName}>{providerNames[source]}</Link></BreadcrumbLink></BreadcrumbItem></>}
       {collections.map(item => <Fragment key={item.url}>

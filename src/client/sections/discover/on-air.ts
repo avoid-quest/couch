@@ -11,7 +11,7 @@ import { useSessionGate } from "@/session/session-context";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 
 /**
- * The stations on air, for Home's Radio shelf and Live's On air shelf: `first` (Home's recents), then the saved
+ * The stations on air, for Home's Radio shelf and Discover's: `first` (Home's recents), then the saved
  * stations, then the built-in ones, each once and with its current show.
  */
 export function useOnAir(enabled = true, first: RadioStation[] = []) {

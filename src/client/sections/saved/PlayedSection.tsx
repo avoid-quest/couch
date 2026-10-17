@@ -6,7 +6,7 @@ import { MediaList, MediaRow } from "@/components/MediaRow";
 import { historyQuery } from "@/api/progress";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import type { Credentials } from "../../session/session";
-import { LibraryEmpty, LibraryError, LibraryStatus } from "./LibraryStatus";
+import { SavedEmpty, SavedError, SavedStatus } from "./SavedStatus";
 
 /** History, newest first. Each row opens its History Details, which holds its verbs and Remove from Continue with Undo. */
 export function PlayedSection({ origin, token, connected, onFind }: Credentials & { connected: boolean; onFind?: () => void }) {
@@ -16,9 +16,9 @@ export function PlayedSection({ origin, token, connected, onFind }: Credentials 
   const items = connected ? history.data?.items ?? [] : [];
   const loading = connected && history.isPending;
   return <section aria-label="Played">
-    <LibraryStatus connected={connected} loading={loading} />
-    {connected && history.error && <LibraryError message={history.error.message || "Couldn't load Played."} onRetry={() => void history.refetch()} />}
-    {connected && !loading && !history.error && !items.length && <LibraryEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing played yet. What plays on Couch shows here.</LibraryEmpty>}
+    <SavedStatus connected={connected} loading={loading} />
+    {connected && history.error && <SavedError message={history.error.message || "Couldn't load Played."} onRetry={() => void history.refetch()} />}
+    {connected && !loading && !history.error && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Nothing played yet. What plays on Couch shows here.</SavedEmpty>}
     {!!items.length && <MediaList aria-label="Played">
       {items.map(item => {
         const href = itemLocation("history", item.mediaId);

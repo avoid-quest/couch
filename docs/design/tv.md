@@ -8,8 +8,8 @@ per row and tile, a quiet header, and controls revealed over the picture.
 What the TV adds is for its remote, which has only arrows, OK and Back:
 
 - spatial navigation, focus on page entry and Back, below;
-- its own name in the header instead of the Couch switch, and no Remote tab
-  or Keyboard shortcuts ([Shell](shell.md#header-and-section-nav));
+- its own name beside Couch's mark in the header instead of the Couch switch,
+  and no Remote tab or Keyboard shortcuts ([Shell](shell.md#header-and-section-nav));
 - OK held on a media row or tile, which opens its one menu, as on Apple TV
   and Android TV; a short OK acts on release ([Menus](../design.md#menus)). A
   row's "…" is a stop Right reaches; a tile's is none, and shows in the
@@ -17,7 +17,7 @@ What the TV adds is for its remote, which has only arrows, OK and Back:
 - no shelf scrollbars, Back buttons, fullscreen or the timeline's time under
   the pointer, which only a pointer or a window uses.
 
-Home's hero and shelves: [Home](home.md). Search and Details: [Browse](browse.md).
+Home's hero and shelves: [Home](home.md). Discover, Search and Details: [Browse](browse.md).
 
 Focus is
 the only highlight; no hover style applies on the TV. The TV has no hover: under `.tv-presentation` the `hover` variant
@@ -25,19 +25,23 @@ never applies, so a stray pointer can't compete with focus.
 
 Back closes an open
 overlay, then leaves a detail page for the page
-that opened it with its focus restored, then takes any section to Home, where
+that opened it with its focus restored (Discover's Radio and Live TV pages
+are left for Discover, on the heading that opened them), then takes any
+section to Home, where
 Back does nothing. Opening
 Up next changes the player URL without losing its opener. Settings' own OK
 and Back: [Settings](settings.md#section-nav).
 
 After every page change, focus is on the page's first control. When that control renders
-after later ones (Home's hero waits for its data, Live's first On air tile for the shows, a collection's Play for its source), focus moves
-to it as it appears, unless a key or pointer came first. Library starts on its rail's current section, and OK on
+after later ones (Home's hero waits for its data, Discover's first Radio tile for the shows, a collection's Play for its source), focus moves
+to it as it appears, unless a key or pointer came first. Saved starts on its rail's current section, and OK on
 another section opens it and keeps the rail; Right reaches its rows. On Details the first control is the
 primary verb, so OK plays, and Right walks the other verbs one stop each. The header's left holds the TV's name
 as plain text; its Couch choice lives in Settings → Couch connection ([Shell](shell.md#header-and-section-nav)).
-Volume and every fader move 5 per press. Search's field says "Type with Remote on
-your phone": a phone's Remote is the TV's text entry.
+Volume and every fader move 5 per press. The header's search field is a stop
+like any header control, on every page; the TV has no keyboard, so a phone's
+Remote is its text entry ([Type on TV](remote.md#type-on-tv)). Typing there
+keeps focus in the field, and Enter on TV goes on to the first result.
 
 ## See the TV in a browser
 
@@ -78,14 +82,17 @@ Spatial navigation places a
 slider by its whole track, not its moving thumb, reaches the header and the
 footer (the now-playing bar) only after the page's own controls, and keeps
 focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
-shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row first, so Home's
-shelves are walked one by one and never skipped for a farther control that
-lines up. In their own row they reach only a control past them and in line
-with them (a wrapped line, Continue's Details under its tile, a device's Sync
-under its fader in Where it plays), never a tile beside them whose caption is
-shorter or taller, nor a device's Sync from its check. The tab bar scrolls
-away with the page, as on Apple TV and on every Couch screen. Up from a page's first row reaches it on the current tab, and
-Down from it returns to the page's first control. Up again, past the top,
+shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row or
+control first, so Home's and Discover's shelves and their headings are walked
+one by one and never skipped for a farther control that lines up; the header
+and the footer still come after the page's controls. In their own row they
+reach only a control past them and in line with them (a wrapped line,
+Continue's Details under its tile, a device's Sync under its fader in Where it
+plays), never a tile beside them whose caption is shorter or taller, nor a
+device's Sync from its check. The header stays at the top while the page
+scrolls under it, and scroll padding keeps the focus clear of it. Up from a
+page's first row (past its heading, where that is a link) reaches it on the
+current tab, and Down from it returns to the page's first control. Up again, past the top,
 reaches a toast's action, such as Undo ([Design](../design.md), Messages). After a page change the first key starts at the page's first
 control. Screens shown before the shell (the first-run chooser) bring the
 same arrow navigation.

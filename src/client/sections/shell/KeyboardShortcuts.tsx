@@ -10,7 +10,7 @@ const help = [
   ["← / →", "Back / forward 5 seconds in the player"], ["↑ / ↓", "Raise / lower volume in the player"],
   ["0–9", "Jump to 0–90%"], ["M", "Mute or unmute"], ["C", "Toggle subtitles"],
   ["F", "Toggle fullscreen in the player"], ["Shift + N", "Play next"],
-  ["H / S", "Home / Library"], ["/", "Search"], [",", "Settings"],
+  ["H / S", "Home / Saved"], ["/", "Search"], [",", "Settings"],
   ["P / Q", "Player / Up next"], ["Esc", "Close panel or go back"], ["?", "Keyboard shortcuts"],
 ];
 
@@ -44,7 +44,7 @@ export function KeyboardShortcuts({ open, onOpenChange }: { open: boolean; onOpe
     { hotkey: "C", enabled: transportReady && subtitles.length > 0, action: () => { if (player?.playbackId) void run({ type: "track", playbackId: player.playbackId, kind: "subtitle", index: subtitles.some(track => track.selected) ? -1 : subtitles[0]!.index }); } },
     { hotkey: "Shift+N", enabled: nextReady && hasNext, action: () => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); } },
     { hotkey: "H", action: () => shell.changeSection("Home") },
-    { hotkey: "S", action: () => shell.changeSection("Library") },
+    { hotkey: "S", action: () => shell.changeSection("Saved") },
     { hotkey: "/", action: shell.focusSearch },
     { hotkey: ",", action: () => shell.changeSection("Settings") },
     { hotkey: "P", enabled: !!current, action: () => shell.openPlayer() },

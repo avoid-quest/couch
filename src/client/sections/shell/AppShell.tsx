@@ -1,10 +1,11 @@
 import { defaultStringifySearch, Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
-import { Component, useEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren } from "react";
+import { Component, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { HouseIcon, Keyboard, LibraryIcon, RadioIcon, SearchIcon, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
+import { BookmarkIcon, CompassIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
+import { CouchMark } from "@/components/CouchMark";
 import { DigitalClock } from "@/components/DigitalClock";
 import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
@@ -12,10 +13,11 @@ import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
+import { HeaderSearch } from "./HeaderSearch";
 import { TvAppearancePreview } from "./TvAppearancePreview";
 import { readSearchState, searchLocation, type SearchRouteState } from "@/search";
 import { createId } from "@/session/session";
-import { pathForSection, sectionForPath } from "../../../shared/page-paths";
+import { discoverPaths, pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -38,8 +40,8 @@ import { useMediaSession } from "@/session/media-session";
 import { hear, onBlocked } from "@/session/renderer";
 import { deviceId, showsPicture, useLocalDeviceName } from "@/session/device-id";
 
-// The sections in tab order, with their icons in the phone tab bar.
-const sections: [string, LucideIcon][] = [["Home", HouseIcon], ["Live", RadioIcon], ["Search", SearchIcon], ["Library", LibraryIcon], ["Remote", TvIcon], ["Settings", SettingsIcon]];
+// The sections in tab order, with their icons in the phone tab bar. Search is the header's field, not a tab.
+const sections: [string, LucideIcon][] = [["Home", HouseIcon], ["Discover", CompassIcon], ["Saved", BookmarkIcon], ["Remote", TvIcon], ["Settings", SettingsIcon]];
 const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 const reducedMotion = () => window.matchMedia(reducedMotionQuery).matches;
 function subscribeReducedMotion(onChange: () => void) {
@@ -53,7 +55,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const { nativeHost, tvPresentation, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, playerTarget } = useSessionGate();
+  const { nativeHost, credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, playerTarget } = useSessionGate();
   const router = useRouter();
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
@@ -117,32 +119,27 @@ function useShellValue() {
     if (pictured && current.settled && (newlySelected || explicitlyStarted) && section !== "Now") openPlayer();
     current.picture = picture;
   }, [picture, presentation, pictured, !!state?.playedBy, !!state]);
+  // The header's field, which the player hides: from there, its page comes back first.
   const focusSearch = () => {
-    void router.navigate({ href: searchLocation(rememberedSearch.current) }).then(() => document.getElementById("media-search")?.focus());
+    const focus = () => { const field = document.getElementById("media-search") as HTMLInputElement | null; field?.focus(); field?.select(); };
+    if (section === "Now") void router.navigate({ href: lastBrowsePath.current }).then(focus);
+    else focus();
   };
   const leavePlayer = () => {
     detailNavigation.back(playerTarget ? "/remote" : lastBrowsePath.current);
   };
-  const browseSection = (name: string) => {
-    const destination = name === "Home" || name === "Queue" ? "Home" : name === "For later" ? "Library" : "Search";
-    changeSection(destination);
-  };
   const changeSettingsSection = (page: SettingsPage | null) => {
     const to = settingsPagePath(page);
     if (to !== location.pathname) router.history.push(to);
-  };
-  const gotoSearch = (state: SearchRouteState) => {
-    const to = searchLocation(state);
-    if (to !== at) router.history.push(to);
   };
   const changeSearch = (state: SearchRouteState) => {
     const to = searchLocation(state);
     if (to !== at) router.history.replace(to);
   };
   useNavigation(() => {
-    if (location.pathname === "/collection" || location.pathname === "/item") { detailNavigation.back(pathForSection(section)); return; }
+    // A detail page, and Discover's own pages (every station, every channel), go back to what opened them.
+    if (["/collection", "/item", ...discoverPaths].includes(location.pathname)) { detailNavigation.back(pathForSection(section)); return; }
     if (section === "Now") leavePlayer();
-    else if (section === "Search" && !tvPresentation && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
     else if (section !== "Home") changeSection("Home");
   });
 
@@ -195,7 +192,7 @@ function useShellValue() {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(...lastBrowsePath.current.split("?") as [string, string?]) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
-    changeSection, openPlayer, leavePlayer, focusSearch, browseSection, gotoSearch, changeSearch, changeSettingsSection,
+    changeSection, openPlayer, leavePlayer, focusSearch, changeSearch, changeSettingsSection,
     openProvider,
     enqueueProvider, enqueueRadio, playHistory,
     sectionUrl: (name: string) => name === "Search" ? searchLocation(rememberedSearch.current) : pathForSection(name),
@@ -300,6 +297,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
   useBottomBar(footer, paired && !setupPending);
+  const header = useRef<HTMLElement>(null);
+  useTopBar(header, !setupPending);
 
   if (setupPending) return <div className="app-shell drag-region flex flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
@@ -308,17 +307,23 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          {/* One header on every screen, the TV's: the Couch switch at the left where the TV names itself, the tabs centred,
-              the clock at the right. It scrolls away with the page; Up from a page's first row reaches it on the TV. */}
-          <header hidden={onPlayer} className="app-header drag-region window-controls-inset z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-2 bg-background px-(--gutter) py-1.5">
-            {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
-            {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+          {/* One header on every screen, the TV's: Couch's mark and the Couch switch at the left (the TV names itself there),
+              the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
+              scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the mark, the switch, search
+              and a Settings gear; their tabs are the bottom bar. */}
+          <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid">
+            <div className="flex min-w-0 items-center">
+              <CouchMark className="h-5 shrink-0" />
+              {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
+              {tvPresentation ? <span className="min-w-0 truncate px-2.5 text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+            </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
             {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex" />}
-            <div data-app-status className="col-start-3 flex min-w-0 items-center justify-end gap-1">
+            <div data-app-status className="col-start-3 flex min-w-0 items-center justify-end gap-1 touch:flex-1">
               <LiveSharingStatus />
               <span role="status" className="sr-only">{statusLabel}</span>
+              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               {/* Phones open Settings from where the clock is: the tab bar keeps the sections people browse. */}
@@ -342,6 +347,18 @@ export function ShellChrome({ children }: PropsWithChildren) {
       </main>
     </div>
   );
+}
+
+/** Publishes the sticky header's height as --top-bar, which the page's scroll padding clears (index.css), as --bottom-bar does below. */
+function useTopBar(ref: RefObject<HTMLElement | null>, shown: boolean) {
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !shown) return;
+    const root = document.documentElement.style;
+    const observer = new ResizeObserver(() => root.setProperty("--top-bar", `${element.offsetHeight}px`));
+    observer.observe(element, { box: "border-box" });
+    return () => { observer.disconnect(); root.removeProperty("--top-bar"); };
+  }, [ref, shown]);
 }
 
 // The sections as tabs: text in the header on the TV and wide screens, icons over labels in the phone tab bar (`bar`),

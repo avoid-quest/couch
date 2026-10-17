@@ -1,4 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { LivePage } from "../sections/live/LivePage";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/live")({ component: LivePage });
+// Live became Discover, which leads with what's on air.
+export const Route = createFileRoute("/live")({
+  beforeLoad: () => { throw redirect({ href: "/discover", replace: true }); },
+});

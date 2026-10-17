@@ -27,7 +27,7 @@ Episode artwork   Name and length
 ------------------------------------------------
 ```
 
-Library items open a full detail page, including inspection from playback and
+Saved items open a full detail page, including inspection from playback and
 Up next. Details offer the same breadcrumb; there is no item-detail dialog or
 separate related-content sheet. Nearby items use four divided rows and a small
 heading that links to the full list. Hide this section when there are no nearby
@@ -68,7 +68,7 @@ Rows are compact MediaRows with the channel logo as artwork. The meta line
 carries what's on now and next from the XMLTV guide, and the group while no
 group is picked. Pressing the row plays the channel; its menu (its "…", right-click,
 a long press or a held OK) offers Play on and Queue.
-The group Select, Filter and page live in the route (`/live?group=…&channelFilter=…&channelPage=…`),
+The group Select, Filter and page live in the route (`/discover/live-tv?group=…&filter=…&page=…`),
 so history restores them. A source without a guide still lists its channels.
 
 ## Shared sources

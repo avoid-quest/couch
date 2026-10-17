@@ -3,7 +3,8 @@
 ## Home is a departures board
 
 Home opens on one large item, the hero, then shelves of tiles, the way Apple
-TV and Infuse do. The TV, the desktop window and phones render the same tree
+TV and Infuse do. Discover is its sibling, built of the same shelves and
+tiles ([Browse](browse.md#discover)). The TV, the desktop window and phones render the same tree
 (`HomePage`) with the same layout; narrow screens stack the hero (`md:`), and
 a pointer gets the shelves' scrollbars, which the TV hides.
 
@@ -41,14 +42,18 @@ Continue, For later, Radio, Played recently and Up next (off by default; it
 stays reachable from the now-playing bar and the player band). Saved
 visibility always applies. A shelf appears only with something in it, and Radio
 always has the built-in stations, so a fresh Couch opens on something playable.
-Home ends with its content.
+Home ends with its content; with none at all it says "Find something to play"
+and offers Discover.
 
 Each shelf's heading names it, then, in muted ink, the time it matters at: "3
 unfinished", "On air now", "2 saved", "4 titles", "until 23:10" (Up next ends
-then). A shelf has no action: the tabs reach Live and Library and the
-now-playing bar Up next, so Up from a shelf meets only the shelves above it.
-Up next's shelf ends with "N more" when it holds more than fits, which opens
-Up next beside Home.
+then). A shelf holds at most twelve; where the rest has a page, the heading is
+a link with a chevron that opens it: Continue and Played recently open
+Saved's Played, For later opens Saved, and Radio opens Discover's every
+station. It is one focus stop between its shelf and the one above, so Up
+from a shelf meets its heading, then the shelf above. Up next's heading has
+no link: its shelf ends with "N more" when it holds more than fits, which
+opens Up next beside Home.
 
 A shelf takes its order once its data and the hero are known, and keeps it
 while Home stays open, so nothing moves under the focus. It leaves out the
