@@ -1816,8 +1816,10 @@ export async function createHub(options: HubOptions) {
               // The one Volume: the loudest sound you may control reaches it, and a trim older clients set (All) folds
               // into those levels, so no hidden level silences them. Other devices' private sound keeps its attenuation.
               const trimmed = !!target && targets.some(id => inSound(id) && trimOf(target, id) !== 100);
+              // Folding the trim changes the Playback too, so it must be allowed before any level moves.
+              if (trimmed) authorizePlayback(target!, authorize, deviceId)();
               await setVolume(targets, action.volume, authorize, deviceId, target);
-              if (trimmed) { authorizePlayback(target!, authorize, deviceId)(); setTrim(target!, 100, deviceId); }
+              if (trimmed) setTrim(target!, 100, deviceId);
             } else if (action.type === "volume") {
               await setVolume(targets, action.volume, authorize, deviceId);
               if (action.volume > 0 && targets.some(inSound)) unsilence(target, deviceId);
