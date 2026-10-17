@@ -210,7 +210,7 @@ test("redirects cannot reach private literals, credentials or a rebound DNS answ
 
 test("public redirects strip credentials, change POST to GET, and expose the final URL", async t => {
   const calls = transport(t, call => call.url.hostname === "public.test" ? { status: 303, headers: { Location: "https://cdn.public.test/final" } } : { body: "done" });
-  const response = await publicFetch("https://public.test/start", { method: "POST", body: "payload", headers: { Authorization: "Bearer private", Cookie: "session=private" } });
+  const response = await publicFetch("https://public.test/start", { method: "POST", body: "payload", headers: { Authorization: "Bearer private", Cookie: "session=private", "Proxy-Authorization": "Basic private", "X-Api-Key": "private key", "X-Auth-Token": "private token", Referer: "https://provider.test/", "User-Agent": "Couch fixture", Range: "bytes=0-10" } });
   assert.equal(await response.text(), "done");
   assert.equal(response.url, "https://cdn.public.test/final");
   assert.equal(response.redirected, true);
@@ -221,7 +221,28 @@ test("public redirects strip credentials, change POST to GET, and expose the fin
   assert.equal(headers.host, "cdn.public.test");
   assert.equal(headers.authorization, undefined);
   assert.equal(headers.cookie, undefined);
+  for (const name of ["proxy-authorization", "x-api-key", "x-auth-token"]) assert.equal(headers[name], undefined);
+  assert.equal(headers.referer, "https://provider.test/");
+  assert.equal(headers["user-agent"], "Couch fixture");
+  assert.equal(headers.range, "bytes=0-10");
   assert.equal(headers["content-type"], undefined);
+});
+
+test("redirects keep same-origin credentials but never restore them after an origin change", async t => {
+  const calls = transport(t, call => {
+    const next = call.url.pathname === "/start" ? "/same" : call.url.pathname === "/same" ? "https://cdn.public.test/away" : call.url.pathname === "/away" ? "https://public.test/final" : undefined;
+    return next ? { status: 307, headers: { Location: next } } : { body: "done" };
+  });
+  const response = await publicFetch("https://public.test/start", { method: "POST", body: "{}", headers: { Authorization: "Bearer private", "X-Api-Key": "private key", "Content-Type": "application/json" } });
+  assert.equal(await response.text(), "done");
+  assert.equal(calls.length, 4);
+  for (const [index, call] of calls.entries()) {
+    const headers = call.options.headers as Record<string, string>;
+    assert.equal(headers.authorization, index < 2 ? "Bearer private" : undefined);
+    assert.equal(headers["x-api-key"], index < 2 ? "private key" : undefined);
+    assert.equal(headers["content-type"], "application/json");
+    assert.equal(call.upload, "{}");
+  }
 });
 
 test("manual and forbidden redirects do not issue another request; loops are bounded", async t => {

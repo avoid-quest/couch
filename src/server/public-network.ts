@@ -108,6 +108,13 @@ function response(incoming: http.IncomingMessage, url: URL, method: string, redi
   } catch (error) { body.destroy(); incoming.destroy(); throw error; }
 }
 
+// Extractors can supply custom credentials, so an auth-header denylist is not
+// enough. Only media negotiation, provider context and body framing cross origins.
+const crossOriginHeaders = new Set(["user-agent", "accept", "accept-language", "accept-encoding", "referer", "origin", "range", "content-type", "content-length"]);
+export function stripCrossOriginHeaders(headers: Headers): void {
+  for (const name of [...headers.keys()]) if (!crossOriginHeaders.has(name)) headers.delete(name);
+}
+
 /** Fetch for untrusted internet media. Every socket and redirect stays public. */
 export async function publicFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let url = target(input instanceof Request ? input.url : input);
@@ -126,7 +133,7 @@ export async function publicFetch(input: RequestInfo | URL, init?: RequestInit):
     incoming.destroy();
     if (request.redirect === "error" || redirects === 20) throw new TypeError("The website redirected this request.");
     const next = target(new URL(location, url));
-    if (next.origin !== url.origin) for (const name of ["authorization", "proxy-authorization", "cookie"]) headers.delete(name);
+    if (next.origin !== url.origin) stripCrossOriginHeaders(headers);
     if (status === 303 && method !== "HEAD" || [301, 302].includes(status) && method === "POST") {
       method = "GET"; body = null;
       for (const name of ["content-type", "content-length", "transfer-encoding"]) headers.delete(name);

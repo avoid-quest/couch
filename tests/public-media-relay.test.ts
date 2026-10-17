@@ -4,6 +4,8 @@ import { createPassThrough } from "../src/server/pass-through";
 const origin = "https://couch.local";
 const target = { origin, userAgent: "Browser fixture" };
 const source = "https://media.example/master.m3u8";
+const credentials = { AuThOrIzAtIoN: "Bearer auth fixture", CoOkIe: "session=cookie-fixture", "PrOxY-AuThOrIzAtIoN": "Basic proxy fixture", "X-Api-Key": "api fixture", "x-AUTH-token": "token fixture" };
+const providerHeaders = { ...credentials, "user-agent": "Provider fixture", referer: "https://player.example/" };
 const signal = () => AbortSignal.timeout(3000);
 const rawRequest = spyOn(globalThis, "fetch");
 beforeEach(() => { rawRequest.mockReset(); rawRequest.mockRejectedValue(new Error("Public media used an unprotected request.")); });
@@ -38,6 +40,13 @@ function destination(value: string, kind: "playlist" | "bytes", upstream: string
   expect(url.origin).toBe(base);
   expect(url.pathname).toContain(`/api/relay/playing/${kind}/`);
   expect(url.searchParams.get("url")).toBe(upstream);
+}
+
+function sourceHeaders(headers: Headers, authorized: boolean) {
+  for (const [name, value] of Object.entries(credentials)) expect(headers.get(name)).toBe(authorized ? value : null);
+  expect(headers.get("user-agent")).toBe(providerHeaders["user-agent"]);
+  expect(headers.get("referer")).toBe(providerHeaders.referer);
+  expect(headers.get("accept-encoding")).toBe("identity");
 }
 
 test("public video and audio use protected relay even with permissive CORS and native playback", async () => {
@@ -97,6 +106,76 @@ test("public media playlists protect keys, maps, low-latency parts and every seg
   expect(f.requests.at(-1)?.url).toBe("https://media.example/segments/1.ts");
   expect(rawRequest).not.toHaveBeenCalled();
 });
+
+for (const childOrigin of ["https://cdn.example", "http://media.example", "https://media.example:444"]) {
+  test(`HLS credentials remain on the source origin when children use ${childOrigin}`, async () => {
+    const f = fixture();
+    const local = "https://media.example/local.m3u8";
+    const variant = `${childOrigin}/variant.m3u8`, rendition = `${childOrigin}/audio.m3u8`;
+    f.manifest(source, `#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",URI="${rendition}"\n#EXT-X-STREAM-INF:BANDWIDTH=1000\n${local}\n#EXT-X-STREAM-INF:BANDWIDTH=2000\n${variant}\n`);
+    for (const url of [local, variant, rendition]) f.manifest(url, `#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="${childOrigin}/encryption.key"\n#EXT-X-MAP:URI="${childOrigin}/init.mp4"\n#EXT-X-PART:DURATION=0.5,URI="${childOrigin}/part.m4s"\n#EXTINF:6,\n${childOrigin}/segment.ts\n#EXTINF:6,\nhttps://media.example/local.ts\n`);
+    const media = await f.prepare(source, "playing", target, providerHeaders);
+    const master = await f.serve(media.source);
+    expect(master.status).toBe(200);
+    sourceHeaders(f.requests.at(-1)!.headers, true);
+    const text = await master.text();
+    const playlists = [...text.matchAll(/URI="([^"]+)"/g)].map(match => match[1]!).concat(text.split("\n").filter(line => line && !line.startsWith("#")));
+    expect(playlists).toHaveLength(3);
+    for (const playlist of playlists) {
+      const authorized = new URL(new URL(playlist).searchParams.get("url")!).origin === new URL(source).origin;
+      const result = await f.serve(playlist);
+      expect(result.status).toBe(200);
+      sourceHeaders(f.requests.at(-1)!.headers, authorized);
+      const body = await result.text();
+      const children = [...body.matchAll(/URI="([^"]+)"/g)].map(match => match[1]!).concat(body.split("\n").filter(line => line && !line.startsWith("#")));
+      expect(children).toHaveLength(5);
+      for (const child of children) {
+        expect((await f.serve(child)).status).toBe(200);
+        sourceHeaders(f.requests.at(-1)!.headers, new URL(new URL(child).searchParams.get("url")!).origin === new URL(source).origin);
+      }
+    }
+    expect(rawRequest).not.toHaveBeenCalled();
+  });
+}
+
+test("a redirected playlist resolves children at its effective URL without granting that origin credentials", async () => {
+  const f = fixture();
+  const effective = "https://redirected.example/path/master.m3u8";
+  f.replies.set(source, () => response(effective, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvariant.m3u8\n", { headers: { "Content-Type": "application/vnd.apple.mpegurl" } }));
+  f.manifest("https://redirected.example/path/variant.m3u8", "#EXTM3U\n#EXTINF:6,\nsegment.ts\n");
+  const media = await f.prepare(source, "playing", target, providerHeaders);
+  const master = await f.serve(media.source);
+  sourceHeaders(f.requests.at(-1)!.headers, true);
+  const variant = (await master.text()).split("\n").find(line => line && !line.startsWith("#"))!;
+  destination(variant, "playlist", "https://redirected.example/path/variant.m3u8");
+  const result = await f.serve(variant);
+  sourceHeaders(f.requests.at(-1)!.headers, false);
+  const segment = (await result.text()).split("\n").find(line => line && !line.startsWith("#"))!;
+  destination(segment, "bytes", "https://redirected.example/path/segment.ts");
+  expect((await f.serve(segment)).status).toBe(200);
+  sourceHeaders(f.requests.at(-1)!.headers, false);
+  expect(rawRequest).not.toHaveBeenCalled();
+});
+
+for (const audioOrigin of ["https://media.example", "https://audio.example", "http://media.example", "https://media.example:444"]) {
+  test(`separate audio probes and playback keep source credentials bound when audio uses ${audioOrigin}`, async () => {
+    const f = fixture();
+    const video = "https://media.example/video.mp4", audio = `${audioOrigin}/audio.m4a`;
+    for (const url of [video, audio]) {
+      let requests = 0;
+      f.replies.set(url, () => response(url, "bytes", { status: ++requests === 1 ? 401 : 200, headers: { "Content-Type": "video/mp4" } }));
+    }
+    const media = await f.relay.prepare("playing", { source: video, audioSource: audio, publicNetwork: true }, providerHeaders, target, signal());
+    const fallback = f.requests.filter(request => request.headers.has("referer"));
+    expect(fallback).toHaveLength(2);
+    for (const request of fallback) sourceHeaders(request.headers, new URL(request.url).origin === new URL(video).origin);
+    expect((await f.serve(media.source)).status).toBe(200);
+    sourceHeaders(f.requests.at(-1)!.headers, true);
+    expect((await f.serve(media.audioSource!)).status).toBe(200);
+    sourceHeaders(f.requests.at(-1)!.headers, audioOrigin === new URL(video).origin);
+    expect(rawRequest).not.toHaveBeenCalled();
+  });
+}
 
 test("a protected request failure never hands public media or its children to the player directly", async () => {
   const f = fixture();

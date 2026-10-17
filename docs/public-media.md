@@ -22,6 +22,12 @@ yt-dlp downloads another.
 Resolved web media always uses Core's protected relay, even when the upstream
 allows browser CORS. Every HLS variant, segment, key, map and rendition is rewritten
 through the same boundary. Playlist reloads and redirects remain protected.
+Stored media credentials are bound to the original media source's exact origin,
+including its scheme and port. Cross-origin children, separate audio sources and
+redirects receive only media negotiation, provider context (User-Agent, Referer
+and Origin) and body-framing headers; authorization, cookies and custom API-key
+headers stay at the original origin. A redirected playlist cannot grant its new
+origin access to those credentials.
 Signed relay paths preserve media extensions so native HLS checks still apply
 when the upstream URL has signed query parameters.
 Extensionless playlists with an incorrect MIME type are detected from their

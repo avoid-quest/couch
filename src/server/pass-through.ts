@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { publicFetch } from "./public-network";
+import { publicFetch, stripCrossOriginHeaders } from "./public-network";
 import { boundedBytes } from "./iptv-feeds";
 import { serve, type Listener } from "./http";
 
@@ -10,7 +10,7 @@ import { serve, type Listener } from "./http";
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
 type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
-type Relay = { id: string; playbackId: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean> };
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean> };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -47,8 +47,15 @@ async function sniffPlaylist(response: Response): Promise<{ response: Response; 
   return { response: replay, playlist: /^\uFEFF?#EXTM3U/.test(prefix.toString("utf8")) };
 }
 
-// Core asks as the Device would, minus its Origin, plus the headers yt-dlp needs (their names are lower case).
-const relayHeaders = (relay: Relay) => ({ "user-agent": relay.target.userAgent, ...relay.headers, "accept-encoding": "identity" });
+// Keep source credentials on their original origin, including when a playlist
+// names another host, port or scheme. Provider context may follow CDN children.
+const relayHeaders = (relay: Relay, url: string) => {
+  const headers = new Headers(relay.headers);
+  if (!headers.has("user-agent")) headers.set("user-agent", relay.target.userAgent);
+  headers.set("accept-encoding", "identity");
+  if (new URL(url).origin !== relay.credentialOrigin) stripCrossOriginHeaders(headers);
+  return Object.fromEntries(headers);
+};
 
 // Asks as the Device would, with its Origin and User-Agent. hls.js and mpegts.js read with
 // CORS, so they also need the source to share it. A source Core can't fetch either stays
@@ -58,11 +65,11 @@ async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSign
   const ask = (headers: Record<string, string>) => request(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) })
     .then(async response => { await response.body?.cancel().catch(() => {}); return response; }, () => null);
   const mixed = relay.target.origin.startsWith("https:") && url.startsWith("http:");
-  const response = await ask(mixed ? relayHeaders(relay) : { origin: relay.target.origin, "user-agent": relay.target.userAgent });
+  const response = await ask(mixed ? relayHeaders(relay, url) : { origin: relay.target.origin, "user-agent": relay.target.userAgent });
   const playlist = playlistType(response?.headers.get("content-type") ?? null, url);
   if (!response) return { direct: true, playlist };
   if (mixed) return { direct: !response.ok, playlist };
-  if (!response.ok) return { direct: !(await ask(relayHeaders(relay)))?.ok, playlist };
+  if (!response.ok) return { direct: !(await ask(relayHeaders(relay, url)))?.ok, playlist };
   const shared = ["*", relay.target.origin].includes(response.headers.get("access-control-allow-origin") ?? "");
   return { direct: shared || !(cors || playlist), playlist };
 }
@@ -135,7 +142,9 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       }
       // Core and Devices can prepare the same Playback with different upstream
       // headers. One capability per preparation keeps every child on its route.
-      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now() };
+      // The single source-header map authorizes only the main source's origin;
+      // a separate audio URL or redirected playlist cannot expand that trust.
+      const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now() };
       const route = async (url: string) => {
         const answer = await probe(url, relay, !!media.mpegts, signal, relay.publicNetwork ? publicRequest : fetch);
         return { url: answer.direct && !relay.publicNetwork ? url : link(relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
@@ -165,7 +174,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       const destination = { ...relay, target: { ...relay.target, origin: address.origin } };
       let upstream: Response;
       try {
-        upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay), ...(range ? { range } : {}) }, signal: request.signal });
+        upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay, url), ...(range ? { range } : {}) }, signal: request.signal });
         let playlist = kind === "playlist" || playlistType(upstream.headers.get("content-type"), upstream.url || url);
         if (relay.publicNetwork && upstream.ok && !playlist) {
           const sniffed = await sniffPlaylist(upstream);
