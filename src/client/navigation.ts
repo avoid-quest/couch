@@ -100,7 +100,8 @@ function moveFocus(key: string) {
   const tab = key === "ArrowUp" && later && best?.element.closest(later)
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
   // Up with nothing above (the header's tabs, the top of the player's band) reaches the newest toast's action.
-  const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-button]`)].find(visible) : undefined;
+  // Sonner keeps the toasts past the two it shows, and each one leaving, mounted but unseen.
+  const toast = key === "ArrowUp" && !best ? [...scope.querySelectorAll<HTMLElement>(`${toaster} [data-sonner-toast][data-visible="true"]:not([data-removed="true"]) [data-button]`)].find(visible) : undefined;
   focus(tab ?? best?.element ?? toast);
 }
 
