@@ -62,7 +62,8 @@ export function keptOrder<T>(order: readonly string[], items: readonly T[], key:
  */
 export function useKeptOrder<T>(items: T[], key: (item: T) => string, ready = true, except?: string): T[] {
   const kept = useRef<{ order: string[]; except?: string } | null>(null);
-  if (!kept.current && ready) kept.current = { order: items.map(key).filter(id => id !== except), except };
+  // An empty first answer takes no order, or the items that arrive later would never be kept.
+  if (!kept.current && ready && items.some(item => key(item) !== except)) kept.current = { order: items.map(key).filter(id => id !== except), except };
   const shown = items.filter(item => key(item) !== (kept.current ? kept.current.except : except));
   return kept.current ? keptOrder(kept.current.order, shown, key) : shown;
 }
