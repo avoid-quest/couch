@@ -87,8 +87,10 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     if (!focused || focused.element.isConnected) return;
     const rows = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-queue-entry-id]") ?? [])];
     const row = rows.find(row => row.dataset.queueEntryId === focused.id);
+    const adjacent = rows[Math.min(focused.index, rows.length - 1)];
+    // A removed row leaves focus on the adjacent one: its "…" on the TV, else its one target, whose context menu removed it.
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
-      ?? rows[Math.min(focused.index, rows.length - 1)]?.querySelector<HTMLElement>("[data-row-options]")
+      ?? adjacent?.querySelector<HTMLElement>("[data-row-options]") ?? adjacent?.querySelector<HTMLElement>("[data-play]:not(:disabled)")
       ?? panelRef.current?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-sheet]")?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-idle]")?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)")

@@ -115,8 +115,9 @@ Compact artwork rows are one target that plays the entry, with one menu for
 Details, Play next, ordering, Save for later and Remove: the row's context menu
 on desktop and phones, and on the TV a "…" beside the title, since an entry's
 page holds only Play and Save ([Browse](browse.md#mediarow--medialist)).
-Removal leaves the TV's focus on an adjacent "…". Save as list asks for a name
-and preserves errors there for retry. shadcn/Radix menus supply keyboard
+Removal leaves focus on the adjacent row, so a keyboard keeps editing: on its
+"…" on the TV, else on the row itself. Save as list asks for a name and
+preserves errors there for retry. shadcn/Radix menus supply keyboard
 navigation and typeahead.
 
 Autoplay is a
