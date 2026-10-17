@@ -43,6 +43,8 @@ export function RemotePad({ connected, onNavigate }: { connected: boolean; onNav
       {arrow("down", <ChevronDown aria-hidden="true" />)}
       {arrow("left", <ChevronLeft aria-hidden="true" />)}
       <Button type="button" aria-label="TV OK" disabled={!connected} onPointerDown={event => { if (event.button === 0) ok.current = startHold(() => navigate("menu")); }} onPointerCancel={() => { ok.current?.release(); ok.current = null; }}
+        // A press that leaves OK ends there, as a click released elsewhere does, so its hold can't fire after it.
+        onPointerLeave={() => { ok.current?.release(); ok.current = null; }}
         onClick={() => { if (ok.current?.release() ?? true) navigate("select"); ok.current = null; }} className="absolute inset-[31%] h-auto rounded-full text-lg">OK</Button>
     </section>
     <div className="grid grid-cols-3 gap-2">
