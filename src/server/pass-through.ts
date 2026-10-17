@@ -1,4 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { publicFetch } from "./public-network";
+import { boundedBytes } from "./iptv-feeds";
+import { serve, type Listener } from "./http";
 
 // Pass-through (#644 Delivery): a Device that can't fetch a source itself because of its
 // Origin, CORS or headers gets the bytes through Core. Core asks each source the way the
@@ -6,14 +9,37 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 // User-Agent sent with a LAN Origin, while its segments allow every Origin (#644 ticket 7).
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
-type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean };
-type Relay = { target: Target; headers: Record<string, string>; segments?: Promise<boolean> };
+type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
+type Relay = { target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean> };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
 // Tags whose URI is another playlist; every other URI is a segment, key or map.
 const playlistTag = /^#EXT-X-(?:MEDIA|I-FRAME-STREAM-INF|RENDITION-REPORT):/;
 const forwarded = ["content-type", "content-length", "content-range", "accept-ranges", "cache-control", "last-modified", "etag"];
+
+// A server can mislabel an extensionless playlist. Inspect a small prefix before
+// giving bytes to a decoder, which otherwise may follow the original HLS URIs.
+async function sniffPlaylist(response: Response): Promise<{ response: Response; playlist: boolean }> {
+  if (!response.body) return { response, playlist: false };
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0, ended = false;
+  while (size < 32) {
+    const next = await reader.read();
+    if (next.done) { ended = true; break; }
+    chunks.push(next.value); size += next.value.length;
+  }
+  const prefix = Buffer.concat(chunks);
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) { if (prefix.length) controller.enqueue(prefix); if (ended) controller.close(); },
+    async pull(controller) { const next = await reader.read(); if (next.done) controller.close(); else controller.enqueue(next.value); },
+    cancel(reason) { return reader.cancel(reason); },
+  });
+  const replay = new Response(body, { status: response.status, headers: response.headers });
+  Object.defineProperty(replay, "url", { value: response.url });
+  return { response: replay, playlist: /^\uFEFF?#EXTM3U/.test(prefix.toString("utf8")) };
+}
 
 // Core asks as the Device would, minus its Origin, plus the headers yt-dlp needs (their names are lower case).
 const relayHeaders = (relay: Relay) => ({ "user-agent": relay.target.userAgent, ...relay.headers, "accept-encoding": "identity" });
@@ -22,8 +48,8 @@ const relayHeaders = (relay: Relay) => ({ "user-agent": relay.target.userAgent, 
 // CORS, so they also need the source to share it. A source Core can't fetch either stays
 // direct, so the Device reports the source's own error. An HTTPS page can't load http://
 // media at all (mixed content), so Core relays those whenever it can fetch them (#644 ticket 8).
-async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSignal) {
-  const ask = (headers: Record<string, string>) => fetch(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) })
+async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSignal, request: typeof fetch = fetch) {
+  const ask = (headers: Record<string, string>) => request(url, { headers, signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) })
     .then(async response => { await response.body?.cancel().catch(() => {}); return response; }, () => null);
   const mixed = relay.target.origin.startsWith("https:") && url.startsWith("http:");
   const response = await ask(mixed ? relayHeaders(relay) : { origin: relay.target.origin, "user-agent": relay.target.userAgent });
@@ -39,46 +65,84 @@ async function probe(url: string, relay: Relay, cors: boolean, signal: AbortSign
 // current Playback and the playlists it relayed; it is never an open proxy. Only Devices
 // that were sent a load command learn them, like subtitle paths.
 // `current` says whether a transport still plays, in whichever Playback (#644 ticket 9).
-export function createPassThrough(current: (playbackId: string) => boolean) {
+export function createPassThrough(current: (playbackId: string) => boolean, publicRequest: typeof fetch = publicFetch) {
   const key = randomBytes(32);
   const relays = new Map<string, Relay>();
+  let internal: Promise<Listener> | undefined;
+  let closed = false;
   const sign = (playbackId: string, kind: string, url: string) => createHmac("sha256", key).update(`${playbackId}\n${kind}\n${url}`).digest("base64url");
   const link = (playbackId: string, relay: Relay, kind: Kind, url: string) => `${relay.target.origin}/api/relay/${playbackId}/${kind}/${sign(playbackId, kind, url)}?${new URLSearchParams({ url })}`;
 
   async function rewrite(text: string, base: string, playbackId: string, relay: Relay) {
     const lines = text.split(/\r?\n/);
     const master = lines.some(line => /^#EXT-X-(?:STREAM-INF|MEDIA):/.test(line));
-    const absolute = (uri: string) => { try { const url = new URL(uri, base); return /^https?:$/.test(url.protocol) ? url.href : null; } catch { return null; } };
+    // Public providers never hand a player an unchecked URI, including keys, maps,
+    // low-latency parts and renditions. Variable substitution and content steering
+    // can introduce destinations after rewriting, so fail closed on those features.
+    if (relay.publicNetwork && (/#EXT-X-(?:DEFINE|CONTENT-STEERING):/.test(text) || text.includes("{$"))) throw new Error("This playlist uses unsupported external destinations.");
+    const absolute = (uri: string) => {
+      try {
+        const url = new URL(uri, base);
+        if (/^https?:$/.test(url.protocol) && !url.username && !url.password) return url.href;
+      } catch { /* Reject malformed public media references. */ }
+      if (relay.publicNetwork) throw new Error("This playlist contains an unsupported destination.");
+      return null;
+    };
     const first = master ? null : lines.find(line => line.trim() && !line.startsWith("#"));
     // Segments stay direct when the Device may read them (Twitch's allow every Origin).
-    if (first && absolute(first.trim())) relay.segments ??= probe(absolute(first.trim())!, relay, true, AbortSignal.timeout(5000)).then(answer => answer.direct);
-    const segments = await relay.segments ?? true;
+    if (!relay.publicNetwork && first && absolute(first.trim())) relay.segments ??= probe(absolute(first.trim())!, relay, true, AbortSignal.timeout(5000)).then(answer => answer.direct);
+    const segments = relay.publicNetwork ? false : await relay.segments ?? true;
     const to = (uri: string, playlist: boolean) => {
       const url = absolute(uri);
       return !url ? uri : playlist ? link(playbackId, relay, "playlist", url) : segments ? url : link(playbackId, relay, "bytes", url);
     };
-    return lines.map(line => line.startsWith("#")
-      ? line.replace(/([:,]URI=)"([^"]+)"/g, (_, name: string, uri: string) => `${name}"${to(uri, playlistTag.test(line))}"`)
-      : line.trim() ? to(line.trim(), master) : line).join("\n");
+    return lines.map(raw => {
+      const line = raw.trim();
+      if (!line.startsWith("#")) return line ? to(line, master) : line;
+      if (relay.publicNetwork && /[:,]\s*[\w-]*URI\s*=/.test(line.replace(/([:,]URI=)"[^"]+"/g, ""))) throw new Error("This playlist contains an unsupported destination attribute.");
+      return line.replace(/([:,]URI=)"([^"]+)"/g, (_, name: string, uri: string) => `${name}"${to(uri, playlistTag.test(line))}"`);
+    }).join("\n");
   }
 
-  return {
+  const api = {
+    // Native decoders always reach a literal loopback address, independently of
+    // the UI listener's COUCH_HOST/TLS configuration. This listener serves only
+    // the same signed, active playback capabilities as the public relay route.
+    async coreOrigin(): Promise<string> {
+      if (closed) throw new Error("The media relay is closed.");
+      internal ??= serve({ hostname: "127.0.0.1", port: 0, maxRequestBodySize: 0,
+        fetch: request => request.method === "GET" && new URL(request.url).pathname.startsWith("/api/relay/") ? api.serve(request) : Promise.resolve(new Response(null, { status: 404 })),
+        websocket: { maxPayload: 0, open() {}, message() {}, close() {} },
+      });
+      const listener = await internal;
+      if (closed) throw new Error("The media relay is closed.");
+      return `http://127.0.0.1:${listener.port}`;
+    },
+    async close() { closed = true; relays.clear(); await (await internal)?.stop(); },
     // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
     async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal): Promise<T> {
-      if (!target || media.mpv) return media;
-      const relay: Relay = { target, headers };
+      signal.throwIfAborted();
+      if (closed) throw new Error("The media relay is closed.");
+      if (!target || media.mpv && !media.publicNetwork) {
+        if (media.publicNetwork) throw new Error("Public media requires a protected playback route.");
+        return media;
+      }
+      const relay: Relay = { target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now() };
       const route = async (url: string) => {
-        const answer = await probe(url, relay, !!media.mpegts, signal);
-        return { url: answer.direct ? url : link(playbackId, relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
+        const answer = await probe(url, relay, !!media.mpegts, signal, relay.publicNetwork ? publicRequest : fetch);
+        return { url: answer.direct && !relay.publicNetwork ? url : link(playbackId, relay, answer.playlist ? "playlist" : "bytes", url), playlist: answer.playlist };
       };
       const [main, audio] = await Promise.all([route(media.source), media.audioSource ? route(media.audioSource) : undefined]);
+      signal.throwIfAborted();
+      if (closed) throw new Error("The media relay is closed.");
       const source = main.url, audioSource = audio?.url;
-      for (const id of relays.keys()) if (!current(id)) relays.delete(id);
+      // Quality changes prepare a new transport before it becomes current.
+      for (const [id, saved] of relays) if (!current(id) && Date.now() - saved.createdAt > 60_000) relays.delete(id);
       if (source !== media.source || audioSource !== media.audioSource) relays.set(playbackId, relay);
-      return { ...media, source, ...(audioSource ? { audioSource } : {}), ...(main.playlist ? { hls: true } : {}) };
+      return { ...media, publicNetwork: undefined, source, ...(audioSource ? { audioSource } : {}), ...(main.playlist ? { hls: true } : {}) };
     },
     // GET /api/relay/<playbackId>/<kind>/<signature>?url=<source>
-    async serve(request: Request) {
+    async serve(request: Request): Promise<Response> {
       const address = new URL(request.url);
       const [playbackId = "", kind = "", signature = ""] = address.pathname.split("/").slice(3);
       const url = address.searchParams.get("url") ?? "";
@@ -87,11 +151,27 @@ export function createPassThrough(current: (playbackId: string) => boolean) {
       const given = Buffer.from(signature);
       if (!relay || !current(playbackId) || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response(null, { status: 404 });
       const range = request.headers.get("range");
-      const upstream = await fetch(url, { headers: { ...relayHeaders(relay), ...(range ? { range } : {}) }, signal: request.signal });
-      if (kind === "playlist" && upstream.ok) return new Response(await rewrite(await upstream.text(), upstream.url, playbackId, relay), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
+      // The same Playback can have a loopback decoder and multiple browser origins.
+      // Keep child links on the origin serving this request, not the last prepared Device.
+      const destination = { ...relay, target: { ...relay.target, origin: address.origin } };
+      let upstream: Response;
+      try {
+        upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay), ...(range ? { range } : {}) }, signal: request.signal });
+        let playlist = kind === "playlist" || playlistType(upstream.headers.get("content-type"), upstream.url || url);
+        if (relay.publicNetwork && upstream.ok && !playlist) {
+          const sniffed = await sniffPlaylist(upstream);
+          upstream = sniffed.response; playlist = sniffed.playlist;
+        }
+        if (upstream.ok && playlist) {
+          const text = new TextDecoder().decode(await boundedBytes(upstream, 2 * 1024 * 1024, request.signal));
+          if (relay.publicNetwork && !/^\uFEFF?#EXTM3U\r?\n/.test(text)) throw new Error("Invalid HLS playlist.");
+          return new Response(await rewrite(text, upstream.url || url, playbackId, destination), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
+        }
+      } catch { return new Response("The media destination could not be read.", { status: 502 }); }
       const headers = new Headers();
       for (const name of forwarded) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
       return new Response(upstream.body, { status: upstream.status, headers });
     },
   };
+  return api;
 }

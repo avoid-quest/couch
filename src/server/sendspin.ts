@@ -1,3 +1,4 @@
+import { createPublicMediaProxy } from "./public-media-proxy";
 import type { IncomingMessage } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
@@ -13,7 +14,7 @@ import { ffmpegErrorLog, logPlaybackError } from "./playback-log";
 // player applies its own level and delay. Muted pictures follow the same clock (ticket 11).
 // live: the clock is the source's own timestamps, so a picture that joins the stream anywhere
 // lines up with the sound (the RaiPlay stall of #643).
-export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & { headers?: Record<string, string>; live?: boolean };
+export type SyncedLoad = Extract<PlaybackCommand, { type: "load" }> & { headers?: Record<string, string>; live?: boolean; publicNetwork?: boolean };
 export type Member = { deviceId: string; level: number };
 type Wire = "opus" | "pcm";
 // offset and duration are microseconds of audio from where this FFmpeg started.
@@ -185,10 +186,12 @@ export function createSendspin(options: { identity: string; name: string; admit:
       const current = load!, attempt = ++generation;
       const signal = AbortSignal.timeout(15_000);
       const headers = current.headers ?? {};
+      let proxy: Awaited<ReturnType<typeof createPublicMediaProxy>> | undefined;
       try {
         input ??= audioInput(current.audioSource ?? current.source, headers, signal);
         const [{ source, hls }, ffmpeg] = await Promise.all([input, options.ffmpeg()]).catch(error => { input = undefined; throw error; });
-        if (attempt !== generation) return;
+        if (current.publicNetwork) proxy = await createPublicMediaProxy(new AbortController().signal, current.source);
+        if (attempt !== generation) { await proxy?.close(); return; }
         const wires = new Set<Wire>(members.flatMap(member => { const session = listening(member.deviceId), wire = session && wireOf(session); return wire ? [wire] : []; }));
         if (!wires.size) wires.add("opus");
         const speed = state.speed ?? 1, start = state.position, live = !!current.live && !current.radio;
@@ -199,14 +202,16 @@ export function createSendspin(options: { identity: string; name: string; admit:
           return ["-map", "0:a:0", "-vn", "-sn", "-dn", ...filters.length ? ["-af", filters.join(",")] : [], "-ar", "48000", "-ac", "2"];
         };
         // Network protocols only, and a 10 s timeout on every read (#644 FFmpeg safety).
-        const child = spawn(ffmpeg, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto", "-rw_timeout", "10000000",
+        const child = spawn(ffmpeg, ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-protocol_whitelist", "http,https,tcp,tls,crypto,httpproxy", "-rw_timeout", "10000000",
+          ...proxy ? ["-http_proxy", proxy.url, "-format_whitelist", "aac,ac3,aiff,ape,asf,flac,flv,hls,matroska,webm,mov,mp3,mpeg,mpegts,ogg,wav,wv"] : [],
           ...Object.keys(headers).length ? ["-headers", Object.entries(headers).map(([name, value]) => `${name}: ${value}\r\n`).join("")] : [],
           // Start live HLS at its newest complete segment and avoid probing ahead
           // through several seconds before anchoring the shared playback clock.
           ...live && hls ? ["-live_start_index", "-1", "-probesize", "32768", "-analyzeduration", "100000"] : [],
           ...live ? ["-copyts"] : [], ...seek ? ["-ss", String(start)] : [], "-i", source,
           ...wires.has("opus") ? [...shape(true), "-c:a", "libopus", "-b:a", "96k", "-frame_duration", "60", "-f", "ogg", "-page_duration", "60000", "pipe:1"] : [],
-          ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"] });
+          ...wires.has("pcm") ? [...shape(!wires.has("opus")), "-c:a", "pcm_s16le", "-f", "s16le", "pipe:3"] : []], { stdio: ["ignore", "pipe", "pipe", "pipe"], ...(proxy ? { env: { ...process.env, http_proxy: proxy.url, https_proxy: proxy.url, HTTP_PROXY: proxy.url, HTTPS_PROXY: proxy.url, all_proxy: "", ALL_PROXY: "", no_proxy: "", NO_PROXY: "" } } : {}) });
+        if (proxy) { const activeProxy = proxy; child.once("close", () => { void activeProxy.close(); }); }
         const next: Run = { child, start, live, anchored: !live, speed, wires, queues: { opus: [], pcm: [] }, pipes: {}, released: 0, timer: setInterval(() => tick(next), 20) };
         run = next;
         state = { ...state, status: "loading", buffering: false, error: null };
@@ -262,6 +267,7 @@ export function createSendspin(options: { identity: string; name: string; admit:
           pipe.on("end", () => { if (pending.length >= 4) flush(pending.subarray(0, pending.length - pending.length % 4)); });
         }
       } catch (error) {
+        await proxy?.close();
         if (attempt === generation) fail(error instanceof Error && error.name !== "TimeoutError" ? error.message : "The audio source didn't answer.");
       }
     };

@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
@@ -15,7 +16,7 @@ import { animeUnityTitle } from "./providers/animeunity";
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -79,7 +80,7 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
 async function rejectDrm(info: Metadata, signal?: AbortSignal) {
   const stream = (Array.isArray(info.requested_formats) ? info.requested_formats : [info]).find(stream => object(stream) && String(stream.protocol).startsWith("m3u8"));
   if (!stream) return;
-  const playlist = await fetch(mediaUrl(stream.url), { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).then(response => response.text()).catch(() => "");
+  const playlist = await publicFetch(mediaUrl(stream.url), { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).then(response => response.text()).catch(() => "");
   if (/#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(playlist)) throw new Error("This item requires DRM playback, which is not supported.");
 }
 
@@ -143,7 +144,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
-    const direct = isMovies123Host(host) ? await resolveMovies123Link(source, signal, globalThis.fetch, subtitleLanguage)
+    const direct = isMovies123Host(host) ? await resolveMovies123Link(source, signal, publicFetch, subtitleLanguage)
       : isAnimeSaturnHost(host) ? await resolveAnimeSaturnLink(source, signal)
       : isAnimeUnityHost(host) ? await resolveAnimeUnityLink(source, signal) : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
@@ -153,6 +154,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const info = parseInfo(output);
     if (info._has_drm === true) await rejectDrm(info, signal);
     const media = parseMedia(info, subtitleLanguage);
+    media.publicNetwork = true;
     if (direct) {
       media.metadata = { ...media.metadata, ...direct.metadata };
       if (direct.subtitles?.length) media.subtitles = direct.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
@@ -163,7 +165,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
     // its own headers, opens the master playlist instead.
     if (media.metadata?.live && !media.audioSource && typeof info.manifest_url === "string" && String(info.protocol).startsWith("m3u8")) {
-      const response = await fetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
+      const response = await publicFetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
       await response?.body?.cancel();
       if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
     }
@@ -176,7 +178,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       media.expiry = { at, recover: async cancellation => {
         if (Date.now() < at) return null;
         cancellation.throwIfAborted();
-        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
+        const response = await publicFetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;

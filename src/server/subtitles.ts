@@ -4,6 +4,7 @@ import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
 import { ControllerError } from "./devices";
 import { STORAGE_ERROR } from "./messages";
 import { boundedBytes } from "./iptv-feeds";
+import { publicFetch } from "./public-network";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
 const cues = /\d{2}:\d{2}[,.]\d{3}\s+-->/;
@@ -20,7 +21,7 @@ export const sourceSubtitle = (url: string) => `/api/subtitles/${sign(url)}.vtt?
  * unguessable address (a <track> request carries no credentials).
  */
 // `player` finds the player that plays `playbackId`, in whichever Playback (#644 ticket 9).
-export function createSubtitles(player: (playbackId: string) => PlayerState | undefined, attach: (playbackId: string, subtitle: ExternalSubtitle) => void) {
+export function createSubtitles(player: (playbackId: string) => PlayerState | undefined, attach: (playbackId: string, subtitle: ExternalSubtitle) => void, publicRequest: typeof fetch = publicFetch) {
   const files = new Map<string, { playbackId: string; text: string }>();
   let pending = 0;
   let closed = false;
@@ -89,7 +90,7 @@ export function createSubtitles(player: (playbackId: string) => PlayerState | un
       const expected = Buffer.from(sign(url));
       if (!url || given.length !== expected.length || !timingSafeEqual(given, expected)) return new Response("Not found", { status: 404 });
       const signal = AbortSignal.timeout(10_000);
-      const content = await fetch(url, { signal, redirect: "error" }).then(async response => {
+      const content = await publicRequest(url, { signal, redirect: "error" }).then(async response => {
         if (!response.ok) { await response.body?.cancel(); return ""; }
         return new TextDecoder().decode(await boundedBytes(response, subtitleSizeLimit, signal));
       }).catch(() => "");

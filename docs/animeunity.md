@@ -22,3 +22,7 @@ Validation uses the Node integration-test commands in [ci.md](ci.md) with
 An isolated Couch Core and Chromium browser played One Piece episode 1 at
 1920×1080 with advancing video and no media error. The installed app and its
 data were not used.
+
+Public player requests and all resolved media use the
+[guarded public-media transport](public-media.md), including HLS descendants,
+redirects, extraction and Synced playback.

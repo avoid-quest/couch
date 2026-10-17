@@ -198,7 +198,7 @@ export async function createHub(options: HubOptions) {
   // the group's last report and a screen's, whose subtitles join it. delivery: as couch.log last said.
   // Private speakers keep their effective trim when another Device sets All. Output consent is live.
   type Playback = { id: string; session: ReturnType<typeof createSession>; outputs: Output[]; mixTrim: number; trimActor?: string; privateTrims: Map<string, number>; renderer: Socket<SocketData> | null; next?: Socket<SocketData>; joining?: Output; state?: SessionState;
-    synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live"> & { audioOnly?: boolean };
+    synced?: ReturnType<typeof sendspin.group>; loaded?: Extract<PlaybackCommand, { type: "load" }>; media?: Pick<SyncedLoad, "playbackId" | "source" | "audioSource" | "headers" | "live" | "publicNetwork"> & { audioOnly?: boolean };
     resolved?: { playbackId: string; vp9: boolean; media: ReturnType<typeof resolveEntry> }; hostMpv?: Set<string>; screens: Map<Socket<SocketData>, string>; heard?: PlayerState; seen?: PlayerState; delivery?: string;
     // Set by Stop: the Playback keeps its queue while the controller's Undo (6 s) can still play it again.
     undoable?: ReturnType<typeof setTimeout>;
@@ -693,6 +693,23 @@ export async function createHub(options: HubOptions) {
   const createPlayback = (id: string = crypto.randomUUID()) => {
     const saved = store.playback(id);
     const playback = { id, outputs: [], mixTrim: saved.mixTrim(), privateTrims: new Map(), renderer: null, screens: new Map() } as unknown as Playback;
+    const prepareMedia = async (resolved: MediaSource & { headers?: Record<string, string> }, playbackId: string, signal: AbortSignal) => {
+      signal.throwIfAborted();
+      const { headers = {}, ...media } = resolved;
+      const tab = playback.next ?? playback.renderer;
+      if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
+      // Native decoders must see the same guarded playlists as browser Devices.
+      const coreOrigin = media.publicNetwork ? await passThrough.coreOrigin() : origin;
+      const core = media.publicNetwork ? await passThrough.prepare(playbackId, media, headers, { origin: coreOrigin, userAgent: "Couch" }, signal) : media;
+      const coreHeaders = media.publicNetwork ? {} : headers;
+      const entry = stateOf(playback).queue.find(item => item.id === stateOf(playback).currentEntryId);
+      const isLiveMedia = !!(entry?.live || media.metadata?.live);
+      const prepared = entry?.liveSourceId ? media : await passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : media.publicNetwork ? { origin: coreOrigin, userAgent: "Couch" } : null, signal);
+      signal.throwIfAborted();
+      playback.media = { playbackId, source: core.source, audioSource: core.audioSource, headers: coreHeaders, publicNetwork: media.publicNetwork, live: isLiveMedia, audioOnly: media.audioOnly };
+      if (isLiveMedia && !media.radio && !entry?.liveSourceId) void audioRendition(core.audioSource ?? core.source, coreHeaders, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
+      return prepared;
+    };
     playback.session = createSession({ ...store, ...saved }, command => sendPlayer(playback, command), (state, clock) => publish(playback, state, clock), {
       systemAudio,
       invalidate: (...domains) => invalidate(...domains),
@@ -703,18 +720,12 @@ export async function createHub(options: HubOptions) {
         const tab = playback.next ?? playback.renderer;
         const resolving = resolveEntry(entry, playbackId, signal, tab, playback);
         playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: resolving };
-        const { headers = {}, ...media } = await resolving;
-        // Only the Device that runs Core has mpv; a Playback elsewhere doesn't move there unasked.
-        if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
-        // Core's own FFmpeg reads the sound as resolved, before Pass-through, with its headers.
-        const isLiveMedia = !!(entry.live || media.metadata?.live);
-        playback.media = { playbackId, source: media.source, audioSource: media.audioSource, headers, live: isLiveMedia, audioOnly: media.audioOnly };
-        // A live master's link can expire within minutes (RaiPlay: 403 after about 150 s) while its
-        // renditions keep working, so the sound's rendition is picked now for a later Synced start.
-        if (isLiveMedia && !media.radio && !entry.liveSourceId) void audioRendition(media.audioSource ?? media.source, headers, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});
-        // A live item reaches its Device over WebRTC, its group through Core, and a screen by its own link.
-        return entry.liveSourceId ? media
-          : passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : null, signal);
+        return prepareMedia(await resolving, playbackId, signal);
+      },
+      prepareRecoveredSource: async (media, playbackId, signal) => {
+        const tab = playback.next ?? playback.renderer;
+        playback.resolved = { playbackId, vp9: tab?.data.vp9 ?? true, media: Promise.resolve(media) };
+        return prepareMedia(media, playbackId, signal);
       },
       observe: player => subtitles.observe(player),
       stopped: playbackId => subtitles.stopped(playbackId),
@@ -1937,7 +1948,7 @@ export async function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([lan?.close(), localRelay.close(), server.stop()]);
+    const results = await Promise.allSettled([lan?.close(), localRelay.close(), passThrough.close(), server.stop()]);
     store.close();
     if (progressError) throw progressError;
     const failed = results.find(result => result.status === "rejected");

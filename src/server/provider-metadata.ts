@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { HistoryItem } from "../shared/viewing";
 import type { QueueEntry } from "../shared/protocol";
@@ -24,7 +25,7 @@ export function providerMetadata(item?: ProviderItem, selectedCollection = false
   return result;
 }
 
-export async function resolveProviderMetadata(url: string, signal: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderMetadata> {
+export async function resolveProviderMetadata(url: string, signal: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<ProviderMetadata> {
   const provider = providerForUrl(url);
   const title = provider === "movies123" ? movies123Title : provider === "animesaturn" ? animeSaturnTitle : provider === "animeunity" ? animeUnityTitle : undefined;
   if (title) return providerMetadata((await title(url, signal, fetchPage)).item);

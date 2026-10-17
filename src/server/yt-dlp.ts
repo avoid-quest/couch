@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { helper, checkHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
+import { createPublicMediaProxy } from "./public-media-proxy";
 
 // Only fixed, public messages from the extractor may cross the catalog boundary.
 export class ExtractionError extends Error {}
@@ -59,11 +60,15 @@ function broken() {
   return new ExtractionError("yt-dlp won't start. Couch is repairing it; try again shortly.");
 }
 
-async function extract(command: string, quickjs: string, args: string[], signal: AbortSignal): Promise<string> {
+async function extract(command: string, quickjs: string, args: string[], signal: AbortSignal, proxy: string): Promise<string> {
   signal.throwIfAborted();
+  const end = args.indexOf("--");
+  const proxied = end < 0 ? [...args, "--proxy", proxy] : [...args.slice(0, end), "--proxy", proxy, ...args.slice(end)];
   // A file that isn't a program fails spawn itself on macOS (ENOEXEC).
   let child: ReturnType<typeof spawn>;
-  try { child = spawn(command, ["--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", "--no-js-runtimes", "--js-runtimes", `quickjs:${quickjs}`, ...args], {
+  try { child = spawn(command, ["--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", "--no-js-runtimes", "--js-runtimes", `quickjs:${quickjs}`, ...proxied], {
+    // urllib can otherwise bypass even an explicit proxy for NO_PROXY hosts.
+    env: { ...process.env, HTTP_PROXY: proxy, HTTPS_PROXY: proxy, ALL_PROXY: proxy, http_proxy: proxy, https_proxy: proxy, all_proxy: proxy, NO_PROXY: "", no_proxy: "" },
     stdio: ["ignore", "pipe", "pipe"], signal, killSignal: "SIGKILL",
   }); } catch { throw broken(); }
   const exited = new Promise<number | null>((resolve, reject) => {
@@ -92,7 +97,11 @@ export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plu
     await acquireSlot(cancellation);
     try {
       const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : null;
-      try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory, "--use-extractors", "StreamingCommunity,end", "--flat-playlist"] : []), ...args], cancellation); }
+      try {
+        const proxy = await createPublicMediaProxy(cancellation);
+        try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory, "--use-extractors", "StreamingCommunity,end", "--flat-playlist"] : []), ...args], cancellation, proxy.url); }
+        finally { await proxy.close(); }
+      }
       finally { await bundled?.close(); }
     }
     finally { releaseSlot(); }

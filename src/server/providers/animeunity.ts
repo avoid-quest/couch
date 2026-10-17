@@ -1,3 +1,4 @@
+import { publicFetch } from "../public-network";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { animeUnityOrigin, animeUnityPageUrl, isAnimeUnityHost } from "../../shared/animeunity";
 import { ProviderError, providerItemId, readProviderText } from "./http";
@@ -33,7 +34,7 @@ function image(value: unknown): string | undefined {
   } catch { /* An optional image never prevents browsing. */ }
 }
 
-export async function animeUnityText(url: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch, init: RequestInit = {}): Promise<{ text: string; response: Response }> {
+export async function animeUnityText(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch, init: RequestInit = {}): Promise<{ text: string; response: Response }> {
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12_000)]);
   cancellation.throwIfAborted();
   const response = await request(url, { ...init, signal: cancellation, credentials: "omit", redirect: "error", headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0", ...init.headers } });
@@ -74,7 +75,7 @@ function episodeItem(collection: ProviderItem, episode: Episode, index?: number)
     collection: { title: collection.title, url: collection.url, ...(index !== undefined && index <= 2400 ? { index } : {}) } };
 }
 
-export async function animeUnityTitle(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch) {
+export async function animeUnityTitle(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch) {
   const url = animeUnityPageUrl(value);
   if (!url) throw new ProviderError("Choose an AnimeUnity anime or episode link.", 400);
   const { text } = await animeUnityText(url.href, signal, request);
@@ -145,7 +146,7 @@ async function catalog(request_: BrowseRequest, signal: AbortSignal | undefined,
   return { title: query ? `AnimeUnity: ${query}` : "AnimeUnity", items, ...(rows.length && offset + rows.length < total ? { nextCursor: String(offset + rows.length) } : {}) };
 }
 
-export async function browseAnimeUnity(request_: BrowseRequest, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function browseAnimeUnity(request_: BrowseRequest, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<ProviderPage> {
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(25_000)]);
   cancellation.throwIfAborted();
   const page = request_.url && animeUnityPageUrl(request_.url);
@@ -158,7 +159,7 @@ export async function browseAnimeUnity(request_: BrowseRequest, signal?: AbortSi
   return titlePage(title, rows, start === 1, title.item.kind === "collection" && start + 120 <= title.count ? String(start + 120) : undefined);
 }
 
-export async function loadAnimeUnityList(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function loadAnimeUnityList(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<ProviderPage> {
   if (!animeUnityPageUrl(value)) throw new ProviderError("Choose an AnimeUnity anime or episode to queue.", 400);
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(25_000)]);
   const title = await animeUnityTitle(value, cancellation, request);

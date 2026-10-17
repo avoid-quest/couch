@@ -47,3 +47,7 @@ limited to 500 entries; their individual episodes remain browsable/playable.
 Live smoke checks also covered the public catalogue, search, an empty
 search, the final One Piece chunk, and a single-episode title
 [Blades of the Guardians 2](https://animesaturn.ro/anime/blades-of-the-guardians-2/).
+
+Public player requests and all resolved media use the
+[guarded public-media transport](public-media.md), including HLS descendants,
+redirects, extraction and Synced playback.

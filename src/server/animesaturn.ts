@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { animeSaturnPageUrl, animesaturnOrigin } from "../shared/animesaturn";
 import { animeSaturnText, animeSaturnTitle } from "./providers/animesaturn";
 import { ProviderError, readProviderText } from "./providers/http";
@@ -38,7 +39,7 @@ function directStream(html: string): URL | undefined {
   }
 }
 
-export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
+export async function resolveAnimeSaturnLink(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
   signal?.throwIfAborted();
   const url = animeSaturnPageUrl(value);
   if (!url || url.pathname.startsWith("/anime/")) throw new ProviderError("Choose an AnimeSaturn episode before playing.", 400);

@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { animeUnityOrigin, animeUnityPageUrl } from "../shared/animeunity";
 import type { ExternalSubtitle } from "../shared/protocol";
 import { animeUnityTitle } from "./providers/animeunity";
@@ -46,7 +47,7 @@ function playlistTarget(html: string, embed: URL, id: number): URL {
   return url;
 }
 
-export async function resolveAnimeUnityLink(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
+export async function resolveAnimeUnityLink(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<{ url: string; headers: Record<string, string>; metadata: WebMediaMetadata; subtitles: ExternalSubtitle[] }> {
   signal?.throwIfAborted();
   const page = animeUnityPageUrl(value);
   if (!page) throw new ProviderError("Choose an AnimeUnity episode link.", 400);

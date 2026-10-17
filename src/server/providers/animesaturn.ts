@@ -1,3 +1,4 @@
+import { publicFetch } from "../public-network";
 import type { BrowseRequest, ProviderItem, ProviderPage } from "../../shared/providers";
 import { animeSaturnPageUrl, animesaturnOrigin, isAnimeSaturnHost } from "../../shared/animesaturn";
 import { ProviderError, providerItemId, readProviderText } from "./http";
@@ -28,7 +29,7 @@ function publicImage(value: string | undefined): string | undefined {
   } catch { /* An invalid optional image does not prevent browsing. */ }
 }
 
-export async function animeSaturnText(url: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch, init: RequestInit = {}): Promise<string> {
+export async function animeSaturnText(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch, init: RequestInit = {}): Promise<string> {
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12_000)]);
   cancellation.throwIfAborted();
   const response = await request(url, { ...init, signal: cancellation, credentials: "omit", redirect: "error", headers: { Accept: "text/html, application/json", "User-Agent": "Mozilla/5.0", Referer: `${animesaturnOrigin}/`, ...init.headers } });
@@ -81,7 +82,7 @@ function playerUrls(html: string): string[] {
   return [...players].slice(0, 4);
 }
 
-export async function animeSaturnTitle(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<AnimeSaturnTitle> {
+export async function animeSaturnTitle(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<AnimeSaturnTitle> {
   const url = animeSaturnPageUrl(value);
   if (!url) throw new ProviderError("Choose an AnimeSaturn anime or episode link.", 400);
   const html = await animeSaturnText(url.href, signal, request);
@@ -118,7 +119,7 @@ function episodeItems(html: string, selected: ProviderItem, page: number, total:
   return rows.map((row, index) => item(row.url, /^(?:Episode|Episodio)\s+\d/i.test(row.title) ? `${selected.title} — ${row.title}` : row.title, { thumbnail: selected.thumbnail, duration: selected.duration, collection: { title: selected.title, url: selected.url, index: page * chunkSize + index } }));
 }
 
-async function episodeChunk(selected: ProviderItem, episodes: EpisodeList, page: number, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<ProviderItem[]> {
+async function episodeChunk(selected: ProviderItem, episodes: EpisodeList, page: number, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<ProviderItem[]> {
   let html = episodes.first;
   if (page) {
     const body = new URLSearchParams({ action: "miruro_load_eplchunk", nonce: episodes.nonce!, series: episodes.series, page: String(page) });
@@ -170,7 +171,7 @@ function cataloguePage(html: string, target: URL, query?: string): ProviderPage 
   return { title: query ? `AnimeSaturn: ${query}` : "AnimeSaturn", items: [...items.values()], ...(nextCursor ? { nextCursor } : {}) };
 }
 
-export async function browseAnimeSaturn(input: BrowseRequest, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function browseAnimeSaturn(input: BrowseRequest, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   if (input.cursor !== undefined && !/^(?:0|[1-9]\d{0,3})$/.test(input.cursor)) throw new ProviderError("Invalid AnimeSaturn page cursor.", 400);
   const query = input.query?.trim();
@@ -199,7 +200,7 @@ export async function browseAnimeSaturn(input: BrowseRequest, signal?: AbortSign
   return cataloguePage(await animeSaturnText(target.href, signal, request), target);
 }
 
-export async function loadAnimeSaturnList(value: string, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function loadAnimeSaturnList(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   const url = animeSaturnPageUrl(value);
   if (!url) throw new ProviderError("Choose an AnimeSaturn anime or episode to queue.", 400);
