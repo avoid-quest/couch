@@ -6,12 +6,17 @@ import { ApiError } from "./api/client";
 const brief = 4_000, long = 6_000;
 
 type Kind = "failed" | "undo" | "queued" | "playing-on" | "activity" | "notice" | "tap-to-hear";
-// Sonner would take a repeat under a leaving toast's id (timed out, dismissed, swiped or acted on) away with it,
-// so once a kind's toast is leaving, its repeat takes the next id.
-const shown = new Map<Kind, { id: string; leaving: boolean }>();
+/** The Toaster shows the newest two; older ones stay mounted, hidden. */
+export const visibleToasts = 2;
+// Sonner updates a toast in place, so a repeat keeps its toast's id only while that toast shows: one leaving (timed
+// out, dismissed, swiped or acted on) would take the repeat away with it, and one hidden behind newer toasts would
+// keep it hidden. Otherwise the repeat takes the next id, and the old toast goes.
+const shown = new Map<Kind, { id: string; seq: number; leaving: boolean }>();
 let ids = 0;
+const showing = (entry: { seq: number }) => [...shown.values()].filter(other => !other.leaving && other.seq > entry.seq).length < visibleToasts;
 function show(kind: Kind, text: string, { action, ...options }: Omit<ExternalToast, "id" | "action"> & { action?: { label: string; onClick: () => void } }, as: typeof toast.error = toast) {
-  const last = shown.get(kind), current = last && !last.leaving ? last : { id: `${kind}-${++ids}`, leaving: false };
+  const last = shown.get(kind), current = last && !last.leaving && showing(last) ? last : { id: `${kind}-${++ids}`, seq: ids, leaving: false };
+  if (last && last !== current && !last.leaving) { last.leaving = true; toast.dismiss(last.id); }
   shown.set(kind, current);
   const leave = () => { current.leaving = true; };
   return as(text, { ...options, id: current.id, onAutoClose: leave, onDismiss: leave, action: action && { label: action.label, onClick: () => { leave(); action.onClick(); } } });

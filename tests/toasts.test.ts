@@ -63,6 +63,17 @@ test("once a kind's toast is leaving, its repeat takes a new id, so that exit ca
   expect(shown().filter(each => each.id === third || each.id === again).map(each => each.title)).toEqual(["Queued Film", "Sound is waiting for a tap"]);
 });
 
+test("a repeat behind two newer toasts takes a new id and shows, and its hidden toast goes", () => {
+  toast.dismiss();
+  const first = failed("Couldn't play Film.");
+  activity("Phone paused");
+  notice("Skipped 2 channels with a repeated tvg-id.");
+  const again = failed("Couldn't play Film again.");
+  expect(again).not.toBe(first);
+  expect(shown().map(each => each.title)).toEqual(["Phone paused", "Skipped 2 channels with a repeated tvg-id.", "Couldn't play Film again."]);
+  toast.dismiss();
+});
+
 test("a failure shows Core's own sentence, else the Couch one, and logs what it hid", () => {
   toast.dismiss();
   const warn = spyOn(console, "warn").mockImplementation(() => {});

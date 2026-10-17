@@ -1,4 +1,5 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { visibleToasts } from "@/toasts"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 // Couch: one placement, top right at the page gutter, below the header's row (min-h-14), or in the
@@ -13,7 +14,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       position="top-right"
       offset={offset}
       mobileOffset={offset}
-      visibleToasts={2}
+      visibleToasts={visibleToasts}
       expand
       icons={{
         success: (
