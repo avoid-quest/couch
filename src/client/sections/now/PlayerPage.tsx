@@ -208,8 +208,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   // A mouse leaving the window shows the controls; a lifted finger "leaves" too, but must let them hide.
   return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={event => { if (event.pointerType === "touch") return; setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
     {/* The picture is the player's surface. It takes focus when the player opens, and keys on it are shortcuts
-        (useCouchHotkeys counts a tabindex of -1 as background). As on YouTube, a click plays or pauses and a
-        double-click toggles fullscreen; a tap shows or hides the controls. */}
+        (useCouchHotkeys counts a tabindex of -1 as background). As on YouTube, a click on a video plays or pauses (on
+        audio, a stray click leaves the music alone) and a double-click toggles fullscreen; a tap shows or hides the controls. */}
     <div ref={picture ? renderInto : undefined} data-player-surface tabIndex={-1} role="group" aria-label={title ? `Player: ${title}` : "Player"} className="player-video absolute inset-0 outline-none"
       onPointerDown={event => { tap.current = event.pointerType === "touch" ? shown : null; }}
       onClick={event => {
