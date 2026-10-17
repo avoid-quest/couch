@@ -103,7 +103,8 @@ export function HomePage() {
     : hasRow("continue") && history.isPending ? undefined
     : hasRow("continue") && unfinished[0] ? { kind: "continue", item: unfinished[0] }
     : radioPending ? undefined
-    : firstOnAir ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
+    // A hidden Radio's queries are off, but their cache (and recents) still hold stations on air.
+    : hasRow("radio") && firstOnAir ? { kind: "radio", station: firstOnAir, show: onAir(firstOnAir.id)! }
     : null;
   const playingStation = (station: RadioStation) => current?.kind === "radio" && (current.source === `radio:${station.id}` || current.source === station.url);
   const playingMedia = current && past.find(item => item.queueEntryId === current.id)?.mediaId;
