@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import { toast } from "sonner";
+import { toast, type ToastT } from "sonner";
 import { ApiError } from "../src/client/api/client";
 import { activity, dismiss, failed, notice, playingOn, queued, undoable, waitingForTap } from "../src/client/toasts";
 
@@ -16,37 +16,63 @@ const press = (id: string | number) => {
   if (action && typeof action === "object" && "onClick" in action) action.onClick({} as never);
 };
 
-test("each kind fixes its id, duration and one action, so a repeat replaces the one showing", () => {
+test("each kind fixes its duration and one action, and a repeat replaces the one showing", () => {
   toast.dismiss();
-  playingOn("Kitchen"); playingOn("Studio");
-  activity("Phone paused"); activity("Phone resumed");
+  const playing = playingOn("Kitchen");
+  expect(playingOn("Studio")).toBe(playing);
+  const phone = activity("Phone paused");
+  expect(activity("Phone resumed")).toBe(phone);
   notice("Skipped 2 channels with a repeated tvg-id.");
   let up = 0;
-  queued("Film", () => up++); queued(undefined, () => up++);
+  const queue = queued("Film", () => up++);
+  expect(queued(undefined, () => up++)).toBe(queue);
   waitingForTap(() => {});
-  expect(shown()).toEqual([
-    { id: "playing-on", title: "Playing on Studio", type: undefined, duration: 4_000, action: undefined },
-    { id: "activity", title: "Phone resumed", type: undefined, duration: 6_000, action: undefined },
-    { id: "notice", title: "Skipped 2 channels with a repeated tvg-id.", type: undefined, duration: 6_000, action: undefined },
-    { id: "queued", title: "Queued", type: undefined, duration: 4_000, action: "Up next" },
-    { id: "tap-to-hear", title: "Sound is waiting for a tap", type: undefined, duration: Infinity, action: "Tap to hear" },
+  expect(shown().map(({ id: _, ...each }) => each)).toEqual([
+    { title: "Playing on Studio", type: undefined, duration: 4_000, action: undefined },
+    { title: "Phone resumed", type: undefined, duration: 6_000, action: undefined },
+    { title: "Skipped 2 channels with a repeated tvg-id.", type: undefined, duration: 6_000, action: undefined },
+    { title: "Queued", type: undefined, duration: 4_000, action: "Up next" },
+    { title: "Sound is waiting for a tap", type: undefined, duration: Infinity, action: "Tap to hear" },
   ]);
-  press("queued");
+  press(queue);
   expect(up).toBe(1);
   dismiss("tap-to-hear"); dismiss("queued");
-  expect(shown().map(each => each.id)).toEqual(["playing-on", "activity", "notice"]);
+  expect(shown().map(each => each.title)).toEqual(["Playing on Studio", "Phone resumed", "Skipped 2 channels with a repeated tvg-id."]);
+});
+
+// Sonner keeps a leaving toast mounted for its exit, then removes whatever its id shows by then.
+test("once a kind's toast is leaving, its repeat takes a new id, so that exit can't take it away", () => {
+  toast.dismiss();
+  const leave = (id: string | number, how: "onAutoClose" | "onDismiss") => {
+    const each = toast.getToasts().find(each => each.id === id) as ToastT | undefined;
+    each?.[how]?.(each);
+  };
+  const first = queued("Film", () => {});
+  leave(first, "onAutoClose");
+  const second = queued("Film", () => {});
+  expect(second).not.toBe(first);
+  leave(first, "onDismiss");
+  expect(queued("Show", () => {})).toBe(second);
+  press(second);
+  const third = queued("Film", () => {});
+  expect(third).not.toBe(second);
+  const sound = waitingForTap(() => {});
+  dismiss("tap-to-hear");
+  const again = waitingForTap(() => {});
+  expect(again).not.toBe(sound);
+  expect(shown().filter(each => each.id === third || each.id === again).map(each => each.title)).toEqual(["Queued Film", "Sound is waiting for a tap"]);
 });
 
 test("a failure shows Core's own sentence, else the Couch one, and logs what it hid", () => {
   toast.dismiss();
   const warn = spyOn(console, "warn").mockImplementation(() => {});
-  failed("Couldn't save Film.", new ApiError("For later can hold 500 items.", 409, { error: "For later can hold 500 items." }));
-  expect(shown()).toEqual([{ id: "failed", title: "For later can hold 500 items.", type: "error", duration: 6_000, action: undefined }]);
+  const id = failed("Couldn't save Film.", new ApiError("For later can hold 500 items.", 409, { error: "For later can hold 500 items." }));
+  expect(shown()).toEqual([{ id, title: "For later can hold 500 items.", type: "error", duration: 6_000, action: undefined }]);
   expect(warn).not.toHaveBeenCalled();
   const offline = new TypeError("Failed to fetch");
   failed("Couldn't save Film.", offline);
   failed("Couldn't save Film.", new ApiError("Request failed: /api/for-later", 405));
-  expect(shown()).toEqual([{ id: "failed", title: "Couldn't save Film.", type: "error", duration: 6_000, action: undefined }]);
+  expect(shown()).toEqual([{ id, title: "Couldn't save Film.", type: "error", duration: 6_000, action: undefined }]);
   expect(warn).toHaveBeenCalledWith("Couldn't save Film.", offline);
   warn.mockRestore();
 });
