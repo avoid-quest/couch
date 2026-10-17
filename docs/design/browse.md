@@ -65,7 +65,9 @@ Home's shelves are:
   Radio shelf builds the same list (`useOnAir`, with Home's recents first).
   The shelf waits for the shows, so no tile grows a line under the focus,
   then keeps its order while Live stays open, as Home's shelves do. Its first
-  tile carries `data-page-first`.
+  tile carries `data-page-first`. If the saved or built-in stations fail to
+  load, "Couldn't load On air." follows it with Try again; shows that fail to
+  load only leave the tiles without a show.
 - **Stations:** every station, as the Radio browse was: its source choice
   (`radioSource`), count, Filter (`filter`) and pager (`page`).
 - **Channels:** Live TV's channels (`group`, `channelPage`, `channelFilter`),

@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { iptvSourcesQuery } from "@/api/iptv";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { DurationBar } from "@/components/DurationBar";
 import { MediaTile } from "@/components/MediaTile";
 import { usePlayOn } from "@/components/PlayOn";
@@ -9,6 +11,7 @@ import { BrowseLiveTv } from "@/sections/find/BrowseLiveTv";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { useKeptOrder } from "@/sections/home/home-rows";
+import { TRY_AGAIN } from "@/copy";
 import { useOnAir } from "./on-air";
 
 /** Live: what's on air at the saved and built-in stations, then every station, then the channels once a Live TV source has some. */
@@ -30,6 +33,8 @@ export function LivePage() {
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)}><DurationBar live /></MediaTile>
       </li>)}
     </Shelf>}
+    {/* A failed list leaves its stations out, so say so; missing shows only cost the tiles their meta line. */}
+    {(onAir.favorites.error || onAir.builtIn.error) && <Alert variant="destructive"><AlertDescription>Couldn't load On air.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void Promise.all([onAir.favorites.refetch(), onAir.builtIn.refetch()])}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     <BrowseRadio origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Live"} onCommand={run} />
     {iptv.data?.sources.some(source => source.channelCount) && <BrowseLiveTv />}
   </section>;
