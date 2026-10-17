@@ -88,16 +88,17 @@ function moveFocus(key: string) {
     const beside = !horizontal && !!own?.contains(element) && (past(to) < 0 || gap >= 0);
     return { element, forward, beside, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
-  // Up and Down from a row reach the nearest row first, so Home's shelves are walked one by one, never
-  // skipped for a farther control that lines up. A row counts by its own box; ties keep the best score.
+  // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
+  // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
+  // score. The header and the footer still come last: the page scrolls under the sticky header.
   const reach = !horizontal && own ? candidates.map(candidate => {
     const row = candidate.element.closest<HTMLElement>("[data-nav-row]");
     const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
-    return { row: unit, edge: Math.max(0, past(to)) };
+    return { row: unit, edge: Math.max(0, past(to)) + (later && candidate.element.closest(later) ? 100_000 : 0) };
   }) : [];
   const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
   const next = reach[nearest]?.row;
-  const best = next ? candidates.find(candidate => next.contains(candidate.element)) : candidates[0];
+  const best = next ? candidates.find(candidate => next.contains(candidate.element)) : candidates[nearest];
   // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
   const tab = key === "ArrowUp" && later && best?.element.closest(later)
     ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;

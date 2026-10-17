@@ -19,17 +19,17 @@ import { playlistsQuery } from "@/api/playlists";
 import { historyQuery } from "@/api/progress";
 import { deviceName } from "@/copy";
 
-export const libraryTabs = ["later", "channels", "lists", "played"] as const;
-export type LibraryTab = typeof libraryTabs[number];
+export const savedTabs = ["later", "channels", "lists", "played"] as const;
+export type SavedTab = typeof savedTabs[number];
 
-/** Library's sections the way Settings shows its pages: a rail with a check on wide screens, a Select on narrow ones. */
-export function LibrarySections({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
+/** Saved's sections the way Settings shows its pages: a rail with a check on wide screens, a Select on narrow ones. */
+export function SavedSections({ state, credentials, connected, canPlay, tab, onTabChange, onFind, ...favoriteActions }: SavedFavoriteActions & {
   state: ClientSessionState | null;
   credentials: Credentials;
   connected: boolean;
   canPlay: boolean;
-  tab: LibraryTab;
-  onTabChange: (tab: LibraryTab) => void;
+  tab: SavedTab;
+  onTabChange: (tab: SavedTab) => void;
   onFind: () => void;
 }) {
   const page = useRef<HTMLElement>(null);
@@ -57,29 +57,30 @@ export function LibrarySections({ state, credentials, connected, canPlay, tab, o
   ] as const;
   const shared = `Shared on ${deviceName(state?.installationName)}`;
 
-  return <section ref={page} aria-label="Library" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
-    <Select value={tab} onValueChange={value => onTabChange(value as LibraryTab)}>
-      <SelectTrigger aria-label="Library section" data-page-first className="w-full md:hidden"><SelectValue /></SelectTrigger>
+  return <section ref={page} aria-label="Saved" className="grid min-w-0 items-start gap-6 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12">
+    <Select value={tab} onValueChange={value => onTabChange(value as SavedTab)}>
+      <SelectTrigger aria-label="Saved section" data-page-first className="w-full md:hidden"><SelectValue /></SelectTrigger>
       <SelectContent><SelectGroup>
         <SelectLabel>{shared}</SelectLabel>
         {tabs.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
       </SelectGroup></SelectContent>
     </Select>
-    <nav aria-label="Library sections" className="hidden min-w-0 flex-col md:flex">
+    <nav aria-label="Saved sections" className="hidden min-w-0 flex-col md:flex">
       <p aria-hidden="true" className="mb-1 truncate px-2.5 text-xs text-muted-foreground">{shared}</p>
       {tabs.map(([value, label, count]) => <Button key={value} variant="ghost" asChild className="w-full justify-start font-normal">
-        <Link to="/library" search={value === "later" ? {} : { tab: value }} replace activeOptions={{ exact: true }} data-page-first={tab === value || undefined}>
+        <Link to="/saved" search={value === "later" ? {} : { tab: value }} replace activeOptions={{ exact: true }} data-page-first={tab === value || undefined}>
           <Check aria-hidden="true" className={tab === value ? undefined : "invisible"} />
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {count != null && <span className="tabular-nums text-muted-foreground">{count}</span>}
         </Link>
       </Button>)}
     </nav>
+    {/* Narrow screens name the tab in the Select above, so its title is for screen readers there. */}
     <div className="min-w-0">
-      {tab === "later" && <><PageHeader title="For later" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
-      {tab === "channels" && <><PageHeader title="Channels & stations" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
+      {tab === "later" && <><PageHeader title="For later" className="max-md:sr-only" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
+      {tab === "channels" && <><PageHeader title="Channels & stations" className="max-md:sr-only" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
       {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} />}
-      {tab === "played" && <><PageHeader title="Played" /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
+      {tab === "played" && <><PageHeader title="Played" className="max-md:sr-only" /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
     </div>
   </section>;
 }

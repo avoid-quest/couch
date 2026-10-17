@@ -18,7 +18,7 @@ Every paired device opens every shared page: rows that need an admin say "Only a
 
 ## Section nav
 
-Library and Settings share one section nav: a rail with a check on wide screens and a Select on phones. In Settings' rail each owner heads its pages, with its device name or role beneath, wrapping where the rail is too narrow. On the TV, Settings starts on the rail's current entry, as Library does, and OK on a rail entry opens its page and moves focus to the page's first control.
+Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones. In Settings' rail each owner heads its pages, with its device name or role beneath, wrapping where the rail is too narrow. On the TV, Settings starts on the rail's current entry, as Library does, and OK on a rail entry opens its page and moves focus to the page's first control.
 
 On the TV, Settings OK enters
 the selected page's first enabled control; Back from its content restores the

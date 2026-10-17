@@ -5,56 +5,86 @@
 | Section | Path | Holds |
 | --- | --- | --- |
 | Home | `/` | one hero (what plays now, else what to continue, else what's on air), then shelves |
-| Live | `/live` | stations on air, then every station, then Live TV channels once a Live TV source has some |
-| Search | `/search` | the search field, results and sources |
-| Library | `/library` | For later, Channels & stations, Lists and Played (`?tab=`) |
-| Settings | `/settings` | the device's and the Couch's pages |
+| Discover | `/discover` | what's on air, Live TV while a source has channels, a shelf from each source's own home, then the sources that start from a search ([Browse](browse.md#discover)) |
+| Saved | `/saved` | For later, Channels & stations, Lists and Played (`?tab=`) |
 | Remote | `/remote` | drives a TV; on non-TV devices while the Couch has one (`DeviceSummary.tv`, online or not) |
+| Settings | `/settings` | the device's and the Couch's pages |
+
+Search is no tab: it is the header's field, and its results are `/search?q=…`
+([Browse](browse.md#search)). An empty query is Discover, so `/search` without
+one opens `/discover`. Discover has two pages of its own, every station
+(`/discover/radio`) and every Live TV channel (`/discover/live-tv`), which
+its shelves' headings open.
 
 `/item` and `/collection` belong to the section that opened them: their
-URL carries it as `from` (`home`, `live`, `search` or `library`), so the tab,
+URL carries it as `from` (`home`, `discover`, `search` or `saved`), so the tab,
 the breadcrumb and a refresh keep it, and moving between details passes it
 on. A row's or tile's link carries it too, so a new tab opens in the same
-section. Without one, a station's page belongs to Live and the rest to Search.
-`/now` is the player. Where it plays has no page: it is the picker, a Sheet
-([Where it plays](where-it-plays.md#the-picker)).
+section. Without one, a page belongs to Discover, where the sources and the
+stations are. `/now` is the player. Where it plays has no page: it is the
+picker, a Sheet ([Where it plays](where-it-plays.md#the-picker)).
 Earlier addresses redirect and keep their query, as `settingsAliases` does
-for Settings: `/find` opens `/search`, `/find?browse=radio` and
-`/find?browse=live-tv` open `/live`, `/saved` opens `/library` on the
-same tab, and `/where-it-plays`, its former overview, opens Home. Core serves every path in `src/shared/page-paths.ts`, the earlier
-ones included, so bookmarks reach their redirects.
-
-Radio and Live TV share Live's address, so Live TV's page and filter are
-`channelPage` and `channelFilter`, and each keeps the other's place.
+for Settings: `/live` opens `/discover`; `/library` opens `/saved` on the
+same tab; `/find` opens `/search`, and `/find?browse=radio` and
+`/find?browse=live-tv` open Discover's Radio and Live TV pages; and
+`/where-it-plays`, its former overview, opens Home. Core serves every path in
+`src/shared/page-paths.ts`, the earlier ones included, so bookmarks reach
+their redirects.
 
 ## Header and section nav
 
-One header on every screen, on a three-column grid: at the left, the Couch
-switch in muted ink (the TV names itself there instead, as plain muted text,
-since it has no switch); in the middle, centred text tabs (Home, Live, Search,
-Library, then Remote while the Couch has a TV, then Settings); at the right,
-Stop sharing while this device shares its screen or sound (the player's top
-band keeps it: [Player](player.md#stop-sharing-stays-on-screen)), then the
-clock. The header scrolls away with the page, so the page gets the screen;
-on the TV, Up from a page's first row reaches it
-([TV](tv.md#every-journey-step-works-with-a-remote)). The current tab names
-the page, so section roots carry no visible title of their own. The current
-tab is underlined; a focused tab inverts, as every control does.
+One header on every screen, on a three-column grid: at the left, Couch's
+mark and the Couch switch in muted ink (the TV names itself there instead,
+as plain muted text, since it has no switch); in the middle, centred text
+tabs (Home, Discover, Saved, then Remote while the Couch has a TV, then
+Settings); at the right, Stop sharing while this device shares its screen or
+sound (the player's top band keeps it:
+[Player](player.md#stop-sharing-stays-on-screen)), then the search field,
+then the clock. The current tab names the page, so section roots carry no
+visible title of their own. The current tab is underlined; a focused tab
+inverts, as every control does.
+
+The header is sticky: it stays at the top on the page's solid ground while
+the page scrolls under it, and the player hides it. It publishes its height
+as `--top-bar` (`useTopBar`, as the footer publishes `--bottom-bar`), and the
+page's scroll padding clears it by that and a rem, so a focused tile is never
+under it. On the TV, Up from a page's first row still reaches it
+([TV](tv.md#every-journey-step-works-with-a-remote)).
+
+**The mark** is `CouchMark`: the drawing inside `packaging/icons/icon.svg`
+without its black tile, as an inline SVG in `currentColor`, its cuts a mask so
+it sits on any ground. The catalog has interface icons, not brand identities
+([Brand mark](../design.md#brand-mark)). It is the one thing at the header's
+left in white ink, on every screen, phones included.
+
+**Search** is `HeaderSearch`: shadcn `InputGroup` with a lucide Search icon and
+the placeholder "Search", up to 16rem wide. `/` focuses it from any page
+(from the player, its page comes back first). Typing searches after a second
+without typing, and Enter at once: the first search from another page opens
+`/search?q=…`, later ones replace it, and focus stays in the field while
+typing (Enter goes on to the results; Down reaches the page's first result).
+Off the TV, Esc clears the field, which is Discover, then leaves it; the TV's
+Back stays Back. On the results page, a key typed outside a control goes on
+with the query (type-to-search), so letters and digits are no shortcuts
+there. It is the TV's Search field too: a remote reaches it with arrows like
+any other header control, and a phone's Remote types into it
+([Type on TV](remote.md#type-on-tv)).
 
 Input exceptions:
 
 - **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) just
   before the clock; the TV, phones and Remote have none.
 - **Touch** (`touch:`, phones and windows below 960px): the tabs move to a
-  bottom tab bar for thumb reach (Home, Live, Search, Library, and Remote while
-  the Couch has a TV), each a lucide icon (House, Radio, Search, Library, Tv)
-  over its label. The top bar keeps the same left/right pair: the Couch switch
-  at the left and a Settings gear (`aria-label="Settings"`) where the clock
-  is. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps its
-  tabs and clock.
+  bottom tab bar for thumb reach (Home, Discover, Saved, and Remote while the
+  Couch has a TV), each a lucide icon (House, Compass, Bookmark, Tv) over its
+  label. The top bar is a row: the mark and the Couch switch at the left, then
+  the search field, which takes the room left (it fits 390px with a long
+  name, which truncates), and a Settings gear (`aria-label="Settings"`) where
+  the clock is. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps
+  its grid, tabs and clock.
 - **The Mac window:** its buttons and the region that drags it live in the
-  header, so there the header stays sticky (`[data-window-controls]` in
-  `index.css`).
+  header; the search field, like every control there, takes its clicks back
+  (`[data-window-controls]` in `index.css`).
 
 The header and the phone tab bar render the same `SectionTabs`.
 
@@ -106,8 +136,9 @@ between the browser and desktop window; Electron global shortcuts would also
 claim keys outside the app. The header's Keyboard shortcuts dialog is the
 user-facing reference: shortcuts work in the player, and while browsing. Keep
 transport shortcuts aligned with visible control capabilities, preserve
-Search's type-to-search, and let open panels, text entry, focused controls and
-TV navigation own their keys.
+the results page's type-to-search, and let open panels, text entry, focused
+controls and TV navigation own their keys. H and S open Home and Saved, `/`
+focuses the header's search field.
 
 Space and the player's arrows (`backgroundOnly`) act only when focus isn't on
 a control: with nothing focused, or on a focus target with `tabindex="-1"`,

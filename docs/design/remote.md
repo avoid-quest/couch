@@ -6,7 +6,7 @@ What the TV does with each press: [TV](tv.md).
 
 **Remote** is a section on Devices that aren't TVs, laid out like the remote
 it stands in for, phone first, in one column, its name left to the current tab
-as Home's and Live's are: the TV and its status, the pad,
+as Home's and Discover's are: the TV and its status, the pad,
 Back, Home and Info, what plays, then Type on TV. It selects a TV to control
 without joining or moving its outputs. With two or more TVs, a Select picks
 one; offline or private TVs cannot be controlled.
@@ -30,8 +30,8 @@ different TV. The now-playing bar hides on Remote.
 
 ## Type on TV
 
-Type on TV is an `InputGroup` for the TV's focused Search field or its own
-Device name. Send replaces the draft; Clear sends an empty draft. Only
+Type on TV is an `InputGroup` for the TV's focused search field (the header's,
+on every page) or its own Device name. Send replaces the draft; Clear sends an empty draft. Only
 Enter on TV submits the existing search or name form. Typing and reconnecting
 do not send an unsaved draft, and no field is chosen automatically. Pairing
 codes, source URLs and administrative fields are unavailable. Status and

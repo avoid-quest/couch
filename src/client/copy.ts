@@ -9,5 +9,5 @@ export const ADMIN_ONLY = "Only an admin can change this.";
 
 export const TRY_AGAIN = "Try again";
 
-/** Copy for Library recovery actions. */
-export const savedNotice = (title: string, saved: boolean) => saved ? `Saved ${title}.` : `Removed ${title} from Library.`;
+/** Copy for Saved recovery actions. */
+export const savedNotice = (title: string, saved: boolean) => saved ? `Saved ${title}.` : `Removed ${title} from Saved.`;
