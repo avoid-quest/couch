@@ -33,7 +33,8 @@ window.runContinueDetailsRegression = async (unavailable = false) => {
     const resume = row.querySelector<HTMLElement>('[data-media-tile]')!;
     const details = row.querySelector<HTMLElement>('button[aria-label^="Details "]')!;
     assert(details && usable(details), "Continue lacks reachable History Details");
-    assert(row.querySelectorAll('button,a[href]').length === 2 && !resume.querySelector('button,a[href]'), "Continue must have only sibling Resume and Details controls");
+    // Its tile's "…" is no stop on the TV (tabindex -1).
+    assert(row.querySelectorAll('button:not([tabindex="-1"]),a[href]').length === 2 && !resume.querySelector('button,a[href]'), "Continue must have only sibling Resume and Details controls");
     assert(details.getBoundingClientRect().height >= 44, "Continue Details target is smaller than 44px");
     assert(resume.getAttribute("aria-label")?.startsWith("Resume "), "Continue lost primary Resume");
     assert(!unavailable || resume.matches(":disabled"), "Use an unavailable Continue fixture");

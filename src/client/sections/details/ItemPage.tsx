@@ -2,8 +2,9 @@ import type { ComponentProps } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
-import { forLaterQuery } from "@/api/for-later";
-import { radioFavoritesListQuery, radioProgrammesQuery } from "@/api/radio";
+import { forLaterQuery, loadForLater } from "@/api/for-later";
+import { radioProgrammesQuery } from "@/api/radio";
+import { useStationSave } from "@/sections/live/on-air";
 import { removeFromContinue, undoProgressAction } from "@/api/progress";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
@@ -25,7 +26,7 @@ import type { PlaybackCollection } from "../../../shared/protocol";
 import { providerForUrl } from "../../../shared/providers";
 import { readFrom } from "../../../shared/page-paths";
 import { sourceLabel } from "@/source-label";
-import { playOnQuery, usePlayOn } from "@/components/PlayOn";
+import { usePlayOn } from "@/components/PlayOn";
 import { useDetailNavigation } from "@/detail-navigation";
 import { reorderedIds } from "@/lib/dnd";
 import { deviceName, savedNotice } from "@/copy";
@@ -176,7 +177,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     await refresh();
   };
   const load = async (mode: "play" | "append", on?: string) => {
-    const send = () => apiSend(shell.credentials, `/api/for-later/${encodeURIComponent(item.id)}/load${playOnQuery(on)}`, { mode }, "POST", 30_000);
+    const send = () => loadForLater(shell.credentials, item.id, mode, on);
     await (mode === "append" ? queue(item.title, send) : send());
     await client.invalidateQueries({ queryKey: forLaterQuery(shell.credentials).queryKey });
   };
@@ -195,21 +196,15 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
 function RadioDetails({ item }: { item: RadioStation }) {
   const shell = useShell();
   const { connected, nativeHost } = useSessionGate();
-  const client = useQueryClient();
   const action = useDetailAction();
   const { play } = usePlayOn();
   const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && item.sourceId === avoidRadioPlaylistId, refetchInterval: 60_000 });
-  const favorites = useQuery({ ...radioFavoritesListQuery(shell.credentials), enabled: connected });
-  const saved = !!favorites.data?.favorites.some(station => station.id === item.id);
+  const save = useStationSave()(item);
   const programme = programmes.data?.[item.id];
-  const save = async () => {
-    await (saved ? apiSend(shell.credentials, `/api/radio/favorites/${encodeURIComponent(item.id)}`, undefined, "DELETE") : apiSend(shell.credentials, "/api/radio/favorites", { station: item }));
-    await client.invalidateQueries({ queryKey: radioFavoritesListQuery(shell.credentials).queryKey });
-  };
   return <><DetailLayout radio title={programme?.title || item.name} thumbnail={programme?.artworkUrl ?? item.logoUrl} shape="square" meta={[programme ? item.name : item.groupTitle || item.countryCode, programme?.genre, programme?.artist, programme?.album, programme?.bitrate && `${programme.bitrate} kbps`].filter(Boolean).join(" · ")} description={programme?.description}
     play={{ label: "Play", aria: item.name, disabled: !connected || !shell.available || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, true)) }}
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, false)) }}
-    save={{ saved, disabled: !connected || !favorites.data || action.isPending, run: () => action.mutate(save) }}
+    save={{ ...save, disabled: save.disabled || action.isPending }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => shell.enqueueRadio(item, true, on), deviceId)) }}
     more={!nativeHost && programme?.programmeUrl ? [{ label: "Open show page", node: <a href={programme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a> }] : []} /><RelatedRadio station={item} /></>;
 }

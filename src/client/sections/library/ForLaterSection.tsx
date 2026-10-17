@@ -88,6 +88,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
           meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")}
           description={item.description}
           primary={{ label: "Details", onClick: inspect }}
+          // Details holds every verb in its menu, so the row needs no "…".
+          menuOnPage
           menu={[
             { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
             { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },

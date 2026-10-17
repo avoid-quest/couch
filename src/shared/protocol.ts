@@ -19,7 +19,8 @@ export type NowPlaying = { title: string; artist?: string };
 export type RadioProgramme = RadioProgrammeDetails & { playbackId: string };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
 export type Domain = "progress" | "radio" | "iptv" | "providers" | "playlists" | "for-later" | "devices" | "settings" | "sound" | "bluetooth" | "display";
-export type NavigationKey ="up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
+// "menu" is OK held, which opens a focused item's menu (docs/design/remote.md).
+export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "menu" | "back" | "home" | "info";
 
 export type PlayerState = {
   playbackId: string | null;

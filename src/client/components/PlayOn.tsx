@@ -3,7 +3,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuGroup,
 import { announcePlay, deviceId } from "@/session/device-id";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { playOnTargets } from "@/session/where-it-plays";
-import type { MenuParts } from "./RowMenu";
 
 /** Where an item can play: the online Devices, this window's first, and where Play goes. */
 export function usePlayOn() {
@@ -29,17 +28,17 @@ export function usePlayOn() {
 export const playOnQuery = (on?: string) => on ? `?on=${encodeURIComponent(on)}` : "";
 
 // sharingDeviceId: a shared source's publisher. It never plays its own capture: choosing it opens Where it plays.
-function Devices({ onPlay, disabled, sharingDeviceId, Item = DropdownMenuItem }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; Item?: MenuParts["Item"] }) {
+function Devices({ onPlay, disabled, sharingDeviceId }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string }) {
   const { devices, here } = usePlayOn();
-  return devices.map(device => <Item key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
+  return devices.map(device => <DropdownMenuItem key={device.id} disabled={disabled} className="flex-col items-start gap-0.5" onSelect={() => onPlay(device.id)}>
     <span className="w-full break-words">{device.name}</span>{(device.id === here || device.id === sharingDeviceId) && <span className="text-xs text-muted-foreground in-data-highlighted:text-accent-foreground">{[device.id === here && "This device", device.id === sharingDeviceId && "Sharing this source"].filter(Boolean).join(" · ")}</span>}
-  </Item>);
+  </DropdownMenuItem>);
 }
 
-/** "Play on" inside an item's menu, a dropdown's or a row's context menu; nothing when only this Device is online. */
-export function PlayOnGroup({ onPlay, disabled, sharingDeviceId, separated = true, parts: { Item, Group, Label, Separator } = { Item: DropdownMenuItem, Group: DropdownMenuGroup, Label: DropdownMenuLabel, Separator: DropdownMenuSeparator } }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; separated?: boolean; parts?: MenuParts }) {
+/** "Play on" inside an item's menu; nothing when only this Device is online. */
+export function PlayOnGroup({ onPlay, disabled, sharingDeviceId, separated = true }: { onPlay: (deviceId: string) => void; disabled?: boolean; sharingDeviceId?: string; separated?: boolean }) {
   if (!usePlayOn().devices.length) return null;
-  return <>{separated && <Separator />}<Group aria-label="Play on"><Label>Play on</Label><Devices Item={Item} onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} /></Group></>;
+  return <>{separated && <DropdownMenuSeparator />}<DropdownMenuGroup aria-label="Play on"><DropdownMenuLabel>Play on</DropdownMenuLabel><Devices onPlay={onPlay} disabled={disabled} sharingDeviceId={sharingDeviceId} /></DropdownMenuGroup></>;
 }
 
 /** "Play on" beside a row's inline verbs. */

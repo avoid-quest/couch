@@ -61,10 +61,12 @@ afresh.
 
 Every item is one [`MediaTile`](browse.md#mediatile), one focus stop on every
 screen, and its press does its main verb: Continue resumes, a station plays,
-an Up next entry plays now, everything else opens its page, which holds the
-other verbs (Play on, Queue, Save, Remove). Continue alone adds a sibling
-secondary Details button (at least 44px): Resume's playback destination lacks
-its history actions. It opens History Details without playing, even when
+an Up next entry plays now, everything else opens its page, which holds every
+verb. Its other verbs (Details, From start, Queue, Save, Play on…) are its one
+menu, behind the "…" in its caption ([Menus](../design.md#menus)). Continue
+alone adds a sibling secondary Details button (at least 44px): Resume's
+playback destination lacks its history actions, and a remote reaches it
+without a held OK. It opens History Details without playing, even when
 Resume is unavailable. Up next tiles read their length and the clock time
 each ends ("4:52, ends 21:47").
 

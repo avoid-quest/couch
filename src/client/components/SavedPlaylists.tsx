@@ -105,6 +105,8 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
         title={item.name}
         meta={summary(item)}
         primary={{ label: "Open", onClick: () => select(item.id), disabled }}
+        // The list's page holds Play, Play on and Queue, so the row needs no "…".
+        menuOnPage
         menu={[
           { label: "Play", disabled: disabled || !canPlay || !item.entryCount, run: () => void load(item, "play") },
           { label: "Play on", disabled: disabled || !canPlay || !item.entryCount, playOn: deviceId => void load(item, "play", deviceId) },
