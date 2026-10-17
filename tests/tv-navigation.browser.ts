@@ -290,6 +290,41 @@ window.runTvNavigationRegression = async () => {
     await key("Escape");
     await until(() => !document.querySelector('[role="dialog"][data-state="open"]') && !!document.activeElement?.matches('[data-now-playing] button[aria-label="Where it plays"]'));
   });
+  await check("Down from a device's check passes its Sync line for the next device, and Down from its fader reaches that line", async () => {
+    await click('[data-now-playing] button[aria-label="Where it plays"]');
+    const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
+    await until(() => document.activeElement === checks()[0]);
+    assert(checks().length >= 2, "Pair a second online shared output before running");
+    // Sync applies while the sound plays in sync on several devices, so the second device's sound joins.
+    // Joining can take it offline for a moment, its check disabled, so the rows settle first.
+    const name = checks()[1]!.getAttribute("aria-label")!, added = checks()[1]!.getAttribute("aria-checked") !== "true";
+    const device = () => checks().find(item => item.getAttribute("aria-label") === name)!;
+    if (added) { device().click(); await until(() => device()?.getAttribute("aria-checked") === "true"); await wait(1500); }
+    const sync = (check: HTMLElement) => check.closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");
+    // A line shows while its delay isn't 0; otherwise Sync… in the row's "…" reveals it.
+    const reveal = async (check: () => HTMLElement) => {
+      if (sync(check())) return;
+      check().closest("li")!.querySelector<HTMLElement>('[aria-haspopup="menu"]')!.focus(); await key("Enter");
+      const item = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent === "Sync…");
+      await until(() => !!item()).catch(() => undefined);
+      assert(item(), "No Sync… while the sound plays on both devices");
+      item()!.click(); await until(() => !!sync(check()) && document.activeElement === sync(check()));
+    };
+    try {
+      const first = () => checks()[0]!;
+      await reveal(first);
+      first().focus(); await key("ArrowDown");
+      assert(document.activeElement === checks()[1], "Down from a check did not reach the next device");
+      first().closest("li")!.querySelector<HTMLElement>("[data-volume]:not([data-sync-line]) [role=slider]")!.focus(); await key("ArrowDown");
+      assert(document.activeElement === sync(first()), "Down from the fader did not reach its Sync line");
+      await reveal(device);
+      device().focus(); await key("ArrowDown");
+      assert(document.activeElement !== sync(device()), "Down from a check reached its own Sync line");
+    } finally {
+      if (added) { device()?.click(); await until(() => device()?.getAttribute("aria-checked") !== "true").catch(() => undefined); }
+      for (let attempt = 0; attempt < 3 && document.querySelector('[role="dialog"][data-state="open"]'); attempt++) { await key("Escape"); await wait(350); }
+    }
+  });
   await check("Saved Details keeps Remove, Undo and ordering reachable with one row stop", async () => {
     await click('[data-app-nav] a[href="/library"]');
     const rows = () => [...document.querySelectorAll<HTMLElement>('[data-saved-details]')];

@@ -81,9 +81,10 @@ function moveFocus(key: string) {
     const forward = (horizontal ? dx : dy) * sign;
     // The sideways gap between the edges, not the centres, so a wide row under a short title is in line with it.
     const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
-    // Up and Down reach a control in the active's own row only past its edge (a wrapped line, Continue's Details),
-    // never one beside it, though a shorter or taller caption moves that one's centre.
-    const beside = !horizontal && !!own?.contains(element) && past(to) < 0;
+    // Up and Down reach a control in the active's own row only past its edge and in line with it: a wrapped line,
+    // Continue's Details under its tile, a device's Sync under its fader. Never one beside it, though a shorter or
+    // taller caption moves that one's centre, nor a device's Sync from its check.
+    const beside = !horizontal && !!own?.contains(element) && (past(to) < 0 || gap >= 0);
     return { element, forward, beside, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
   // Up and Down from a row reach the nearest row first, so Home's shelves are walked one by one, never
