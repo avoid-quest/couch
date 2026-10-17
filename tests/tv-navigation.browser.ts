@@ -427,6 +427,8 @@ window.runTvNavigationRegression = async () => {
     const options = (row?: HTMLElement) => row?.querySelector<HTMLElement>('button[aria-label^="Options"]');
     const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === label);
     await until(() => rows().length >= 2);
+    // The fixture saves two; a Couch with more keeps its count.
+    const count = rows().length;
     // A station's page holds no ordering or Remove, so its row's Options menu does.
     const label = options(rows()[0])?.getAttribute("aria-label");
     assert(label, "Favorite lost Options");
@@ -439,11 +441,11 @@ window.runTvNavigationRegression = async () => {
     const remove = menuItem("Remove");
     assert(remove, "Favorite lost Remove");
     remove!.click();
-    await until(() => rows().length === 1);
+    await until(() => rows().length === count - 1);
     const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
     assert(undo && document.activeElement?.closest('[aria-label="Channels & stations"]'), "Favorite removal lost Undo or adjacent focus");
     // Undo saves the station again, then its order, so the list can briefly show the save alone.
-    const restored = () => rows().length === 2 && options(rows()[1])?.getAttribute("aria-label") === label;
+    const restored = () => rows().length === count && options(rows()[1])?.getAttribute("aria-label") === label;
     undo!.click(); await until(restored).catch(() => undefined);
     assert(restored(), "Favorite Undo lost saved order");
   });
