@@ -68,7 +68,9 @@ footer (the now-playing bar) only after the page's own controls, and keeps
 focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
 shelf, the hero's verbs, a media row) reach the nearest row first, so Home's
 shelves are walked one by one and never skipped for a farther control that
-lines up. The TV's tab bar is not sticky: it scrolls away
+lines up. In their own row they reach only a control past them (a wrapped
+line, Continue's Details), never a tile beside them whose caption is shorter
+or taller. The TV's tab bar is not sticky: it scrolls away
 with the page, as on Apple TV, so the page gets the screen. Up from a page's
 first row reaches it on the current tab, and Down from it returns to the
 page's first control. After a page change the first key starts at the page's first

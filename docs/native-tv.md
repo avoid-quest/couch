@@ -111,7 +111,7 @@ bun build tests/tv-navigation.browser.ts --target browser --format iife --minify
 
 Evaluate that bundle in the T3 preview, then evaluate
 `await window.runTvNavigationRegression()`. The checks exercise real route,
-focus and playback behavior: one Home station stop, Home entry on the hero's
+focus and playback behavior: one Home station stop, Up and Down out of a shelf beside a tile with a longer or shorter caption, Home entry on the hero's
 primary verb and Up from its last shelf through each shelf and the hero to the
 current tab, pairing overlay → content
 → rail → Home, hidden-HUD ten-second seek, queue and Details opener retention,
