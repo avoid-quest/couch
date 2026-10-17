@@ -17,7 +17,7 @@ function Items({ actions, on, select }: { actions: MenuAction[]; on: (label: str
 }
 
 const own = (event: { currentTarget: Element; target: EventTarget }) => event.target instanceof Node && event.currentTarget.contains(event.target);
-type ItemProps = Pick<HTMLAttributes<HTMLElement>, "className" | "onContextMenu" | "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onTouchEnd">;
+type ItemProps = Pick<HTMLAttributes<HTMLElement>, "className" | "onContextMenu" | "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onTouchEnd" | "onClickCapture">;
 
 /**
  * An item's one menu, for a row or a tile. Spread `item` on the item and `target` on its primary target (its press);
@@ -58,6 +58,9 @@ export function useItemMenu(actions: MenuAction[]) {
     onPointerCancel: cancel,
     // A long press ends without the mouse events, focus and click a tap makes, which would close the menu or press the item.
     onTouchEnd: (event: TouchEvent<HTMLElement>) => { if (held.current) event.preventDefault(); },
+    // Not every browser drops that click for a prevented touchend, so a click a held press still makes stops here once.
+    // A keyboard's click (detail 0) never does: Enter after a long press must still press the item.
+    onClickCapture: (event: MouseEvent<HTMLElement>) => { if (held.current && event.detail) { event.preventDefault(); event.stopPropagation(); held.current = false; } },
   };
   return { shown, on, open, setOpen, opener, item, target: { "data-item-menu": "" } };
 }
