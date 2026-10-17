@@ -75,8 +75,11 @@ export function createBandcampCatalog(run: typeof runYtDlp = runYtDlp, request: 
       const title = label(entry.name);
       if (!title || seen.has(source.url) || source.kind !== (entry.type === "a" ? "album" : "track")) return [];
       seen.add(source.url);
+      // Search's `img` leaves out the "a" a cover's address starts with, so it answers 404: build it from `art_id`,
+      // at the size album pages give.
+      const art = typeof entry.art_id === "number" && Number.isSafeInteger(entry.art_id) && entry.art_id > 0 ? `https://f4.bcbits.com/img/a${String(entry.art_id).padStart(10, "0")}_5.jpg` : entry.img;
       return [{ id: providerItemId("bandcamp", source.url), provider: "bandcamp", kind: source.kind === "album" ? "collection" : "media",
-        title, url: source.url, subtitle: label(entry.band_name), thumbnail: thumbnail({ thumbnail: entry.img }) }];
+        title, url: source.url, subtitle: label(entry.band_name), thumbnail: thumbnail({ thumbnail: art }) }];
     });
     return { title: "Bandcamp", items };
   }

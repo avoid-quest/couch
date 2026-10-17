@@ -7,7 +7,7 @@ import { readCollectionSearch } from "../src/client/collection-pagination";
 import { readSearchState, searchLocation } from "../src/client/search";
 import { supportsWebVideoQuality } from "../src/shared/video-quality";
 
-const album = { type: "a", name: "A che punto siamo", band_name: "Arsider", item_url_path: "https://arsider.bandcamp.com/album/a-che-punto-siamo", img: "https://f4.bcbits.com/img/3034736658_3.jpg" };
+const album = { type: "a", name: "A che punto siamo", band_name: "Arsider", item_url_path: "https://arsider.bandcamp.com/album/a-che-punto-siamo", img: "https://f4.bcbits.com/img/3034736658_3.jpg", art_id: 3034736658 };
 const track = { type: "t", name: "Track", band_name: "Arsider", item_url_path: "https://arsider.bandcamp.com/track/track" };
 const soundcloud = (index = 0) => ({ _type: "url", title: `Arsider track ${index}`, uploader: "Arsider Produzioni", duration: 92.566,
   url: `https://api.soundcloud.com/tracks/${index}`, webpage_url: `https://soundcloud.com/arsiderprod/track-${index}`,
@@ -26,7 +26,8 @@ test("Bandcamp keyword search returns openable albums and tracks without extract
   expect(page.items.map(item => [item.title, item.kind, item.url])).toEqual([
     [album.name, "collection", album.item_url_path], [track.name, "media", track.item_url_path],
   ]);
-  expect(page.items[0]?.thumbnail).toBe(album.img);
+  // Search names the cover without its "a" (a 404), so it comes from art_id.
+  expect(page.items[0]?.thumbnail).toBe("https://f4.bcbits.com/img/a3034736658_5.jpg");
   expect(page.items[0]?.subtitle).toBe("Arsider");
   expect(extractions).toBe(0);
 });
