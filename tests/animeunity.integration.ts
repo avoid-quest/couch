@@ -68,6 +68,28 @@ test("catalogue pagination follows the public CSRF protocol with temporary anony
   assert.equal(calls.length, 3);
 });
 
+test("short catalogue pages advance by their returned row count", async () => {
+  const rows = [row, { ...row, id: 20 }];
+  const calls: Call[] = [];
+  const request = fixture(call => {
+    if (call.init?.method !== "POST") return new Response(archiveHtml(rows, 4), { headers: cookies });
+    assert.equal(JSON.parse(String(call.init.body)).offset, 2);
+    return JSON.stringify({ records: [{ ...row, id: 21 }, { ...row, id: 22 }], tot: 4 });
+  }, calls);
+  const first = await browseAnimeUnity({}, undefined, request);
+  assert.equal(first.nextCursor, "2");
+  const last = await browseAnimeUnity({ cursor: first.nextCursor }, undefined, request);
+  assert.equal(last.items.length, 2);
+  assert.equal(last.nextCursor, undefined);
+  assert.equal(calls.length, 3);
+});
+
+test("empty catalogue pages cannot hide advertised remaining results", async () => {
+  await assert.rejects(() => browseAnimeUnity({}, undefined, fixture(archiveHtml([], 1))), /changed this page/);
+  const request = fixture(call => call.init?.method === "POST" ? JSON.stringify({ records: [], tot: 31 }) : new Response(archiveHtml([row], 31), { headers: cookies }));
+  await assert.rejects(() => browseAnimeUnity({ cursor: "30" }, undefined, request), /changed this page/);
+});
+
 test("title rows carry ordered episode identities, exact known indices and parent metadata", async () => {
   const page = await browseAnimeUnity({ url: anime }, undefined, fixture(titleHtml()));
   assert.equal(page.item?.kind, "collection");
@@ -101,7 +123,35 @@ test("queue lists collect bounded ranges and never silently truncate a long anim
   assert.equal(calls.length, 1);
 });
 
+test("incomplete episode ranges never produce a shortened queue with shifted indices", async () => {
+  const first = Array.from({ length: 120 }, (_, index) => ep(index + 1));
+  for (const last of [[], [ep(121)], [ep(122)]]) {
+    const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 122, episodes: last }) : titleHtml(first, 122));
+    await assert.rejects(() => loadAnimeUnityList(anime, undefined, request), /changed this page/);
+  }
+  const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 122, episodes: [ep(121), ep(122)] }) : titleHtml(first.filter(row => row.number !== "60"), 122));
+  await assert.rejects(() => loadAnimeUnityList(anime, undefined, request), /changed this page/);
+});
+
+test("combined and unpublished rows contribute coverage before queue filtering", async () => {
+  const first = Array.from({ length: 120 }, (_, index) => ep(index + 1));
+  const request = fixture(call => call.url.includes("/info_api/") ? JSON.stringify({ episodes_count: 123, episodes: [ep(121, { number: "121-122" }), ep(123, { public: 0 })] }) : titleHtml(first, 123));
+  const page = await loadAnimeUnityList(anime, undefined, request);
+  assert.equal(page.items.length, 121);
+  assert.equal(page.items.at(-1)?.title, "One Piece — Episode 121-122");
+  assert.equal(page.items.at(-1)?.collection?.index, 120);
+  for (const [number, count] of [["1-2", 2], ["1-2-3", 3], ["1-2-3-4", 4]] as const) {
+    const combined = await loadAnimeUnityList(anime, undefined, fixture(titleHtml([ep(1, { number })], count)));
+    assert.equal(combined.items.length, 1);
+    assert.equal(combined.items[0]?.collection?.index, 0);
+  }
+  await assert.rejects(() => loadAnimeUnityList(anime, undefined, fixture(titleHtml([ep(1, { number: "1-3" })], 3))), /changed this page/);
+});
+
 test("unpublished episodes and malformed title identities cannot enter playable lists", async () => {
+  const title = await animeUnityTitle(anime, undefined, fixture(titleHtml([ep(), ep(2, { public: 0, link: "private-file.mkv" })])));
+  assert.deepEqual(title.episodes.map(row => row.id), [5987]);
+  assert.equal(JSON.stringify(title).includes("private-file.mkv"), false);
   const page = await loadAnimeUnityList(anime, undefined, fixture(titleHtml([ep(), ep(2, { public: 0 })])));
   assert.deepEqual(page.items.map(item => item.url), [episode]);
   await assert.rejects(() => animeUnityTitle(`${anime}/5988`, undefined, fixture(titleHtml([ep(), ep(2, { public: 0 })], 2, ep(2, { public: 0 })))), /does not have this episode/);
@@ -113,7 +163,7 @@ test("unpublished episodes and malformed title identities cannot enter playable 
 test("invalid URL targets, cursors and queries fail before requests", async () => {
   let calls = 0;
   const never = (async () => { calls++; throw new Error("Unexpected request"); }) as typeof fetch;
-  for (const request of [{ url: "https://evil.example/archivio" }, { url: `${animeUnityOrigin}/embed-url/5987` }, { url: `${animeUnityOrigin}/archivio?token=secret` }, { url: anime, cursor: "2" }, { url: episode, cursor: "121" }, { cursor: "https://evil.example" }, { query: "x" }, { cursor: "31" }]) await assert.rejects(() => browseAnimeUnity(request, undefined, never));
+  for (const request of [{ url: "https://evil.example/archivio" }, { url: `${animeUnityOrigin}/embed-url/5987` }, { url: `${animeUnityOrigin}/archivio?token=secret` }, { url: anime, cursor: "2" }, { url: episode, cursor: "121" }, { cursor: "https://evil.example" }, { query: "x" }, { cursor: "100001" }]) await assert.rejects(() => browseAnimeUnity(request, undefined, never));
   await assert.rejects(() => loadAnimeUnityList(`${animeUnityOrigin}/archivio`, undefined, never));
   assert.equal(calls, 0);
 });

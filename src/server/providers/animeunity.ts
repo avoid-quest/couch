@@ -65,7 +65,7 @@ function episodes(value: unknown, animeId: number): Episode[] {
     if (!object(row) || !id(row.id) || row.anime_id !== animeId || typeof row.number !== "string" || !/^\d{1,5}(?:[.-]\d{1,5}){0,5}$/.test(row.number) || ![0, 1].includes(Number(row.public)) || seen.has(row.id)) throw changed();
     seen.add(row.id);
     return { id: row.id, anime_id: animeId, number: row.number, public: Number(row.public), ...(id(row.scws_id) ? { scws_id: row.scws_id } : {}), ...(typeof row.link === "string" ? { link: row.link } : {}) };
-  }).filter(row => row.public === 1);
+  });
 }
 
 function episodeItem(collection: ProviderItem, episode: Episode, index?: number): ProviderItem {
@@ -83,14 +83,16 @@ export async function animeUnityTitle(value: string, signal?: AbortSignal, reque
   const collection = animeItem(anime);
   const count = Number(attributes_.episodes_count);
   if (!object(anime) || !collection || collection.url !== `${animeUnityOrigin}/anime/${url.pathname.split("/")[2]}` || !Number.isSafeInteger(count) || count < 0 || count > 10_000) throw changed();
-  const rows = episodes(json(attributes_.episodes || "[]"), Number(anime.id));
-  const episode = selected === null || selected === false ? undefined : episodes([selected], Number(anime.id))[0];
+  const rawRows = episodes(json(attributes_.episodes || "[]"), Number(anime.id));
+  const rows = rawRows.filter(row => row.public === 1);
+  const episode = selected === null || selected === false ? undefined : episodes([selected], Number(anime.id)).find(row => row.public === 1);
   const episodeId = url.pathname.split("/")[3];
   if (episodeId && (!episode || episode.id !== Number(episodeId))) throw new ProviderError("AnimeUnity does not have this episode.", 404);
   if (episode && !rows.some(row => row.id === episode.id)) throw changed();
   const firstRange = rows.length > 0 && Number(rows[0]!.number.split("-")[0]) <= 120;
   const index = firstRange && episode ? rows.findIndex(row => row.id === episode.id) : undefined;
-  return { item: episodeId && episode ? episodeItem(collection, episode, index) : collection, collection, episodes: rows, episode, count, embedUrl: attributes_.embed_url };
+  return { item: episodeId && episode ? episodeItem(collection, episode, index) : collection, collection, episodes: rows,
+    episodeNumbers: rawRows.flatMap(row => row.number.split("-").map(Number)), episode, count, embedUrl: attributes_.embed_url };
 }
 
 async function episodeRange(title: Awaited<ReturnType<typeof animeUnityTitle>>, start: number, signal: AbortSignal | undefined, request: typeof fetch): Promise<Episode[]> {
@@ -106,7 +108,7 @@ async function episodeRange(title: Awaited<ReturnType<typeof animeUnityTitle>>, 
 
 function titlePage(title: Awaited<ReturnType<typeof animeUnityTitle>>, rows: Episode[], firstRange: boolean, nextCursor?: string): ProviderPage {
   const selected = title.item;
-  const items = selected.kind === "media" ? [selected] : rows.map((row, index) => episodeItem(title.collection, row, firstRange ? index : undefined));
+  const items = selected.kind === "media" ? [selected] : rows.filter(row => row.public === 1).map((row, index) => episodeItem(title.collection, row, firstRange ? index : undefined));
   return { item: selected, title: selected.title, thumbnail: selected.thumbnail, description: selected.description, subtitle: selected.subtitle, ...(selected.collection ? { parent: selected.collection } : {}), items, ...(nextCursor ? { nextCursor } : {}) };
 }
 
@@ -124,7 +126,7 @@ async function catalog(request_: BrowseRequest, signal: AbortSignal | undefined,
   if (query && (query.length < 2 || query.length > 200 || /[\u0000-\u001f\u007f]/.test(query))) throw new ProviderError("Search AnimeUnity with 2 to 200 characters.", 400);
   if (query) target.searchParams.set("title", query); else target.search = "";
   const offset = Number(request_.cursor ?? 0);
-  if (request_.cursor !== undefined && (!/^\d{1,6}$/.test(request_.cursor) || offset > 100_000 || offset % 30 !== 0)) throw new ProviderError("Invalid AnimeUnity catalogue cursor.", 400);
+  if (request_.cursor !== undefined && (!/^\d{1,6}$/.test(request_.cursor) || offset > 100_000)) throw new ProviderError("Invalid AnimeUnity catalogue cursor.", 400);
   const first = await animeUnityText(target.href, signal, request);
   const attrs = attributes(/<archivio\b[^>]*>/i.exec(first.text)?.[0] ?? "");
   let rows = json(attrs.records), total = Number(attrs.tot_count);
@@ -137,10 +139,10 @@ async function catalog(request_: BrowseRequest, signal: AbortSignal | undefined,
     if (!object(result)) throw changed();
     rows = result.records; total = Number(result.tot);
   }
-  if (!Array.isArray(rows) || rows.length > 30 || !Number.isSafeInteger(total) || total < 0 || total > 100_000) throw changed();
+  if (!Array.isArray(rows) || rows.length > 30 || !Number.isSafeInteger(total) || total < 0 || total > 100_000 || !rows.length && offset < total) throw changed();
   const items = [...new Map(rows.flatMap(row => { const item = animeItem(row); return item ? [[item.url, item] as const] : []; })).values()];
   if (rows.length && !items.length) throw changed();
-  return { title: query ? `AnimeUnity: ${query}` : "AnimeUnity", items, ...(rows.length === 30 && offset + rows.length < total ? { nextCursor: String(offset + rows.length) } : {}) };
+  return { title: query ? `AnimeUnity: ${query}` : "AnimeUnity", items, ...(rows.length && offset + rows.length < total ? { nextCursor: String(offset + rows.length) } : {}) };
 }
 
 export async function browseAnimeUnity(request_: BrowseRequest, signal?: AbortSignal, request: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
@@ -164,7 +166,11 @@ export async function loadAnimeUnityList(value: string, signal?: AbortSignal, re
   if (title.count > 500) throw new ProviderError("This anime has more than 500 episodes. Choose individual episodes instead.", 400);
   const rows = [...title.episodes];
   for (let start = 121; start <= title.count; start += 120) rows.push(...await episodeRange(title, start, cancellation, request));
-  if (!rows.length) throw new ProviderError("AnimeUnity has no playable episodes for this anime.", 404);
+  // Combined labels cover several episode numbers, including unpublished rows.
+  // Check coverage before filtering so a partial response cannot shift indices.
+  const covered = new Set([...title.episodeNumbers, ...rows.flatMap(row => row.number.split("-").map(Number))]);
+  for (let number = 1; number <= title.count; number++) if (!covered.has(number)) throw changed();
+  if (!rows.some(row => row.public === 1)) throw new ProviderError("AnimeUnity has no playable episodes for this anime.", 404);
   if (new Set(rows.map(row => row.id)).size !== rows.length || rows.length > 500) throw changed();
   return titlePage(title, rows, true);
 }
