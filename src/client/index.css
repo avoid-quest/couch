@@ -150,6 +150,8 @@ html { view-transition-name: none; }
 /* Artwork as it comes, contained on black and set down on the copy below it: the box hugs it up to a square, and short screens shrink it whole. */
 .player-art > :not(svg), .player-art img { width: 100%; height: auto; max-height: 100%; min-height: 0; min-width: 0; object-fit: contain; object-position: left bottom; background: transparent; }
 .player-art > svg { width: 4rem; height: 4rem; }
+/* MediaArtwork's own 16:9 box would letterbox square and portrait art, so the image keeps its ratio. */
+.player-art img { aspect-ratio: auto; }
 [data-player-audio-copy] { flex: 0 0 auto; }
 .player-timeline:has([role="slider"]) { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
 .player-timeline:has([role="slider"]) > .relative { grid-column: 2; grid-row: 1; }
