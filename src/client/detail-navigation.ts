@@ -22,6 +22,9 @@ export function keepSection(href: string, section: string | undefined) {
   return from && /^\/(?:item|collection)\?/.test(href) && !/[?&]from=/.test(href) ? `${href}&from=${from}` : href;
 }
 
+/** A detail link as rendered: a new tab (Ctrl/Cmd-click, middle-click) skips open(), so the link itself keeps the section. */
+export const detailHref = (href: string) => typeof location === "undefined" ? href : keepSection(href, sectionForPath(location.pathname, location.search));
+
 export function queueItemLocation(entry: Pick<QueueEntry, "id" | "source" | "collection">) {
   const url = entry.source.replace(/^web:/, ""), provider = providerForUrl(url);
   return entry.source.startsWith("radio:") ? itemLocation("radio", entry.source.slice(6)) : provider ? collectionLocation({ provider, url, collection: entry.collection }) : itemLocation("queue", entry.id);

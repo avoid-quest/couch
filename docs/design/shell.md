@@ -14,7 +14,8 @@
 `/item` and `/collection` belong to the section that opened them: their
 URL carries it as `from` (`home`, `live`, `search` or `library`), so the tab,
 the breadcrumb and a refresh keep it, and moving between details passes it
-on. Without one, a station's page belongs to Live and the rest to Search.
+on. A row's or tile's link carries it too, so a new tab opens in the same
+section. Without one, a station's page belongs to Live and the rest to Search.
 `/now` is the player, and
 `/where-it-plays` is Where it plays' overview, which opens from the picker
 and is not a tab ([Where it plays](where-it-plays.md#the-overview)).
