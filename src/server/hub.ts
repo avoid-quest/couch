@@ -699,12 +699,14 @@ export async function createHub(options: HubOptions) {
       const tab = playback.next ?? playback.renderer;
       if (media.mpv && !(playback.joining ? playback.joining.deviceId === hostId() : playback.outputs.some(output => output.deviceId === hostId()))) throw new Error(`This channel plays only on ${nameOf(hostId())}.`);
       // Native decoders must see the same guarded playlists as browser Devices.
-      const coreOrigin = media.publicNetwork ? await passThrough.coreOrigin() : origin;
-      const core = media.publicNetwork ? await passThrough.prepare(playbackId, media, headers, { origin: coreOrigin, userAgent: "Couch" }, signal) : media;
+      const coreTarget = media.publicNetwork ? { origin: await passThrough.coreOrigin(), userAgent: "Couch" } : null;
+      const core = coreTarget ? await passThrough.prepare(playbackId, media, headers, coreTarget, signal) : media;
       const coreHeaders = media.publicNetwork ? {} : headers;
       const entry = stateOf(playback).queue.find(item => item.id === stateOf(playback).currentEntryId);
       const isLiveMedia = !!(entry?.live || media.metadata?.live);
-      const prepared = entry?.liveSourceId ? media : await passThrough.prepare(playbackId, media, headers, tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : media.publicNetwork ? { origin: coreOrigin, userAgent: "Couch" } : null, signal);
+      const deviceTarget = tab?.data.origin ? { origin: tab.data.origin, userAgent: tab.data.userAgent } : coreTarget;
+      const sameTarget = coreTarget && deviceTarget?.origin === coreTarget.origin && deviceTarget.userAgent === coreTarget.userAgent;
+      const prepared = entry?.liveSourceId ? media : sameTarget ? core : await passThrough.prepare(playbackId, media, headers, deviceTarget, signal);
       signal.throwIfAborted();
       playback.media = { playbackId, source: core.source, audioSource: core.audioSource, headers: coreHeaders, publicNetwork: media.publicNetwork, live: isLiveMedia, audioOnly: media.audioOnly };
       if (isLiveMedia && !media.radio && !entry?.liveSourceId) void audioRendition(core.audioSource ?? core.source, coreHeaders, signal).then(url => { if (playback.media?.playbackId === playbackId) playback.media.audioSource = url; }, () => {});

@@ -28,7 +28,7 @@ function fixture() {
   }) as typeof fetch;
   const relay = createPassThrough(id => current.has(id), publicRequest);
   const manifest = (url: string, text: string, type = "application/vnd.apple.mpegurl") => replies.set(url, () => response(url, text, { headers: { "Content-Type": type } }));
-  const prepare = (url = source, playbackId = "playing", destination = target) => relay.prepare(playbackId, { source: url, publicNetwork: true }, {}, destination, signal());
+  const prepare = (url = source, playbackId = "playing", destination = target, headers: Record<string, string> = {}) => relay.prepare(playbackId, { source: url, publicNetwork: true }, headers, destination, signal());
   const serve = (url: string, headers?: HeadersInit) => relay.serve(new Request(url, { headers }));
   return { relay, current, replies, requests, manifest, prepare, serve };
 }
@@ -185,13 +185,24 @@ test("public relay streams byte ranges through the protected request boundary", 
 test("forged and stopped public relay capabilities fail before any network request", async () => {
   const f = fixture();
   const media = await f.prepare();
+  const repeated = await f.prepare();
+  expect(media.source).not.toBe(repeated.source);
+  f.current.add("other");
+  await f.prepare(source, "other");
   f.requests.length = 0;
   const changed = new URL(media.source);
   changed.searchParams.set("url", "http://127.0.0.1/private");
   expect((await f.serve(changed.href)).status).toBe(404);
+  expect((await f.serve(media.source.replace("/playlist/", "/bytes/"))).status).toBe(404);
+  expect((await f.serve(media.source.replace("/playing/", "/other/"))).status).toBe(404);
   expect((await f.serve(media.source.replace("/playing/", "/foreign/"))).status).toBe(404);
+  const originalSignature = new URL(media.source).pathname.split("/").at(-1)!;
+  const repeatedId = new URL(repeated.source).pathname.split("/").at(-1)!.split("-", 1)[0]!;
+  const swapped = media.source.replace(originalSignature, originalSignature.replace(/^[^-]+/, repeatedId));
+  expect((await f.serve(swapped)).status).toBe(404);
   f.current.delete("playing");
   expect((await f.serve(media.source)).status).toBe(404);
+  expect((await f.serve(repeated.source)).status).toBe(404);
   expect(f.requests).toHaveLength(0);
   expect(rawRequest).not.toHaveBeenCalled();
 });
@@ -206,17 +217,62 @@ test("a pending quality transport remains protected while another playback prepa
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
-test("Core and Device manifests keep their own serving origin after both prepare the same playback", async () => {
+test("cleanup retains active preparations and expires retired or abandoned playback capabilities", async () => {
+  const now = spyOn(Date, "now").mockReturnValue(0);
+  try {
+    const f = fixture();
+    f.manifest(source, "#EXTM3U\n#EXTINF:6,\nsegment.ts\n");
+    f.current.add("retired");
+    const first = await f.prepare();
+    const second = await f.prepare();
+    const retired = await f.prepare(source, "retired");
+    const abandoned = await f.prepare(source, "pending");
+    f.current.delete("retired");
+    now.mockReturnValue(60_001);
+    await f.prepare();
+    expect((await f.serve(first.source)).status).toBe(200);
+    expect((await f.serve(second.source)).status).toBe(200);
+    const calls = f.requests.length;
+    f.current.add("retired");
+    f.current.add("pending");
+    expect((await f.serve(retired.source)).status).toBe(404);
+    expect((await f.serve(abandoned.source)).status).toBe(404);
+    expect(f.requests).toHaveLength(calls);
+    expect(rawRequest).not.toHaveBeenCalled();
+  } finally { now.mockRestore(); }
+});
+
+test("Core and Device preparations keep their own headers and origin through nested playlists", async () => {
   const f = fixture();
-  f.manifest(source, "#EXTM3U\n#EXTINF:6,\nsegment.ts\n");
+  f.manifest(source, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvariant.m3u8\n");
+  f.manifest("https://media.example/variant.m3u8", "#EXTM3U\n#EXTINF:6,\nsegment.ts\n");
   const coreOrigin = "http://127.0.0.1:3800";
-  const core = await f.prepare(source, "playing", { origin: coreOrigin, userAgent: "Couch" });
-  const device = await f.prepare();
-  for (const [media, expected] of [[core, coreOrigin], [device, origin]] as const) {
-    const result = await f.serve(media.source);
-    const text = await result.text();
-    destination(text.split("\n").find(line => line && !line.startsWith("#"))!, "bytes", "https://media.example/segment.ts", expected);
+  const coreTarget = { origin: coreOrigin, userAgent: "Couch" };
+  const coreHeaders = { authorization: "Bearer Core fixture", referer: "https://core.example/" };
+  const deviceHeaders = { authorization: "Bearer Device fixture", referer: "https://device.example/" };
+  const core = await f.prepare(source, "playing", coreTarget, coreHeaders);
+  const device = await f.prepare(source, "playing", target, deviceHeaders);
+  const capabilities = [core.source, device.source];
+  for (const [media, expected, headers] of [[core, coreTarget, coreHeaders], [device, target, deviceHeaders]] as const) {
+    let url = media.source;
+    for (const [kind, upstream] of [["playlist", "https://media.example/variant.m3u8"], ["bytes", "https://media.example/segment.ts"]] as const) {
+      const result = await f.serve(url);
+      expect(result.status).toBe(200);
+      expect(f.requests.at(-1)?.headers.get("user-agent")).toBe(expected.userAgent);
+      expect(f.requests.at(-1)?.headers.get("authorization")).toBe(headers.authorization);
+      expect(f.requests.at(-1)?.headers.get("referer")).toBe(headers.referer);
+      url = (await result.text()).split("\n").find(line => line && !line.startsWith("#"))!;
+      destination(url, kind, upstream, expected.origin);
+      capabilities.push(url);
+    }
+    expect((await f.serve(url)).status).toBe(200);
+    expect(f.requests.at(-1)?.headers.get("user-agent")).toBe(expected.userAgent);
+    expect(f.requests.at(-1)?.headers.get("authorization")).toBe(headers.authorization);
   }
+  f.current.delete("playing");
+  const calls = f.requests.length;
+  for (const url of capabilities) expect((await f.serve(url)).status).toBe(404);
+  expect(f.requests).toHaveLength(calls);
   expect(rawRequest).not.toHaveBeenCalled();
 });
 
