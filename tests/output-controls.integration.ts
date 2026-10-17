@@ -9,6 +9,7 @@ import WebSocket from "ws";
 import { createHub } from "../src/server/hub";
 import { openStore } from "../src/server/store";
 import { WhereItPlays } from "../src/client/sections/shell/Outputs";
+import { PlaybackVolume } from "../src/client/components/PlaybackTransport";
 import { deviceId } from "../src/client/session/device-id";
 import type { Action, ServerMessage, SessionState } from "../src/shared/protocol";
 
@@ -19,11 +20,14 @@ globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::
 const hostId = "h".repeat(43), otherId = "o".repeat(43), hostToken = "h".repeat(64);
 
 // Inspect the production component's actual control props and handlers, without copying its guards.
-type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNode; disabled?: boolean; onCommit?: (value: number) => Promise<boolean>; onPressedChange?: (value: boolean) => void };
+type ControlProps = { label?: string; "aria-label"?: string; children?: ReactNode; disabled?: boolean; onCommit?: (value: number) => Promise<boolean>; onClick?: () => void; onCheckedChange?: (value: boolean) => void; onSelect?: () => void };
 function control(node: ReactNode, label: string): ControlProps | undefined {
   if (Array.isArray(node)) return node.map(child => control(child, label)).find(Boolean);
   if (!isValidElement<ControlProps>(node)) return;
-  if (node.props.label === label || node.props["aria-label"] === label) return node.props;
+  // Controls, not the groups that name them.
+  if ((node.props.label === label || node.props["aria-label"] === label) && typeof node.type !== "string") return node.props;
+  // The band's Volume renders inside the Sheet as its own component, without hooks.
+  if (node.type === PlaybackVolume) return control(PlaybackVolume(node.props as Parameters<typeof PlaybackVolume>[0]), label);
   return control(node.props.children, label);
 }
 
@@ -81,34 +85,42 @@ async function fixture() {
 test("output controls agree with Core for own moves and foreign private replacements", async () => {
   const f = await fixture();
   try {
-    const render = () => WhereItPlays({ state: f.actor.state, run: async () => true });
+    const render = () => WhereItPlays({ state: f.actor.state, connected: true, run: async () => true });
+    // A row's check is labelled by its device's name; its fader, and the Picture, Mute and Only here in its menu, by theirs.
     async function check(label: string, action: Action, expected: boolean) {
       let result: Promise<boolean> | undefined;
-      const tree = WhereItPlays({ state: f.actor.state, run: command => {
+      const tree = WhereItPlays({ state: f.actor.state, connected: true, run: command => {
         assert.deepEqual(command, action);
         return result = f.actor.command(command).then(response => { assert.equal(response.ok, expected, response.error); return response.ok; });
       } });
       const props = control(tree, label); assert.ok(props, label);
-      // Drive its actual handler even when disabled, then compare the affordance with Core's verdict.
-      if (action.type === "output" && action.level !== undefined) { assert.ok(props.onCommit); void props.onCommit(action.level); }
-      else { assert.ok(props.onPressedChange); props.onPressedChange(true); }
+      // Drive its actual handler even when disabled, then compare the affordance with Core's verdict. A disabled
+      // row offers no action of its own, so Core is asked for the one it would have sent.
+      if (action.type === "output" && action.level !== undefined && props.onCommit) void props.onCommit(action.level);
+      else if (props.onClick && !props.disabled) props.onClick();
+      else if (props.onClick) result = f.actor.command(action).then(response => response.ok);
+      else if (props.onCheckedChange) props.onCheckedChange(true);
+      else { assert.ok(props.onSelect); props.onSelect(); }
       assert.ok(result, `${label} did not send its existing command`);
       assert.equal(await result, expected, `${label}: Core outcome`);
       assert.equal(!props.disabled, expected, `${label}: renderer affordance`);
     }
+    const level = (id: string) => f.actor.state.devices?.find(device => device.id === id)?.volume || 50;
     await f.actor.command({ type: "sharing", sharing: { audio: true, video: false } });
     await f.play(f.actor, f.actorId, "Own private picture");
     await f.play(f.actor, hostId, "Viewed");
     assert.ok(f.actor.state.outputs?.every(output => output.deviceId !== f.actorId));
     assert.ok(f.actor.state.playbacks?.some(playback => playback.id !== f.actor.state.playback && playback.outputs.some(output => output.deviceId === f.actorId && output.picture && output.local)));
-    await check("Actor volume", { type: "output", deviceId: f.actorId, level: 45 }, true);
-    assert.deepEqual(f.actor.state.outputs?.find(output => output.deviceId === f.actorId), { deviceId: f.actorId, picture: false, sound: true, local: true });
+    // Its own row joins the viewed playback with picture and sound, leaving its private one.
+    await check("Actor", { type: "output", deviceId: f.actorId, picture: true, level: level(f.actorId) }, true);
+    assert.deepEqual(f.actor.state.outputs?.find(output => output.deviceId === f.actorId), { deviceId: f.actorId, picture: true, sound: true, local: true });
 
     await f.play(f.actor, f.actorId, "Own Solo picture");
     await f.play(f.actor, hostId, "Viewed Solo");
     // Solo moves the whole destination and requires the current item to have started.
     f.host.socket.send(JSON.stringify({ type: "player", state: { ...f.host.state.player, status: "playing", duration: 100, seekable: true, speed: 1, buffering: false } }));
     await until(() => f.actor.state.player.status === "playing");
+    await check("Actor", { type: "output", deviceId: f.actorId, picture: true, level: level(f.actorId) }, true);
     await check("Only on Actor", { type: "solo", deviceId: f.actorId }, true);
     assert.deepEqual(f.actor.state.outputs, [{ deviceId: f.actorId, picture: true, sound: true, local: true }]);
 
@@ -122,11 +134,13 @@ test("output controls agree with Core for own moves and foreign private replacem
     await f.play(f.other, otherId, "Foreign private picture");
     await until(() => f.actor.state.playbacks?.some(playback => playback.outputs.some(output => output.deviceId === otherId && output.picture)) === true);
     const foreignBefore = f.actor.state.playbacks?.find(playback => playback.outputs.some(output => output.deviceId === otherId));
-    await check("Other volume", { type: "output", deviceId: otherId, level: 45 }, false);
-    await check("Only on Other", { type: "solo", deviceId: otherId }, false);
+    // Its row can't take Other from its private picture: Core refuses what the row would send, so the row is disabled.
+    await check("Other", { type: "output", deviceId: otherId, level: level(otherId) }, false);
+    await check("Other", { type: "output", deviceId: otherId, picture: true }, false);
+    await check("Other", { type: "solo", deviceId: otherId }, false);
     assert.deepEqual(f.actor.state.playbacks?.find(playback => playback.id === foreignBefore?.id), foreignBefore);
-    await check("Mute Other", { type: "mute", deviceId: otherId, muted: true }, true);
-    await check("Other picture", { type: "output", deviceId: otherId, picture: true }, false);
+    // Out of this playback, Other offers no fader or menu.
+    for (const label of ["Other volume", "Other picture", "Mute Other", "Only on Other"]) assert.equal(control(render(), label), undefined, label);
 
     // Same-playback private picture allows shared sound changes, but Solo replaces the whole output.
     await f.play(f.other, hostId, "Joined boundary");
@@ -144,20 +158,42 @@ test("output controls agree with Core for own moves and foreign private replacem
   } finally { await f.close(); }
 });
 
-test("All describes selected sound including the actor's private self-play", async () => {
+test("Where it plays' one Volume is the band's, and moves the actor's private self-play", async () => {
   const f = await fixture();
   try {
     await f.play(f.actor, f.actorId, "Private");
     const before = f.actor.state;
     let accepted: Promise<boolean> | undefined;
-    const tree = WhereItPlays({ state: before, run: action => accepted = f.actor.command(action).then(result => result.ok) });
-    const all = control(tree, "All trim"); assert.ok(all?.onCommit); void all.onCommit(50);
+    const tree = WhereItPlays({ state: before, connected: true, run: action => accepted = f.actor.command(action).then(result => result.ok) });
+    const volume = control(tree, "Volume"); assert.ok(volume?.onCommit); void volume.onCommit(50);
     assert.equal(await accepted, true);
-    assert.equal(f.actor.state.mixTrim, 50);
+    assert.equal(f.actor.state.player.volume, 50);
+    assert.equal(f.actor.state.mixTrim, 100);
     assert.deepEqual(f.actor.state.outputs, before.outputs);
-    assert.deepEqual(f.actor.state.devices?.map(device => [device.volume, device.muted]), before.devices?.map(device => [device.volume, device.muted]));
-    const copy = JSON.stringify(tree);
-    assert.ok(copy.includes("Selected sound you can control"));
-    assert.ok(!copy.includes("selected shared sound"));
+    assert.equal(f.actor.state.devices?.find(device => device.id === f.actorId)?.volume, 50);
+    assert.equal(control(tree, "All trim"), undefined);
+  } finally { await f.close(); }
+});
+
+test("the one Volume shows the sound it may move, so another device's louder private sound never holds it back", async () => {
+  const f = await fixture();
+  try {
+    await f.play(f.actor, hostId, "Mix");
+    await f.actor.command({ type: "output", deviceId: hostId, level: 40 });
+    // Other adds its own sound, private to the actor, at 80.
+    await f.other.command({ type: "output", deviceId: otherId, level: 80 });
+    await until(() => f.actor.state.outputs?.some(output => output.deviceId === otherId && output.sound) === true);
+    const level = (id: string) => f.actor.state.devices?.find(device => device.id === id)?.volume;
+    assert.equal(f.actor.state.player.volume, 40);
+    assert.equal(f.other.state.player.volume, 80);
+    let accepted: Promise<boolean> | undefined;
+    const volume = control(WhereItPlays({ state: f.actor.state, connected: true, run: action => accepted = f.actor.command(action).then(result => result.ok) }), "Volume");
+    assert.equal((volume as { value?: number }).value, 40);
+    void volume!.onCommit!(50);
+    assert.equal(await accepted, true);
+    assert.deepEqual([f.actor.state.player.volume, level(hostId), level(otherId)], [50, 50, 80]);
+    // With only private sound left, it shows the level that plays, which it can't change.
+    await f.actor.command({ type: "output", deviceId: hostId, level: 0 });
+    assert.equal(f.actor.state.player.volume, 80);
   } finally { await f.close(); }
 });

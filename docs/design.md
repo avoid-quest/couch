@@ -139,7 +139,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | --- | --- |
 | the device's name, or Couch | host, playback host/computer/device, coordinator, installation |
 | This computer, This device | this installation, this app |
-| Where it plays, Picture, Only here, Mute, All | Mixer, Speakers panel, look at, host |
+| Where it plays, Volume, Picture, Only here, Mute | Mixer, Speakers panel, All, look at, host |
 | Play on {name}, Playing on {name} | Send to, Cast to |
 | device (a phone, browser, app window or TV) | remote (for a device), controller, client |
 | Remote (the section that drives a TV) | TV remote, remote control |
@@ -162,7 +162,7 @@ Each surface's own layout and behaviour lives in its file:
 - [Home](design/home.md): Home's hero and its shelves of tiles.
 - [Browse](design/browse.md): Search, Live, Library, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
 - [Player](design/player.md): the player band, transport, timeline, Up next and Playback settings.
-- [Where it plays](design/where-it-plays.md): the Where it plays Sheet, its faders and Only here, Play on, DeviceIcon and outputs after a server switch.
+- [Where it plays](design/where-it-plays.md): its principles and rules model, the picker with its Volume, device rows and "…" menu, Play on, DeviceIcon and outputs after a server switch.
 - [TV](design/tv.md): anything shown on a TV: remote navigation, the TV layout and the TV player.
 - [Remote](design/remote.md): the Remote section that drives a TV, and Type on TV.
 - [Settings](design/settings.md): Settings' two owners, its section nav, admin-only rows and device names.

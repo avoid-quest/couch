@@ -6,6 +6,7 @@ import { normalizeDeviceName } from "../../shared/devices";
 import { couchApp } from "./native-context";
 import { fromSavedCouch } from "./connection";
 import { defaultDeviceSharing, isDeviceSharing, type DeviceSharing } from "../../shared/device-sharing";
+import { playingOn } from "./where-it-plays";
 
 let id: string | undefined;
 // This device's one name, reused with every Couch: the Couch app's installation name, or this browser's storage.
@@ -118,6 +119,6 @@ export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output =>
  * picture and sound are elsewhere. A fixed id keeps it one toast when both the command and Play on announce it.
  */
 export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
-  const name = target && target !== deviceId() && state?.devices?.find(device => device.id === target)?.name;
+  const name = playingOn(state, target, deviceId());
   if (name) toast(`Playing on ${name}`, { id: "playing-on" });
 }

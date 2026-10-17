@@ -36,7 +36,7 @@ time), so the band's timeline keeps only its position and the time remaining
 ("−3:24"), and live media leaves its slot empty. `useEndTime` is that line,
 in clock time.
 
-Volume across several Devices: [Where it plays](where-it-plays.md#band-volume).
+Volume across several Devices: [Where it plays](where-it-plays.md#volume).
 
 ### Layout
 

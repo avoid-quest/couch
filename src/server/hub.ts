@@ -209,7 +209,8 @@ export async function createHub(options: HubOptions) {
     choosing?: number; held?: Output; entered?: () => void;
     // inSync: its live inputs play buffered in its Sendspin group when they span Devices (docs/adr/0001).
     // bufferFailure: the buffered stream its relayed receivers waited for failed during this item.
-    inSync?: boolean; bufferFailure?: { playbackId: string; error: string } };
+    // silenced: the levels its Volume last brought to 0, so raising it again restores their proportion.
+    inSync?: boolean; bufferFailure?: { playbackId: string; error: string }; silenced?: Map<string, number> };
   const playbacks = new Map<string, Playback>();
   let mpvPlayback: Playback | null = null;
   let radioPlayback: Playback | null = null;
@@ -349,6 +350,8 @@ export async function createHub(options: HubOptions) {
     }
     return changed;
   };
+  // The level a Device's sound plays at in a Playback, its trim included: what the one Volume shows and moves.
+  const playsAt = (playback: Playback | undefined, deviceId: string) => soundOf(deviceId).volume * (playback?.outputs.some(output => output.deviceId === deviceId && output.sound) ? trimOf(playback, deviceId) : 100) / 100;
   // The Playback's trim attenuates sound without changing Device levels. On the TV the system volume does the rest.
   const rendered = (playback: Playback, output: Output | undefined) => !output?.sound ? 0 : Math.round((systemAudio && output.deviceId === hostId() ? 100 : heard(output.deviceId)) * trimOf(playback, output.deviceId) / 100);
   const levelOf = (playback: Playback) => rendered(playback, playback.outputs[0]);
@@ -379,6 +382,8 @@ export async function createHub(options: HubOptions) {
   const members = (playback: Playback) => playback.outputs.flatMap(output => output.sound ? [{ deviceId: output.deviceId, level: rendered(playback, output) }] : []);
   // The Devices a volume without a Device acts on: those in the Playback's sound, else the window's own.
   const sounding = (playback: Playback | undefined, deviceId: string) => { const ids = playback?.outputs.flatMap(output => output.sound ? [output.deviceId] : []) ?? []; return ids.length ? ids : [deviceId]; };
+  // Of those, the sound an actor's Volume shows and moves: what its Device may control, as outputFor grants it.
+  const controlled = (playback: Playback | undefined, actor: string) => sounding(playback, selected(actor)).filter(id => id === actor || sharingOf(id).audio);
   const active = (status: string) => ["loading", "playing", "paused"].includes(status);
   const deliver = (playback: Playback, command: PlaybackCommand) => {
     if (mpvPlayback === playback) mpv.send(command);
@@ -847,10 +852,14 @@ export async function createHub(options: HubOptions) {
     broadcast();
   };
   // Several Devices move together: the loudest reaches `volume`, the others keep their proportion.
-  const setVolume = async (deviceIds: string[], volume: number, authorize: () => void, actor: string) => {
-    const loudest = Math.max(0, ...deviceIds.map(id => soundOf(id).volume));
-    const volumes = deviceIds.map(id => loudest ? Math.round(soundOf(id).volume * volume / loudest) : volume);
+  // In a Playback they move from what they play at, its trim included, and keep their proportion even from a trim at 0,
+  // or from a Volume at 0: that remembers the levels it silenced, since the 0 it gives each Device holds no proportion.
+  const setVolume = async (deviceIds: string[], volume: number, authorize: () => void, actor: string, playback?: Playback) => {
+    const at = deviceIds.map(id => playsAt(playback, id)), own = deviceIds.map(id => soundOf(id).volume), silenced = deviceIds.map(id => playback?.silenced?.get(id) ?? 0);
+    const levels = [at, own, silenced].find(levels => Math.max(0, ...levels)) ?? at, loudest = Math.max(0, ...levels);
+    const volumes = levels.map(level => loudest ? Math.round(level * volume / loudest) : volume);
     for (const [index, id] of deviceIds.entries()) await setSound(id, { volume: volumes[index] }, authorize, actor);
+    if (playback && !volume && loudest) playback.silenced = new Map(deviceIds.map((id, index) => [id, levels[index]!]));
   };
   // All changes only sound the actor may control; private speakers retain their chosen attenuation.
   // Outputs and their consent are runtime state. Restart restores queues and All without outputs.
@@ -942,9 +951,10 @@ export async function createHub(options: HubOptions) {
     const delays = (playback: Playback | undefined) => (playback?.outputs ?? []).map(output => { const delay = sendspin.delay(output.deviceId), sourceId = sourceOf(playback!); return { ...output, ...delay === undefined ? {} : { delay }, ...syncing(playback!, output.deviceId) ? { delayActive: true } : {}, ...sourceId && !playback!.synced && live.relayed(sourceId, output.deviceId) ? bufferFailed(playback!) ? { error: bufferFailed(playback!) } : { buffered: true } : {} }; });
     const hearing = new Set(all().flatMap(playback => playback.synced ? members(playback).map(member => member.deviceId) : []));
     for (const socket of sockets) {
-      const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket));
-      // Volume keeps its saved level while muted, like each Device's mixer fader.
-      const volume = playback?.mixTrim === 0 ? 0 : Math.max(0, ...sounding(playback, device).map(id => soundOf(id).volume)), view = `${playback?.id}:${device}:${volume}`;
+      const playback = lookedAt(deviceOf(socket)), device = selected(deviceOf(socket)), moves = controlled(playback, deviceOf(socket));
+      // The one Volume: the loudest level the sound it moves plays at, so it reaches what it shows, kept while muted
+      // like each Device's fader. Without any, the window shows the Playback's level and can't change it.
+      const volume = Math.round(Math.max(0, ...(moves.length ? moves : sounding(playback, device)).map(id => playsAt(playback, id)))), view = `${playback?.id}:${device}:${volume}`;
       if (!views.has(view)) { const state = playback ? stateOf(playback) : idle(); views.set(view, JSON.stringify({ type: "state", state: { ...state, ...shared, player: { ...state.player, volume }, controlling: device, textField: remote.field(tvSocket(device)), playback: playback?.id ?? null, mixTrim: playback?.mixTrim ?? 100, outputs: delays(playback) } } satisfies ServerMessage)); }
       send(socket, views.get(view)!);
       // The newest tab of each synced speaker plays its sound over Sendspin; a screen follows its clock.
@@ -1787,11 +1797,16 @@ export async function createHub(options: HubOptions) {
             }
           } else if (action.type === "volume" || action.type === "mute") {
             // Without a Device, the group changes only the speakers this device may control.
-            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : sounding(target, selected(deviceId)).filter(id => outputFor(id, deviceId).sound);
+            const target = lookedAt(deviceId), targets = action.deviceId ? [action.deviceId] : controlled(target, deviceId);
             const inSound = (id: string) => !!target?.outputs.some(output => output.deviceId === id && output.sound);
-            if (action.type === "volume" && !action.deviceId && target?.mixTrim === 0) {
-              // The band shows 0 while All is 0: raising it only brings All back, and lowering it changes nothing.
-              if (action.volume > 0 && targets.length) { authorizePlayback(target, authorize, deviceId)(); setTrim(target, 100, deviceId); }
+            if (action.type === "volume" && !action.deviceId) {
+              // The one Volume: the loudest sound you may control reaches it, and a trim older clients set (All) folds
+              // into those levels, so no hidden level silences them. Other devices' private sound keeps its attenuation.
+              const trimmed = !!target && targets.some(id => inSound(id) && trimOf(target, id) !== 100);
+              // Folding the trim changes the Playback too, so it must be allowed before any level moves.
+              if (trimmed) authorizePlayback(target!, authorize, deviceId)();
+              await setVolume(targets, action.volume, authorize, deviceId, target);
+              if (trimmed) setTrim(target!, 100, deviceId);
             } else if (action.type === "volume") {
               await setVolume(targets, action.volume, authorize, deviceId);
               if (action.volume > 0 && targets.some(inSound)) unsilence(target, deviceId);
