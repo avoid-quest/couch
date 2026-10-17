@@ -71,7 +71,8 @@ Home's shelves are:
 - **Stations:** every station, as the Radio browse was: its source choice
   (`radioSource`), count, Filter (`filter`) and pager (`page`).
 - **Channels:** Live TV's channels (`group`, `channelPage`, `channelFilter`),
-  only while a Live TV source has some.
+  only while a Live TV source has some. If the sources fail to load, "Couldn't
+  load Live TV." stands in for them, with Try again.
 
 There is no programme grid: that waits for a source that needs one. As a
 section root Live carries no breadcrumb.
