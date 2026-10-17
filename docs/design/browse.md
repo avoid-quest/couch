@@ -36,7 +36,7 @@ The row holds, in order: Play (Play all for a list; Resume, with From start
 beside it, once partly watched), Queue (Queue all), Save or Saved, Play on
 while another device can play it, then one "…" menu for the rest. Each verb is
 one focus stop. The primary verb carries `data-page-first`, so the page starts
-on it; without one, the first verb does. Seasons, episodes, tracks and nearby
+on it; while it is disabled, or without one, the first verb you can press does. Seasons, episodes, tracks and nearby
 items follow as divided MediaRows.
 
 Home's tiles do one verb, so Details holds the others for everything Home
