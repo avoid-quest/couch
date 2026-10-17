@@ -293,13 +293,8 @@ window.runTvNavigationRegression = async () => {
   await check("Down from a device's check passes its Sync line for the next device, and Down from its fader reaches that line", async () => {
     await click('[data-now-playing] button[aria-label="Where it plays"]');
     const checks = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check]:not(:disabled)')];
-    await until(() => document.activeElement === checks()[0]);
-    assert(checks().length >= 2, "Pair a second online shared output before running");
-    // Sync applies while the sound plays in sync on several devices, so the second device's sound joins.
-    // Joining can take it offline for a moment, its check disabled, so the rows settle first.
-    const name = checks()[1]!.getAttribute("aria-label")!, added = checks()[1]!.getAttribute("aria-checked") !== "true";
+    let name = "", added = false;
     const device = () => checks().find(item => item.getAttribute("aria-label") === name)!;
-    if (added) { device().click(); await until(() => device()?.getAttribute("aria-checked") === "true"); await wait(1500); }
     const sync = (check: HTMLElement) => check.closest("li")!.querySelector<HTMLElement>("[data-sync-line] [role=slider]");
     // A line shows while its delay isn't 0; otherwise Sync… in the row's "…" reveals it.
     const reveal = async (check: () => HTMLElement) => {
@@ -310,7 +305,14 @@ window.runTvNavigationRegression = async () => {
       assert(item(), "No Sync… while the sound plays on both devices");
       item()!.click(); await until(() => !!sync(check()) && document.activeElement === sync(check()));
     };
+    // Everything after the Sheet opens is undone in finally: the device it added leaves, and the Sheet closes.
     try {
+      await until(() => document.activeElement === checks()[0]);
+      assert(checks().length >= 2, "Pair a second online shared output before running");
+      // Sync applies while the sound plays in sync on several devices, so the second device's sound joins.
+      // Joining can take it offline for a moment, its check disabled, so the rows settle first.
+      name = checks()[1]!.getAttribute("aria-label")!;
+      if (checks()[1]!.getAttribute("aria-checked") !== "true") { added = true; device().click(); await until(() => device()?.getAttribute("aria-checked") === "true"); await wait(1500); }
       const first = () => checks()[0]!;
       await reveal(first);
       first().focus(); await key("ArrowDown");
@@ -321,7 +323,7 @@ window.runTvNavigationRegression = async () => {
       device().focus(); await key("ArrowDown");
       assert(document.activeElement !== sync(device()), "Down from a check reached its own Sync line");
     } finally {
-      if (added) { device()?.click(); await until(() => device()?.getAttribute("aria-checked") !== "true").catch(() => undefined); }
+      if (added && device()?.getAttribute("aria-checked") === "true") { device().click(); await until(() => device()?.getAttribute("aria-checked") !== "true").catch(() => undefined); }
       for (let attempt = 0; attempt < 3 && document.querySelector('[role="dialog"][data-state="open"]'); attempt++) { await key("Escape"); await wait(350); }
     }
   });
