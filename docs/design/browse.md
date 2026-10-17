@@ -2,23 +2,60 @@
 
 ## Search
 
-Search (`/search`) leads with its display-size field. It searches after one
-second without typing; Enter submits immediately. Its filters, From, What
-(Video, Music, Live, Radio and Channels) and Length, follow the field: a rail
-beside the results on wide screens, behind Filters on narrow ones. Music
-includes Bandcamp albums and tracks and SoundCloud tracks. A pasted link opens
-as a webpage or as direct media, with Open page for a source's own link. On the
-TV the field says "Type with Remote on your phone", and Remote's
-[Type on TV](remote.md#type-on-tv) fills it.
+Search is the header's field on every page ([Shell](shell.md#header-and-section-nav)),
+and its results are `/search?q=…`: no tab names that page, so its title is
+the query (`PageHeader`). It asks every source at once and says which it is
+still asking. Its filters, From, What (Video, Music, Live, Radio and Channels)
+and Length, sit in a rail beside the results on wide screens and behind
+Filters on narrow ones. Music includes Bandcamp albums and tracks and
+SoundCloud tracks. A pasted link opens as a webpage or as direct media, with
+Open page for a source's own link. The first result starts the page, which
+Down from the header's field reaches. An empty query has no results page: it
+is Discover.
 
-Before a query, Search lists its Sources as divided rows: shared inputs, then
-YouTube, Twitch, RaiPlay, StreamingCommunity, 123MoviesFree, Bandcamp and
-SoundCloud, video before music. Each row opens that source's own home
-(`/collection?provider=…`). YouTube, Bandcamp and SoundCloud have no home page
-of their own, so theirs is an Empty with a search field scoped to them. The
-heading has no action, as Home's shelves have none: the tabs reach Settings →
-Sources and This device → Sharing, which add sources, and Down from the field
-meets the first source.
+## Discover
+
+Discover (`/discover`) is Home's sibling: shelves of `MediaTile`s under their
+headings, with no hero, since Couch picks nothing for it. Each heading names
+what it samples and is a link that opens the rest ([MediaTile](#mediatile)).
+In order, so what's live leads and the catalogues' posters and wide frames
+alternate:
+
+- **Radio**, "On air now": the saved stations, then the built-in ones (Home's
+  Radio shelf without its recents, `useOnAir`). A tile reads the station and
+  its current show, else where it's from; the heading already says they're on
+  air, so a tile doesn't repeat "Live". A show's `expiresAt` is when its data
+  refreshes, not when it ends, so there is no "until" time. A tile plays its
+  station, and its first carries `data-page-first`. The shelf waits for the
+  shows, so no tile grows a line under the focus, then keeps its order while
+  Discover stays open. Its heading opens every station (`/discover/radio`):
+  its source choice (`radioSource`), count, Filter (`filter`) and pager
+  (`page`), as divided rows.
+- **Live TV**, "N channels", only while a Live TV source has some: the
+  guide's first twelve channels. A channel has no page, so its tile plays it
+  and its menu holds Play on and Queue. Its heading opens every channel
+  (`/discover/live-tv`): the guide's channels with what's on now and next,
+  by group (`group`), Filter (`filter`) and page (`page`).
+- **One shelf per source with a home**: Twitch ("Live now"),
+  StreamingCommunity ("Films and series"), RaiPlay ("Programmes") and
+  123MoviesFree ("Films"). Each holds the first twelve of the source's own
+  home, the same query its page makes (`ProviderPage`, `url` ""), so opening
+  the heading shows them at once. A tile opens its Details; its menu holds its
+  search hit's verbs.
+- **Sources**: the sources that start from a search, YouTube, Bandcamp and
+  SoundCloud, as a compact row of names over a muted line, each opening its
+  scoped search (`/collection?provider=…`, an Empty with a search field). The
+  devices' shared inputs lead the row, and play; their other verbs are their
+  menu.
+
+Shelves load side by side and hold about a tile's height meanwhile, so the
+ones below don't move under the focus. One that fails says "Couldn't load
+{source}." with Try again, as Home does; an empty one is left out. Discover's
+own pages carry a breadcrumb to it, and Back returns to the heading that
+opened them. As a section root, Discover carries no breadcrumb.
+
+Not yet: a programme grid for Live TV, and any Core endpoint it would need;
+it waits for a source that needs one.
 
 ## Details
 
@@ -57,32 +94,6 @@ them; a Home tile's menu holds the row of verbs, and reaches Details for the
 - **A source's page:** Play, Play all or Resume, From start, Queue or Queue
   all, Save and Play on; "…" holds Play next.
 
-## Live
-
-Live (`/live`) is one page in three parts, each under a section heading, as
-Home's shelves are:
-
-- **On air:** a shelf of `MediaTile`s, the saved stations first, then the
-  built-in ones. Each tile reads the station and its current show; the
-  heading already says they're on air, so a tile doesn't repeat "Live". A
-  show's `expiresAt` is when its data refreshes, not when it ends, so there
-  is no "until" time. A tile plays its station. Home's
-  Radio shelf builds the same list (`useOnAir`, with Home's recents first).
-  The shelf waits for the shows, so no tile grows a line under the focus,
-  then keeps its order while Live stays open, as Home's shelves do. Its first
-  tile carries `data-page-first`. If the saved or built-in stations fail to
-  load, "Couldn't load On air." follows it with Try again; shows that fail to
-  load only leave the tiles without a show.
-- **Stations:** every station, as the Radio browse was: its source choice
-  (`radioSource`), count, Filter (`filter`) and pager (`page`).
-- **Channels:** Live TV's channels (`group`, `channelPage`, `channelFilter`),
-  only while a Live TV source has some. If the sources fail to load, "Couldn't
-  load Live TV." stands in for them, with Try again.
-
-Not yet: a programme grid, and any Core endpoint it would need; it waits
-for a source that needs one. As a
-section root Live carries no breadcrumb.
-
 ## Keep discovery context visible
 
 Opened shows, seasons and albums retain
@@ -99,8 +110,11 @@ or per-result request is needed.
 
 Source results
 pair artwork with available synopsis and episode metadata; collection
-headers contain their artwork instead of cropping covers. A collection
-without artwork shows a muted folder, not title initials.
+headers contain their artwork instead of cropping covers. Missing artwork
+keeps its frame as a hairline on the page's ground, with the title set in
+type sized to the frame (a container query) in muted ink, so it keeps a
+shelf's rhythm without reading as a picture; a collection shows a folder
+there instead.
 
 ## Details are destinations
 
@@ -112,24 +126,29 @@ a separate, explicit action, including on phones. StreamingCommunity's
 collections say Series or Season rather than List. Reuse PageHeader and existing media rows. Dialogs remain
 reserved for focused tasks such as pairing and source setup.
 
-## Library
+## Saved
 
-Library (`/library`) holds what you keep, one section per `?tab=`: For later,
-Channels & stations (saved channels, playlists and stations), Lists, and
-Played. The sections sit in the section nav Library shares with Settings, a
-rail on wide screens and a Select on phones: [Settings](settings.md#section-nav).
+Saved (`/saved`) holds what you keep, one section per `?tab=`: For later,
+Channels & stations (saved channels, playlists, albums and series, then
+favourite stations), Lists, and Played. Each is a list you manage in its own
+way (an order, Remove with Undo, a list's entries, history), which a shelf
+can't hold, and Home already shows For later and Played as shelves, so the
+tabs stay. They sit in the section nav Saved shares with Settings, a rail on
+wide screens and a Select on phones, where the Select names the tab and its
+title is for screen readers: [Settings](settings.md#section-nav).
 
 Played (`?tab=played`) lists History, newest first, as divided MediaRows with
 their length bar ("Resume at …" once partly watched). Each row's one verb opens
 its History Details, which holds the others and Remove from Continue with Undo;
 the rows have no menu.
-Removing from For later or Channels & stations says "Removed … from Library."
+Removing from For later or Channels & stations says "Removed … from Saved."
+An empty tab says what goes there and offers Discover.
 
 ## MediaRow / MediaList
 
 Thumbnail, title, meta and length bar, as one target on every screen: pressing
 the row (its artwork too, for a pointer) does its main verb, Play for stations,
-channels and live hits, else Open or Details. Live, Search and Library, and Up
+channels and live hits, else Open or Details. Search, Saved, Discover's pages, and Up
 next's compact rows. Its other verbs (Play, Play on, Play next, Queue, Save,
 Move up, Move down, Remove, and Open where a live hit's press plays) are one list, `MediaRow`'s `menu`: the
 row's one menu ([Menus](../design.md#menus)), behind a "…" at the end of the
@@ -178,16 +197,19 @@ verbs, with Details first where the press plays:
 - **Played recently** (press opens Details): Resume or Play, From start,
   Queue, Play on.
 - **For later** (press opens Details): Play, Queue, Play on.
-- **A station** (Home's Radio and Live's On air; press plays): Details, Queue,
+- **A station** (Home's and Discover's Radio; press plays): Details, Queue,
   Save or Saved, Play on. A station played from a link may be in no list, so
   its tile is where it can be saved.
 - **An Up next entry** (press plays it now): its Up next row's verbs.
-- **A source's poster** (press opens it): its search hit's verbs.
+- **A source's tile** (Discover's source shelves and a catalogue's posters; press opens it): its search hit's verbs.
+- **A Live TV channel** (press plays it): Play on, Queue.
 
 Shelves
-(`Shelf`: Home's, and Live's On air) are plain overflow rows (`data-nav-row`):
+(`Shelf`: Home's and Discover's) are plain overflow rows (`data-nav-row`):
 Carousel's own arrow handling fights spatial navigation, and focus scrolls a
-plain row into view. On air's tiles take the shelf's height, so a station
+plain row into view. A shelf's heading can be a link to the rest of what it
+samples, with a chevron; it is a focus stop between its shelf and the one
+above. Radio's tiles take the shelf's height, so a station
 without a show stays level with the rest: a shorter tile's centre sits higher,
 and Up from its neighbour would pick it before the tab bar.
 

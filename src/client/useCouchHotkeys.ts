@@ -19,7 +19,8 @@ export function useCouchHotkeys(shortcuts: Shortcut[]) {
       if (target?.closest('[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"]')) return;
       if ([...document.querySelectorAll(overlays)].some(element => !element.closest('[hidden], [data-state="closed"]'))) return;
       if (backgroundOnly && !isBackground(target)) return;
-      if (document.getElementById("media-search") && /^[a-z0-9]$/i.test(event.key) && isBackground(target)) return;
+      // On the search results, typing goes on with the query (HeaderSearch), so letters and digits are not shortcuts there.
+      if (location.pathname === "/search" && /^[a-z0-9]$/i.test(event.key) && isBackground(target)) return;
       event.preventDefault();
       action();
     },

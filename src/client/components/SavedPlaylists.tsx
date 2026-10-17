@@ -14,7 +14,7 @@ import { ApiError, apiSend } from "@/api/client";
 import { playlistQuery, playlistsQuery } from "@/api/playlists";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { formatDuration } from "@/time-format";
-import { LibraryEmpty, LibraryError, LibraryStatus } from "@/sections/library/LibraryStatus";
+import { SavedEmpty, SavedError, SavedStatus } from "@/sections/saved/SavedStatus";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
 
 const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree" };
@@ -26,7 +26,7 @@ const summary = (list: SavedPlaylistSummary) => [
 const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
 type Write = { path: string; body: unknown; method?: string };
 
-/** Library's Lists tab: lists kept from Up next or a source, and one list's detail. */
+/** Saved's Lists tab: lists kept from Up next or a source, and one list's detail. */
 export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }: {
   origin: string;
   token: string;
@@ -97,10 +97,10 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
     {!openId ? <>
       <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
       {connected && cannotSave && <p className="mb-4 text-sm text-muted-foreground">{cannotSave}</p>}
-      <LibraryStatus connected={connected} loading={loading} />
-      {loadError && <LibraryError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
-      {connected && mutation.error && <LibraryError message={mutation.error.message || "Couldn't change this list."} />}
-      {connected && !loading && !loadError && !playlists.length && <LibraryEmpty>No lists yet. Save Up next to play it again later.</LibraryEmpty>}
+      <SavedStatus connected={connected} loading={loading} />
+      {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
+      {connected && mutation.error && <SavedError message={mutation.error.message || "Couldn't change this list."} />}
+      {connected && !loading && !loadError && !playlists.length && <SavedEmpty>No lists yet. Save Up next to play it again later.</SavedEmpty>}
       {!!playlists.length && <MediaList>{playlists.map(item => <MediaRow key={item.id} data-playlist-id={item.id}
         title={item.name}
         meta={summary(item)}
@@ -132,10 +132,10 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
         </AlertDialog>
         <Button variant="ghost" disabled={disabled} onClick={() => void deleteList(playlist)}>Delete</Button>
       </>} />
-      <LibraryStatus connected={connected} loading={loading} />
-      {loadError && <LibraryError message={loadError.message || "Couldn't load this list."} onRetry={() => void detail.refetch()} />}
-      {connected && mutation.error && <LibraryError message={mutation.error.message || "Couldn't change this list."} />}
-      {playlist && !playlist.entries.length && <LibraryEmpty>This list is empty. Use Update from Up next to fill it.</LibraryEmpty>}
+      <SavedStatus connected={connected} loading={loading} />
+      {loadError && <SavedError message={loadError.message || "Couldn't load this list."} onRetry={() => void detail.refetch()} />}
+      {connected && mutation.error && <SavedError message={mutation.error.message || "Couldn't change this list."} />}
+      {playlist && !playlist.entries.length && <SavedEmpty>This list is empty. Use Update from Up next to fill it.</SavedEmpty>}
       {!!playlist?.entries.length && <DndContext sensors={sensors} onDragEnd={({ active, over }) => {
         if (!over || active.id === over.id) return;
         const from = playlist.entries.findIndex(entry => entry.id === String(active.id)), to = playlist.entries.findIndex(entry => entry.id === String(over.id));
