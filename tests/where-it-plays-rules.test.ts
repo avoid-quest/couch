@@ -290,6 +290,12 @@ describe("band volume", () => {
     expect(muted(session({ devices: devices.map(item => ({ ...item, muted: true })), outputs: [sound("tv"), picture("kitchen")] }))).toBe(true);
     expect(muted(session({ devices, outputs: [], controlling: "tv" }))).toBe(true);
   });
+
+  test("Mute reads only the sound this device may control, as Core's Volume does, while there is any", () => {
+    const phone = device("phone", { sharing: { audio: false, video: true } });
+    expect(muted(session({ devices: [device("tv", { muted: true }), phone], outputs: [sound("tv"), sound("phone")] }))).toBe(true);
+    expect(muted(session({ devices: [{ ...phone, muted: true }], outputs: [both("phone")] }))).toBe(true);
+  });
 });
 
 describe("Play on", () => {
