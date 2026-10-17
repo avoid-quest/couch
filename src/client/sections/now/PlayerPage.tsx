@@ -111,8 +111,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;
-  // The controls stay up while the keyboard is in them; on the picture they hide when idle.
-  const idle = () => { if (!root.current?.querySelector(":focus-visible:not([data-player-surface])")) setShown(false); };
+  // The controls stay up while the keyboard is in them or on a toast's action, which Back returns to them;
+  // on the picture they hide when idle.
+  const idle = () => { if (!root.current?.querySelector(":focus-visible:not([data-player-surface])") && !document.activeElement?.closest("[data-sonner-toaster]")) setShown(false); };
   const wake = () => {
     setShown(true);
     clearTimeout(timer.current);
@@ -140,6 +141,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.key === "Escape" || event.key === "BrowserBack") {
         if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="listbox"][data-state="open"], [role="menu"][data-state="open"], [data-slot="popover-content"][data-state="open"]')) return;
+        // Back on a toast's action only leaves it (navigation.ts).
+        if (event.target instanceof Element && event.target.closest("[data-sonner-toaster]")) return;
         event.preventDefault(); event.stopImmediatePropagation();
         if (panel) setPanelState(null);
         else if (queueOpen) closeQueue();

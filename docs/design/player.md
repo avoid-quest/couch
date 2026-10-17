@@ -98,7 +98,8 @@ returns to it whenever the player opens: from the now-playing bar, Home, the
 P key or a picture that starts; Back from Details still restores its opener,
 Playback. A key on the picture shows the controls for a while and leaves focus
 where it is; over a playing video they hide after 4 s while focus is on the
-picture, and stay up while the keyboard is in them.
+picture, and stay up while the keyboard is in them or on a toast's action,
+which Back leaves for the control it came from.
 
 - **A click** on a video plays or pauses; on audio Now playing it does
   nothing, so a stray click never stops the music. **A double-click**
