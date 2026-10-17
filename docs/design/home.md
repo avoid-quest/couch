@@ -27,8 +27,9 @@ Radio and live media read "Live": a station's programme data says when it
 expires (about every 15 minutes), not when the show ends, so on air has no
 "until" time. Continue leads only while its shelf is shown, and a station only
 while Radio is. The primary verb carries `data-page-first`, so page entry lands
-on it. Below `md` the hero stacks artwork, text, then verbs, with the primary
-verb full-width. It waits for the data that decides it (the session, then
+on it, and when Resume or From start plays where Home stays open, focus moves
+to the playing hero's Open player. Below `md` the hero stacks artwork, text,
+then verbs, with the primary verb full-width. It waits for the data that decides it (the session, then
 history, then the stations) so it never swaps under the focus while loading,
 and the shelves wait with it.
 
