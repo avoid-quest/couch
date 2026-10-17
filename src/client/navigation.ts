@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
 import { isTvPresentation } from "./session/presentation";
+import { startHold } from "./hold";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
@@ -106,6 +107,9 @@ function moveFocus(key: string) {
   focus(tab ?? best?.element ?? toast);
 }
 
+/** Opens the menu of the item whose primary target this is (`data-item-menu`), as right-click does (RowMenu.tsx). */
+export const openItemMenu = (target: HTMLElement) => target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+
 export function sendKey(target: HTMLElement, key: string) {
   const code = key === " " ? "Space" : key;
   target.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, cancelable: true }));
@@ -118,19 +122,21 @@ export function applyTvNavigation(key: NavigationKey) {
   if (key === "home" || key === "info") return false;
   // A nested Radix portal can aria-hide its parent dialog without closing it.
   if (key !== "back" && [...document.querySelectorAll<HTMLElement>(portals)].some(element => element.closest(localOnly) && rendered(element))) return true;
+  // A held OK ("menu") opens a focused item's menu; on anything else it is OK.
+  const ok = key === "select" || key === "menu";
   const previous = remoteNavigation;
   remoteNavigation = true;
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
     if (key !== "back" && scope.querySelector("[data-player-band=hidden]")) {
-      sendKey(document.body, key === "select" ? "Enter" : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key]);
+      sendKey(document.body, ok ? "Enter" : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key]);
       return true;
     }
     let target = document.activeElement instanceof HTMLElement && scope.contains(document.activeElement) && visible(document.activeElement)
       ? document.activeElement : null;
     if (key !== "back" && target?.closest(localOnly)) {
-      if (key === "select") return true;
+      if (ok) return true;
       const tablist = target.closest('[role="tablist"]');
       if (tablist && target.matches('[role="tab"]') && (key === "left" || key === "right")) {
         const tabs = [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')];
@@ -146,11 +152,15 @@ export function applyTvNavigation(key: NavigationKey) {
       target = entry(controlsIn(scope)) ?? scope;
       focus(target);
       // The first directional press establishes focus rather than skipping over it.
-      if (key !== "select" && key !== "back") return true;
+      if (!ok && key !== "back") return true;
     }
     if (key === "back") {
       sendKey(target, "Escape");
-    } else if (key === "select") {
+    } else if (key === "menu" && target.matches("[data-item-menu]")) {
+      // As the keyboard's menu key does, so the menu hears a key and lands on its first verb.
+      sendKey(target, "ContextMenu");
+      openItemMenu(target);
+    } else if (ok) {
       if (target.closest('[role="combobox"], [aria-haspopup="menu"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"], [role="slider"], [aria-roledescription="sortable"]')) sendKey(target, "Enter");
       else target.click();
     } else {
@@ -199,6 +209,25 @@ export function useNavigation(onBack: () => void) {
       event.stopPropagation();
     };
     const release = (event: FocusEvent) => { if (event.target === adjusting) adjust(null); };
+    // On the TV, OK on an item with a menu acts on release and, held, opens its menu, as on Apple TV and Android TV.
+    // Repeats while it is held are dropped, so they never reach the menu that opened under them.
+    let press: { target: HTMLElement; hold: ReturnType<typeof startHold> } | null = null;
+    const okDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") return;
+      if (press && event.repeat) { event.preventDefault(); event.stopPropagation(); return; }
+      press?.hold.release(); press = null; // Its keyup went missing, as when the window lost focus.
+      const target = event.target instanceof HTMLElement && event.target.matches("[data-item-menu]:not(:disabled)") ? event.target : null;
+      if (!target || !isTvPresentation() || event.repeat || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      press = { target, hold: startHold(() => openItemMenu(target)) };
+    };
+    const okUp = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || !press) return;
+      event.preventDefault(); event.stopPropagation();
+      const { target, hold } = press;
+      press = null;
+      if (hold.release()) target.click();
+    };
     const keydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -223,12 +252,17 @@ export function useNavigation(onBack: () => void) {
     };
     window.addEventListener("keydown", keyboard, true);
     window.addEventListener("keydown", leave, true);
+    window.addEventListener("keydown", okDown, true);
+    window.addEventListener("keyup", okUp, true);
     window.addEventListener("focusout", release, true);
     window.addEventListener("pointerdown", pointer, true);
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keyboard, true);
       window.removeEventListener("keydown", leave, true);
+      window.removeEventListener("keydown", okDown, true);
+      window.removeEventListener("keyup", okUp, true);
+      press?.hold.release();
       window.removeEventListener("focusout", release, true);
       window.removeEventListener("pointerdown", pointer, true);
       window.removeEventListener("keydown", keydown);

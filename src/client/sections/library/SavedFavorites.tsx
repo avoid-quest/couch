@@ -99,8 +99,8 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
     const blocked = !connected || pending || reorder.isPending;
     const move = (offset: number) => { const plan = moveFavorite(favorites, favorite, offset); if (plan && !blocked) reorder.mutate(plan); };
-    // A station's page holds no Remove or ordering, so the TV keeps these verbs on the row.
-    return <MediaRow key={key(favorite)} tvMenu
+    // A station's page holds no Remove or ordering, so the row keeps its "…".
+    return <MediaRow key={key(favorite)}
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}

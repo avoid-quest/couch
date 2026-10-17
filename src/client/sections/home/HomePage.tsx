@@ -14,8 +14,12 @@ import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { PlaybackTransport } from "@/components/PlaybackTransport";
 import { usePlayOn } from "@/components/PlayOn";
 import { historyQuery } from "@/api/progress";
-import { forLaterQuery } from "@/api/for-later";
+import { forLaterQuery, loadForLater } from "@/api/for-later";
+import { apiSend } from "@/api/client";
+import type { MenuAction } from "@/components/RowMenu";
+import { failed } from "@/toasts";
 import { QueuePanel } from "@/sections/now/QueuePanel";
+import { useQueueActions, type QueueActionsProps } from "@/sections/now/QueueActions";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { savedSourceLabel } from "@/saved-source";
@@ -25,9 +29,10 @@ import { offline, TRY_AGAIN } from "@/copy";
 import { formatDuration, formatEndTime } from "@/time-format";
 import { avoidRadioPlaylistId, isRadio, type RadioProgrammeDetails, type RadioStation } from "../../../shared/radio";
 import type { HistoryItem } from "../../../shared/viewing";
+import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
-import { useOnAir } from "@/sections/live/on-air";
+import { useOnAir, useStationMenu } from "@/sections/live/on-air";
 import { useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
@@ -52,7 +57,7 @@ export function HomePage() {
   const shell = useShell();
   const { on, play } = usePlayOn();
   const { credentials, available, current, programme } = shell;
-  const { state, connected, run, nativeHost, videoQualityPreference } = useSessionGate();
+  const { state, connected, run, queue: queued, nativeHost, videoQualityPreference } = useSessionGate();
   const details = useDetailNavigation();
   const now = useDurationClock();
   const [queueOpen, setQueueOpen] = useState(false);
@@ -64,9 +69,26 @@ export function HomePage() {
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && hasRow("later") });
   const { stations: allStations, show: onAir, playing: playingStation, meta: showMeta, pending: radioPending, favorites, builtIn } = useOnAir(hasRow("radio"), shell.recentRadio);
   const resume = useMutation({
-    mutationFn: ({ item, fromStart }: { item: HistoryItem; fromStart: boolean }) => play(on => shell.playHistory(item, { fromStart, on })),
+    mutationFn: ({ item, fromStart, deviceId }: { item: HistoryItem; fromStart: boolean; deviceId?: string }) => play(on => shell.playHistory(item, { fromStart, on }), deviceId),
   });
   const resumable = (item: HistoryItem) => available && !resume.isPending && !!(item.playable || item.queueEntryId);
+  // Each tile's menu holds its Details' verbs: Details itself where the press plays, else the press's own verb.
+  const stationMenu = useStationMenu();
+  const queueItem = (title: string, work: () => Promise<unknown>) => void queued(title, work).catch(reason => failed(`Couldn't queue ${title}.`, reason));
+  const historyMenu = (item: HistoryItem, resumes: boolean): MenuAction[] => [
+    resumes ? { label: "Details", run: () => details.open(itemLocation("history", item.mediaId)) } : { label: item.position > 0 ? "Resume" : "Play", disabled: !resumable(item), run: () => resume.mutate({ item, fromStart: item.position === 0 }) },
+    ...item.position > 0 ? [{ label: "From start", disabled: !resumable(item), run: () => resume.mutate({ item, fromStart: true }) }] : [],
+    { label: "Queue", disabled: !connected, run: () => queueItem(item.title, () => apiSend(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: state?.activeProfile.id })) },
+    { label: "Play on", disabled: !resumable(item) || !item.playable, playOn: deviceId => resume.mutate({ item, fromStart: item.position === 0, deviceId }) },
+  ];
+  const savedMenu = (item: ForLaterItem): MenuAction[] => {
+    const start = (deviceId?: string) => void play(on => loadForLater(credentials, item.id, "play", on), deviceId).catch(reason => failed(`Couldn't play ${item.title}.`, reason));
+    return [
+      { label: "Play", disabled: !available, run: () => start() },
+      { label: "Queue", disabled: !connected, run: () => queueItem(item.title, () => loadForLater(credentials, item.id, "append")) },
+      { label: "Play on", disabled: !available, playOn: start },
+    ];
+  };
 
   const player = state?.player;
   const queue = state?.queue ?? [];
@@ -146,7 +168,7 @@ export function HomePage() {
     continue: !!continued.length && <Shelf title="Continue" time={`${unfinished.length} unfinished`}>
       {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="flex shrink-0 flex-col items-start gap-1">
         <MediaTile shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={historyMeta(item)} thumbnail={item.thumbnail}
-          aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })}>
+          aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)}>
           <DurationBar duration={item.duration} position={item.position} />
         </MediaTile>
         <Button variant="ghost" size="sm" className="-ml-1 min-h-11" aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))}>Details</Button>
@@ -154,9 +176,9 @@ export function HomePage() {
     </Shelf>,
 
     upNext: !!upcoming.length && <Shelf title="Up next" time={doneBy != null ? `until ${formatEndTime(doneBy, now)}` : plural(upcoming.length, "item")}>
-      {plan.slice(0, shelfLength).map(({ entry, starts, seconds }) => <li key={entry.id} className="shrink-0">
-        <MediaTile shape={entryShape(entry)} title={entry.title} thumbnail={entry.thumbnail} aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}
-          meta={seconds == null ? entry.live ? "Live" : undefined : [formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`].filter(Boolean).join(", ")} />
+      {plan.slice(0, shelfLength).map(({ entry, starts, seconds }, index) => <li key={entry.id} className="shrink-0">
+        <UpNextTile entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} meta={seconds == null ? entry.live ? "Live" : undefined : [formatDuration(seconds), starts != null && `ends ${formatEndTime(starts + seconds, now)}`].filter(Boolean).join(", ")}
+          verbs={{ credentials, entry, index: cursor + 1 + index, queue, connected, run, firstUpcomingIndex: cursor + 1, lastUpcomingIndex: queue.length - 1 }} />
       </li>)}
       {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
     </Shelf>,
@@ -164,21 +186,21 @@ export function HomePage() {
     radio: !!listed.length && <Shelf title="Radio" label="Radio stations" time={allStations.some(station => onAir(station.id)) ? "On air now" : plural(listed.length, "station")}>
       {listed.map(station => <li key={station.id} className="shrink-0">
         <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl}
-          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} />
+          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>,
 
     later: !!savedMedia.length && <Shelf title="For later" time={`${savedMedia.length} saved`}>
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
-          aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} />
+          aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,
 
     recent: !!recent.length && <Shelf title="Played recently" time={plural(recent.length, "title")}>
       {recent.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
         <MediaTile shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={recentMeta(item)} thumbnail={item.thumbnail}
-          aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} />
+          aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
       </li>)}
     </Shelf>,
   };
@@ -204,6 +226,11 @@ export function HomePage() {
       </SheetContent>
     </Sheet>
   </section>;
+}
+
+/** An Up next entry's tile: its press plays it now, and its menu holds what its Up next row's does. */
+function UpNextTile({ entry, meta, disabled, onPlay, verbs }: { entry: QueueEntry; meta?: string; disabled: boolean; onPlay: () => void; verbs: QueueActionsProps }) {
+  return <MediaTile shape={entryShape(entry)} title={entry.title} thumbnail={entry.thumbnail} meta={meta} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} menu={useQueueActions(verbs)} />;
 }
 
 /**

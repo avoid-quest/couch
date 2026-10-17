@@ -10,9 +10,10 @@ What the TV adds is for its remote, which has only arrows, OK and Back:
 - spatial navigation, focus on page entry and Back, below;
 - its own name in the header instead of the Couch switch, and no Remote tab
   or Keyboard shortcuts ([Shell](shell.md#header-and-section-nav));
-- a visible "…" on rows whose page doesn't hold their other verbs, since a
-  remote can't open the context menu that holds them on other screens
-  ([Browse](browse.md#mediarow--medialist));
+- OK held on a media row or tile, which opens its one menu, as on Apple TV
+  and Android TV; a short OK acts on release ([Menus](../design.md#menus)). A
+  row's "…" is a stop Right reaches; a tile's is none, and shows in the
+  focused tile's caption;
 - no shelf scrollbars, Back buttons, fullscreen or the timeline's time under
   the pointer, which only a pointer or a window uses.
 

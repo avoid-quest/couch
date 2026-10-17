@@ -126,8 +126,48 @@ window.runTvNavigationRegression = async () => {
     await click('[data-app-nav] a[href="/"]');
     const items = [...document.querySelectorAll('[aria-label="Radio stations"] li')];
     assert(items.length > 0, "Radio fixture missing");
-    assert(items.every(item => item.querySelectorAll('button:not(:disabled), a[href]').length === 1), "Radio has multiple stops per item");
+    // A tile's "…" is no stop on the TV (tabindex -1); a held OK opens its menu.
+    assert(items.every(item => item.querySelectorAll('button:not(:disabled):not([tabindex="-1"]), a[href]').length === 1), "Radio has multiple stops per item");
     assert(!document.querySelector('.app-header [data-slot="popover-trigger"]'), "TV header still has Couch switch");
+  });
+  await check("A held OK opens a Home tile's menu, Back returns to the tile, a short OK acts on release, and the Remote's hold does the same", async () => {
+    await click('[data-app-nav] a[href="/"]');
+    const tile = control('[aria-label="Radio stations"] [data-media-tile][data-item-menu]:not(:disabled)');
+    const ok = (type: "keydown" | "keyup", repeat = false) => (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", repeat, bubbles: true, cancelable: true }));
+    const menu = () => document.querySelector('[role="menu"]');
+    tile.focus(); ok("keydown"); await wait(700);
+    assert(menu() && document.activeElement?.closest('[role="menu"]'), "A held OK did not open the tile's menu on its first verb");
+    assert([...menu()!.querySelectorAll('[role="menuitem"]')].some(item => item.textContent === "Queue"), "The station's menu lacks Queue");
+    ok("keydown", true); ok("keyup"); await wait(150);
+    assert(menu(), "The held OK's repeat or release acted in the menu");
+    await key("Escape"); await wait(350);
+    assert(!menu() && document.activeElement === tile, "Back did not close the menu onto its tile");
+    // The tile's press is caught here, so the fixture keeps playing what it plays.
+    let pressed = 0;
+    const press = (event: Event) => { pressed++; event.preventDefault(); event.stopPropagation(); };
+    tile.addEventListener("click", press, true);
+    try {
+      ok("keydown"); await wait(100);
+      assert(!pressed && !menu(), "OK acted before its release");
+      ok("keyup"); await wait(150);
+      assert(pressed === 1 && !menu(), "A short OK did not act once on release");
+    } finally { tile.removeEventListener("click", press, true); }
+    applyTvNavigation("menu"); await wait(350);
+    assert(menu(), "The Remote's held OK did not open the tile's menu");
+    applyTvNavigation("back"); await wait(350);
+    assert(!menu() && document.activeElement === tile, "The Remote's Back did not close the menu onto its tile");
+  });
+  await check("Details from a Home tile's menu keeps Home, and Back returns to the tile", async () => {
+    await click('[data-app-nav] a[href="/"]');
+    const tile = control('[aria-label="Radio stations"] [data-media-tile][data-item-menu]:not(:disabled)');
+    const label = tile.getAttribute("aria-label");
+    tile.focus(); applyTvNavigation("menu"); await wait(350);
+    assert(document.activeElement?.textContent === "Details", "The station's menu did not start on Details");
+    applyTvNavigation("select");
+    await until(() => location.pathname === "/item");
+    assert(new URLSearchParams(location.search).get("from") === "home" && document.querySelector('.app-header [aria-current="page"][href="/"]'), "Details from Home's menu left Home");
+    await key("Escape");
+    await until(() => location.pathname === "/" && document.activeElement?.getAttribute("aria-label") === label).catch(() => { throw new Error("Back did not return to the tile"); });
   });
   await check("Home starts on the hero's primary verb, and Up from its last shelf passes each shelf and the hero to the current tab", async () => {
     await click('[data-app-nav] a[href="/live"]');
@@ -197,7 +237,7 @@ window.runTvNavigationRegression = async () => {
   await check("Saved Home tile opens Details on its primary verb, walks its verbs with Right and restores its opener", async () => {
     const tile = control('[data-saved-details] button');
     const label = tile.getAttribute("aria-label");
-    assert(tile.parentElement?.querySelectorAll('button:not(:disabled),a[href]').length === 1, "Saved media has multiple stops");
+    assert(tile.closest("li")?.querySelectorAll('button:not(:disabled):not([tabindex="-1"]),a[href]').length === 1, "Saved media has multiple stops");
     tile.focus(); tile.click();
     await until(() => location.pathname === "/item" && !!document.querySelector('[data-page="Item"] h1'));
     await wait(350);
@@ -399,6 +439,8 @@ window.runTvNavigationRegression = async () => {
     const options = (row?: HTMLElement) => row?.querySelector<HTMLElement>('button[aria-label^="Options"]');
     const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => element.textContent === label);
     await until(() => rows().length >= 2);
+    // The fixture saves two; a Couch with more keeps its count.
+    const count = rows().length;
     // A station's page holds no ordering or Remove, so its row's Options menu does.
     const label = options(rows()[0])?.getAttribute("aria-label");
     assert(label, "Favorite lost Options");
@@ -411,11 +453,11 @@ window.runTvNavigationRegression = async () => {
     const remove = menuItem("Remove");
     assert(remove, "Favorite lost Remove");
     remove!.click();
-    await until(() => rows().length === 1);
+    await until(() => rows().length === count - 1);
     const undo = [...document.querySelectorAll<HTMLElement>('[data-sonner-toast] button')].find(element => element.textContent === "Undo");
     assert(undo && document.activeElement?.closest('[aria-label="Channels & stations"]'), "Favorite removal lost Undo or adjacent focus");
     // Undo saves the station again, then its order, so the list can briefly show the save alone.
-    const restored = () => rows().length === 2 && options(rows()[1])?.getAttribute("aria-label") === label;
+    const restored = () => rows().length === count && options(rows()[1])?.getAttribute("aria-label") === label;
     undo!.click(); await until(restored).catch(() => undefined);
     assert(restored(), "Favorite Undo lost saved order");
   });

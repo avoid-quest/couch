@@ -1,6 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiSend } from "@/api/client";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { useDurationClock } from "@/components/DurationBar";
+import { usePlayOn } from "@/components/PlayOn";
+import type { MenuAction } from "@/components/RowMenu";
+import { itemLocation, useDetailNavigation } from "@/detail-navigation";
+import { failed } from "@/toasts";
 import { useShell } from "@/sections/shell/shell-context";
 import { useSessionGate } from "@/session/session-context";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
@@ -27,5 +32,45 @@ export function useOnAir(enabled = true, first: RadioStation[] = []) {
     pending: enabled && (favorites.isPending || builtIn.isPending || programmesShown && programmes.isPending),
     /** Playing, then the show and its genre. */
     meta: (station: RadioStation) => [playing(station) && "Playing", show(station.id)?.title, show(station.id)?.genre].filter(Boolean).join(" · "),
+  };
+}
+
+/** Save and Saved for a station, its favourite toggled: radio Details' verb, and every station tile's. */
+export function useStationSave() {
+  const { credentials } = useShell();
+  const { connected } = useSessionGate();
+  const client = useQueryClient();
+  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
+  const toggle = useMutation({
+    mutationFn: async ({ station, saved }: { station: RadioStation; saved: boolean }) => {
+      await (saved ? apiSend(credentials, `/api/radio/favorites/${encodeURIComponent(station.id)}`, undefined, "DELETE") : apiSend(credentials, "/api/radio/favorites", { station }));
+      await client.invalidateQueries({ queryKey: radioFavoritesListQuery(credentials).queryKey });
+    },
+    onError: (error, { station, saved }) => failed(`Couldn't ${saved ? "remove" : "save"} ${station.name}.`, error),
+  });
+  return (station: RadioStation) => {
+    const saved = !!favorites.data?.favorites.some(favorite => favorite.id === station.id);
+    return { saved, disabled: !connected || !favorites.data || toggle.isPending, run: () => toggle.mutate({ station, saved }) };
+  };
+}
+
+/**
+ * A station tile's menu, its Details' verbs: Details itself (the tile's press plays), Queue, Save or Saved, and Play
+ * on. A station played from a link may be in no list, so its tile is where it can be saved.
+ */
+export function useStationMenu() {
+  const { available, enqueueRadio } = useShell();
+  const { connected } = useSessionGate();
+  const details = useDetailNavigation();
+  const { play } = usePlayOn();
+  const save = useStationSave();
+  return (station: RadioStation): MenuAction[] => {
+    const favorite = save(station);
+    return [
+      { label: "Details", run: () => details.open(itemLocation("radio", station.id)) },
+      { label: "Queue", disabled: !connected, run: () => void enqueueRadio(station, false) },
+      { label: favorite.saved ? "Saved" : "Save", pressed: favorite.saved, disabled: favorite.disabled, run: favorite.run },
+      { label: "Play on", disabled: !available, playOn: deviceId => void play(on => enqueueRadio(station, true, on), deviceId) },
+    ];
   };
 }

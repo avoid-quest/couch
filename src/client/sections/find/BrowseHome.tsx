@@ -23,7 +23,7 @@ export function BrowseHome() {
   return <section aria-label="Sources">
     <h2 className="mb-2 flex min-h-8 items-center text-base font-medium">Sources</h2>
     <MediaList>
-      {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} tvMenu
+      {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta}
         primary={{ label: hit.primary.label, disabled: hit.primary.disabled, onClick: hit.primary.run }}
         menu={hit.actions.filter(action => action.label !== "Play")} />)}
       {catalogues.map(item => {

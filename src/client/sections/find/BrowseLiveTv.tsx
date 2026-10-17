@@ -61,8 +61,8 @@ export function BrowseLiveTv() {
   const disabled = !available || action.isPending;
   const row = (channel: GuideRow) => {
     const run = (playNow: boolean, deviceId?: string) => action.mutate({ channel, playNow, deviceId });
-    // A channel has no page, so the TV keeps its verbs on the row.
-    return <MediaRow key={channel.id} compact title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} tvMenu
+    // A channel has no page, so its row keeps its "…".
+    return <MediaRow key={channel.id} compact title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />}
       meta={[channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(" · ")}
       primary={{ label: "Play", disabled, onClick: () => run(true) }}
       menu={[

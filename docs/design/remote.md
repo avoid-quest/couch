@@ -16,7 +16,10 @@ key. Each arrow is a quarter of the ring, so a press anywhere on it counts, and
 every target is at least 64px at the base scale. The catalog has no direction
 pad, so it is `Button`s, each in its half of the ring so that its centre is
 its own (taps by assistive tools land there), clipped to its quarter; a mask
-keeps a gap around OK, so a focused quarter stays apart from it. Arrow keys and Home work
+keeps a gap around OK, so a focused quarter stays apart from it. OK sends on
+release; held for 500 ms it sends a held OK (`menu`), which opens the menu of
+the item focused on the TV, as a remote's held OK does
+([Menus](../design.md#menus)), and is OK elsewhere. Arrow keys and Home work
 while the pad has focus, and a hint line says so outside `touch:`. Back, Home
 and Info follow in a row of hairline pills; Info opens the TV's player.
 
