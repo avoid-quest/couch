@@ -155,7 +155,9 @@ function Delay({ id, label, delay, onCommit }: { id: string; label: string; dela
   const revealed = useContext(RevealedSync);
   const [draft, setDraft] = useState<number | null>(null);
   const value = draft ?? delay;
-  const hides = revealed.id === id && !delay;
+  // A line taken to 0 while its slider is in use stays until focus leaves it, as a revealed one would.
+  const shown = revealed.id === id || draft !== null;
+  const hides = shown && !delay;
   // Back or Esc on a revealed slider still at 0 hides it, with focus back on "…", rather than closing the Sheet.
   // Radix listens on the document, so this listens on the window first, after the TV fader's own Back has had its turn.
   useEffect(() => {
@@ -170,7 +172,7 @@ function Delay({ id, label, delay, onCommit }: { id: string; label: string; dela
     window.addEventListener("keydown", hide, true);
     return () => window.removeEventListener("keydown", hide, true);
   }, [hides, id]);
-  if (!delay && revealed.id !== id) return null;
+  if (!delay && !shown) return null;
   return <div data-volume data-sync-line={id} className="col-span-2 flex min-h-11 min-w-0 items-center gap-3 md:grid md:grid-cols-subgrid">
     <span className="shrink-0 text-sm text-muted-foreground tabular-nums md:pl-15">Sync {value} ms earlier</span>
     <div className="flex min-w-0 flex-1 items-center gap-3">
