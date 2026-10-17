@@ -37,6 +37,15 @@ time), so the band's timeline keeps only its position and the time remaining
 ("−3:24"), and live media leaves its slot empty. `useEndTime` is that line,
 in clock time.
 
+A pointer hovering a timeline (the band's, the now-playing bar's or the
+Remote's) reads the time under it in a small label above the bar, in the
+timeline's own format ("1:02:15"), black like the Buffering status. It follows
+the pointer, and through a drag too, centred over it and held inside the bar
+at either end; it goes when the pointer leaves. Touch and the TV's remote have
+no hover, so they never show it, and live media without a timeline has none.
+It is the shadcn Slider as it is plus a label driven by `pointermove`: the
+catalog has no slider with a hover readout.
+
 Volume across several Devices: [Where it plays](where-it-plays.md#volume).
 
 ### Layout
