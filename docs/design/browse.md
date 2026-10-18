@@ -59,6 +59,11 @@ opened them. As a section root, Discover carries no breadcrumb.
 Not yet: a programme grid for Live TV, and any Core endpoint it would need;
 it waits for a source that needs one.
 
+The film and series catalogue homes (StreamingCommunity, 123MoviesFree,
+AnimeSaturn and AnimeUnity) use the same poster-tile grid on TV, desktop
+and phone; the available width sets its column count. Titles, seasons,
+episodes and tracks keep their divided rows.
+
 ## Details
 
 Item pages (`/item`: History, For later, a station, an Up next entry) and

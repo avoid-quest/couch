@@ -107,8 +107,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
         </div>
       </div>
       {/* The first tile or row starts the page when the header has no verbs (a source's home); verbs come first, so they win. */}
-      {posterCatalogue ? <>
-        <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="hidden list-none grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-4 gap-y-2 p-0 md:grid">
+      {posterCatalogue ? <ul aria-label={`${collection.title} ${noun.toLocaleLowerCase()}`} className="grid list-none grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-x-4 gap-y-2 p-0">
           {hits.slice(paging.start, paging.end).map((hit, index) => {
             const item = page?.items.find(item => item.url === hit.url);
             return item && <li key={hit.id} className="min-w-0">
@@ -116,9 +115,7 @@ function CollectionPage({ provider, url, search }: { provider: ProviderId; url: 
                 href={collectionLocation(item)} onClick={() => openProvider(item)} />
             </li>;
           })}
-        </ul>
-        <div className="md:hidden"><HitList pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} /></div>
-      </> : <HitList pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
+        </ul> : <HitList pageFirst hits={hits.slice(paging.start, paging.end)} currentId={currentId} timeline={false} label={`${collection.title} ${noun.toLocaleLowerCase()}`} />}
       {connected && summary && !summary.loading && !summary.error && !hits.length && <Empty><EmptyHeader><EmptyTitle>{search.filter ? "No matching items" : "No items available"}</EmptyTitle><EmptyDescription>{search.filter ? "Try another name or clear the filter to see this list." : "This collection has no available items."}</EmptyDescription></EmptyHeader>{search.filter && <Button variant="ghost" onClick={() => void navigate({ href: collectionLocation({ provider, url }, { ...search, page: 1, filter: "" }), replace: true })}>Clear filter</Button>}</Empty>}
     </>}
     <SourceProblems summaries={summary ? [[providerNames[provider], summary]] : []} />
