@@ -100,13 +100,14 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
   let active = 0;
   let closed = false;
   const wrongMethod = (allow: string) => Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: allow } });
+  function cachedItem(url: string, collection?: Pick<NonNullable<ProviderItem["collection"]>, "url" | "index">): ProviderItem | undefined {
+    for (const { page, expires } of [...cache.values()].reverse()) {
+      if (expires > Date.now()) { const item = page.items.find(item => item.kind === "media" && item.url === url && (!collection || item.collection?.url === collection.url && item.collection.index === collection.index)); if (item) return item; }
+    }
+  }
 
   return {
-    cachedItem(url: string, collection?: Pick<NonNullable<ProviderItem["collection"]>, "url" | "index">): ProviderItem | undefined {
-      for (const { page, expires } of [...cache.values()].reverse()) {
-        if (expires > Date.now()) { const item = page.items.find(item => item.kind === "media" && item.url === url && (!collection || item.collection?.url === collection.url && item.collection.index === collection.index)); if (item) return item; }
-      }
-    },
+    cachedItem,
     async handle(request: Request, authorize = () => {}): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {
@@ -162,6 +163,10 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         const key = JSON.stringify([provider, query, url, cursor]);
         const cached = cache.get(key);
         if (cached && cached.expires > Date.now()) return Response.json(cached.page);
+        // SoundCloud search already carries its complete public track metadata.
+        // Opening Details mustn't resolve audio streams that playback will resolve afresh.
+        const track = provider === "soundcloud" && url && !query && !cursor ? cachedItem(url) : undefined;
+        if (track) return Response.json({ title: track.title, item: track, items: [track] });
         // Search asks every provider, plus RaiPlay's separate live-channel request.
         if (active >= providerIds.size + 1) throw new ProviderError("The catalog is busy. Try again shortly.", 503);
         active++;

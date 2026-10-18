@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
+import { resolve } from "node:path";
+import { providerForUrl } from "../shared/providers";
 import { helper, checkHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
+import { soundCloudPlugin } from "./soundcloud";
 import { createPublicMediaProxy } from "./public-media-proxy";
 
 // Only fixed, public messages from the extractor may cross the catalog boundary.
@@ -96,10 +99,16 @@ export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plu
   try {
     await acquireSlot(cancellation);
     try {
-      const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : null;
+      const target = args.at(-1) ?? "";
+      const soundcloud = /^scsearch\d*:/.test(target) || providerForUrl(target) === "soundcloud";
+      const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : soundcloud ? await soundCloudPlugin() : null;
       try {
         const proxy = await createPublicMediaProxy(cancellation);
-        try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory, "--use-extractors", "StreamingCommunity,end", "--flat-playlist"] : []), ...args], cancellation, proxy.url); }
+        // yt-dlp caches SoundCloud's public client ID and refreshes it on 401/403.
+        // Keep it in Couch's data, so each search and playback needn't fetch the site's JS again.
+        const settings = plugin === "streamingcommunity" ? ["--use-extractors", "StreamingCommunity,end", "--flat-playlist"]
+          : soundcloud ? ["--cache-dir", resolve(process.env.COUCH_DATA_DIR ?? ".data", "yt-dlp-cache")] : [];
+        try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory] : []), ...settings, ...args], cancellation, proxy.url); }
         finally { await proxy.close(); }
       }
       finally { await bundled?.close(); }
