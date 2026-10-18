@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { defaultStringifySearch, useLocation, useRouter } from "@tanstack/react-router";
 import { providerForUrl, type ProviderItem } from "../shared/providers";
 import type { QueueEntry } from "../shared/protocol";
-import { isTvPresentation } from "./session/native-context";
+import { isTvPresentation } from "./session/presentation";
 import { focusPageControl } from "./navigation";
 
 type FocusTarget = { selector: string; index: number };

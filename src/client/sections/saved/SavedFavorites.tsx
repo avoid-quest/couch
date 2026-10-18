@@ -18,7 +18,7 @@ import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean, deviceId?: string) => Promise<boolean>;

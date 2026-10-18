@@ -11,6 +11,7 @@ import { deviceId, loadLocalDeviceSharing, localDeviceSharing, subscribeDeviceId
 import type { DeviceSharing } from "../../shared/device-sharing";
 import { connectRemoteText } from "../remote-text";
 import { couchApp } from "./native-context";
+import { isTvPresentation } from "./presentation";
 import { createLiveSession } from "./live";
 import { replyDeadline } from "./reply-deadline";
 import type { LiveSelection } from "../../shared/live-input";
@@ -186,7 +187,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       for (const capability of ["audio", "video"] as const) if (advertised[capability]) url.searchParams.set(capability, "1");
       if (playsVp9) url.searchParams.set("vp9", "1");
       if (couchApp?.update) url.searchParams.set("updates", "1");
-      if (couchApp?.tvPresentation) url.searchParams.set("tv", "1");
+      if (isTvPresentation()) url.searchParams.set("tv", "1");
       const asset = buildKey(loadedBuild);
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
@@ -200,7 +201,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (!isCurrent()) return;
         setStatus("syncing");
         advertiseSharing();
-        if (couchApp?.tvPresentation) textInput = connectRemoteText(field => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textFocus", field })); });
+        if (isTvPresentation()) textInput = connectRemoteText(field => { if (isCurrent() && connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "textFocus", field })); });
         stopRendering = connectRenderer(state => {
           rendererStatus = state.status; reportPlayback();
           if (connection.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ type: "player", state } satisfies PlayerMessage));

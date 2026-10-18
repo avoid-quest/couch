@@ -172,7 +172,7 @@ release notes ([ci.md](ci.md)).
 | Branch | Title | Scope | Updates |
 | --- | --- | --- | --- |
 | `spec` | Describe Couch's redesigned interface | this brief; design docs split by surface | `design.md`, `design/`, `AGENTS.md` |
-| `foundation` | Prepare the interface for its redesign | one presentation module; a TV presentation override for scratch and browser checks, unreachable in release builds; no visual change | `design/tv.md` |
+| `foundation` | Prepare the interface for its redesign | one presentation module; a TV presentation override for scratch and browser checks, unreachable in release builds; no visual change (landed) | `design/tv.md` |
 | `shell` | Navigate Couch with tabs and a now-playing bar | Shell; new section paths with redirects; existing pages render inside them | `design/shell.md` |
 | `home` | Open Home on what you'll most likely play next | Home | `design/home.md` |
 | `browse` | Search everything and open each source from its own home | Search, source homes, details | `design/browse.md` |
@@ -205,6 +205,7 @@ release notes ([ci.md](ci.md)).
 - **Seen on three screens.** Run a scratch Couch with its own
   `COUCH_DATA_DIR` and `COUCH_PORT`, and stop it by PID afterwards. Take
   before and after screenshots of the layer's surface at 1920×1080 in TV
-  presentation, 1440×900 on desktop and 390×844 on a phone.
+  presentation ([in a browser](design/tv.md#see-the-tv-in-a-browser)),
+  1440×900 on desktop and 390×844 on a phone.
 - **Docs follow code.** Move the layer's decisions from this brief into its
   surface doc, and delete them here.

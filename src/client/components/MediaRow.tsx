@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemMedia } from "@/components/ui/item";
 import { cn } from "@/lib/utils";
 import { usePlayOn } from "./PlayOn";
-import { isTvPresentation } from "@/session/native-context";
+import { isTvPresentation } from "@/session/presentation";
 
 /** A divided list of MediaRow items. */
 export function MediaList({ className, ...props }: ComponentProps<"ul">) {
