@@ -44,6 +44,14 @@ then the clock. The current tab names the page, so section roots carry no
 visible title of their own. The current tab is underlined; a focused tab
 inverts, as every control does.
 
+While sharing, the search keeps at least 11rem and the right column can take
+space from the left, moving the tabs only as much as needed. Below `xl`,
+the sharing status gives up "Sharing screen" (or sound) before the search
+gives up that width. Stop sharing keeps its label from 24rem up; below that,
+it is a 44px stop icon with the same accessible name. This smaller breakpoint
+keeps the label on a 390px phone while fitting the search and Couch switch
+at 320px. Without sharing, the columns and search keep their usual widths.
+
 The header is sticky: it stays at the top on the page's solid ground while
 the page scrolls under it, and the player hides it. It publishes its height
 as `--top-bar` (`useTopBar`, as the footer publishes `--bottom-bar`), and the
