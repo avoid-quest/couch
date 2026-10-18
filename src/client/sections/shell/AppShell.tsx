@@ -318,10 +318,11 @@ export function ShellChrome({ children }: PropsWithChildren) {
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
             {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex" />}
-            <div data-app-status className="col-start-3 flex min-w-0 items-center justify-end gap-1 touch:flex-1">
-              <LiveSharingStatus />
+            {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. */}
+            <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1">
+              <LiveSharingStatus header />
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 touch:max-w-none tv:max-w-64" />}
+              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-2 touch:hidden tv:inline" />
