@@ -101,7 +101,7 @@ window, or a browser tab using the [TV override](design/tv.md#see-the-tv-in-a-br
 viewport and a paused finite direct-media video that supports byte-range seeking (a
 provider's video opens `/collection`, and the Details check wants the Playback sheet's `/item` link). Network
 sharing must be enabled for the pairing-dialog check. Save two direct-media videos
-with only titles (no metadata or known duration yet) as the first For later items
+with only titles (no metadata or known duration yet) as the first two items in For later
 to exercise the Home tile and asynchronous Details check. Their compact controls
 also catch Up wrongly choosing the Saved rail over the preceding video; taller
 rows with metadata can hide that regression. Reload the renderer before
