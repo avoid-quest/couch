@@ -320,8 +320,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          {/* The TV's tab bar scrolls away with the page (Up from its first row returns to it); elsewhere the header stays. */}
-          <header className={cn("app-header drag-region window-controls-inset sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-(--gutter) py-1.5 tv:static tv:grid tv:grid-cols-[1fr_auto_1fr]", onPlayer && "hidden")}>
+          {/* The TV's tab bar scrolls away with the page (Up from its first row returns to it); elsewhere the header stays.
+              The player hides it with the attribute: tv:grid would beat the class and lay the TV's header over the picture. */}
+          <header hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-(--gutter) py-1.5 tv:static tv:grid tv:grid-cols-[1fr_auto_1fr]">
             {/* The TV names itself at the left; a phone's top bar names the page. */}
             {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : paired && <span className="hidden min-w-0 flex-1 truncate text-lg font-semibold tracking-tight touch:block">{section}</span>}
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). */}

@@ -131,17 +131,27 @@ html { view-transition-name: none; }
 .player-workspace { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); pointer-events: none; }
 .player-main { position: relative; min-width: 0; min-height: 0; }
 .player-band { position: absolute; inset: auto 0 0; padding-inline: var(--gutter); pointer-events: auto; }
-/* Video controls shade the picture without a hard edge that looks like a crop. */
-.player-band.player-video-controls { pointer-events: none; padding-top: 3.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 3rem, rgb(0 0 0 / 96%)); }
+/* Video controls shade the picture only as dark as their text needs, easing in over --fade so no edge looks like a
+   crop; the top band mirrors the band. */
+.player-video-controls { --fade: 3.75rem; --scrim: transparent, rgb(0 0 0 / 10%) calc(var(--fade) * .25), rgb(0 0 0 / 35%) calc(var(--fade) * .5), rgb(0 0 0 / 70%) calc(var(--fade) * .8), rgb(0 0 0 / 88%) var(--fade), rgb(0 0 0 / 96%); pointer-events: none; }
+.player-band.player-video-controls { padding-top: var(--fade); background: linear-gradient(to bottom, var(--scrim)); }
+.player-top.player-video-controls { padding-bottom: var(--fade); background: linear-gradient(to top, var(--scrim)); }
 .player-video-controls > * { pointer-events: auto; }
-.player-band[data-player-band="hidden"] { pointer-events: none; }
+.player-band[data-player-band="hidden"], .player-top[data-player-top="hidden"] { pointer-events: none; }
+/* The top band or Now playing says when it ends (or Live), so the band's timeline doesn't repeat it. */
+.player-band :is([data-end-time], [data-live]) { display: none; }
+/* Up next over a video starts below the top band, which turns solid, so the picture letterboxes under it. */
+.player-page[data-queue-open]:not([data-artwork-stage]) .player-top { padding-bottom: .75rem; background: var(--background); }
 .player-queue { display: none; flex-direction: column; min-width: 0; min-height: 0; pointer-events: auto; }
 [data-artwork-stage] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1.5rem); }
 [data-artwork-stage] .player-main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; }
-.player-summary { display: flex; flex-direction: column; align-items: center; gap: 1rem; width: min(26rem, 100%); min-height: 0; flex: 0 1 auto; pointer-events: auto; }
-.player-art { width: min(22rem, 100%); aspect-ratio: 1; min-height: 0; max-height: 22rem; flex: 0 1 auto; }
-.player-art > :not(svg), .player-art img { width: 100%; height: 100%; min-height: 0; min-width: 0; object-fit: contain; background: transparent; }
+.player-summary { display: flex; flex-direction: column; gap: 1.5rem; width: min(24rem, 100%); min-height: 0; flex: 0 1 auto; pointer-events: auto; }
+.player-art { width: 100%; min-height: 0; max-height: 24rem; flex: 0 1 auto; }
+/* Artwork as it comes, contained on black and set down on the copy below it: the box hugs it up to a square, and short screens shrink it whole. */
+.player-art > :not(svg), .player-art img { width: 100%; height: auto; max-height: 100%; min-height: 0; min-width: 0; object-fit: contain; object-position: left bottom; background: transparent; }
 .player-art > svg { width: 4rem; height: 4rem; }
+/* MediaArtwork's own 16:9 box would letterbox square and portrait art, so the image keeps its ratio. */
+.player-art img { aspect-ratio: auto; }
 [data-player-audio-copy] { flex: 0 0 auto; }
 .player-timeline:has([role="slider"]) { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; }
 .player-timeline:has([role="slider"]) > .relative { grid-column: 2; grid-row: 1; }
@@ -149,7 +159,7 @@ html { view-transition-name: none; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:first-child { grid-column: 1; grid-row: 1; max-width: 9rem; }
 .player-timeline:has([role="slider"]) [data-time-labels] > span:last-child { grid-column: 3; grid-row: 1; }
 /* Transport, then the timeline's slot, then the tools. A timeline takes its own row above (it comes first in the
-   DOM, so focus lands on it); "Live" stays in the slot between transport and tools. */
+   DOM, so focus lands on it); live that can't seek leaves the slot between transport and tools empty. */
 .player-control-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .25rem 1.5rem; }
 .player-control-row > .player-timeline:has([role="slider"]) { grid-column: 1 / -1; grid-row: 1; }
 .player-control-row > .player-transport { order: -1; }
@@ -157,20 +167,22 @@ html { view-transition-name: none; }
 @media (min-width: 960px) {
   [data-artwork-stage] .player-workspace { grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: 3rem; }
   [data-artwork-stage] .player-queue { display: flex; border-left: 1px solid var(--border); padding-left: 1.5rem; }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: 3.5rem; bottom: var(--bottom-bar, 10rem); grid-template-columns: minmax(0, 1fr) 24rem; }
-  .player-page[data-queue-open]:not([data-artwork-stage]) .player-video { right: 24rem; }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: var(--player-top, 3.5rem); bottom: var(--bottom-bar, 10rem); grid-template-columns: minmax(0, 1fr) 24rem; }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-video { top: var(--player-top, 3.5rem); right: 24rem; }
   .player-page[data-queue-open]:not([data-artwork-stage]) .player-queue { display: flex; border-left: 1px solid var(--border); padding: 1.5rem; }
 }
 @media (max-width: 959px) {
   [data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) calc(var(--bottom-bar, 10rem) + 1rem); }
+  /* On phones Up next replaces the picture too. */
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-workspace { top: calc(var(--player-top, 3.5rem) + 1rem); }
+  .player-page[data-queue-open]:not([data-artwork-stage]) .player-video { visibility: hidden; }
   [data-queue-open] .player-main { display: none; }
   [data-queue-open] .player-summary { display: none; }
   [data-queue-open] .player-queue { display: flex; grid-row: 1; }
   .player-control-row { column-gap: .5rem; }
 }
 @media (max-width: 599px) {
-  [data-player-audio-copy] h1 { font-size: 1.25rem; }
-  .player-timeline [data-current-chapter], .player-timeline [data-end-time] { display: none; }
+  .player-timeline [data-current-chapter] { display: none; }
 }
 /* Keep the transport and 44px tools reachable on narrow phones. */
 @media (max-width: 399px) {
@@ -181,10 +193,10 @@ html { view-transition-name: none; }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }
   .player-header { padding-block: .25rem; }
   [data-player-band] { padding-block: .25rem; }
-  .player-band.player-video-controls { padding-top: 1.75rem; background: linear-gradient(to bottom, transparent, rgb(0 0 0 / 88%) 1.5rem, rgb(0 0 0 / 96%)); }
+  .player-video-controls { --fade: 1.75rem; }
   .player-control-row { column-gap: .5rem; }
   [data-player-audio-copy] { gap: .25rem; }
-  [data-player-audio-copy] h1 { font-size: 1.125rem; -webkit-line-clamp: 1; }
+  [data-player-audio-copy] :is(h1, [data-player-ends]) { font-size: 1.125rem; -webkit-line-clamp: 1; }
 }
 
 .player-page[data-player-idle][data-queue-open] .player-workspace { inset: 4.5rem var(--gutter) 1rem; display: flex; justify-content: center; }
