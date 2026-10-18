@@ -5,7 +5,6 @@ import { BookmarkIcon, CompassIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
-import { CouchMark } from "@/components/CouchMark";
 import { DigitalClock } from "@/components/DigitalClock";
 import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
@@ -307,15 +306,14 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
-          {/* One header on every screen, the TV's: Couch's mark and the Couch switch at the left (the TV names itself there),
+          {/* One header on every screen, the TV's: the Couch switch at the left (the TV names itself there),
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
-              scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the mark, the switch, search
-              and their tabs are the bottom bar, with Settings last. */}
+              scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
+              with their tabs in the bottom bar and Settings last. */}
           <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid">
             <div className="flex min-w-0 items-center">
-              <CouchMark className="h-5 shrink-0" />
               {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
-              {tvPresentation ? <span className="min-w-0 truncate px-2.5 text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+              {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}

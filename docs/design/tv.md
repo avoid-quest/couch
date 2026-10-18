@@ -8,7 +8,7 @@ per row and tile, a quiet header, and controls revealed over the picture.
 What the TV adds is for its remote, which has only arrows, OK and Back:
 
 - spatial navigation, focus on page entry and Back, below;
-- its own name beside Couch's mark in the header instead of the Couch switch,
+- its own name alone in the header instead of the Couch switch,
   and no Remote tab or Keyboard shortcuts ([Shell](shell.md#header-and-section-nav));
 - OK held on a media row or tile, which opens its one menu, as on Apple TV
   and Android TV; a short OK acts on release ([Menus](../design.md#menus)). A

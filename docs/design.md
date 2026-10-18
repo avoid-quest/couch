@@ -24,9 +24,8 @@ right. Desktop icons use the black tile in `packaging/icons/icon.svg`. The macOS
 tray uses a transparent template silhouette so the system can tint it. The PWA
 maskable icon uses a full black background and keeps the mark inside the safe
 circle. The website uses a custom SVG for this product mark because the shadcn
-catalog provides interface icons, not brand identities. The app's header shows
-the same drawing without its tile, in `currentColor` (`CouchMark`), on every
-screen.
+catalog provides interface icons, not brand identities. The app's header uses
+the Couch switch or the TV's name on its own, without the mark.
 
 ## Principles
 
@@ -168,8 +167,6 @@ Shared building blocks in `src/client/components`:
   ([Browse](design/browse.md#mediatile)).
 - `MediaArtwork`: contained artwork; without any, a hairline frame with the
   title set in type ([Browse](design/browse.md#keep-discovery-context-visible)).
-- `CouchMark`: the brand mark in `currentColor`, at the header's left
-  ([Shell](design/shell.md#header-and-section-nav)).
 - `RowMenu`: an item's one menu, `useItemMenu` and `ItemMenu`, for media rows,
   tiles, Up next's rows and Details' "…" ([Menus](#menus)).
 
@@ -248,7 +245,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 
 Each surface's own layout and behaviour lives in its file:
 
-- [Shell](design/shell.md): the sections and their paths, the header (mark, search) and tab bars, the Couch switch, the now-playing bar, keyboard shortcuts, first run and pairing, and when a picture opens the player.
+- [Shell](design/shell.md): the sections and their paths, the header (name, search) and tab bars, the Couch switch, the now-playing bar, keyboard shortcuts, first run and pairing, and when a picture opens the player.
 - [Home](design/home.md): Home's hero and its shelves of tiles.
 - [Browse](design/browse.md): Search, Discover, Saved, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
 - [Player](design/player.md): the player band, transport, timeline, Up next and Playback settings.

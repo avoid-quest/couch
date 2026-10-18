@@ -33,8 +33,8 @@ their redirects.
 
 ## Header and section nav
 
-One header on every screen, on a three-column grid: at the left, Couch's
-mark and the Couch switch in muted ink (the TV names itself there instead,
+One header on every screen, on a three-column grid: at the left, the Couch
+switch in muted ink (the TV names itself there instead,
 as plain muted text, since it has no switch); in the middle, centred text
 tabs (Home, Discover, Saved, then Remote while the Couch has a TV, then
 Settings); at the right, Stop sharing while this device shares its screen or
@@ -51,11 +51,8 @@ page's scroll padding clears it by that and a rem, so a focused tile is never
 under it. On the TV, Up from a page's first row still reaches it
 ([TV](tv.md#every-journey-step-works-with-a-remote)).
 
-**The mark** is `CouchMark`: the drawing inside `packaging/icons/icon.svg`
-without its black tile, as an inline SVG in `currentColor`, its cuts a mask so
-it sits on any ground. The catalog has interface icons, not brand identities
-([Brand mark](../design.md#brand-mark)). It is the one thing at the header's
-left in white ink, on every screen, phones included.
+The Couch switch and the TV's plain name stand alone at the page gutter; the
+header carries no brand mark.
 
 **Search** is `HeaderSearch`: shadcn `InputGroup` with a lucide Search icon and
 the placeholder "Search", up to 16rem wide. `/` focuses it from any page
@@ -78,7 +75,7 @@ Input exceptions:
   bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
   Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,
   Tv, Settings) over its label. Five equal-width tabs fit 390px; without a TV
-  there are four. The top bar is a row: the mark and the Couch switch at the left, then
+  there are four. The top bar is a row: the Couch switch at the left, then
   the search field, which takes the room left (it fits 390px with a long
   name, which truncates). Settings is in the bottom bar; the clock is hidden. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps
   its grid, tabs and clock.
