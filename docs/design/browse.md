@@ -18,19 +18,24 @@ is Discover.
 ## Discover
 
 Discover (`/discover`) is Home's sibling: shelves of `MediaTile`s under their
-headings, with no hero, since Couch picks nothing for it. Each heading names
+headings, with no hero, since Couch picks nothing for it. Each shelf's heading names
 what it samples and is a link that opens the rest ([MediaTile](#mediatile)).
 In order, so what's live leads and wide frames break up the catalogues'
 posters:
 
+- **Shared sources**, while devices share screen or sound: a compact row of
+  names over their input kind, wrapping like Sources.
+  Pressing a source plays it; its menu holds Play on, Play next and Queue.
+  The first source carries `data-page-first`, so TV focus starts there.
+  Sharing's Add source opens Discover directly.
 - **Radio**, "On air now": the saved stations, then the built-in ones (Home's
   Radio shelf without its recents, `useOnAir`). A tile reads the station and
   its current show, else where it's from; the heading already says they're on
   air, so a tile doesn't repeat "Live". A show's `expiresAt` is when its data
   refreshes, not when it ends, so there is no "until" time. A tile plays its
-  station, and its first carries `data-page-first`. The shelf waits for the
-  shows, so no tile grows a line under the focus, then keeps its order while
-  Discover stays open. Its heading opens every station (`/discover/radio`):
+  station, and its first carries `data-page-first` when no shared source leads.
+  The shelf waits for the shows, so no tile grows a line under the focus, then
+  keeps its order while Discover stays open. Its heading opens every station (`/discover/radio`):
   its source choice (`radioSource`), count, Filter (`filter`) and pager
   (`page`), as divided rows.
 - **Live TV**, "N channels", only while a Live TV source has some: the
@@ -47,15 +52,17 @@ posters:
   search hit's verbs.
 - **Sources**: the sources that start from a search, YouTube, Bandcamp and
   SoundCloud, as a compact row of names over a muted line, each opening its
-  scoped search (`/collection?provider=…`, an Empty with a search field). The
-  devices' shared inputs lead the row, and play; their other verbs are their
-  menu.
+  scoped search (`/collection?provider=…`, an Empty with a search field).
 
 Shelves load side by side and hold about a tile's height meanwhile, so the
 ones below don't move under the focus. One that fails says "Couldn't load
 {source}." with Try again, as Home does; an empty one is left out. Discover's
 own pages carry a breadcrumb to it, and Back returns to the heading that
 opened them. As a section root, Discover carries no breadcrumb.
+
+Shared sources is the exception: its row comes and goes with intentional
+sharing. TV navigation keeps the same Radio tile focused when sharing starts;
+after its focused last source ends, the next arrow reaches Radio's first tile.
 
 Not yet: a programme grid for Live TV, and any Core endpoint it would need;
 it waits for a source that needs one.

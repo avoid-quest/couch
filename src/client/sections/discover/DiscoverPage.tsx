@@ -10,7 +10,7 @@ import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { Shelf } from "@/components/Shelf";
 import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
-import { providerNames, SearchOnlineResults, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
+import { providerNames, SearchOnlineResults, type SearchHit, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
 import { useKeptOrder } from "@/sections/home/home-rows";
 import { useShell } from "@/sections/shell/shell-context";
@@ -41,7 +41,7 @@ const searches: { provider: ProviderId; meta: string }[] = [
 ];
 
 /**
- * Discover, Home's sibling: what's on air, then Live TV while a source has channels, then a shelf from each source's
+ * Discover, Home's sibling: shared inputs, what's on air, then Live TV while a source has channels, then a shelf from each source's
  * own home, then the sources that start from a search. Shelves load side by side and hold their place meanwhile, so
  * nothing moves under the focus; one that fails says so, and an empty one is left out.
  */
@@ -49,9 +49,11 @@ export function DiscoverPage() {
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected });
+  const shared = useLiveSourceHits("");
   return <section data-page="Discover" aria-label="Discover" className="grid min-w-0 gap-12">
     <h1 className="sr-only">Discover</h1>
-    <OnAir />
+    {!!shared.length && <SharedSources hits={shared} />}
+    <OnAir first={!shared.length} />
     {iptv.data?.sources.some(source => source.channelCount) && <LiveTv />}
     {iptv.error && !iptv.data && <Failed what="Live TV" retry={() => void iptv.refetch()} />}
     {homes.map(home => <SourceHome key={home.provider} {...home} />)}
@@ -60,7 +62,7 @@ export function DiscoverPage() {
 }
 
 /** The stations on air (Home's Radio shelf, without its recents); the heading opens every station. */
-function OnAir() {
+function OnAir({ first }: { first: boolean }) {
   const { available, enqueueRadio } = useShell();
   const { on } = usePlayOn();
   const onAir = useOnAir();
@@ -72,7 +74,7 @@ function OnAir() {
   return <Shelf title="Radio" label="Radio stations" href="/discover/radio" time={onAir.pending ? undefined : stations.some(station => onAir.show(station.id)) ? "On air now" : plural(stations.length, "station")}>
     {onAir.pending ? <Pending /> : stations.map((station, index) => <li key={station.id} className="flex shrink-0">
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
-      <MediaTile data-page-first={index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
+      <MediaTile data-page-first={first && index === 0 || undefined} shape="square" title={station.name} meta={onAir.meta(station) || station.groupTitle || station.countryCode || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
         aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} menu={stationMenu(station)} />
     </li>)}
   </Shelf>;
@@ -123,15 +125,23 @@ function SourceHome({ provider, time }: { provider: ProviderId; time: string }) 
   </>;
 }
 
-/** The sources that start from a search (YouTube, Bandcamp, SoundCloud), after the devices' shared inputs, which play. */
+/** The devices' shared inputs, while any are shared; each plays, and its other verbs are its menu. */
+function SharedSources({ hits }: { hits: SearchHit[] }) {
+  const { on } = usePlayOn();
+  return <section aria-labelledby="discover-shared-sources" className="grid min-w-0 gap-3">
+    <h2 id="discover-shared-sources" className="flex min-h-8 items-center text-base font-medium">Shared sources</h2>
+    <ul data-nav-row aria-label="Shared sources" className="-ml-2.5 flex flex-wrap gap-x-4 gap-y-2">
+      {hits.map((hit, index) => <SourceButton key={hit.id} data-page-first={index === 0 || undefined} title={hit.title} meta={hit.meta} aria-label={on(`Play ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== "Play")} />)}
+    </ul>
+  </section>;
+}
+
+/** The sources that start from a search (YouTube, Bandcamp, SoundCloud). */
 function Sources() {
   const navigation = useDetailNavigation();
-  const { on } = usePlayOn();
-  const shared = useLiveSourceHits("");
   return <section aria-labelledby="discover-sources" className="grid min-w-0 gap-3">
     <h2 id="discover-sources" className="flex min-h-8 items-center text-base font-medium">Sources</h2>
     <ul data-nav-row aria-label="Sources" className="-ml-2.5 flex flex-wrap gap-x-4 gap-y-2">
-      {shared.map(hit => <SourceButton key={hit.id} title={hit.title} meta={hit.meta} aria-label={on(`Play ${hit.title}`)} disabled={hit.primary.disabled} onClick={hit.primary.run} menu={hit.actions.filter(action => action.label !== "Play")} />)}
       {searches.map(({ provider, meta }) => {
         const href = collectionLocation({ provider, url: "" });
         return <SourceButton key={provider} title={providerNames[provider]} meta={meta} aria-label={`Search ${providerNames[provider]}`} href={href} onClick={() => navigation.open(href)} />;
