@@ -33,8 +33,7 @@ catalog provides interface icons, not brand identities.
   bottom control band; and the Device you control and where it plays one step
   away.
 - **One target per row and tile.** Pressing a media row or tile does its main
-  verb; its page holds every verb, and on a pointer or touch screen its
-  context menu holds the rest.
+  verb; its one menu holds the rest ([Menus](#menus)).
 - **Real content only.** A browse page shows what its source returns, never
   suggestions Couch picked. A source without a home page of its own (YouTube,
   Bandcamp, SoundCloud) opens on an Empty with a search field scoped to it.
@@ -122,9 +121,8 @@ Shared building blocks in `src/client/components`:
   and row of verbs ([Browse](design/browse.md#details)).
 - `Shelf`: a section heading over a plain overflow row of `MediaTile`s, for
   Home's shelves and Live's On air ([Browse](design/browse.md#mediatile)).
-- `RowMenu`: one list of verbs as a row's `RowContextMenu` (right-click or a
-  long press) or a visible "…" `OptionsMenu`, for Details' rest and the TV's
-  rows that keep theirs ([Browse](design/browse.md#mediarow--medialist)).
+- `RowMenu`: an item's one menu, `useItemMenu` and `ItemMenu`, for media rows,
+  tiles, Up next's rows and Details' "…" ([Menus](#menus)).
 
 Release notes use `react-markdown` with GitHub-flavoured Markdown because the
 [shadcn catalog](https://ui.shadcn.com/docs/components) has no Markdown renderer.
@@ -148,8 +146,31 @@ Messages:
 - **Dialog** for short focused tasks (pairing, source setup); **AlertDialog**
   for confirmations; **Sheet** for player panels; **Popover** for the header's
   Couch switch: the server this window shows, with its connection status;
-  **Context Menu** for a row's other verbs on right-click or a long press
-  ([Browse](design/browse.md#mediarow--medialist)).
+  **Dropdown Menu** for an item's other verbs ([Menus](#menus)).
+
+## Menus
+
+One item, one menu. Every media row and tile has one primary target, its
+press, and at most one menu holding everything else, Details included where
+the press doesn't open Details. The menu is a controlled shadcn Dropdown Menu
+fed one verb list (`useItemMenu` and `ItemMenu` in `RowMenu.tsx`). It hangs
+from the item's "…" ("Options for {title}"), or from the whole item where a
+row's page holds all its verbs and the row shows no "…", so it opens in one
+place with the same verbs whatever opened it:
+
+| Input | Opens the menu |
+| --- | --- |
+| Pointer | The "…", shown while the item is hovered or holds focus; right-click |
+| Touch | The "…", always shown; a long press held still (500 ms), with no text selection or link preview |
+| Keyboard | The "…" (a Tab stop on rows and tiles); the menu key or Shift+F10 on the item |
+| TV remote | OK held for 500 ms on the item, which acts on release when pressed shortly; Right to a row's "…" (a tile's is no stop, so Up and Down still go shelf to shelf, but it shows in the focused tile's caption; it is the tile's one stop while the press is disabled) |
+| Remote section | OK held on the pad, sent to the TV as a held OK |
+
+A keyboard or a remote lands on the menu's first verb. Esc and Back close it
+and return focus to what opened it, the item or its "…"; a verb runs from there,
+so Details records the item for Back. A verb that takes its item away (Remove,
+Saved on a station shown only as a favourite) leaves focus on the neighbouring
+row or tile in its list or shelf instead.
 
 ## Copy
 

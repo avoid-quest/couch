@@ -60,6 +60,11 @@ test("Remote selects a joined TV without output consent and keeps target through
     assert.equal(f.phone.state.outputs?.some(output => output.deviceId === phoneId), false);
     assert.equal((await f.phone.command({ type: "navigate", key: "down", deviceId: tvId }, tvId)).ok, true);
     await until(() => f.tv.messages.some(message => message.type === "navigation" && message.key === "down"));
+    // OK held on the Remote reaches the TV as "menu", which opens its focused item's menu; unknown keys don't.
+    assert.equal((await f.phone.command({ type: "navigate", key: "menu", deviceId: tvId }, tvId)).ok, true);
+    await until(() => f.tv.messages.some(message => message.type === "navigation" && message.key === "menu"));
+    await assert.rejects(f.phone.command({ type: "navigate", key: "hold" as "menu", deviceId: tvId }, tvId), /No command result/);
+    assert.equal(f.tv.messages.some(message => message.type === "navigation" && (message.key as string) === "hold"), false);
     assert.equal(f.host.messages.some(message => message.type === "navigation"), false);
     f.phone.socket.terminate(); await until(() => f.phone.socket.readyState === WebSocket.CLOSED);
     const returned = await f.connect(f.phoneToken, phoneId);

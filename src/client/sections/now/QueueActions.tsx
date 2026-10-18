@@ -1,10 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { apiSend } from "@/api/client";
 import type { Credentials } from "../../session/session";
 import type { Action, QueueEntry } from "../../../shared/protocol";
 import type { MenuAction } from "@/components/RowMenu";
-import { queueItemLocation } from "@/detail-navigation";
+import { queueItemLocation, useDetailNavigation } from "@/detail-navigation";
 import { failed } from "@/toasts";
 
 export type QueueActionsProps = {
@@ -20,6 +19,7 @@ export type QueueActionsProps = {
 
 /** An Up next entry's other verbs: Details, Play next, Earlier, Later, Save for later and Remove. Nothing for rows without them. */
 export function useQueueActions(props?: QueueActionsProps): MenuAction[] {
+  const details = useDetailNavigation();
   const save = useMutation({
     mutationFn: () => apiSend(props!.credentials, "/api/for-later", { reference: { kind: "queue", id: props!.entry.id } }, "POST", 20_000),
     onError: error => failed(`Couldn't save ${props?.entry.title}.`, error),
@@ -28,7 +28,8 @@ export function useQueueActions(props?: QueueActionsProps): MenuAction[] {
   const { entry, index, queue, connected, run, firstUpcomingIndex, lastUpcomingIndex } = props;
   const upcoming = index >= firstUpcomingIndex && firstUpcomingIndex < lastUpcomingIndex;
   return [
-    ...(!entry.liveSourceId ? [{ label: "Details", node: <Link to={queueItemLocation(entry)}>Details</Link> }] : []),
+    // Details opens as any detail does, so it keeps the section (Home, the player) and Back finds the entry again.
+    ...(!entry.liveSourceId ? [{ label: "Details", run: () => details.open(queueItemLocation(entry)) }] : []),
     ...(upcoming && index > firstUpcomingIndex ? [
       { label: "Play next", disabled: !connected, run: () => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[firstUpcomingIndex]?.id ?? null }) },
       { label: "Earlier", disabled: !connected, run: () => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index - 1]!.id }) },

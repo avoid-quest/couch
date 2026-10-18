@@ -20,8 +20,7 @@ import type { Credentials } from "../../session/session";
 import { offline } from "@/copy";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
-import { OptionsMenu, RowContextMenu } from "@/components/RowMenu";
-import { isTvPresentation } from "@/session/presentation";
+import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 
 type Props = {
   state: ClientSessionState | null;
@@ -88,9 +87,9 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     const rows = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-queue-entry-id]") ?? [])];
     const row = rows.find(row => row.dataset.queueEntryId === focused.id);
     const adjacent = rows[Math.min(focused.index, rows.length - 1)];
-    // A removed row leaves focus on the adjacent one: its "…" on the TV, else its one target, whose context menu removed it.
+    // A removed row leaves focus on the adjacent one, on the control that opened its menu: its "…", else its one target.
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
-      ?? adjacent?.querySelector<HTMLElement>("[data-row-options]") ?? adjacent?.querySelector<HTMLElement>("[data-play]:not(:disabled)")
+      ?? (focused.element.matches("[data-row-options]") ? adjacent?.querySelector<HTMLElement>("[data-row-options]") : null) ?? adjacent?.querySelector<HTMLElement>("[data-play]:not(:disabled)")
       ?? panelRef.current?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-sheet]")?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest("[data-player-idle]")?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)")
@@ -143,14 +142,14 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
 }
 
 
-// One target that plays the entry, with its other verbs in its context menu. An entry's page holds only Play and Save,
-// so the TV, which can't open a context menu, keeps them in a "…" on the row.
+// One target that plays the entry, with its other verbs in its menu. An entry's page holds only Play and Save, so the
+// row keeps its "…".
 function QueueRow({ entry, meta, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
-  const menu = useQueueActions(verbs);
+  const options = useItemMenu(useQueueActions(verbs));
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 gap-1"><span className="truncate text-sm font-medium">{entry.title}</span>{meta && <span className="truncate text-xs text-muted-foreground">{meta}</span>}</span></>;
-  return <RowContextMenu actions={menu}><li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} className="flex min-w-0 items-center gap-2 py-2">
-    {onPlay ? <Button data-play variant="ghost" aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
-    {isTvPresentation() && <OptionsMenu title={entry.title} actions={menu} />}
-  </li></RowContextMenu>;
+  return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 items-center gap-2 py-2", options.item.className)}>
+    {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
+    <ItemMenu menu={options} title={entry.title} />
+  </li>;
 }
