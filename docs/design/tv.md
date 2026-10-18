@@ -13,8 +13,8 @@ What the TV adds is for its remote, which has only arrows, OK and Back:
 - a visible "…" on rows whose page doesn't hold their other verbs, since a
   remote can't open the context menu that holds them on other screens
   ([Browse](browse.md#mediarow--medialist));
-- no shelf scrollbars, Back buttons or fullscreen, which only a pointer or a
-  window uses.
+- no shelf scrollbars, Back buttons, fullscreen or the timeline's time under
+  the pointer, which only a pointer or a window uses.
 
 Home's hero and shelves: [Home](home.md). Search and Details: [Browse](browse.md).
 

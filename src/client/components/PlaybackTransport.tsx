@@ -1,5 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
+import { useState, type PointerEvent } from "react";
 import { Pause, Play, RotateCcw, SkipForward, Square, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -52,10 +53,12 @@ export function useEndTime(state: ClientSessionState | null | undefined) {
 /**
  * Position, the timeline and "−3:24 ends 20:59", only where a timeline means something: media that seeks,
  * or has a length to seek through once loaded (the slider stays, disabled, meanwhile). Live media that
- * can't seek reads "Live" alone: no bar, no position, no total.
+ * can't seek reads "Live" alone: no bar, no position, no total. A hovering pointer reads the time under it.
  */
 export function PlaybackTimeline({ state, connected, run, pageFirst = false, compact = false, className }: Props & { pageFirst?: boolean; compact?: boolean; className?: string }) {
   const playbackClock = usePlaybackClock();
+  // Where a hovering pointer is along the bar, from 0 to 1; a drag keeps reporting it through the slider's pointer capture.
+  const [hover, setHover] = useState<number | null>(null);
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
@@ -67,9 +70,17 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
   if (!canSeek && (live || !length)) return live ? <span data-live className={cn("text-sm text-muted-foreground", className)}>Live</span> : null;
   const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (playbackClock.duration ?? 0)) ?? [];
   const chapter = player.chapters?.findLast(item => item.position <= playbackClock.position);
+  const max = canSeek ? playbackClock.duration! : length;
+  const disabled = !transportReady || !canSeek;
+  // Touch has no hover; the TV's remote has none either (tv:hidden).
+  const track = (event: PointerEvent<HTMLDivElement>) => { const { left, width } = event.currentTarget.getBoundingClientRect(); if (event.pointerType === "touch" || !width) return; setHover(Math.min(1, Math.max(0, (event.clientX - left) / width))); };
   return <div className={cn("grid gap-1", compact && "player-timeline", className)}>
-    <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={canSeek ? playbackClock.duration! : length} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady || !canSeek}
-      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}</div>
+    <div className="relative @container" onPointerMove={track} onPointerLeave={() => setHover(null)}><RangeControl key={player.playbackId || "idle"} label="Playback position" value={playbackClock.position || 0} max={max} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={disabled}
+      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{canSeek && chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 size-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / playbackClock.duration! * 100}%` }} />)}
+      {/* The time under the pointer, just clear of the thumb at any target height, centred over the pointer and held
+          inside the bar at either end (100cqw is the bar's width). */}
+      {hover !== null && !disabled && <span data-hover-time aria-hidden="true" className="pointer-events-none absolute bottom-[calc(50%+.875rem)] left-0 bg-background px-2 py-1 text-sm tabular-nums tv:hidden" style={{ translate: `clamp(0px, calc(${hover} * 100cqw - 50%), calc(100cqw - 100%))` }}>{formatDuration(Math.round(hover * max))}</span>}
+    </div>
     <div data-time-labels className="flex justify-between gap-4 text-sm tabular-nums text-muted-foreground">
       <span className="min-w-0 truncate"><span className="text-foreground">{formatDuration(playbackClock.position || 0)}</span>{chapter && <span data-current-chapter className="ml-3">{chapter.title}</span>}</span>
       <span className="shrink-0">{live ? <span data-live>Live</span> : length ? <>−{formatDuration(remaining)}<span data-end-time> ends {formatEndTime(remaining)}</span></> : null}</span>
