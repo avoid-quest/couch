@@ -24,12 +24,14 @@ import { channelMeta, useChannelActions, useChannelLogo } from "./LiveTvPage";
 // A shelf samples its source's home; its heading opens the rest.
 const shelfLength = 12;
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-// The sources with a home of their own: what's live first, then the catalogues, so posters and wide frames alternate.
+// The sources with a home of their own: what's live first, then the catalogues, so wide frames break up the posters.
 const homes: { provider: ProviderId; time: string }[] = [
   { provider: "twitch", time: "Live now" },
   { provider: "streamingcommunity", time: "Films and series" },
   { provider: "raiplay", time: "Programmes" },
   { provider: "movies123", time: "Films" },
+  { provider: "animesaturn", time: "Anime" },
+  { provider: "animeunity", time: "Anime" },
 ];
 // The sources without one open on a search of their own.
 const searches: { provider: ProviderId; meta: string }[] = [

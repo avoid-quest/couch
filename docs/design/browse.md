@@ -18,8 +18,8 @@ is Discover.
 Discover (`/discover`) is Home's sibling: shelves of `MediaTile`s under their
 headings, with no hero, since Couch picks nothing for it. Each heading names
 what it samples and is a link that opens the rest ([MediaTile](#mediatile)).
-In order, so what's live leads and the catalogues' posters and wide frames
-alternate:
+In order, so what's live leads and wide frames break up the catalogues'
+posters:
 
 - **Radio**, "On air now": the saved stations, then the built-in ones (Home's
   Radio shelf without its recents, `useOnAir`). A tile reads the station and
@@ -37,8 +37,8 @@ alternate:
   (`/discover/live-tv`): the guide's channels with what's on now and next,
   by group (`group`), Filter (`filter`) and page (`page`).
 - **One shelf per source with a home**: Twitch ("Live now"),
-  StreamingCommunity ("Films and series"), RaiPlay ("Programmes") and
-  123MoviesFree ("Films"). Each holds the first twelve of the source's own
+  StreamingCommunity ("Films and series"), RaiPlay ("Programmes"),
+  123MoviesFree ("Films"), and AnimeSaturn and AnimeUnity ("Anime"). Each holds the first twelve of the source's own
   home, the same query its page makes (`ProviderPage`, `url` ""), so opening
   the heading shows them at once. A tile opens its Details; its menu holds its
   search hit's verbs.
