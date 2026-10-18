@@ -107,6 +107,46 @@ Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
 actions take `h-8 text-sm` and the touch target through its `actionButton` classes, as its default is 24px.
 
+## Motion
+
+A small touch, the same everywhere: things ease, nothing performs. One easing,
+`ease-out` (Tailwind's `cubic-bezier(0, 0, .2, 1)`, which `index.css` makes
+every `transition-*` utility's default), and two durations: **150 ms** for what
+answers a control, **200 ms** for what arrives.
+
+| What | Moves | Time |
+| --- | --- | --- |
+| Hover, press and selection: tints, ink, borders, the current tab's underline | colour, both ways | 150 ms |
+| Focus and a menu's highlight (inversion), a tile's outline | at once in, eased out as they leave | 150 ms |
+| A menu, popover, select or dialog | shadcn's fade, 95% zoom and short slide in; leaves at once | 150 ms |
+| A page (a new route) | fades in | 200 ms |
+| Artwork | fades in once it has loaded | 200 ms |
+| The Sheet | fades and rises in; leaves at once | 200 ms |
+| A toast | sonner's slide and fade, both ways | 200 ms |
+| The player's bands, and the subtitles they lift | fade; the subtitles move with them | 200 ms |
+| The now-playing bar growing into the player band | view transition (`couch-player-band`) | 320 ms |
+
+- **General rules first.** Every link, button, tab, option and menu item eases
+  its colours from one base rule in `index.css`, as the shadcn primitives'
+  own `transition-*` utilities do, and those win. A page fades in from the
+  shell (`starting:` on its root, so Saved's tabs or a new query don't
+  replay it), and `MediaArtwork` fades its image in. Add a `transition-*`
+  only where a component moves something else, as a saved list's rows fade
+  in their actions on hover.
+- **Inversion arrives at once.** Easing it in would pass through a grey that
+  reads as nothing, at every step of a held arrow; arriving at once keeps a
+  remote instant, and the fade as focus leaves is a short trail behind it.
+- **Overlays leave at once.** Menus, dialogs and Sheets hold focus, so they
+  close at once and focus is back on what opened them before the next key.
+- **Composited.** Opacity and transforms move surfaces; colour moves only on
+  small elements. The bar's grow is the one longer move, as it crosses the
+  screen.
+- **Never in the way.** No entrances on scroll, staggers, springs, scaling
+  tiles or loops; a page takes keys while it fades in.
+- **Reduced motion stills it all.** New motion is written `motion-safe:`; a
+  primitive's own `transition-*` carries `motion-reduce:transition-none`;
+  sonner stills toasts itself.
+
 ## Components
 
 Prefer shadcn components from `src/client/components/ui`, and check the

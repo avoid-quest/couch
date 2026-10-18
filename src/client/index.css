@@ -61,6 +61,8 @@ body { min-width: 0; }
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 }
+/* Motion eases out: every transition-* utility, and the rules below, start fast and settle (Design → Motion). */
+@theme { --default-transition-timing-function: var(--ease-out); }
 
 /* Clock: one dark theme. Black ground, white ink, hairlines; the picture brings the colour. */
 :root {
@@ -94,6 +96,9 @@ body { min-width: 0; }
   body { @apply bg-background text-foreground; }
   button, [role="button"] { touch-action: manipulation; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  /* What hover, a press or leaving focus changes on a control eases over 150 ms, as the shadcn primitives' own
+     transition-* utilities do (those win, being utilities). Muted text and a tile's caption ease with it. */
+  :is(a, button, [role="tab"], [role="option"], [role^="menuitem"], [data-tile-caption], .text-muted-foreground) { @apply motion-safe:transition-colors; }
 }
 @media (max-width: 700px) { :root { --gutter: 1rem; } }
 
@@ -107,12 +112,22 @@ body { min-width: 0; }
 :is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
 /* Artwork stays contained; focus outlines it and inverts only the tile caption. */
 [data-media-tile]:focus-visible { background: none; color: inherit; }
-[data-media-tile]:focus-visible [data-tile-art] { outline: .125rem solid var(--foreground); outline-offset: .125rem; }
+/* The outline grows from nothing rather than fading from transparent, which forced colours would draw on every tile. */
+[data-tile-art] { outline: 0 solid var(--foreground); outline-offset: .125rem; @apply motion-safe:transition-[outline-width]; }
+[data-media-tile]:focus-visible [data-tile-art] { outline-width: .125rem; }
 [data-media-tile]:focus-visible [data-tile-caption] { background: var(--foreground); color: var(--background); }
+/* Inversion (focus, a menu's highlight) arrives at once and fades only as it leaves: easing it in would pass through a
+   grey nobody can read, which a held arrow would show at every step, and a remote would feel slow. */
+:is(button, a, [role="tab"], [role="option"], [role^="menuitem"]):is(:focus-visible, [data-highlighted]),
+:is(button, a, [role="option"]):focus-visible .text-muted-foreground,
+[data-media-tile]:focus-visible :is([data-tile-art], [data-tile-caption], [data-tile-caption] *), [data-media-tile]:focus-visible ~ * { transition-duration: 0s; }
 html { view-transition-name: none; }
 
-/* The now-playing bar grows into the player band and back. */
+/* The now-playing bar grows into the player band and back: the one longer move, as it crosses the screen. */
 ::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+/* Toasts arrive like the other surfaces, over 200 ms, not sonner's 400 ms, so a leaving one has faded by the time sonner
+   unmounts it (200 ms). Sonner itself keeps them still with reduced motion. */
+[data-sonner-toaster] :is([data-sonner-toast], [data-sonner-toast] > *) { transition-duration: 200ms; transition-timing-function: var(--ease-out); }
 
 /* The Mac app has no title bar (app/main.ts). As in t3code, headers drag the window
    around their controls and leave 90pt for the window's buttons, which don't zoom.
@@ -138,7 +153,7 @@ html { view-transition-name: none; }
 .player-video-controls { --fade: 2.5rem; --scrim: transparent, rgb(0 0 0 / 7%) calc(var(--fade) * .2), rgb(0 0 0 / 21%) calc(var(--fade) * .4), rgb(0 0 0 / 39%) calc(var(--fade) * .6), rgb(0 0 0 / 53%) calc(var(--fade) * .8), rgb(0 0 0 / 60%) var(--fade), rgb(0 0 0 / 72%); --muted-foreground: rgb(255 255 255 / 85%); pointer-events: none; }
 /* The video's own subtitles rise clear of the band while it shows, and settle back as it hides. Chromium and WebKit
    expose the cue box; Firefox doesn't and drops these rules, so there they stay put. */
-.player-video video::-webkit-media-text-track-container { transition: translate .2s ease-out; }
+.player-video video::-webkit-media-text-track-container { transition: translate .2s var(--ease-out); }
 .player-page:has(> [data-player-band="shown"]) video::-webkit-media-text-track-container { translate: 0 calc(-1 * var(--bottom-bar, 0px)); }
 @media (prefers-reduced-motion: reduce) { .player-video video::-webkit-media-text-track-container { transition: none; } }
 .player-band.player-video-controls { padding-top: var(--fade); background: linear-gradient(to bottom, var(--scrim)); }
