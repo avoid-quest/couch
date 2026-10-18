@@ -75,12 +75,12 @@ Input exceptions:
 - **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) just
   before the clock; the TV, phones and Remote have none.
 - **Touch** (`touch:`, phones and windows below 960px): the tabs move to a
-  bottom tab bar for thumb reach (Home, Discover, Saved, and Remote while the
-  Couch has a TV), each a lucide icon (House, Compass, Bookmark, Tv) over its
-  label. The top bar is a row: the mark and the Couch switch at the left, then
+  bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
+  Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,
+  Tv, Settings) over its label. Five equal-width tabs fit 390px; without a TV
+  there are four. The top bar is a row: the mark and the Couch switch at the left, then
   the search field, which takes the room left (it fits 390px with a long
-  name, which truncates), and a Settings gear (`aria-label="Settings"`) where
-  the clock is. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps
+  name, which truncates). Settings is in the bottom bar; the clock is hidden. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps
   its grid, tabs and clock.
 - **The Mac window:** its buttons and the region that drags it live in the
   header; the search field, like every control there, takes its clicks back
