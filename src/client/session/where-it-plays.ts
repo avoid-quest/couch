@@ -35,6 +35,8 @@ export type Row = {
   mine: boolean;
   /** One line: why you can't change it, what it plays elsewhere, or what it plays here. This device's starts "This device". */
   status: string;
+  /** Why this receiver plays buffered, or why that stream failed, with Core's reason. */
+  explanation?: string;
   /** Pressing the row: in, it leaves; out, it joins with picture and sound as its consent and the media allow. */
   check: Control & { action?: Action };
   /** The fader, while it is in: its volume while its sound is in, else 0. */
@@ -112,6 +114,8 @@ export function picker(state: ClientSessionState, { here, tv = false }: { here: 
     const sound = !!current?.sound && !silent;
     return {
       device, output: current, mine, status: mine ? `This device · ${status}` : status,
+      explanation: current?.error ? `It couldn't connect directly to this source, and Couch's buffered stream failed: ${current.error}`
+        : current?.buffered ? "It couldn't connect directly to this source, so it plays a few seconds behind." : undefined,
       check: { ...check, action },
       level: { value: sound ? device.volume : 0, sound, ...control(lock || sharing || silent && "No sound" || !speakers && "Private" || moved) },
       picture: { on: !!current?.picture && !audioOnly, ...control(lock || sharing || audioOnly && "No picture" || !screen && "Private" || moved) },

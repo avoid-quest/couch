@@ -27,8 +27,8 @@ People never wonder whether a word names a device, a group or a place.
   fader are one control, with each device's fader below it. No hidden level
   silences sound ([Volume](#volume)).
 - **Show what you can't change.** A device you can't change stays listed and
-  dimmed, its check disabled, with a one-word status. No explanatory
-  paragraphs: the picker has at most one hint line.
+  dimmed, its check disabled, with a one-word status. Buffered delivery and
+  its failure explain why under the status; the picker has at most one hint line.
 
 ## The picker
 
@@ -153,6 +153,13 @@ plays here. This device needs no consent to add itself.
 This device's starts "This device · ". Statuses describe playback and
 consent, never whether sound can be heard; a busy device names what it plays
 before you press, because moving it interrupts that.
+
+Under "Buffered", the row says "It couldn't connect directly to this source,
+so it plays a few seconds behind." Under "Can't play", a failed buffered
+stream says "It couldn't connect directly to this source, and Couch's buffered
+stream failed: {Core's reason}" in destructive red, instead of the Buffered
+explanation. Either wraps under the status, inside the check, which announces
+it.
 
 **Consent.** Every refusal Core makes shows as a disabled control with its
 reason: the check by its status, a menu item by a word at its end
