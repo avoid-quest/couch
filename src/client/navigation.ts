@@ -205,6 +205,8 @@ export function useNavigation(onBack: () => void) {
       }
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
       if (target?.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], [role="menu"], [role="slider"]')) return;
+      // Off the TV, the player's picture keeps its arrows for its shortcuts, even where one can't act (live media can't seek).
+      if (!isTvPresentation() && target?.matches("[data-player-surface]")) return;
       if (target?.closest('[role="tablist"]') && ["ArrowLeft", "ArrowRight"].includes(event.key)) return;
       event.preventDefault();
       moveFocus(event.key);

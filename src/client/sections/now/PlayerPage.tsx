@@ -1,5 +1,6 @@
 import { useCouchHotkeys } from "@/useCouchHotkeys";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent } from "react";
+import { flushSync } from "react-dom";
 import { ArrowLeft, Captions, ChevronRight, Info, ListMusic, Maximize, Minimize, Music2, Pause, Settings, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -50,6 +51,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const root = useRef<HTMLElement>(null);
   const firstTransport = () => root.current?.querySelector<HTMLElement>('[aria-label="Playback controls"] button:not(:disabled)');
+  const surface = () => root.current?.querySelector<HTMLElement>("[data-player-surface]");
+  // What a touch found when it landed (the controls shown or not), so its tap can show or hide them; null for a mouse.
+  const tap = useRef<boolean | null>(null);
+  // What the picture's last click asked for, so a double-click's second click can undo it.
+  const clicked = useRef(false);
   const closeQueue = useCallback(() => {
     setQueueOpen(false);
     (queueTrigger.current?.getClientRects().length ? queueTrigger.current : root.current?.querySelector<HTMLButtonElement>('button[data-play-button]:not(:disabled), button[data-primary]:not(:disabled)'))?.focus();
@@ -89,12 +95,13 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { if (queueOpen) queueClose.current?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const ends = useEndTime(state);
+  // Opening, the player focuses the picture, so keys are shortcuts at once; a TV's remote starts on the transport.
   useEffect(() => {
-    if (!tvPresentation || queueOpen) return;
+    if (queueOpen) return;
     const frame = requestAnimationFrame(() => {
       if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement) && !document.activeElement.matches(":disabled")) return;
       if (restoreDetailFocus(location.state.detailFocus)) return;
-      firstTransport()?.focus();
+      (tvPresentation ? firstTransport() : surface())?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [tvPresentation, current?.id, transportReady, location.state.__TSR_key]);
@@ -103,15 +110,17 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] ?? (state?.autoplay?.enabled ? state.autoplay.next : undefined) : undefined;
   const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
   const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;
+  // The controls stay up while the keyboard is in them; on the picture they hide when idle.
+  const idle = () => { if (!root.current?.querySelector(":focus-visible:not([data-player-surface])")) setShown(false); };
   const wake = () => {
     setShown(true);
     clearTimeout(timer.current);
-    if (autoHide && !panel && !queueOpen) timer.current = setTimeout(() => { if (!root.current?.querySelector(":focus-visible")) setShown(false); }, 4000);
+    if (autoHide && !panel && !queueOpen) timer.current = setTimeout(idle, 4000);
   };
   useEffect(() => {
     clearTimeout(timer.current);
     if (!autoHide || panel || queueOpen) setShown(true);
-    else timer.current = setTimeout(() => { if (!root.current?.querySelector(":focus-visible")) setShown(false); }, 4000);
+    else timer.current = setTimeout(idle, 4000);
     return () => clearTimeout(timer.current);
   }, [autoHide, panel, queueOpen]);
   useEffect(() => {
@@ -143,17 +152,20 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         return;
       }
       const inPlayer = root.current?.contains(document.activeElement) || document.activeElement === document.body;
-      if (!panel && !shown && inPlayer && (tvPresentation ? ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "] : ["Enter"]).includes(event.key)) {
+      // A TV's remote with the controls hidden: OK shows them on the transport, the arrows on the timeline.
+      if (tvPresentation && !panel && !shown && inPlayer && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation(); wake();
-        if (tvPresentation && (event.key === "ArrowLeft" || event.key === "ArrowRight")) void seekBy(event.key === "ArrowLeft" ? -10 : 10);
-        const timeline = tvPresentation && event.key.startsWith("Arrow");
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") void seekBy(event.key === "ArrowLeft" ? -10 : 10);
+        const timeline = event.key.startsWith("Arrow");
         requestAnimationFrame(() => (timeline ? root.current?.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]:not([data-disabled])') ?? firstTransport() : firstTransport())?.focus());
         return;
       }
       if (tvPresentation && !panel && event.key === " " && inPlayer && !(event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea, [role="slider"]')) && transportReady && pausable && player?.playbackId) {
         event.preventDefault(); void run({ type: "pause", playbackId: player.playbackId, paused: playing });
       }
-      if (inPlayer) wake();
+      // Any other key shows the controls for a while and leaves focus where it is. Hidden bands are inert, so Tab
+      // shows them before the browser moves focus, and enters them in their order.
+      if (inPlayer) { if (event.key === "Tab" && !shown) flushSync(wake); else wake(); }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -193,8 +205,21 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     : ended && !artworkStage ? { title: findingNext ? "Finding the next item…" : `Finished ${current.title}`, detail: findingNext ? "" : "Replay to watch again.", busy: !!findingNext }
     : null;
 
-  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={() => { setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
-    <div ref={picture ? renderInto : undefined} className="player-video absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady && pausable) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
+  // A mouse leaving the window shows the controls; a lifted finger "leaves" too, but must let them hide.
+  return <section ref={root} className={cn("player-page fixed inset-0 overflow-hidden bg-background", !shown && "cursor-none [&_*]:cursor-none")} data-page="Now" data-artwork-stage={artworkStage || undefined} data-queue-open={queueOpen || undefined} data-player-idle={!current || undefined} aria-label="Player" onPointerMove={wake} onPointerLeave={event => { if (event.pointerType === "touch") return; setShown(true); clearTimeout(timer.current); }} onFocus={wake} onBlur={wake}>
+    {/* The picture is the player's surface. It takes focus when the player opens, and keys on it are shortcuts
+        (useCouchHotkeys counts a tabindex of -1 as background). As on YouTube, a click on a video plays or pauses (on
+        audio, a stray click leaves the music alone) and a double-click toggles fullscreen; a tap shows or hides the controls. */}
+    <div ref={picture ? renderInto : undefined} data-player-surface tabIndex={-1} role="group" aria-label={title ? `Player: ${title}` : "Player"} className="player-video absolute inset-0 outline-none"
+      onPointerDown={event => { tap.current = event.pointerType === "touch" ? shown : null; }}
+      onClick={event => {
+        if (tap.current !== null) { if (tap.current) { clearTimeout(timer.current); setShown(false); } else wake(); return; }
+        if (audioOnly || !active || !player?.playbackId || !transportReady || !pausable) return;
+        // A double-click's second click undoes its first, so the double-click only toggles fullscreen.
+        clicked.current = event.detail % 2 ? playing : !clicked.current;
+        void run({ type: "pause", playbackId: player.playbackId, paused: clicked.current });
+      }}
+      onDoubleClick={() => { if (tap.current === null && fullscreen.supported && !fullscreen.pending) void fullscreen.toggle(); }}>
     </div>
     {/* The top band shows and hides with the band. Over a video it reads as one board line: the title and subtitle at the
         left, the clock and the end time at the right. Without a video desktop and phones show it for Back and a Remote's
@@ -247,7 +272,11 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         </div>
       </aside>}
     </div>
-    <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
+    {/* A pointer leaves the keys to the shortcuts: once a click in the band has done its job, focus returns to the
+        picture, unless the click opened something. A keyboard's click (detail 0) keeps focus where the keyboard put it. */}
+    <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={event => {
+      if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
+    }} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
       {/* Gutter to gutter like the now-playing bar, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
           A timeline takes its own row above (index.css), without the end time or "Live" the top band or Now playing says. Every tool is an icon. */}
       <div className="grid gap-1">
