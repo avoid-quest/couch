@@ -12,7 +12,7 @@ import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
 import { apiSend } from "@/api/client";
-import { LibraryEmpty, LibraryError, LibraryStatus, useRemovalFocus } from "./LibraryStatus";
+import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
 
 type Mode = "play" | "append" | "remove";
@@ -21,7 +21,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
   origin: string; token: string; connected: boolean; canPlay: boolean;
   /** Shown as the empty state's next step. */
   onFind?: () => void;
-  /** A visible section title. Library titles the tab with its PageHeader. */
+  /** A visible section title. Saved titles the tab with its PageHeader. */
   showHeading?: boolean;
 }) {
   // The session invalidates ["for-later"] whenever any remote changes the list.
@@ -72,10 +72,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
 
   return <section ref={section} aria-labelledby="for-later-title">
     <h2 ref={heading} tabIndex={-1} id="for-later-title" className={showHeading ? "mb-2 text-base font-medium outline-none" : "sr-only"}>For later</h2>
-    <LibraryStatus connected={connected} loading={loading} />
-    {connected && loadError && <LibraryError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
-    {connected && failure && <LibraryError message={failure} />}
-    {connected && !loading && !loadError && !items.length && <LibraryEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Use Save on anything in Search.</LibraryEmpty>}
+    <SavedStatus connected={connected} loading={loading} />
+    {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
+    {connected && failure && <SavedError message={failure} />}
+    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Nothing saved yet. Use Save on anything in Discover or Search.</SavedEmpty>}
     {!!items.length && <MediaList ref={list} aria-label="For later">
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));

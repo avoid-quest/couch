@@ -32,12 +32,12 @@ import type { HistoryItem } from "../../../shared/viewing";
 import type { ForLaterItem } from "../../../shared/for-later";
 import type { QueueEntry } from "../../../shared/protocol";
 import { cn } from "@/lib/utils";
-import { useOnAir, useStationMenu } from "@/sections/live/on-air";
+import { useOnAir, useStationMenu } from "@/sections/discover/on-air";
 import { useHomeRows, useKeptOrder, type HomeRowId } from "./home-rows";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean; on?: string }) => Promise<boolean>;
 
-// A shelf scrolls, so it holds more than fits; Live and Library hold the rest.
+// A shelf scrolls, so it holds more than fits; its heading opens the rest in Discover or Saved.
 const shelfLength = 12;
 const knownLength = (entry: QueueEntry) => entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -165,7 +165,7 @@ export function HomePage() {
     </HomeHero>;
 
   const shelves: Record<HomeRowId, ReactNode> = {
-    continue: !!continued.length && <Shelf title="Continue" time={`${unfinished.length} unfinished`}>
+    continue: !!continued.length && <Shelf title="Continue" href="/saved?tab=played" time={`${unfinished.length} unfinished`}>
       {continued.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="flex shrink-0 flex-col items-start gap-1">
         <MediaTile shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={historyMeta(item)} thumbnail={item.thumbnail}
           aria-label={on(`Resume ${item.title}`)} disabled={!resumable(item)} onClick={() => resume.mutate({ item, fromStart: false })} menu={historyMenu(item, true)}>
@@ -183,21 +183,21 @@ export function HomePage() {
       {upcoming.length > shelfLength && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setQueueOpen(true)}>{upcoming.length - shelfLength} more</Button></li>}
     </Shelf>,
 
-    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" time={allStations.some(station => onAir(station.id)) ? "On air now" : plural(listed.length, "station")}>
+    radio: !!listed.length && <Shelf title="Radio" label="Radio stations" href="/discover/radio" time={allStations.some(station => onAir(station.id)) ? "On air now" : plural(listed.length, "station")}>
       {listed.map(station => <li key={station.id} className="shrink-0">
         <MediaTile shape="square" title={station.name} meta={stationMeta(station)} thumbnail={onAir(station.id)?.artworkUrl ?? station.logoUrl}
           aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void shell.enqueueRadio(station, true)} menu={stationMenu(station)} />
       </li>)}
     </Shelf>,
 
-    later: !!savedMedia.length && <Shelf title="For later" time={`${savedMedia.length} saved`}>
+    later: !!savedMedia.length && <Shelf title="For later" href="/saved" time={`${savedMedia.length} saved`}>
       {savedMedia.slice(0, shelfLength).map(item => <li key={item.id} data-saved-details={item.id} className="shrink-0">
         <MediaTile shape={tileShape(savedSourceLabel(item), !!item.collection)} title={item.title} meta={[item.subtitle, savedSourceLabel(item)].filter(Boolean).join(" · ")} thumbnail={item.thumbnail}
           aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("saved", item.id))} menu={savedMenu(item)} />
       </li>)}
     </Shelf>,
 
-    recent: !!recent.length && <Shelf title="Played recently" time={plural(recent.length, "title")}>
+    recent: !!recent.length && <Shelf title="Played recently" href="/saved?tab=played" time={plural(recent.length, "title")}>
       {recent.map(item => <li key={item.mediaId} data-history-details={item.mediaId} className="shrink-0">
         <MediaTile shape={tileShape(item.sourceLabel, !!item.collection)} title={item.title} meta={recentMeta(item)} thumbnail={item.thumbnail}
           aria-label={`Details ${item.title}`} onClick={() => details.open(itemLocation("history", item.mediaId))} menu={historyMenu(item, false)} />
@@ -215,8 +215,8 @@ export function HomePage() {
     {hero !== undefined && onHome.map(row => <Fragment key={row.id}>{shelves[row.id]}</Fragment>)}
 
     {empty && <Empty className="items-start py-12 text-left">
-      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Search for something to play</h2></EmptyTitle></EmptyHeader>
-      <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Search")}>Search</Button></EmptyContent>
+      <EmptyHeader className="items-start text-left"><EmptyTitle><h2>Find something to play</h2></EmptyTitle></EmptyHeader>
+      <EmptyContent className="items-start"><Button data-page-first onClick={() => shell.changeSection("Discover")}>Discover</Button></EmptyContent>
     </Empty>}
 
     <Sheet modal={false} open={queueOpen} onOpenChange={setQueueOpen}>

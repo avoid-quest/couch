@@ -1,10 +1,9 @@
-import { mergeSearchHits, searchSources, searchKinds, searchLengths, type SearchRouteState } from "../../search";
-import { memo, useMemo, useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { isLink, mergeSearchHits, searchSources, searchKinds, searchLengths, type SearchRouteState } from "../../search";
+import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
-import { SearchBar } from "@/components/SearchBar";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { MediaList, MediaRow } from "@/components/MediaRow";
 import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
@@ -28,93 +27,52 @@ export type Props = {
   onCommand?: (action: Action) => Promise<boolean>;
   onManageSources?: (source?: SourceKind) => void;
   onOpenCollection?: (item: ProviderItem) => void;
-  onQueryChange?: (query: string) => void;
-  draftQuery?: string;
-  searchState?: SearchRouteState;
-  onSearchChange?: (state: SearchRouteState) => void;
+  searchState: SearchRouteState;
+  onSearchChange: (state: SearchRouteState) => void;
 };
 type Entry = [source: string, summary: SearchResultSummary];
 
 // Sources in the order their results interleave; the rest are searched too.
 const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twitch", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
-const isLink = (value: string) => {
-  try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
-  catch { return false; }
-};
 
+/** The results of the header's search (`searchState`, the route's): every source's hits, their filters, or a pasted link. */
 export function SearchPanel(props: Props) {
-  const [localDraft, setDraft] = useState(props.searchState?.query ?? "");
-  const routeQuery = props.searchState?.query;
-  const [seenRoute, setSeenRoute] = useState(routeQuery);
-  if (routeQuery !== seenRoute) { setSeenRoute(routeQuery); if (props.draftQuery === undefined && routeQuery !== undefined) setDraft(routeQuery); }
-  const draft = props.draftQuery ?? localDraft;
-  const input = useRef<HTMLInputElement>(null);
-  const [composing, setComposing] = useState(false);
-  const typeToSearch = useEffectEvent((event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || (event.key.length !== 1 || event.key === " ") || document.querySelector('[role="dialog"][data-state="open"]')) return;
-    if (!(event.target instanceof HTMLElement) || event.target.closest("button, a, input, select, textarea, summary, [role=button], [role=link], [role=option], [contenteditable=true]")) return;
-    input.current?.focus();
-    if (input.current) { props.onQueryChange?.(`${draft}${event.key}`); if (!props.onQueryChange) setDraft(`${draft}${event.key}`); event.preventDefault(); }
-  });
-  useEffect(() => {
-    if (!props.active) return;
-    const onKeyDown = (event: KeyboardEvent) => typeToSearch(event);
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.active]);
-  const [localSearch, setSearch] = useState({ query: "", attempt: 0 });
-  const search = { ...localSearch, query: props.searchState?.query ?? localSearch.query };
+  const { searchState } = props;
+  const query = searchState.query;
   const [remoteSummaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
-  const liveHits = useLiveSourceHits(search.query);
+  const liveHits = useLiveSourceHits(query);
   const summaries = useMemo<Record<string, SearchResultSummary>>(() => ({ ...remoteSummaries, "Shared sources": { count: liveHits.length, hits: liveHits, facets: liveHits, loading: false, error: false } }), [remoteSummaries, liveHits]);
-  const resultsKey = JSON.stringify([search.query, props.origin, props.token]);
+  const resultsKey = JSON.stringify([query, props.origin, props.token]);
   const [seenResults, setSeenResults] = useState(resultsKey);
   if (resultsKey !== seenResults) { setSeenResults(resultsKey); setSummaries({}); }
   const reportResults = useCallback((source: string, summary: SearchResultSummary) => setSummaries(current => ({ ...current, [source]: summary })), []);
-  const [localFilter, setLocalFilter] = useState("All");
-  const [localKind, setLocalKind] = useState<SearchKind | "All">("All");
-  const [localLength, setLocalLength] = useState<SearchLength | "All">("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const filter = props.searchState?.source ?? localFilter;
-  const kind = props.searchState ? props.searchState.kind ?? "All" : localKind;
-  const length = props.searchState ? props.searchState.length ?? "All" : localLength;
-  const filtersState = { ...(kind === "All" ? {} : { kind }), ...(length === "All" ? {} : { length }) };
-  const setFilter = (source: string) => { setLocalFilter(source); props.onSearchChange?.({ query: search.query, source, ...filtersState }); };
-  const setKind = (value: SearchKind | "All") => { setLocalKind(value); props.onSearchChange?.({ query: search.query, source: filter, ...filtersState, kind: value === "All" ? undefined : value }); };
-  const setLength = (value: SearchLength | "All") => { setLocalLength(value); props.onSearchChange?.({ query: search.query, source: filter, ...filtersState, length: value === "All" ? undefined : value }); };
-  const changeDraft = (query: string) => { if (props.draftQuery === undefined) setDraft(query); props.onQueryChange?.(query); };
-  const commit = (query: string, submit = false) => {
-    const source = isLink(query) ? "All" : filter;
-    setLocalFilter(source);
-    setSearch(value => ({ query, attempt: value.attempt + Number(submit && query === search.query) }));
-    props.onSearchChange?.({ query, source, ...filtersState });
-  };
-  const commitDraft = useEffectEvent(() => commit(draft.trim()));
-  useEffect(() => {
-    if (composing || !props.active || !props.connected || draft.trim() === search.query) return;
-    const timer = setTimeout(() => commitDraft(), 1000);
-    return () => clearTimeout(timer);
-  }, [draft, search.query, props.active, props.connected, composing]);
+  const filter = searchState.source;
+  const kind = searchState.kind ?? "All";
+  const length = searchState.length ?? "All";
+  const setFilter = (source: string) => props.onSearchChange({ ...searchState, source });
+  const setKind = (value: SearchKind | "All") => props.onSearchChange({ ...searchState, kind: value === "All" ? undefined : value });
+  const setLength = (value: SearchLength | "All") => props.onSearchChange({ ...searchState, length: value === "All" ? undefined : value });
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
-  const url = isLink(search.query) ? search.query : undefined;
+  const url = isLink(query) ? query : undefined;
   const providers = url ? [] : ["youtube", "bandcamp", "soundcloud", "raiplay", "twitch", "streamingcommunity", "movies123", "animesaturn", "animeunity"] as ProviderId[];
   const inScope = (source: string) => filter === "All" || filter === source;
   const asking = sourceOrder.filter(source => !summaries[source] || summaries[source].loading);
   const total = Object.values(summaries).reduce((sum, summary) => sum + summary.count, 0);
   const facetKind = kind === "All" ? undefined : kind, facetLength = length === "All" ? undefined : length;
-  const mergedHits = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), search.query)
-    .filter(hit => inScope(hit.source) && matchesFacet(hit, facetKind, facetLength)), [summaries, search.query, filter, facetKind, facetLength]);
+  const mergedHits = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), query)
+    .filter(hit => inScope(hit.source) && matchesFacet(hit, facetKind, facetLength)), [summaries, query, filter, facetKind, facetLength]);
   const focusedHit = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!props.active || !focusedHit.current || document.activeElement !== document.body) return;
     const row = panel.current?.querySelector<HTMLElement>(`[data-hit-id="${CSS.escape(focusedHit.current)}"] [data-play]`)
-      ?? panel.current?.querySelector<HTMLElement>("[data-play]") ?? input.current;
+      ?? panel.current?.querySelector<HTMLElement>("[data-play]");
     row?.focus({ preventScroll: true });
   }, [mergedHits, props.active]);
   const shown: Entry[] = Object.entries(summaries).filter(([source]) => inScope(source));
-  const clearFilters = () => { setLocalFilter("All"); setLocalKind("All"); setLocalLength("All"); props.onSearchChange?.({ query: search.query, source: "All" }); };
+  const clearFilters = () => props.onSearchChange({ query, source: "All" });
   const facets = (source = filter) => Object.entries(summaries).filter(([name]) => source === "All" || name === source).flatMap(([, summary]) => summary.facets ?? []);
   const count = (items: SearchFacet[], kind?: SearchKind, length?: SearchLength) => items.filter(item => matchesFacet(item, kind, length)).length;
   const fromSources = searchSources.filter(source => source !== "All" && (source === filter || summaries[source]?.loading || count(facets(source), facetKind, facetLength) > 0));
@@ -127,30 +85,25 @@ export function SearchPanel(props: Props) {
       ...searchLengths.map(value => { const matches = count(facets(), facetKind, value); return { value, label: value, count: matches, disabled: !matches && length !== value }; })]} />
   </>;
   const activeFilters = [filter, kind, length].filter(value => value !== "All").join(", ");
-  const results = (label: string) => <>
-    <HitList hits={mergedHits} label={label} />
-    <MoreResults summaries={shown} />
-    <SourceProblems summaries={shown} />
-  </>;
-  return <section ref={panel} className="min-w-0 space-y-6" aria-label="Search media" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }} onKeyDown={event => { if (event.target !== input.current) return; if (event.key === "ArrowDown") { const row = panel.current?.querySelector<HTMLElement>("[data-play]"); if (row) { event.preventDefault(); row.focus(); } } else if (event.key === "ArrowUp") { const nav = document.querySelector<HTMLElement>('.app-header [aria-current="page"]'); if (nav) { event.preventDefault(); nav.focus(); } } }}>
-    <SearchBar remoteField="find" id="media-search" pageFirst inputRef={input} className="min-w-0" value={draft} onValueChange={changeDraft} onCompositionChange={setComposing} onSubmit={() => { commit(draft.trim(), true); requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("[data-play]")?.focus()); }} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
-    {search.query && !url && asking.length > 0 && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner aria-hidden="true" className="size-3.5" />Still asking {asking.join(", ")}…</p>}
-    {search.query && !url && <div className={total ? "grid min-w-0 gap-6 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-12" : "min-w-0"}>
+  return <section ref={panel} className="min-w-0 space-y-6" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
+    {!url && asking.length > 0 && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner aria-hidden="true" className="size-3.5" />Still asking {asking.join(", ")}…</p>}
+    {!url && <div className={total ? "grid min-w-0 gap-6 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-12" : "min-w-0"}>
       {total > 0 && <>
         <div className="xl:hidden"><Button variant="ghost" className="-ml-2.5" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}>Filters{activeFilters && <span className="text-muted-foreground">{activeFilters}</span>}</Button></div>
         <aside className={filtersOpen ? "grid gap-6 sm:grid-cols-3 xl:block xl:space-y-6" : "hidden xl:block xl:space-y-6"} aria-label="Filter search results">{filters}</aside>
       </>}
       <div className="min-w-0 space-y-6">
-        {results("Search results")}
+        {/* The first result starts the page, which Down from the header's field reaches. */}
+        <HitList pageFirst hits={mergedHits} label="Search results" />
+        <MoreResults summaries={shown} />
+        <SourceProblems summaries={shown} />
         {total > 0 && !asking.length && !mergedHits.length && <Empty><EmptyHeader><EmptyTitle>Nothing matches these filters</EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={clearFilters}>Clear filters</Button></EmptyContent></Empty>}
-        {props.connected && !asking.length && total === 0 && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{search.query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
+        {props.connected && !asking.length && total === 0 && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       </div>
     </div>}
-    {search.query && providers.map(provider => <SearchOnlineResults key={`${provider}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && inScope(providerNames[provider])} provider={provider} query={search.query} quality={quality} onEnqueued={resetQuality} />)}
-    {search.query && !url && <>
-      {radioSources.map(source => <SearchRadioResults key={`${source}:${search.query}:${search.attempt}`} {...props} retry={search.attempt} onResults={reportResults} active={props.active && inScope(source)} query={search.query} source={source} />)}
-    </>}
-    {url && <PastedLink key={`${url}:${search.attempt}`} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
+    {providers.map(provider => <SearchOnlineResults key={`${provider}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(providerNames[provider])} provider={provider} query={query} quality={quality} onEnqueued={resetQuality} />)}
+    {!url && radioSources.map(source => <SearchRadioResults key={`${source}:${query}`} {...props} onResults={reportResults} active={props.active && inScope(source)} query={query} source={source} />)}
+    {url && <PastedLink key={url} url={url} {...props} quality={quality} onQualityChange={setQuality} onDone={resetQuality} />}
   </section>;
 }
 

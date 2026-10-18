@@ -72,9 +72,17 @@ function item(info: unknown): ProviderItem | null {
   };
 }
 
-function channelPage(url: string): ProviderPage {
+// A channel's page is its sections. Its name and avatar come from yt-dlp's listing, without its videos, so the page
+// and a Save made there name the channel rather than its address (a UC… ID); the address stays the fallback.
+async function channelPage(url: string, run: typeof runYtDlp, signal?: AbortSignal): Promise<ProviderPage> {
+  let info: Metadata = {};
+  try {
+    const parsed: unknown = JSON.parse(await run(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", "0", "--", url], { signal }));
+    if (object(parsed)) info = parsed;
+  } catch { signal?.throwIfAborted(); }
   return {
-    title: label(decodeURIComponent(new URL(url).pathname.split("/").at(-1)!)),
+    title: label(info.channel) ?? label(info.uploader) ?? label(decodeURIComponent(new URL(url).pathname.split("/").at(-1)!)),
+    thumbnail: thumbnail(info, { url, kind: "channel" }),
     items: [["videos", "Videos"], ["playlists", "Playlists"], ["shorts", "Shorts"], ["streams", "Live streams"]].map(([tab, title]) => ({
       id: providerItemId("youtube", `${url}/${tab}`), provider: "youtube", kind: "collection", title: title!, url: `${url}/${tab}`,
     })),
@@ -97,7 +105,7 @@ export function createYouTubeBrowser(run: typeof runYtDlp = runYtDlp) {
     const source = target(request.url || (/^https?:\/\//i.test(query) ? query : query.startsWith("@") ? `https://www.youtube.com/${encodeURIComponent(query).replace(/^%40/, "@")}` : searchUrl(query)));
     if (source.kind === "channel") {
       if (offset) throw new ProviderError("Invalid YouTube page. Open a channel section first.", 400);
-      return withProviderItem("youtube", source.url, "channel", channelPage(source.url));
+      return withProviderItem("youtube", source.url, "channel", await channelPage(source.url, run, signal));
     }
     if (source.kind === "media" && offset) throw new ProviderError("Invalid YouTube page. Start a new search.", 400);
     const output = await run(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", `${offset + 1}:${offset + pageSize + 1}`, "--", source.url], { signal });

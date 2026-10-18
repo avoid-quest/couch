@@ -35,7 +35,7 @@ export function RemotePage() {
   if (tvPresentation) return <><PageHeader title="Remote" /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
   // Laid out like the remote it stands in for: the TV, the pad, what plays, then text.
   return <div data-remote-page className="mx-auto grid w-full max-w-sm gap-8">
-    {/* The current tab names the page, as Home's and Live's do. */}
+    {/* The current tab names the page, as Home's and Discover's do. */}
     <PageHeader title="Remote" className="sr-only" />
     <div className="grid gap-1">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>

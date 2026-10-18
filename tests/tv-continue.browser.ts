@@ -132,7 +132,9 @@ window.runBusyLiveHitRegression = async () => {
   const gate = new Promise<void>(resolve => { release = resolve; });
   let saved: { url: string; init: RequestInit; id: string } | undefined;
   try {
-    document.querySelector<HTMLElement>('[data-app-nav] a[href="/live"]')!.click(); await wait();
+    document.querySelector<HTMLElement>('[data-app-nav] a[href="/discover"]')!.click(); await wait();
+    await until(() => !!document.querySelector('[data-page="Discover"] a[href="/discover/radio"]'));
+    document.querySelector<HTMLElement>('[data-page="Discover"] a[href="/discover/radio"]')!.click(); await wait();
     await until(() => !!document.querySelector('[data-hit-id] button[aria-label^="Options"]'));
     const row = document.querySelector<HTMLElement>('[data-hit-id]')!;
     const id = row.dataset.hitId!.split(":").at(-1)!;
@@ -151,7 +153,7 @@ window.runBusyLiveHitRegression = async () => {
     };
     save!.click(); await until(() => !!saved); await wait(850);
     const open = row.querySelector<HTMLElement>('[data-play]')!;
-    assert(open.getAttribute("aria-label")?.startsWith("Open ") && usable(open) && open.getAttribute("href") === `/item?kind=radio&id=${id}`, "Pending Save hid the original enabled Open destination");
+    assert(open.getAttribute("aria-label")?.startsWith("Open ") && usable(open) && open.getAttribute("href")?.startsWith(`/item?kind=radio&id=${id}&from=`), "Pending Save hid the original enabled Open destination");
     // The row's Options menu holds Play, disabled while busy.
     row.querySelector<HTMLElement>('button[aria-label^="Options"]')!.focus(); await press("Enter");
     const busyPlay = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element => !element.closest('[role="group"]') && /^Play( on .+)?$/.test(element.textContent ?? ""));
@@ -164,7 +166,7 @@ window.runBusyLiveHitRegression = async () => {
     await press("Escape"); await wait();
     // Remount ends this row's busy lifetime and restores Play, so the temporary
     // Open opener can disappear. Existing navigation must retain usable page focus.
-    assert(location.pathname === "/live" && document.activeElement?.closest('[data-page]') && usable(document.activeElement as HTMLElement), "Busy Open Back lost usable browse focus");
+    assert(location.pathname === "/discover/radio" && document.activeElement?.closest('[data-page]') && usable(document.activeElement as HTMLElement), "Busy Open Back lost usable browse focus");
     return { passed: true };
   } catch (error) { return { passed: false, error: String(error) }; }
   finally {

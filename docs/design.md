@@ -24,19 +24,23 @@ right. Desktop icons use the black tile in `packaging/icons/icon.svg`. The macOS
 tray uses a transparent template silhouette so the system can tint it. The PWA
 maskable icon uses a full black background and keeps the mark inside the safe
 circle. The website uses a custom SVG for this product mark because the shadcn
-catalog provides interface icons, not brand identities.
+catalog provides interface icons, not brand identities. The app's header shows
+the same drawing without its tile, in `currentColor` (`CouchMark`), on every
+screen.
 
 ## Principles
 
-- **Conventional structure, quiet style.** Home, Live, Search, Library and
-  Settings, plus Remote on a Device that can drive a TV; a full-bleed player with a compact
+- **Conventional structure, quiet style.** Home, Discover, Saved and
+  Settings, plus Remote on a Device that can drive a TV, with search in the
+  header; a full-bleed player with a compact
   bottom control band; and the Device you control and where it plays one step
   away.
 - **One target per row and tile.** Pressing a media row or tile does its main
   verb; its one menu holds the rest ([Menus](#menus)).
 - **Real content only.** A browse page shows what its source returns, never
-  suggestions Couch picked. A source without a home page of its own (YouTube,
-  Bandcamp, SoundCloud) opens on an Empty with a search field scoped to it.
+  suggestions Couch picked: Discover samples each source's own home. A source
+  without one (YouTube, Bandcamp, SoundCloud) opens on an Empty with a search
+  field scoped to it.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29". The now-playing bar reads "−3:24 ends 20:59"; the
   player says "ends 20:59" once, in its top band or Now playing, and its band
@@ -86,7 +90,7 @@ the same typography and controls scale across screens.
 
 | Role | Classes |
 | --- | --- |
-| Display (search field, Home's hero, Details and Now playing titles) | `text-3xl font-semibold tracking-tight` |
+| Display (a source's search field, Home's hero, Details and Now playing titles) | `text-3xl font-semibold tracking-tight` |
 | Title over a video (the player's top band) | `text-2xl font-semibold tracking-tight` |
 | Departures line (the hero's and Now playing's end time) | `text-2xl tabular-nums` |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
@@ -119,8 +123,13 @@ Shared building blocks in `src/client/components`:
 - `ChoiceGroup`: inline choices with a check on the selected option.
 - `DetailHeader`: an item or collection page's artwork, title, meta, synopsis
   and row of verbs ([Browse](design/browse.md#details)).
-- `Shelf`: a section heading over a plain overflow row of `MediaTile`s, for
-  Home's shelves and Live's On air ([Browse](design/browse.md#mediatile)).
+- `Shelf`: a section heading, which can link to the rest, over a plain
+  overflow row of `MediaTile`s, for Home's and Discover's shelves
+  ([Browse](design/browse.md#mediatile)).
+- `MediaArtwork`: contained artwork; without any, a hairline frame with the
+  title set in type ([Browse](design/browse.md#keep-discovery-context-visible)).
+- `CouchMark`: the brand mark in `currentColor`, at the header's left
+  ([Shell](design/shell.md#header-and-section-nav)).
 - `RowMenu`: an item's one menu, `useItemMenu` and `ItemMenu`, for media rows,
   tiles, Up next's rows and Details' "…" ([Menus](#menus)).
 
@@ -188,7 +197,7 @@ Sentence case, short, no filler. Say what happened and what to do next.
 | admin, Make admin, Become admin | administrator, Claim administration |
 | Up next (the list), Queue (the verb) | shared queue, Add to Up next |
 | Saved, Save / Saved | Kept, Keep, favorites |
-| Live, Search, Library (the sections) | Find, Saved (earlier sections) |
+| Discover, Saved (the sections), Search (the header's field) | Live, Library, Find (earlier sections) |
 | Live TV, Radio playlists | IPTV, TV guide |
 | Try again | Retry, Reload, Refresh |
 | Couldn't load X. | Could not…, Check the connection and… |
@@ -199,9 +208,9 @@ Sentence case, short, no filler. Say what happened and what to do next.
 
 Each surface's own layout and behaviour lives in its file:
 
-- [Shell](design/shell.md): the sections and their paths, the header and tab bars, the Couch switch, the now-playing bar, keyboard shortcuts, first run and pairing, and when a picture opens the player.
+- [Shell](design/shell.md): the sections and their paths, the header (mark, search) and tab bars, the Couch switch, the now-playing bar, keyboard shortcuts, first run and pairing, and when a picture opens the player.
 - [Home](design/home.md): Home's hero and its shelves of tiles.
-- [Browse](design/browse.md): Search, Live, Library, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
+- [Browse](design/browse.md): Search, Discover, Saved, item and collection pages, media rows and tiles, pagination, breadcrumbs and Play on menus.
 - [Player](design/player.md): the player band, transport, timeline, Up next and Playback settings.
 - [Where it plays](design/where-it-plays.md): its principles and rules model, the picker with its Volume, device rows and "…" menu, Play on, DeviceIcon and outputs after a server switch.
 - [TV](design/tv.md): what a TV adds for its remote: remote navigation, Back, its header's name, and the TV player's keys.

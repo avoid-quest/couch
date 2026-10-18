@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiJson, apiSend, type ApiCredentials } from "@/api/client";
 import { forLaterQuery, loadForLater } from "@/api/for-later";
 import { radioProgrammesQuery } from "@/api/radio";
-import { useStationSave } from "@/sections/live/on-air";
+import { useStationSave } from "@/sections/discover/on-air";
 import { removeFromContinue, undoProgressAction } from "@/api/progress";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape } from "@/components/MediaTile";
@@ -167,7 +167,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
       await refresh();
     });
     await refresh();
-    navigation.back("/library");
+    navigation.back("/saved");
   };
   const move = async (offset: number) => {
     const adjacent = items[index + offset];
