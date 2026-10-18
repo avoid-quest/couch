@@ -1875,12 +1875,13 @@ export async function createHub(options: HubOptions) {
           }
           if (playedBy && playback && playbacks.has(playback.id)) {
             const titleOf = (entryId: string) => stateOf(playback!).queue.find(entry => entry.id === entryId)?.title;
+            const added = "playNow" in action && action.playNow ? "played" : "queued";
             const label = action.type === "pause" ? action.paused ? "paused" : "resumed"
               : action.type === "stop" ? "stopped playback"
               : action.type === "remove" ? `removed ${removed || "an item"}`
-              : action.type === "enqueue" ? `queued ${action.entry.title}`
-              : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? `queued ${action.title || "media"}`
-              : action.type === "enqueueRadio" ? `queued ${titleOf(action.entryId) || "media"}`
+              : action.type === "enqueue" ? `${added} ${action.entry.title}`
+              : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? `${added} ${action.title || "media"}`
+              : action.type === "enqueueRadio" ? `${added} ${titleOf(action.entryId) || "media"}`
               : action.type === "play" ? `played ${titleOf(action.entryId) || "media"}` : null;
             if (label) playback.session.notice(playedBy, `${playedBy.name} ${label}`);
           }

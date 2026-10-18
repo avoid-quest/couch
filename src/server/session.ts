@@ -598,8 +598,10 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     forgetProfile(id: string) { progress.forgetProfile(id); },
     finish() { finishProgress(false, true); },
     notice(actor: PlaybackActor, text: string) {
-      state.activity = { id: crypto.randomUUID(), actor, text };
-      try { broadcast(); } finally { state.activity = undefined; }
+      const activity = state.activity = { id: crypto.randomUUID(), actor, text };
+      broadcast();
+      // The hub sends state on its next turn, so the activity stays until then: cleared at once, it never left.
+      setImmediate(() => { if (state.activity === activity) state.activity = undefined; });
     },
     // Ephemeral inputs disappear from Up next when capture ends, including removed-entry Undo.
     endSource(sourceId: string) {

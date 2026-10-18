@@ -1,10 +1,10 @@
 import type { ConnectionInfo } from "../../shared/protocol";
 import { useEffect, useRef, type RefObject } from "react";
-import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { deviceName, offline } from "@/copy";
 import { SetupQr } from "./SetupQr";
+import { activity } from "@/toasts";
 
 export function PairingDialog({ credentials, urls, connected, open, onOpenChange, openerRef }: { credentials: Pick<ConnectionInfo, "origin" | "token">; urls: string[]; connected: boolean; open: boolean; onOpenChange: (open: boolean) => void; openerRef?: RefObject<HTMLButtonElement | null> }) {
   const state = useOptionalSessionGate()?.state;
@@ -15,7 +15,7 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
     if (!open || !state?.devices) { before.current = null; return; }
     const paired = before.current && state.devices.find(device => !before.current!.ids.has(device.id));
     if (paired) {
-      toast(`${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " · admin" : ""}`);
+      activity(`${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " · admin" : ""}`);
       onOpenChange(false);
     }
     before.current = { ids: new Set(state.devices.map(device => device.id)), admin: state.administratorClaimed };

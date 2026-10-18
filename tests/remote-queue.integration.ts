@@ -236,3 +236,12 @@ test("new queue additions use the selected idle TV and ordinary explicit Play on
     assert.deepEqual(queueIds(f.phone.state), ["idle-added"]);
   } finally { await f.close(); }
 });
+
+test("another device's play and queue reach the TV as its activity, sent before Core clears it", async () => {
+  const f = await fixture();
+  try {
+    await choose(f);
+    const activity = () => f.tv.messages.flatMap(message => message.type === "state" && message.state.activity ? [message.state.activity.text] : []);
+    await until(() => activity().includes("Phone played chosen") && activity().includes("Phone queued waiting"));
+  } finally { await f.close(); }
+});

@@ -24,8 +24,8 @@ import { useIdleCursor } from "@/useIdleCursor";
 import { useNavigation } from "@/navigation";
 import { collectionLocation, DetailFocusRestoration, useDetailNavigation } from "@/detail-navigation";
 import { cn } from "cn";
-import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { activity, dismiss, waitingForTap } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
@@ -227,8 +227,8 @@ function MediaSessionBridge() { useMediaSession(); useTapToHear(); return null; 
 // A browser that needs a gesture before it plays sound asks for one on its own screen (#644).
 function useTapToHear() {
   useEffect(() => onBlocked(blocked => {
-    if (blocked) toast("Sound is waiting for a tap", { id: "tap-to-hear", duration: Infinity, action: { label: "Tap to hear", onClick: hear } });
-    else toast.dismiss("tap-to-hear");
+    if (blocked) waitingForTap(hear);
+    else dismiss("tap-to-hear");
   }), []);
 }
 
@@ -283,15 +283,11 @@ export function ShellChrome({ children }: PropsWithChildren) {
     return () => { window.removeEventListener("couch-home", onHome); window.removeEventListener("couch-info", onInfo); };
   }, [tvPresentation, section]);
   const player = state?.player;
-  const activityToast = useRef<string | null>(null);
+  // Another device's activity replaces the last; this device's own retires it.
   useEffect(() => {
     if (!state?.activity) return;
-    if (activityToast.current) toast.dismiss(activityToast.current);
-    activityToast.current = null;
-    if (identity && state.activity.actor.deviceId !== (identity.device?.id ?? "host")) {
-      activityToast.current = `activity-${state.activity.id}`;
-      toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
-    }
+    if (identity && state.activity.actor.deviceId !== (identity.device?.id ?? "host")) activity(state.activity.text);
+    else dismiss("activity");
   }, [state?.activity?.id, identity?.device?.id]);
   const paired = !!credentials && !pairingRequired;
   // The player is full-bleed: its band replaces the header and status line.
@@ -342,8 +338,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
               <SectionTabs bar className="hidden border-t bg-background touch:flex tv:hidden" />
             </div>
           </>}
+          {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
+          <Toaster />
         </div>
-        <Toaster />
       </main>
     </div>
   );

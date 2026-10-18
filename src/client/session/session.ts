@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { failed } from "../toasts";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
@@ -213,7 +213,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           upload.searchParams.set("token", credentials.token);
           upload.searchParams.set("key", key);
           return new WebSocket(upload);
-        }, failed: error => { if (isCurrent()) toast.error(error.message); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
+        }, failed: error => { if (isCurrent()) failed(error.message); }, published: source => { if (isCurrent()) setLocalLiveSourceId(source?.id ?? null); } });
       };
       connection.onmessage = (event: MessageEvent<string>) => {
         if (!isCurrent()) return;

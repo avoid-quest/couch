@@ -100,7 +100,7 @@ body { min-width: 0; }
 /* Clock focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
    Unlayered on purpose so it wins over component rings and hover backgrounds. */
 :is(button, a, [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
-[data-slot="button"][data-variant="default"]:focus-visible,
+[data-slot="button"][data-variant="default"]:focus-visible, [data-sonner-toast] [data-button]:focus-visible,
 :is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
 [role="slider"][data-adjusting] { scale: 1.75; }

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
 import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
 import { useDurationClock } from "@/components/DurationBar";
 import { createId } from "../../session/session";
 import { readSearch, searchError, type SearchPlaybackProps, type SearchHit } from "./SearchOnlineResults";
+import { failed } from "@/toasts";
 
 type Props = SearchPlaybackProps & { query: string; retry?: number; browse?: boolean; source: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
@@ -35,19 +35,19 @@ function RadioResults(props: Props) {
     await client.invalidateQueries({ queryKey: options.queryKey, exact: true, refetchType: "none" });
     await client.fetchQuery({ ...radioSearchQuery(props, title, props.query, avoid), staleTime: 0 }).catch(() => {});
   }
-  async function action(work: (signal: AbortSignal) => Promise<boolean | void>) {
+  async function action(failure: string, work: (signal: AbortSignal) => Promise<boolean | void>) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal; setBusy(true);
     try { await work(signal); }
-    catch (reason) { if (!signal.aborted) toast.error(searchError(reason)); }
+    catch (reason) { if (!signal.aborted) failed(failure, reason); }
     finally { if (!signal.aborted) setBusy(false); }
   }
   function play(station: RadioStation, playNow: boolean, deviceId?: string) {
     const on = deviceId ? { deviceId } : {};
-    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, ...on } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow, ...on }) ?? false);
+    void action(`Couldn't ${playNow ? "play" : "queue"} ${station.name}.`, async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow, ...on } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow, ...on }) ?? false);
   }
   function save(station: RadioStation, saved: boolean) {
-    void action(async signal => {
+    void action(`Couldn't ${saved ? "remove" : "save"} ${station.name}.`, async signal => {
       await readSearch(props, saved ? `/api/radio/favorites/${encodeURIComponent(station.id)}` : "/api/radio/favorites", signal, { method: saved ? "DELETE" : "POST", ...(saved ? {} : { body: JSON.stringify({ station }) }) });
       if (!signal.aborted) await client.invalidateQueries({ queryKey: ["radio", "favorites"] });
     });
