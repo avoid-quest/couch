@@ -7,7 +7,7 @@ A TV (`body.tv-presentation`, styled with the
 a remote at ten feet. The TV uses its own
 composition: fewer focus stops, a quiet local-name header and controls revealed
 over the picture. Desktop and phone keep their browsing and Couch-switch controls.
-Home's hero and shelves: [Home](home.md).
+Home's hero and shelves: [Home](home.md). Search and Details: [Browse](browse.md).
 
 Focus is
 the only highlight; no hover style applies on the TV. The TV has no hover: under `.tv-presentation` the `hover` variant
@@ -20,11 +20,12 @@ Up next changes the player URL without losing its opener. Settings' own OK
 and Back: [Settings](settings.md#section-nav).
 
 After every page change, focus is on the page's first control. When that control renders
-after later ones (Home's hero waits for its data), focus moves to it as it appears, unless a
-key or pointer came first. The header holds the sections as centred tabs,
+after later ones (Home's hero waits for its data, a collection's Play for its source), focus moves
+to it as it appears, unless a key or pointer came first. On Details the first control is the
+primary verb, so OK plays, and Right walks the other verbs one stop each. The header holds the sections as centred tabs,
 the TV's name at the left and the clock at the right, as plain text; the Couch choice lives in Settings → Couch
 connection, and the TV has no Remote tab or Keyboard shortcuts. Layout per screen: [Shell](shell.md#header-and-section-nav).
-Volume and every fader move 5 per press. Text fields say "Type with Remote on
+Volume and every fader move 5 per press. Search's field says "Type with Remote on
 your phone": a phone's Remote is the TV's text entry.
 
 ## See the TV in a browser
@@ -66,7 +67,7 @@ Spatial navigation places a
 slider by its whole track, not its moving thumb, reaches the header and the
 footer (the now-playing bar) only after the page's own controls, and keeps
 focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
-shelf, the hero's verbs, a media row) reach the nearest row first, so Home's
+shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row first, so Home's
 shelves are walked one by one and never skipped for a farther control that
 lines up. In their own row they reach only a control past them (a wrapped
 line, Continue's Details), never a tile beside them whose caption is shorter

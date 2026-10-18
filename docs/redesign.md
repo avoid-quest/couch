@@ -28,10 +28,6 @@ type or copy rules.
 
 ## Browse
 
-- **Search:** the display-size search field leads, with Find's filters and
-  type-to-search behaviour. Before a query, the page lists the sources
-  (YouTube, Twitch, RaiPlay, StreamingCommunity, 123MoviesFree, Bandcamp,
-  SoundCloud), each opening its own home, plus pasted links.
 - **Live:** an "On air" shelf of saved and built-in stations, each with its
   show and "until" time, then every station (today's Radio browse). Then
   channels (today's Live TV browse), only when a Live TV source exists. No
@@ -39,11 +35,6 @@ type or copy rules.
 - **Library:** For later, Saved, playlists and Played: today's Saved
   sections plus Played, with the rail on wide screens and the Select on
   phones.
-- **Details:** a classic layout: contained artwork at the left, the title at
-  display size, one meta line, the synopsis, then one row of verbs (Play or
-  Resume, From start, Queue, Save, Play on). Seasons and episodes follow as
-  divided rows. Everything in "Keep discovery context visible" and "Details
-  are destinations" still holds.
 
 ## Player
 
@@ -125,7 +116,7 @@ release notes ([ci.md](ci.md)).
 | `foundation` | Prepare the interface for its redesign | one presentation module; a TV presentation override for scratch and browser checks, unreachable in release builds; no visual change (landed) | `design/tv.md` |
 | `shell` | Navigate Couch with tabs and a now-playing bar | Shell; new section paths with redirects; existing pages render inside them (landed) | `design/shell.md` |
 | `home` | Open Home on what you'll most likely play next | Home (landed) | `design/home.md` |
-| `browse` | Search everything and open each source from its own home | Search, source homes, details | `design/browse.md` |
+| `browse` | Search everything and open each source from its own home | Search, source homes, details (landed) | `design/browse.md` |
 | `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library | `design/browse.md` |
 | `player` | Show the time and title over the playing picture | Player | `design/player.md` |
 | `where-it-plays` | Choose where it plays from a simple list of devices | rules model and tests; picker | `design/where-it-plays.md` |
