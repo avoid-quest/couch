@@ -3,11 +3,13 @@
 ## Search
 
 Search is the header's field on every page ([Shell](shell.md#header-and-section-nav)),
-and its results are `/search?q=…`: no tab names that page, so its title is
-the query (`PageHeader`). It asks every source at once and says which it is
-still asking. Its filters, From, What (Video, Music, Live, Radio and Channels)
+and its results are `/search?q=…`. The query stays in the field; the page's
+"Search results" heading is for screen readers, so the results start directly
+below the header. It asks every source at once and says which it is still
+asking, while the header's Spinner stays busy. Its filters, From, What (Video, Music, Live, Radio and Channels)
 and Length, sit in a rail beside the results on wide screens and behind
-Filters on narrow ones. Music includes Bandcamp albums and tracks and
+Filters on narrow ones. The phone's Filters button sits just above the first
+divided row; opening it reveals the same groups in place. Music includes Bandcamp albums and tracks and
 SoundCloud tracks. A pasted link opens as a webpage or as direct media, with
 Open page for a source's own link. The first result starts the page, which
 Down from the header's field reaches. An empty query has no results page: it

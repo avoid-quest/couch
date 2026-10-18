@@ -54,10 +54,20 @@ under it. On the TV, Up from a page's first row still reaches it
 The Couch switch and the TV's plain name stand alone at the page gutter; the
 header carries no brand mark.
 
-**Search** is `HeaderSearch`: shadcn `InputGroup` with a lucide Search icon and
-the placeholder "Search", up to 16rem wide. `/` focuses it from any page
+**Search** is `HeaderSearch`: shadcn `InputGroup` at the tabs' `text-base`,
+with a muted lucide Search icon and "Search" placeholder, up to 16rem wide.
+It has only a bottom hairline at rest, so the field belongs with the header's
+open type; focus inverts the field to white with black ink and caret, including
+on the TV. This is a Clock adjustment to InputGroup's default bordered box.
+A fine pointer sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
+(off the TV). A Spinner replaces the icon as soon as the draft changes and
+stays while the current query's sources answer, with a screen-reader status.
+The clear button stays, with a 44px touch target. The field never changes
+width on focus, so the surrounding header stays still. `/` focuses it from any page
 (from the player, its page comes back first). Typing searches after a second
-without typing, and Enter at once: the first search from another page opens
+without typing, and Enter at once. The delay coalesces edits because one
+search fills Core's eight provider slots, including two yt-dlp jobs; the
+spinner makes that wait visible. The first search from another page opens
 `/search?q=…`, later ones replace it, and focus stays in the field while
 typing (Enter goes on to the results; Down reaches the page's first result).
 Off the TV, Esc clears the field, which is Discover, then leaves it; the TV's

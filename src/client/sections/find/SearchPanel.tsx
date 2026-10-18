@@ -87,10 +87,10 @@ export function SearchPanel(props: Props) {
   const activeFilters = [filter, kind, length].filter(value => value !== "All").join(", ");
   return <section ref={panel} className="min-w-0 space-y-6" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && asking.length > 0 && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner aria-hidden="true" className="size-3.5" />Still asking {asking.join(", ")}…</p>}
-    {!url && <div className={total ? "grid min-w-0 gap-6 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-12" : "min-w-0"}>
+    {!url && <div className={total ? "grid min-w-0 gap-x-6 gap-y-2 xl:grid-cols-[12rem_minmax(0,1fr)] xl:gap-12" : "min-w-0"}>
       {total > 0 && <>
-        <div className="xl:hidden"><Button variant="ghost" className="-ml-2.5" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}>Filters{activeFilters && <span className="text-muted-foreground">{activeFilters}</span>}</Button></div>
-        <aside className={filtersOpen ? "grid gap-6 sm:grid-cols-3 xl:block xl:space-y-6" : "hidden xl:block xl:space-y-6"} aria-label="Filter search results">{filters}</aside>
+        <div className="xl:hidden"><Button variant="ghost" className="-ml-2.5" aria-expanded={filtersOpen} aria-controls="search-filters" onClick={() => setFiltersOpen(open => !open)}>Filters{activeFilters && <span className="text-muted-foreground">{activeFilters}</span>}</Button></div>
+        <aside id="search-filters" className={filtersOpen ? "grid gap-6 pb-4 sm:grid-cols-3 xl:block xl:space-y-6 xl:pb-0" : "hidden xl:block xl:space-y-6"} aria-label="Filter search results">{filters}</aside>
       </>}
       <div className="min-w-0 space-y-6">
         {/* The first result starts the page, which Down from the header's field reaches. */}
