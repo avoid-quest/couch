@@ -129,6 +129,39 @@ window.runTvNavigationRegression = async () => {
     assert(items.every(item => item.querySelectorAll('button:not(:disabled), a[href]').length === 1), "Radio has multiple stops per item");
     assert(!document.querySelector('.app-header [data-slot="popover-trigger"]'), "TV header still has Couch switch");
   });
+  await check("Home starts on the hero's primary verb, and Up from its last shelf passes each shelf and the hero to the current tab", async () => {
+    await click('[data-app-nav] a[href="/live"]');
+    await click('[data-app-nav] a[href="/"]');
+    const hero = control("[data-home-hero]");
+    assert(document.activeElement === hero.querySelector("[data-page-first]"), "Home entry did not focus the hero's primary verb");
+    const shelves = [...document.querySelectorAll<HTMLElement>('[data-page="Home"] ol[data-nav-row]')];
+    assert(shelves.length >= 2, "Home needs two shelves (Radio and the saved videos)");
+    shelves.at(-1)!.querySelector<HTMLElement>("button")!.focus();
+    const passed: Element[] = [];
+    for (let step = 0; step < 12 && !document.activeElement?.closest(".app-header"); step++) {
+      await key("ArrowUp");
+      const at = document.activeElement?.closest('[data-page="Home"] ol[data-nav-row], [data-home-hero]');
+      if (at && passed.at(-1) !== at) passed.push(at);
+    }
+    const expected = [...shelves.slice(0, -1).reverse(), hero];
+    assert(passed.length === expected.length && passed.every((element, index) => element === expected[index]), "Up skipped a shelf or the hero, or met another control");
+    assert(document.activeElement?.matches('.app-header a[aria-current="page"][href="/"]'), "Up from the hero did not reach the current tab");
+  });
+  await check("Up and Down leave a shelf for the next one beside a tile whose caption is shorter or taller", async () => {
+    await click('[data-app-nav] a[href="/"]');
+    const [upper, lower] = [...document.querySelectorAll<HTMLElement>('[data-page="Home"] ol[data-nav-row]')].slice(-2);
+    const tiles = (shelf?: HTMLElement) => [...shelf?.querySelectorAll<HTMLElement>("[data-media-tile]") ?? []];
+    assert(tiles(upper).length >= 2 && tiles(lower).length >= 2, "Home needs two shelves of two tiles (the saved videos and Radio)");
+    // A longer caption (a two-line title) moves a tile's centre off its neighbour's.
+    const leave = async (from: HTMLElement, taller: HTMLElement, direction: string, into: HTMLElement) => {
+      const caption = taller.querySelector<HTMLElement>("[data-tile-caption]")!;
+      caption.style.paddingBottom = "3rem";
+      try { from.focus(); await key(direction); } finally { caption.style.paddingBottom = ""; }
+      assert(into.contains(document.activeElement), `${direction} moved along its shelf or skipped the next`);
+    };
+    await leave(tiles(lower).at(-1)!, tiles(lower).at(-1)!, "ArrowUp", upper!);
+    await leave(tiles(upper).at(-1)!, tiles(upper).at(-2)!, "ArrowDown", lower!);
+  });
   await check("The tab bar scrolls with the page, Up from its first row reaches the current tab, and Back goes Home", async () => {
     await click('[data-app-nav] a[href="/live"]');
     assert(getComputedStyle(control(".app-header")).position !== "sticky", "TV tab bar is still sticky");

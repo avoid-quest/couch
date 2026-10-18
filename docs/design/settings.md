@@ -6,7 +6,7 @@ Settings has two owners, each titled with its real name. **This device** (its na
 
 Settings opens on This device → General; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last. On the TV, Devices opens on Pair a device.
 
-This device → Home's rows: [Home](home.md#home-is-a-timetable).
+This device → Home's shelves: [Home](home.md#shelves).
 
 ## Admin-only rows
 

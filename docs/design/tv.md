@@ -7,7 +7,7 @@ A TV (`body.tv-presentation`, styled with the
 a remote at ten feet. The TV uses its own
 composition: fewer focus stops, a quiet local-name header and controls revealed
 over the picture. Desktop and phone keep their browsing and Couch-switch controls.
-Home's tiles: [Home](home.md#tiles-on-the-tv).
+Home's hero and shelves: [Home](home.md).
 
 Focus is
 the only highlight; no hover style applies on the TV. The TV has no hover: under `.tv-presentation` the `hover` variant
@@ -19,7 +19,9 @@ restored, then takes any section to Home, where Back does nothing. Opening
 Up next changes the player URL without losing its opener. Settings' own OK
 and Back: [Settings](settings.md#section-nav).
 
-After every page change, focus is on the page's first control. The header holds the sections as centred tabs,
+After every page change, focus is on the page's first control. When that control renders
+after later ones (Home's hero waits for its data), focus moves to it as it appears, unless a
+key or pointer came first. The header holds the sections as centred tabs,
 the TV's name at the left and the clock at the right, as plain text; the Couch choice lives in Settings → Couch
 connection, and the TV has no Remote tab or Keyboard shortcuts. Layout per screen: [Shell](shell.md#header-and-section-nav).
 Volume and every fader move 5 per press. Text fields say "Type with Remote on
@@ -63,7 +65,12 @@ enabled so focus stays where it was.
 Spatial navigation places a
 slider by its whole track, not its moving thumb, reaches the header and the
 footer (the now-playing bar) only after the page's own controls, and keeps
-focus clear of the footer. The TV's tab bar is not sticky: it scrolls away
+focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
+shelf, the hero's verbs, a media row) reach the nearest row first, so Home's
+shelves are walked one by one and never skipped for a farther control that
+lines up. In their own row they reach only a control past them (a wrapped
+line, Continue's Details), never a tile beside them whose caption is shorter
+or taller. The TV's tab bar is not sticky: it scrolls away
 with the page, as on Apple TV, so the page gets the screen. Up from a page's
 first row reaches it on the current tab, and Down from it returns to the
 page's first control. After a page change the first key starts at the page's first
@@ -77,11 +84,11 @@ on the first enabled transport slot, Up and Down show them on the timeline (or
 that transport slot when there is no seekable timeline), and Left and Right seek
 10 s and show the timeline (live media that can't seek only shows them). Back
 hides the controls; with them hidden it leaves the player for the page that
-opened it, and playback goes on in Home's Now row and the now-playing bar.
+opened it, and playback goes on in Home's hero and the now-playing bar.
 
 Paused shows a large Pause glyph and "Paused", and the controls stay up until
 Back hides them. The TV's player has no breadcrumb, Couch switch, inline Details button or fullscreen;
 Details is in the Playback sheet. From hidden controls, Stop for pausable media
 is OK, Right, OK. Nonpausable radio/live starts on Stop, so it is OK, OK.
-Home's Now row uses that
+Home's hero uses that
 same transport rather than maintaining separate Play/Pause, Stop and Next logic.

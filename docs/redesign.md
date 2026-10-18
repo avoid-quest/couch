@@ -26,23 +26,6 @@ type or copy rules.
 - **Fewer exceptions.** A rule that needs an exception for one surface is a
   sign the structure is wrong. Prefer changing the structure.
 
-## Home
-
-- **Hero:** the first of
-  1. what you control is playing: artwork, title, "on {device}" (+N), end
-     time, the shared transport and Open player;
-  2. the first Continue item: Resume and From start;
-  3. the first radio station on air: Play.
-
-  Its primary verb is the page's first control.
-- **Shelves follow**, in Settings → Home's order and visibility: Continue, Up
-  next, For later, Radio and Played recently. The hero's item does not repeat
-  in the shelf below it. Each shelf's heading names the section and the time
-  it matters at, as Home's rows do today.
-- **Tiles everywhere:** `MediaTile` shelves on the TV, desktop and phones. One
-  tree replaces today's separate TV and desktop Home components. The TV's
-  one-focus-stop and Continue Details rules carry over unchanged.
-
 ## Browse
 
 - **Search:** the display-size search field leads, with Find's filters and
@@ -141,7 +124,7 @@ release notes ([ci.md](ci.md)).
 | `spec` | Describe Couch's redesigned interface | this brief; design docs split by surface | `design.md`, `design/`, `AGENTS.md` |
 | `foundation` | Prepare the interface for its redesign | one presentation module; a TV presentation override for scratch and browser checks, unreachable in release builds; no visual change (landed) | `design/tv.md` |
 | `shell` | Navigate Couch with tabs and a now-playing bar | Shell; new section paths with redirects; existing pages render inside them (landed) | `design/shell.md` |
-| `home` | Open Home on what you'll most likely play next | Home | `design/home.md` |
+| `home` | Open Home on what you'll most likely play next | Home (landed) | `design/home.md` |
 | `browse` | Search everything and open each source from its own home | Search, source homes, details | `design/browse.md` |
 | `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library | `design/browse.md` |
 | `player` | Show the time and title over the playing picture | Player | `design/player.md` |

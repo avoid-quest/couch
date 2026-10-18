@@ -89,7 +89,7 @@ them all, and so does M.
 **Play on** in item menus offers This device and the other online Devices
 that share, hidden while this is the only one; the primary Play says "Play on
 {name}" while you control another Device, and a "Playing on {name}" toast
-confirms it. The now-playing bar, the player's summary and Home's Now row say
+confirms it. The now-playing bar, the player's summary and Home's hero say
 "on {name}" (+N) whenever the controlled Playback plays anywhere but only here.
 
 Its target rows in menus: [Browse](browse.md#play-on-targets-in-menus).

@@ -51,9 +51,9 @@ with Settings: [Settings](settings.md#section-nav).
 ## MediaRow / MediaList
 
 Thumbnail, title, meta, length bar, one main verb
-and actions revealed on hover or focus. Home, Live, Search and Library. Every media
-row ends with the same verbs (`BrowseActions`): a filled ▷ for Play (Resume
-on Continue), then one "…" menu with Play on, Queue, Save and its other verbs.
+and actions revealed on hover or focus. Live, Search and Library. Every media
+row ends with the same verbs (`BrowseActions`): a filled ▷ for Play, then one
+"…" menu with Play on, Queue, Save and its other verbs.
 On the TV a row is one focus stop: OK does its main verb (Play for stations,
 channels and episodes, else Open), and its other verbs wait on its page.
 
@@ -74,7 +74,7 @@ and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
 title and one meta line, plus a `DurationBar` on Continue. It is one focus
 stop whose press does the item's main verb. The catalog has no media tile
 and Card breaks Flat, so a tile is the smallest Button composition. Shelves
-are plain overflow rows (`data-nav-row`), as Played recently already is:
+(Home's) are plain overflow rows (`data-nav-row`):
 Carousel's own arrow handling fights spatial navigation, and focus scrolls a
 plain row into view.
 
