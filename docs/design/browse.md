@@ -36,7 +36,10 @@ The row holds, in order: Play (Play all for a list; Resume, with From start
 beside it, once partly watched), Queue (Queue all), Save or Saved, Play on
 while another device can play it, then one "…" menu for the rest. Each verb is
 one focus stop. The primary verb carries `data-page-first`, so the page starts
-on it; while it is disabled, or without one, the first verb you can press does. Seasons, episodes, tracks and nearby
+on it; while it is disabled, or without one, the first verb you can press does.
+A header without verbs, such as a source's home, leaves the page to its first
+tile or row, or to the scoped search field where a source has no home page of
+its own, never to the breadcrumb. Seasons, episodes, tracks and nearby
 items follow as divided MediaRows.
 
 Home's tiles do one verb, so Details holds the others for everything Home
@@ -59,9 +62,10 @@ Live (`/live`) is one page in three parts, each under a section heading, as
 Home's shelves are:
 
 - **On air:** a shelf of `MediaTile`s, the saved stations first, then the
-  built-in ones. Each tile reads the station, its current show and "Live"
-  (a `DurationBar`): a show's `expiresAt` is when its data refreshes, not when
-  it ends, so there is no "until" time. A tile plays its station. Home's
+  built-in ones. Each tile reads the station and its current show; the
+  heading already says they're on air, so a tile doesn't repeat "Live". A
+  show's `expiresAt` is when its data refreshes, not when it ends, so there
+  is no "until" time. A tile plays its station. Home's
   Radio shelf builds the same list (`useOnAir`, with Home's recents first).
   The shelf waits for the shows, so no tile grows a line under the focus,
   then keeps its order while Live stays open, as Home's shelves do. Its first
@@ -74,7 +78,8 @@ Home's shelves are:
   only while a Live TV source has some. If the sources fail to load, "Couldn't
   load Live TV." stands in for them, with Try again.
 
-There is no programme grid: that waits for a source that needs one. As a
+Not yet: a programme grid, and any Core endpoint it would need; it waits
+for a source that needs one. As a
 section root Live carries no breadcrumb.
 
 ## Keep discovery context visible
@@ -141,7 +146,7 @@ keep their existing disabled state.
 
 One `Button` wrapping `MediaArtwork` (contained; 2:3 for films
 and series, 1:1 for stations and albums, 16:9 for videos and episodes), a
-title and one meta line, plus a `DurationBar` on Continue and On air. It is one focus
+title and one meta line, plus a `DurationBar` on Continue. It is one focus
 stop whose press does the item's main verb. The catalog has no media tile
 and Card breaks Flat, so a tile is the smallest Button composition. Shelves
 (`Shelf`: Home's, and Live's On air) are plain overflow rows (`data-nav-row`):
@@ -163,8 +168,8 @@ links do, and a bordered field there would be a panel inside the pager.
 
 ## ContentBreadcrumb
 
-The path above a collection or item (Search, then
-the source, then the collection; a station's starts at Live). It replaces a Back control, so its
+The path above a collection or item: the section the page belongs to (its
+tab: [Shell](shell.md#sections)), then the source, then the collection. It replaces a Back control, so its
 links are `text-sm`, the controls' size, rather than Mira's `text-xs`
 caption size, and each is `min-h-11`, a 44px target on every screen.
 

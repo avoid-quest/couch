@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, retainSearchParams } from "@tanstack/react-router";
 import { ItemPage, readItemSearch } from "../sections/details/ItemPage";
 
-export const Route = createFileRoute("/item")({ validateSearch: readItemSearch, component: ItemPage });
+// `from` names the section the page opened in; moving between details keeps it.
+export const Route = createFileRoute("/item")({ validateSearch: readItemSearch, search: { middlewares: [retainSearchParams(["from"])] }, component: ItemPage });

@@ -33,35 +33,34 @@ export function RemotePage() {
   const current = ready ? state?.queue.find(entry => entry.id === state.currentEntryId) : undefined;
   const volumeState = state && target ? { ...state, outputs: [{ deviceId: target.id, sound: true, picture: false }], systemAudio: undefined, player: { ...state.player, volume: target.volume } } : null;
   if (tvPresentation) return <><PageHeader title="Remote" /><p>Open Remote on a paired phone or computer to control this TV.</p></>;
-  return <div data-remote-page className="mx-auto w-full max-w-4xl">
+  // Laid out like the remote it stands in for: the TV, the pad, what plays, then text.
+  return <div data-remote-page className="mx-auto grid w-full max-w-sm gap-8">
     {/* A phone's top bar already names the page. */}
-    <PageHeader title="Remote" className="touch:sr-only" />
-    <div className="mb-6 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-4">
+    <PageHeader title="Remote" className="-mb-2 touch:sr-only" />
+    <div className="grid gap-1">
       {tvs.length > 1 ? <Select value={targetId} onValueChange={value => { setBinding(null); setError(null); setChosen(value); }} disabled={!connected}>
-        <SelectTrigger aria-label="TV to control" className="min-h-11 w-full sm:w-72"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
+        <SelectTrigger aria-label="TV to control" className="min-h-11 w-full"><SelectValue placeholder="Choose a TV" /></SelectTrigger>
         <SelectContent>{tvs.map(tv => <SelectItem key={tv.id} value={tv.id} className="min-h-11" disabled={!tv.online || !(tv.sharing?.audio || tv.sharing?.video)}>{tv.name}{!tv.online ? " · Offline" : !(tv.sharing?.audio || tv.sharing?.video) ? " · Private" : ""}</SelectItem>)}</SelectContent>
       </Select> : <p className="min-w-0 break-words text-lg font-medium">{target?.name ?? "No TV connected"}</p>}
-      <p className="text-sm text-muted-foreground" role="status">{!target ? "Pair a TV with this Couch to use Remote." : !connected ? "Reconnecting to Couch…" : !target.online ? `${target.name} is offline.` : !allowed ? `${target.name} is private. Enable its sharing to control it.` : !ready ? "Selecting TV…" : `Controlling ${target.name}`}</p>
+      <p className="text-sm text-muted-foreground" role="status">{!target ? "Pair a TV with this Couch to use Remote." : !connected ? "Reconnecting to Couch…" : !target.online ? `${target.name} is offline.` : !allowed ? `${target.name} is private. Enable its sharing to control it.` : !ready ? "Selecting TV…" : "Connected"}</p>
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
     </div>
-    {error && <p className="mb-5 text-sm text-destructive" role="alert">{error}</p>}
-    {target && <div className="grid gap-8 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:gap-12">
-      <div className="grid content-start gap-6">
-        <RemotePad connected={ready} onNavigate={key => send({ type: "navigate", deviceId: target.id, key })} />
-        <RemoteText key={target.id} field={ready ? state?.textField ?? null : null} connected={ready} send={(token, text, submit) => send({ type: "text", deviceId: target.id, token, text, submit })} />
-      </div>
-      <section className="grid content-start gap-5 border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0"><h2 className="text-lg font-medium">{current?.title ?? (ready ? "Nothing playing" : `Playback on ${target.name}`)}</h2>{current && <p className="text-sm text-muted-foreground">{state?.player.status === "error" ? state.player.error : state?.player.status === "loading" ? "Loading…" : state?.player.status === "paused" ? "Paused" : state?.player.status === "ended" ? "Finished" : "Playing"}</p>}</div>
-          <Button variant="ghost" className="min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
+    {target && <>
+      <RemotePad connected={ready} onNavigate={key => send({ type: "navigate", deviceId: target.id, key })} />
+      <section className="grid gap-4 border-t pt-6 [&_[data-slot=slider]]:min-h-11" aria-label={`Playback on ${target.name}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0"><h2 className="truncate text-base font-medium">{current?.title ?? (ready ? "Nothing playing" : `Playback on ${target.name}`)}</h2>{current && <p className="text-sm text-muted-foreground">{state?.player.status === "error" ? state.player.error : state?.player.status === "loading" ? "Loading…" : state?.player.status === "paused" ? "Paused" : state?.player.status === "ended" ? "Finished" : "Playing"}</p>}</div>
+          <Button variant="ghost" className="-mr-2.5 min-h-11" aria-label="Up next" disabled={!ready || !state?.queue.length} onClick={() => shell.openPlayer("queue", targetId)}>Up next</Button>
         </div>
         {state && credentials && <>
           <PlaybackTransport state={state} connected={ready} run={send} />
           {current && <PlaybackTimeline state={state} connected={ready} run={send} />}
         </>}
-        {volumeState && <div className="border-t pt-4"><PlaybackVolume state={volumeState} connected={ready && target.sharing?.audio === true} run={action => send(action.type === "volume" || action.type === "mute" ? { ...action, deviceId: target.id } : action)} /></div>}
+        {volumeState && <PlaybackVolume state={volumeState} connected={ready && target.sharing?.audio === true} run={action => send(action.type === "volume" || action.type === "mute" ? { ...action, deviceId: target.id } : action)} />}
       </section>
-    </div>}
-    {!target && <Button variant="outline" className="mt-3" asChild><Link to="/settings/couch/devices">Open Devices</Link></Button>}
+      <RemoteText key={target.id} field={ready ? state?.textField ?? null : null} connected={ready} send={(token, text, submit) => send({ type: "text", deviceId: target.id, token, text, submit })} />
+    </>}
+    {!target && <Button variant="outline" className="justify-self-start" asChild><Link to="/settings/couch/devices">Open Devices</Link></Button>}
   </div>;
 }
 
@@ -91,8 +90,8 @@ function RemoteText({ field, connected, send }: { field: RemoteTextField | null;
     finally { setPending(false); }
   };
   const disabled = !connected || !field || pending;
-  return <section className="grid gap-2 border-t pt-5" aria-label="Type on TV">
-    <label htmlFor="remote-text" className="text-sm font-medium">{field ? `Type in ${field.label}` : "Type on TV"}</label>
+  return <section className="grid gap-2 border-t pt-6" aria-label="Type on TV">
+    <label htmlFor="remote-text" className="text-base font-medium">{field ? `Type in ${field.label}` : "Type on TV"}</label>
     <InputGroup className="min-h-11">
       <InputGroupInput id="remote-text" value={draft} maxLength={field?.maxLength ?? 4096} disabled={disabled} onChange={event => { setDraft(event.target.value); setDirty(true); setSent(false); }} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(false); } }} autoComplete="off" />
       <InputGroupAddon align="inline-end"><InputGroupButton className="min-h-11 min-w-11" disabled={disabled} onClick={() => void submit(false)}>Send</InputGroupButton></InputGroupAddon>

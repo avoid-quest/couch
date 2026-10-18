@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { DurationBar } from "@/components/DurationBar";
 import { MediaTile } from "@/components/MediaTile";
 import { usePlayOn } from "@/components/PlayOn";
 import { Shelf } from "@/components/Shelf";
@@ -30,7 +29,7 @@ export function LivePage() {
       {/* Tiles take the shelf's height, so one without a show stays level with the rest and Up and Down leave the shelf. */}
       {stations.map((station, index) => <li key={station.id} className="flex shrink-0">
         <MediaTile data-page-first={index === 0 || undefined} className="justify-start" shape="square" title={station.name} meta={onAir.meta(station) || undefined} thumbnail={onAir.show(station.id)?.artworkUrl ?? station.logoUrl}
-          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)}><DurationBar live /></MediaTile>
+          aria-label={on(`Play ${station.name}`)} disabled={!available} onClick={() => void enqueueRadio(station, true)} />
       </li>)}
     </Shelf>}
     {/* A failed list leaves its stations out, so say so; missing shows only cost the tiles their meta line. */}
