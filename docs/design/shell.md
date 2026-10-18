@@ -51,9 +51,6 @@ page's scroll padding clears it by that and a rem, so a focused tile is never
 under it. On the TV, Up from a page's first row still reaches it
 ([TV](tv.md#every-journey-step-works-with-a-remote)).
 
-The Couch switch and the TV's plain name stand alone at the page gutter; the
-header carries no brand mark.
-
 **Search** is `HeaderSearch`: shadcn `InputGroup` at the tabs' `text-base`,
 with a muted lucide Search icon and "Search" placeholder, up to 16rem wide.
 It has only a bottom hairline at rest, so the field belongs with the header's
@@ -61,7 +58,7 @@ open type; focus inverts the field to white with black ink and caret, including
 on the TV. This is a Clock adjustment to InputGroup's default bordered box.
 A fine pointer sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
 (off the TV). A Spinner replaces the icon as soon as the draft changes and
-stays while the current query's sources answer, with a screen-reader status.
+stays while the results page's sources answer.
 The clear button stays, with a 44px touch target. The field never changes
 width on focus, so the surrounding header stays still. `/` focuses it from any page
 (from the player, its page comes back first). Typing searches after a second
@@ -87,8 +84,8 @@ Input exceptions:
   Tv, Settings) over its label. Five equal-width tabs fit 390px; without a TV
   there are four. The top bar is a row: the Couch switch at the left, then
   the search field, which takes the room left (it fits 390px with a long
-  name, which truncates). Settings is in the bottom bar; the clock is hidden. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps
-  its grid, tabs and clock.
+  name, which truncates); phones show no clock. A narrow TV has no touch, so
+  `tv:` undoes `touch:` and it keeps its grid, tabs and clock.
 - **The Mac window:** its buttons and the region that drags it live in the
   header; the search field, like every control there, takes its clicks back
   (`[data-window-controls]` in `index.css`).

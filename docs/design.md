@@ -24,8 +24,7 @@ right. Desktop icons use the black tile in `packaging/icons/icon.svg`. The macOS
 tray uses a transparent template silhouette so the system can tint it. The PWA
 maskable icon uses a full black background and keeps the mark inside the safe
 circle. The website uses a custom SVG for this product mark because the shadcn
-catalog provides interface icons, not brand identities. The app's header uses
-the Couch switch or the TV's name on its own, without the mark.
+catalog provides interface icons, not brand identities.
 
 ## Principles
 

@@ -26,12 +26,9 @@ export function HeaderSearch({ className }: { className?: string }) {
   const [draft, setDraft] = useState({ route: routeQuery, value: routeQuery });
   if (draft.route !== routeQuery) setDraft({ route: routeQuery, value: routeQuery });
   const value = draft.value;
-  // Observe the existing queries: source filters keep all counts loading, but unrelated page reads stay quiet.
-  const fetching = useIsFetching({ predicate: ({ queryKey: [scope, type, , request] }) => results && !isLink(routeQuery) && (
-    scope === "search" && type === "providers" && typeof request === "object" && request !== null && "query" in request && request.query === routeQuery
-    || (scope === "radio" || scope === "radio-directory") && type === "search" && (request === routeQuery || request === "")
-  ) });
-  const busy = connected && (value.trim() !== routeQuery || fetching > 0);
+  // The field spins while a typed query waits, then while the results page's sources answer.
+  const fetching = useIsFetching({ queryKey: ["search", "providers"] });
+  const busy = connected && (value.trim() !== routeQuery || results && fetching > 0);
   const type = (next: string) => setDraft(current => ({ ...current, value: next }));
   const [composing, setComposing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -84,6 +81,5 @@ export function HeaderSearch({ className }: { className?: string }) {
       {!value && <InputGroupAddon align="inline-end" className="hidden pointer-fine:flex group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
       {value && <InputGroupAddon align="inline-end" className="pr-2.5 group-has-[input:focus]/input-group:text-background/65"><InputGroupButton size="icon-xs" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
     </InputGroup>
-    <span role="status" className="sr-only">{busy ? "Searching…" : ""}</span>
   </form>;
 }
