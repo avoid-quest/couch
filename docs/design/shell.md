@@ -33,8 +33,8 @@ their redirects.
 
 ## Header and section nav
 
-One header on every screen, on a three-column grid: at the left, Couch's
-mark and the Couch switch in muted ink (the TV names itself there instead,
+One header on every screen, on a three-column grid: at the left, the Couch
+switch in muted ink (the TV names itself there instead,
 as plain muted text, since it has no switch); in the middle, centred text
 tabs (Home, Discover, Saved, then Remote while the Couch has a TV, then
 Settings); at the right, Stop sharing while this device shares its screen or
@@ -51,16 +51,20 @@ page's scroll padding clears it by that and a rem, so a focused tile is never
 under it. On the TV, Up from a page's first row still reaches it
 ([TV](tv.md#every-journey-step-works-with-a-remote)).
 
-**The mark** is `CouchMark`: the drawing inside `packaging/icons/icon.svg`
-without its black tile, as an inline SVG in `currentColor`, its cuts a mask so
-it sits on any ground. The catalog has interface icons, not brand identities
-([Brand mark](../design.md#brand-mark)). It is the one thing at the header's
-left in white ink, on every screen, phones included.
-
-**Search** is `HeaderSearch`: shadcn `InputGroup` with a lucide Search icon and
-the placeholder "Search", up to 16rem wide. `/` focuses it from any page
+**Search** is `HeaderSearch`: shadcn `InputGroup` at the tabs' `text-base`,
+with a muted lucide Search icon and "Search" placeholder, up to 16rem wide.
+It has only a bottom hairline at rest, so the field belongs with the header's
+open type; focus inverts the field to white with black ink and caret, including
+on the TV. This is a Clock adjustment to InputGroup's default bordered box.
+A fine pointer sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
+(off the TV). A Spinner replaces the icon as soon as the draft changes and
+stays while the results page's sources answer.
+The clear button stays, with a 44px touch target. The field never changes
+width on focus, so the surrounding header stays still. `/` focuses it from any page
 (from the player, its page comes back first). Typing searches after a second
-without typing, and Enter at once: the first search from another page opens
+without typing, and Enter at once. The delay coalesces edits because one
+search fills every one of Core's provider slots, including two yt-dlp jobs; the
+spinner makes that wait visible. The first search from another page opens
 `/search?q=…`, later ones replace it, and focus stays in the field while
 typing (Enter goes on to the results; Down reaches the page's first result).
 Off the TV, Esc clears the field, which is Discover, then leaves it; the TV's
@@ -75,13 +79,13 @@ Input exceptions:
 - **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) just
   before the clock; the TV, phones and Remote have none.
 - **Touch** (`touch:`, phones and windows below 960px): the tabs move to a
-  bottom tab bar for thumb reach (Home, Discover, Saved, and Remote while the
-  Couch has a TV), each a lucide icon (House, Compass, Bookmark, Tv) over its
-  label. The top bar is a row: the mark and the Couch switch at the left, then
+  bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
+  Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,
+  Tv, Settings) over its label. Five equal-width tabs fit 390px; without a TV
+  there are four. The top bar is a row: the Couch switch at the left, then
   the search field, which takes the room left (it fits 390px with a long
-  name, which truncates), and a Settings gear (`aria-label="Settings"`) where
-  the clock is. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps
-  its grid, tabs and clock.
+  name, which truncates); phones show no clock. A narrow TV has no touch, so
+  `tv:` undoes `touch:` and it keeps its grid, tabs and clock.
 - **The Mac window:** its buttons and the region that drags it live in the
   header; the search field, like every control there, takes its clicks back
   (`[data-window-controls]` in `index.css`).

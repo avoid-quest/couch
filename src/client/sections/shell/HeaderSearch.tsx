@@ -1,6 +1,9 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
+import { useIsFetching } from "@tanstack/react-query";
+import { Kbd } from "@/components/ui/kbd";
+import { Spinner } from "@/components/ui/spinner";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { focusPageControl } from "@/navigation";
 import { isLink, readSearchState, searchLocation } from "@/search";
@@ -23,6 +26,9 @@ export function HeaderSearch({ className }: { className?: string }) {
   const [draft, setDraft] = useState({ route: routeQuery, value: routeQuery });
   if (draft.route !== routeQuery) setDraft({ route: routeQuery, value: routeQuery });
   const value = draft.value;
+  // The field spins while a typed query waits, then while the results page's sources answer.
+  const fetching = useIsFetching({ queryKey: ["search", "providers"] });
+  const busy = connected && (value.trim() !== routeQuery || results && fetching > 0);
   const type = (next: string) => setDraft(current => ({ ...current, value: next }));
   const [composing, setComposing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -36,6 +42,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   const commit = useEffectEvent(() => search(value.trim()));
   useEffect(() => {
     if (composing || !connected || value.trim() === routeQuery) return;
+    // One query fills every one of Core's provider slots (including two yt-dlp jobs); keep edits coalesced.
     const timer = setTimeout(commit, 1000);
     return () => clearTimeout(timer);
   }, [value, routeQuery, composing, connected]);
@@ -54,10 +61,11 @@ export function HeaderSearch({ className }: { className?: string }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [results]);
   const clear = () => { type(""); search(""); input.current?.focus(); };
-  return <form role="search" aria-label="Search" className={className} onSubmit={event => { event.preventDefault(); if (!composing) search(value.trim(), true); }}>
-    <InputGroup>
-      <InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon>
-      <InputGroupInput ref={input} id="media-search" data-remote-field="find" type="search" aria-label="Search or paste a link" placeholder="Search" maxLength={4096} autoComplete="off" className="[&::-webkit-search-cancel-button]:hidden" value={value}
+  return <form role="search" aria-label="Search" aria-busy={busy} className={className} onSubmit={event => { event.preventDefault(); if (!composing) search(value.trim(), true); }}>
+    {/* InputGroup keeps its input/addon behavior; the header needs a hairline and Clock inversion instead of a box. */}
+    <InputGroup className="h-11 rounded-none border-x-0 border-t-0 border-b bg-transparent transition-colors dark:bg-transparent has-[input:focus]:border-foreground has-[input:focus]:bg-foreground has-[input:focus]:text-background has-[input:focus]:duration-0 has-[[data-slot=input-group-control]:focus-visible]:ring-0">
+      <InputGroupAddon className="pl-2.5 group-has-[input:focus]/input-group:text-background/65">{busy ? <Spinner aria-hidden="true" /> : <Search aria-hidden="true" />}</InputGroupAddon>
+      <InputGroupInput ref={input} id="media-search" data-remote-field="find" type="search" aria-label="Search or paste a link" placeholder="Search" maxLength={4096} autoComplete="off" className="h-full text-base md:text-base caret-current focus:duration-0 focus-visible:outline-none group-has-[input:focus]/input-group:placeholder:text-background/65 [&::-webkit-search-cancel-button]:hidden" value={value}
         onChange={event => type(event.target.value)}
         onCompositionStart={() => setComposing(true)} onCompositionEnd={event => { setComposing(false); type(event.currentTarget.value); }}
         onKeyDown={event => {
@@ -70,7 +78,8 @@ export function HeaderSearch({ className }: { className?: string }) {
             if (page) { event.preventDefault(); focusPageControl(page); }
           }
         }} />
-      {value && <InputGroupAddon align="inline-end"><InputGroupButton size="icon-xs" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
+      {!value && <InputGroupAddon align="inline-end" className="hidden pointer-fine:flex group-has-[input:focus]/input-group:invisible tv:hidden"><Kbd aria-hidden="true">/</Kbd></InputGroupAddon>}
+      {value && <InputGroupAddon align="inline-end" className="pr-2.5 group-has-[input:focus]/input-group:text-background/65"><InputGroupButton size="icon-xs" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
     </InputGroup>
   </form>;
 }

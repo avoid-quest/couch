@@ -24,7 +24,7 @@ export function CouchSwitch({ credentials, connected, status, installationName }
   const name = deviceName(installationName);
   return <><Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button ref={trigger} variant="ghost" className="min-w-0 shrink gap-2 text-base font-normal text-muted-foreground touch:min-w-11" aria-label={`${name}: ${status}`}>
+      <Button ref={trigger} variant="ghost" className="-ml-2.5 min-w-0 shrink gap-2 text-base font-normal text-muted-foreground touch:min-w-11" aria-label={`${name}: ${status}`}>
         <StatusDot connected={connected} />
         <span className="max-w-48 truncate max-sm:max-w-32">{name}</span>
       </Button>
