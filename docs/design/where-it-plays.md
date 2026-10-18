@@ -17,12 +17,13 @@ People never wonder whether a word names a device, a group or a place.
 - **One device, one row.** The picker lists every paired device once, since
   Core lets a device serve one Playback at a time.
 - **This device keeps its name.** Its status line starts with "This device".
-- **The host is just a device.** The Couch and its host share one name, which
-  appears only where you choose which Couch to use (the Couch switch and Couch
-  connection), never in Where it plays.
+- **The host is just a device.** The Couch and its host share one name. In
+  Where it plays that name labels the host's device row, with no separate
+  Couch heading.
 - **Hardware is not a device.** An HDMI display, a sound card or a Bluetooth
-  speaker is part of its device, chosen in Settings → The Couch → Hardware and
-  never listed beside devices.
+  speaker is part of its device, chosen in Settings under the Couch's name
+  through Display, Sound or Bluetooth, where available; on phones, choose
+  the page from the Settings page menu. It is never listed beside devices.
 - **One level for the whole Playback.** The band's Volume and the picker's top
   fader are one control, with each device's fader below it. No hidden level
   silences sound ([Volume](#volume)).
@@ -176,7 +177,8 @@ number reads "–"): 0 takes its sound out and raising it puts it in.
 "Sync … ms earlier" plays a late speaker sooner (Sendspin's static delay).
 It applies only while the device's sound plays in sync with other devices,
 and few people touch it, so a row shows its Sync line only while its delay
-isn't 0. Otherwise **Sync…** in the row's "…", there while Sync applies,
+isn't 0. Outside synchronized playback the saved value is hidden, though
+Core keeps it. At 0, **Sync…** in the row's "…", there while Sync applies,
 reveals the line and moves focus to its slider; Back or Esc on the slider,
 or closing the Sheet, hides it again while the delay is still 0. That
 reveal is the open Sheet's own state, not Core's. The line is part of the
@@ -234,8 +236,9 @@ the catalog's `DropdownMenuCheckboxItem`.
 
 ## Play on
 
-**Play on** in item menus offers This device and the other online devices
-that share, hidden while this is the only one; the primary Play says "Play on
+**Play on** in item menus lists this device by name with "This device"
+underneath, then the other online devices that share. The group is hidden
+with only one eligible online target; the primary Play says "Play on
 {name}" while you control another device, and a "Playing on {name}" toast
 confirms it. The now-playing bar, the player's summary and Home's hero say
 "on {name}" (+N) whenever the controlled Playback plays anywhere but only here.
