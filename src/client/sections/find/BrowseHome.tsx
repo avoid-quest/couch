@@ -1,6 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
 import { MediaList, MediaRow } from "@/components/MediaRow";
-import { iptvSourcesQuery } from "@/api/iptv";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { Button } from "@/components/ui/button";
@@ -21,18 +19,15 @@ const catalogues: { title: string; meta: string; provider: ProviderId }[] = [
   { title: "Twitch", meta: "Live streams and past broadcasts", provider: "twitch" },
 ];
 
-// Find with an empty query: where to browse. What to continue and what was
+// Search with an empty query: where to browse. Radio and Live TV live in Live; what to continue and what was
 // saved for later live on Home.
-export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-tv") => void }) {
+export function BrowseHome() {
   const navigation = useDetailNavigation();
   const { connected, tvPresentation } = useSessionGate();
-  const { credentials, openSources } = useShell();
+  const { openSources } = useShell();
   const shared = useLiveSourceHits("");
-  // Live TV appears once a source has channels.
-  const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected });
-  const liveTv = !!iptv.data?.sources.some(source => source.channelCount);
   return <div className="space-y-6">
-    {onBrowse && <section aria-label="Browse">
+    <section aria-label="Browse">
       <div className="mb-2 flex items-center justify-between gap-4">
         <h2 className="text-base font-medium">Browse</h2>
         <Button variant="ghost" disabled={!connected} onClick={() => openSources()}>Add source</Button>
@@ -41,13 +36,11 @@ export function BrowseHome({ onBrowse }: { onBrowse?: (source: "radio" | "live-t
         {shared.map(hit => <MediaRow key={hit.id} data-hit-id={hit.id} title={hit.title} meta={hit.meta} tvSecondaryActions
           primary={{ label: hit.primary.label, disabled: hit.primary.disabled, onClick: hit.primary.run }}
           actions={<BrowseActions title={hit.title} actions={tvPresentation ? hit.actions.filter(action => action.label !== "Play") : hit.actions} />} />)}
-        <MediaRow title="Radio" meta="Stations and playlists" primary={{ label: "Open", onClick: () => onBrowse("radio") }} />
-        {liveTv && <MediaRow title="Live TV" meta="Channels and what's on" primary={{ label: "Open", onClick: () => onBrowse("live-tv") }} />}
         {catalogues.map(item => {
           const href = collectionLocation({ provider: item.provider, url: "" });
           return <MediaRow key={item.provider} title={item.title} meta={item.meta} primary={{ label: "Open", href, onClick: () => navigation.open(href) }} />;
         })}
       </MediaList>
-    </section>}
+    </section>
   </div>;
 }

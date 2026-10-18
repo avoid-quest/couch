@@ -1,6 +1,6 @@
 # Browsing around playback
 
-Couch is a shared media library for the TV and its controllers. Find remains the
+Couch is a shared media library for the TV and its controllers. Search remains the
 cross-source search. Opening a collection should make its place in the library
 clear, keep its browsing position, and offer named destinations during playback.
 
@@ -16,7 +16,7 @@ artwork beside the title even on phones, and divided media rows. Descriptions
 are optional disclosure content rather than a large block above the list.
 
 ```text
-Find / provider / series / season
+Search / provider / series / season
 
 Artwork    Season title     Play all  …
            About
@@ -36,7 +36,7 @@ items. Browser history restores the collection page and scroll position.
 
 Collection rows open details through their title; a small Play control stays
 available, and secondary verbs use Couch's existing Dropdown Menu. The existing
-Find results, action layout, and time ruler remain as they are. Use one compact
+Search results, action layout, and time ruler remain as they are. Use one compact
 pager with Previous, "Page N of M" and Next in fixed slots, disabling unavailable directions.
 
 Use the official shadcn [Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
@@ -51,13 +51,11 @@ StreamingCommunity episodes whose saved season URL already identifies the series
 
 ## Live TV
 
-Find > Browse lists Live TV only once a Live TV source has channels; there is
-no preset. Its page uses the same breadcrumb (Find / Live TV), title, toolbar
-and divided rows as a collection:
+Live lists Live TV's channels below its radio stations only once a Live TV
+source has channels; there is no preset. They use the same title, toolbar and
+divided rows as a collection:
 
 ```text
-Find / Live TV
-
 Live TV
 
 305 channels      All groups   Filter       ‹ 2 / 13 ›
@@ -70,22 +68,22 @@ Logo   Channel name                             ▷  …
 Rows are compact MediaRows with the channel logo as artwork. The meta line
 carries what's on now and next from the XMLTV guide, and the group while no
 group is picked. Play plays the channel; the menu offers Play on and Queue.
-The group Select, Filter and page live in the route (`/find?browse=live-tv`),
+The group Select, Filter and page live in the route (`/live?group=…&channelFilter=…&channelPage=…`),
 so history restores them. A source without a guide still lists its channels.
 
 ## Shared sources
 
 A device's live input uses the same Sources setup, Browse rows, search results
 and Play on menu as other media. Configure capture in Settings → This device → Sharing,
-or open Find → Add source → This device. Capture always belongs to the
+or open Search → Add source → This device. Capture always belongs to the
 device running that form, including for paired users without administrator access.
 The source picker uses two columns so its four tabs fit narrow dialogs without
 overlapping the form; it reuses the existing shadcn Tabs, Select and Field controls.
 
-Active inputs appear as rows in Find's Browse list and in search results, under
+Active inputs appear as rows in Search's Browse list and in search results, under
 the Shared sources source filter and the Live kind filter. Their player
-breadcrumb returns to Find (`/find`). Playback uses the same Now
-Playing page, mini player, Playback settings, Up next and Where it plays controls
+breadcrumb returns to Search (`/search`). Playback uses the same Now
+Playing page, now-playing bar, Playback settings, Up next and Where it plays controls
 as TV and radio. The usual picture stage displays video; audio-only inputs use
 the usual artwork stage. There is no separate live player or visualizer.
 
@@ -96,7 +94,7 @@ details page or Save for later action. Other items can still be queued, played
 and saved while capture is active.
 
 A small Stop sharing action stays available throughout browsing while local
-capture is active. There is no separate capture panel on the Find landing page.
+capture is active. There is no separate capture panel on the Search landing page.
 Every receiving device gets the input over WebRTC in the normal player. With
 **In sync** on in Where it plays, the input reaches the normal player as HLS
 instead; sound uses the existing Sendspin clock and pictures follow it, and that

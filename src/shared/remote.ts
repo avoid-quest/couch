@@ -1,6 +1,6 @@
 // Only these ordinary TV fields accept phone text. Core owns their labels and limits.
 export const remoteFields = {
-  find: { label: "Find title or link", maxLength: 4096, submit: true },
+  find: { label: "Search title or link", maxLength: 4096, submit: true },
   "device-name": { label: "Device name", maxLength: 60, submit: true },
 } as const;
 export type RemoteFieldKind = keyof typeof remoteFields;

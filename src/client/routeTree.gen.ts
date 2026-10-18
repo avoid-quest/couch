@@ -14,9 +14,12 @@ import { Route as SplatRouteImport } from './routes/$'
 import { Route as CollectionRouteImport } from './routes/collection'
 import { Route as FindRouteImport } from './routes/find'
 import { Route as ItemRouteImport } from './routes/item'
+import { Route as LibraryRouteImport } from './routes/library'
+import { Route as LiveRouteImport } from './routes/live'
 import { Route as NowRouteImport } from './routes/now'
 import { Route as RemoteRouteImport } from './routes/remote'
 import { Route as SavedRouteImport } from './routes/saved'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsSplatRouteImport } from './routes/settings/$'
@@ -65,6 +68,16 @@ const ItemRoute = ItemRouteImport.update({
   path: '/item',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LibraryRoute = LibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NowRoute = NowRouteImport.update({
   id: '/now',
   path: '/now',
@@ -78,6 +91,11 @@ const RemoteRoute = RemoteRouteImport.update({
 const SavedRoute = SavedRouteImport.update({
   id: '/saved',
   path: '/saved',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -202,9 +220,12 @@ export interface FileRoutesByFullPath {
   '/collection': typeof CollectionRoute
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
+  '/library': typeof LibraryRoute
+  '/live': typeof LiveRoute
   '/now': typeof NowRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/$': typeof SettingsSplatRoute
   '/settings/': typeof SettingsIndexRoute
@@ -234,9 +255,12 @@ export interface FileRoutesByTo {
   '/collection': typeof CollectionRoute
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
+  '/library': typeof LibraryRoute
+  '/live': typeof LiveRoute
   '/now': typeof NowRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings': typeof SettingsIndexRoute
   '/settings/couch/bluetooth': typeof SettingsCouchBluetoothRoute
@@ -265,9 +289,12 @@ export interface FileRoutesById {
   '/collection': typeof CollectionRoute
   '/find': typeof FindRoute
   '/item': typeof ItemRoute
+  '/library': typeof LibraryRoute
+  '/live': typeof LiveRoute
   '/now': typeof NowRoute
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/$': typeof SettingsSplatRoute
   '/settings/': typeof SettingsIndexRoute
@@ -299,9 +326,12 @@ export interface FileRouteTypes {
     | '/collection'
     | '/find'
     | '/item'
+    | '/library'
+    | '/live'
     | '/now'
     | '/remote'
     | '/saved'
+    | '/search'
     | '/settings'
     | '/settings/$'
     | '/settings/'
@@ -331,9 +361,12 @@ export interface FileRouteTypes {
     | '/collection'
     | '/find'
     | '/item'
+    | '/library'
+    | '/live'
     | '/now'
     | '/remote'
     | '/saved'
+    | '/search'
     | '/settings/$'
     | '/settings'
     | '/settings/couch/bluetooth'
@@ -361,9 +394,12 @@ export interface FileRouteTypes {
     | '/collection'
     | '/find'
     | '/item'
+    | '/library'
+    | '/live'
     | '/now'
     | '/remote'
     | '/saved'
+    | '/search'
     | '/settings'
     | '/settings/$'
     | '/settings/'
@@ -394,9 +430,12 @@ export interface RootRouteChildren {
   CollectionRoute: typeof CollectionRoute
   FindRoute: typeof FindRoute
   ItemRoute: typeof ItemRoute
+  LibraryRoute: typeof LibraryRoute
+  LiveRoute: typeof LiveRoute
   NowRoute: typeof NowRoute
   RemoteRoute: typeof RemoteRoute
   SavedRoute: typeof SavedRoute
+  SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
 
@@ -437,6 +476,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ItemRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/library': {
+      id: '/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof LibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/now': {
       id: '/now'
       path: '/now'
@@ -456,6 +509,13 @@ declare module '@tanstack/react-router' {
       path: '/saved'
       fullPath: '/saved'
       preLoaderRoute: typeof SavedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -683,9 +743,12 @@ const rootRouteChildren: RootRouteChildren = {
   CollectionRoute: CollectionRoute,
   FindRoute: FindRoute,
   ItemRoute: ItemRoute,
+  LibraryRoute: LibraryRoute,
+  LiveRoute: LiveRoute,
   NowRoute: NowRoute,
   RemoteRoute: RemoteRoute,
   SavedRoute: SavedRoute,
+  SearchRoute: SearchRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }
 export const routeTree = rootRouteImport

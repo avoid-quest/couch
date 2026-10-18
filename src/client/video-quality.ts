@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
 export { supportsWebVideoQuality, supportsCurrentVideoQuality } from "../shared/video-quality";
 
-// The only labels for video quality. Settings, the player and Find all use these.
+// The only labels for video quality. Settings, the player and Search all use these.
 export const videoQualityLabels: Record<VideoQuality, string> = { auto: "Auto (1080p)", best: "Best", "1080p": "1080p", "720p": "720p", "480p": "480p" };
 export const videoQualityOptions = (Object.entries(videoQualityLabels) as [VideoQuality, string][]).map(([value, label]) => ({ value, label }));
 const storageKey = "couch.online-video-quality";

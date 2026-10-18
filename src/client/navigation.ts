@@ -65,8 +65,8 @@ function moveFocus(key: string) {
   const destinations = row ? controls.filter(element => row.contains(element)) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
-  // The sticky header and mini player come after the page's controls, which scroll under them.
-  const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? "[data-mini-player]" : null;
+  // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
+  const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
   const candidates = destinations.filter(element => element !== active).map(element => {
     const to = box(element);
@@ -76,7 +76,10 @@ function moveFocus(key: string) {
     const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
     return { element, forward, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1).sort((a, b) => a.score - b.score);
-  focus(candidates[0]?.element);
+  // Up into the header lands on the current tab, as Down out of it lands on the page's first control.
+  const tab = key === "ArrowUp" && later && candidates[0]?.element.closest(later)
+    ? [...scope.querySelectorAll<HTMLElement>('.app-header [aria-current="page"]')].find(visible) : undefined;
+  focus(tab ?? candidates[0]?.element);
 }
 
 export function sendKey(target: HTMLElement, key: string) {

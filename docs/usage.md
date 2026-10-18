@@ -24,7 +24,7 @@ and paired remotes.
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
   Sources > Live TV**. Channels that need custom headers or DRM are skipped.
   Edit keeps saved URLs unless you type new ones; **Remove guide** drops a
-  source's guide and its programmes. Browse them in **Find > Live TV**.
+  source's guide and its programmes. Browse them in **Live**.
 
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.
@@ -82,7 +82,7 @@ a Mac.
    Fill in **Name this device** and the six-digit **Pairing code**. The first
    device you pair becomes the admin. The dialog closes when the phone pairs,
    and a message names it, ending in "· admin" for the first.
-3. Search in **Find**, or paste a link. Searches wait one second after you stop
+3. Open **Search** and type, or paste a link. Searches wait one second after you stop
    typing; Enter searches immediately. The **Music** filter shows Bandcamp and
    SoundCloud results. **Play** starts an item now; **Queue** in
    its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,

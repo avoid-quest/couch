@@ -22,5 +22,5 @@ export function searchLocation(state: SearchRouteState) {
   if (state.source !== "All" && searchSources.includes(state.source)) params.set("source", state.source);
   if (state.kind && searchKinds.includes(state.kind)) params.set("kind", state.kind);
   if (state.length && searchLengths.includes(state.length)) params.set("length", state.length);
-  return `/find${params.size ? `?${params}` : ""}`;
+  return `/search${params.size ? `?${params}` : ""}`;
 }

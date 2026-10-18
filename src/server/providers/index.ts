@@ -162,7 +162,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         const key = JSON.stringify([provider, query, url, cursor]);
         const cached = cache.get(key);
         if (cached && cached.expires > Date.now()) return Response.json(cached.page);
-        // Find asks every provider, plus RaiPlay's separate live-channel request.
+        // Search asks every provider, plus RaiPlay's separate live-channel request.
         if (active >= providerIds.size + 1) throw new ProviderError("The catalog is busy. Try again shortly.", 503);
         active++;
         try {

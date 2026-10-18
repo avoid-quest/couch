@@ -125,8 +125,7 @@ window.runBusyLiveHitRegression = async () => {
   const gate = new Promise<void>(resolve => { release = resolve; });
   let saved: { url: string; init: RequestInit; id: string } | undefined;
   try {
-    document.querySelector<HTMLElement>('[data-app-nav] a[href="/find"]')!.click(); await wait();
-    document.querySelector<HTMLElement>('button[aria-label="Open Radio"]')!.click();
+    document.querySelector<HTMLElement>('[data-app-nav] a[href="/live"]')!.click(); await wait();
     await until(() => !!document.querySelector('[data-hit-id] button[aria-label^="Options"]'));
     const row = document.querySelector<HTMLElement>('[data-hit-id]')!;
     const id = row.dataset.hitId!.split(":").at(-1)!;
@@ -154,7 +153,7 @@ window.runBusyLiveHitRegression = async () => {
     await press("Escape"); await wait();
     // Remount ends this row's busy lifetime and restores Play, so the temporary
     // Open opener can disappear. Existing navigation must retain usable page focus.
-    assert(location.search.includes("browse=radio") && document.activeElement?.closest('[data-page]') && usable(document.activeElement as HTMLElement), "Busy Open Back lost usable browse focus");
+    assert(location.pathname === "/live" && document.activeElement?.closest('[data-page]') && usable(document.activeElement as HTMLElement), "Busy Open Back lost usable browse focus");
     return { passed: true };
   } catch (error) { return { passed: false, error: String(error) }; }
   finally {
