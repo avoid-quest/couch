@@ -40,7 +40,7 @@ posters:
   by group (`group`), Filter (`filter`) and page (`page`).
 - **One shelf per source with a home**: Twitch ("Live now"),
   StreamingCommunity ("Films and series"), RaiPlay ("Programmes"),
-  123MoviesFree ("Films"), and AnimeSaturn and AnimeUnity ("Anime"). Each holds the first twelve of the source's own
+  123MoviesFree ("Films"), and AnimeSaturn and AnimeUnity ("Films and series"). Each holds the first twelve of the source's own
   home, the same query its page makes (`ProviderPage`, `url` ""), so opening
   the heading shows them at once. A tile opens its Details; its menu holds its
   search hit's verbs.

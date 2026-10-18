@@ -30,8 +30,8 @@ const homes: { provider: ProviderId; time: string }[] = [
   { provider: "streamingcommunity", time: "Films and series" },
   { provider: "raiplay", time: "Programmes" },
   { provider: "movies123", time: "Films" },
-  { provider: "animesaturn", time: "Anime" },
-  { provider: "animeunity", time: "Anime" },
+  { provider: "animesaturn", time: "Films and series" },
+  { provider: "animeunity", time: "Films and series" },
 ];
 // The sources without one open on a search of their own.
 const searches: { provider: ProviderId; meta: string }[] = [

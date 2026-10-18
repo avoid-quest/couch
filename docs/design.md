@@ -39,6 +39,9 @@ catalog provides interface icons, not brand identities.
   suggestions Couch picked: Discover samples each source's own home. A source
   without one (YouTube, Bandcamp, SoundCloud) opens on an Empty with a search
   field scoped to it.
+- **Sources are peers.** Every provider uses the same search, Details, Saved
+  and Home surfaces. Source-specific behaviour follows the site's content
+  and pagination, with no separate genre-specific layout or copy.
 - **Time is the organising idea.** Every length is read as the clock time it
   ends: "4:52, ends 10:29". The now-playing bar reads "−3:24 ends 20:59"; the
   player says "ends 20:59" once, in its top band or Now playing, and its band
