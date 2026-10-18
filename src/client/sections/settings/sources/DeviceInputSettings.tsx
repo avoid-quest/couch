@@ -75,7 +75,7 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
     try {
       await startLive({ kind, videoQuality, includeAudio, ...(choosesSource ? { sourceId } : {}), ...(kind === "microphone" && audioDeviceId !== "default" ? { audioDeviceId } : {}) });
       onAdded?.();
-      void navigate({ to: "/search" });
+      void navigate({ to: "/discover" });
     }
     catch (reason) { setError(errorText(reason)); await checkAccess(); }
     finally { setPending(false); }
