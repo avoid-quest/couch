@@ -22,8 +22,8 @@ test("Saved's addresses open Library on the same tab", () => {
   expect(open(saved, "?tab=channels")).toBe("/library?tab=channels");
 });
 
-test("Core serves the sections and the earlier addresses that redirect to them", () => {
-  for (const path of ["/live", "/search", "/library", "/find", "/saved"]) expect(frontendPaths).toContain(path);
+test("Core serves the sections, Where it plays' overview and the earlier addresses that redirect to them", () => {
+  for (const path of ["/live", "/search", "/library", "/where-it-plays", "/find", "/saved"]) expect(frontendPaths).toContain(path);
   expect(sectionForPath("/live/")).toBe("Live");
   expect(sectionForPath("/collection")).toBe("Search");
   expect(pathForSection("For later")).toBe("/library");

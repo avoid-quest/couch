@@ -25,6 +25,7 @@ import { serveLiveStun } from "./live-stun";
 import { createLiveStreams, type LiveRendition } from "./live-stream";
 import { createContinuationResolver } from "./continuation";
 import { createRadio } from "./radio";
+import { isRadio } from "../shared/radio";
 import { createRadioProgramme } from "./radio-programme";
 import { createRadioSettings } from "./radio-settings";
 import { createCatalog, type Viewing } from "./catalog";
@@ -953,7 +954,13 @@ export async function createHub(options: HubOptions) {
         const state = stateOf(playback);
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
-        return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
+        const current = state.queue.find(entry => entry.id === state.currentEntryId), entry = current ?? state.queue[cursor + 1];
+        // Its departures line, as the player's: Live, or the clock time a playing item ends.
+        const { status, position, duration, speed } = state.player, length = duration || current?.duration || 0;
+        // A direct stream says it is live only once resolved, for the item it resolved.
+        const onAir = current?.live || isRadio(current) || playback.media?.playbackId === state.player.playbackId && playback.media.live;
+        const time = onAir ? { live: true } : status === "playing" && length ? { ends: Math.round(Date.now() / 1000 + (length - position) / (speed || 1)) * 1000 } : {};
+        return { id: playback.id, title: entry?.title ?? null, status, outputs: playback.outputs, ...entry?.thumbnail ? { thumbnail: entry.thumbnail } : {}, ...time,
           ...mpvPlayback === playback ? { hostOnly: true } : {}, ...playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),

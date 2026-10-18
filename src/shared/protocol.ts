@@ -49,7 +49,9 @@ export type Output = { deviceId: string; picture: boolean; sound: boolean; delay
 // choosing: its shared source waits for Where it plays; it counts up with each request to choose.
 // held: its publisher's output, left out while its own capture plays and returning after it.
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
-export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean };
+// thumbnail, live and ends: its artwork and departures line in Where it plays' overview; ends is the time its item
+// ends, in milliseconds since the epoch, sent only while it plays, since a paused item's end time moves.
+export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean; thumbnail?: string; live?: boolean; ends?: number };
 // Every Device has one volume and mute; on the TV with system audio they are the system's.
 export type DeviceSummary = { id: string; name: string; online: boolean; updates?: boolean; tv?: boolean; sharing?: DeviceSharing; volume: number; muted: boolean };
 

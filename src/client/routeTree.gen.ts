@@ -21,6 +21,7 @@ import { Route as RemoteRouteImport } from './routes/remote'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as WhereItPlaysRouteImport } from './routes/where-it-plays'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SettingsSplatRouteImport } from './routes/settings/$'
 import { Route as SettingsCouchBluetoothRouteImport } from './routes/settings/couch/bluetooth'
@@ -101,6 +102,11 @@ const SearchRoute = SearchRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WhereItPlaysRoute = WhereItPlaysRouteImport.update({
+  id: '/where-it-plays',
+  path: '/where-it-plays',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
@@ -227,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/where-it-plays': typeof WhereItPlaysRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings/': typeof SettingsIndexRoute
   '/settings/couch/bluetooth': typeof SettingsCouchBluetoothRoute
@@ -261,6 +268,7 @@ export interface FileRoutesByTo {
   '/remote': typeof RemoteRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
+  '/where-it-plays': typeof WhereItPlaysRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings': typeof SettingsIndexRoute
   '/settings/couch/bluetooth': typeof SettingsCouchBluetoothRoute
@@ -296,6 +304,7 @@ export interface FileRoutesById {
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/where-it-plays': typeof WhereItPlaysRoute
   '/settings/$': typeof SettingsSplatRoute
   '/settings/': typeof SettingsIndexRoute
   '/settings/couch/bluetooth': typeof SettingsCouchBluetoothRoute
@@ -333,6 +342,7 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/settings'
+    | '/where-it-plays'
     | '/settings/$'
     | '/settings/'
     | '/settings/couch/bluetooth'
@@ -367,6 +377,7 @@ export interface FileRouteTypes {
     | '/remote'
     | '/saved'
     | '/search'
+    | '/where-it-plays'
     | '/settings/$'
     | '/settings'
     | '/settings/couch/bluetooth'
@@ -401,6 +412,7 @@ export interface FileRouteTypes {
     | '/saved'
     | '/search'
     | '/settings'
+    | '/where-it-plays'
     | '/settings/$'
     | '/settings/'
     | '/settings/couch/bluetooth'
@@ -437,6 +449,7 @@ export interface RootRouteChildren {
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  WhereItPlaysRoute: typeof WhereItPlaysRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -523,6 +536,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/where-it-plays': {
+      id: '/where-it-plays'
+      path: '/where-it-plays'
+      fullPath: '/where-it-plays'
+      preLoaderRoute: typeof WhereItPlaysRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/': {
@@ -750,6 +770,7 @@ const rootRouteChildren: RootRouteChildren = {
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  WhereItPlaysRoute: WhereItPlaysRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
