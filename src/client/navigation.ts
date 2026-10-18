@@ -73,6 +73,12 @@ function moveFocus(key: string) {
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
   // How far a box starts past the active's top (Up) or bottom (Down) edge.
   const past = (to: DOMRect) => sign < 0 ? from.top - to.bottom : to.top - from.bottom;
+  // Measure sideways between edges, so a wide row stays in line with a short title. Keep this penalty when
+  // comparing row edges too, so a rail beside the rows cannot win on its nearer edge alone.
+  const sideways = (to: DOMRect) => {
+    const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
+    return gap < 0 ? 0 : gap * 2 + 1000;
+  };
   // The header and the footer (now-playing bar, phone tabs) come after the page's controls, which scroll under them.
   const bar = key === "ArrowUp" ? ".app-header" : key === "ArrowDown" ? ".app-footer" : null;
   const later = bar && !active.closest(bar) ? bar : null;
@@ -80,23 +86,20 @@ function moveFocus(key: string) {
     const to = box(element);
     const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
     const forward = (horizontal ? dx : dy) * sign;
-    // The sideways gap between the edges, not the centres, so a wide row under a short title is in line with it.
-    const gap = horizontal ? Math.max(to.top - from.bottom, from.top - to.bottom) : Math.max(to.left - from.right, from.left - to.right);
+    const penalty = sideways(to);
     // Up and Down reach a control in the active's own row only past its edge and in line with it: a wrapped line,
     // Continue's Details under its tile, a device's Sync under its fader. Never one beside it, though a shorter or
     // taller caption moves that one's centre, nor a device's Sync from its check.
-    const beside = !horizontal && !!own?.contains(element) && (past(to) < 0 || gap >= 0);
-    return { element, forward, beside, score: forward + (gap < 0 ? 0 : gap * 2 + 1000) + (later && element.closest(later) ? 100_000 : 0) };
+    const beside = !horizontal && !!own?.contains(element) && (past(to) < 0 || penalty > 0);
+    return { element, forward, beside, score: forward + penalty + (later && element.closest(later) ? 100_000 : 0) };
   }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
-  // score. Keep the sideways penalty so a rail beside the rows cannot win on its nearer edge alone.
-  // The header and the footer still come last: the page scrolls under the sticky header.
+  // score. The header and the footer still come last: the page scrolls under the sticky header.
   const reach = !horizontal && own ? candidates.map(candidate => {
     const row = candidate.element.closest<HTMLElement>("[data-nav-row]");
     const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
-    const gap = Math.max(to.left - from.right, from.left - to.right);
-    return { row: unit, edge: Math.max(0, past(to)) + (gap < 0 ? 0 : gap * 2 + 1000) + (later && candidate.element.closest(later) ? 100_000 : 0) };
+    return { row: unit, edge: Math.max(0, past(to)) + sideways(to) + (later && candidate.element.closest(later) ? 100_000 : 0) };
   }) : [];
   const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
   const next = reach[nearest]?.row;
