@@ -86,7 +86,9 @@ focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
 shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row or
 control first, so Home's and Discover's shelves and their headings are walked
 one by one and never skipped for a farther control that lines up; the header
-and the footer still come after the page's controls. In their own row they
+and the footer still come after the page's controls. This keeps the sideways
+distance penalty, so a rail beside a list cannot take Up or Down from a nearer
+row in that list. In their own row they
 reach only a control past them and in line with them (a wrapped line,
 Continue's Details under its tile, a device's Sync under its fader in Where it
 plays), never a tile beside them whose caption is shorter or taller, nor a

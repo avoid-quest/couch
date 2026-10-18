@@ -62,6 +62,8 @@ const savedBack = async (cold: boolean) => {
       && !restored.closest('[inert], [aria-hidden="true"]') && restored.getClientRects().length > 0, "Saved Back did not retain its enabled visible item opener after settling");
     await key("ArrowUp");
     assert(document.activeElement?.getAttribute("aria-label") === previousLabel, "Next arrow did not continue from the restored Saved item");
+    await key("ArrowDown");
+    assert(document.activeElement?.getAttribute("aria-label") === label, "Down did not return to the restored Saved item");
     await click(`[data-saved-details="${id}"] button[aria-label^="Details"]`);
     await key("Escape"); await wait(350);
     assert(document.activeElement?.getAttribute("aria-label") === label, "Repeated Saved Back lost its opener");

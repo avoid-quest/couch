@@ -90,11 +90,13 @@ function moveFocus(key: string) {
   }).filter(candidate => candidate.forward > 1 && !candidate.beside).sort((a, b) => a.score - b.score);
   // Up and Down from a row reach the nearest row or control first, so Home's shelves and their headings are walked
   // one by one, never skipped for a farther control that lines up. A row counts by its own box; ties keep the best
-  // score. The header and the footer still come last: the page scrolls under the sticky header.
+  // score. Keep the sideways penalty so a rail beside the rows cannot win on its nearer edge alone.
+  // The header and the footer still come last: the page scrolls under the sticky header.
   const reach = !horizontal && own ? candidates.map(candidate => {
     const row = candidate.element.closest<HTMLElement>("[data-nav-row]");
     const unit = row && !row.contains(active) ? row : null, to = box(unit ?? candidate.element);
-    return { row: unit, edge: Math.max(0, past(to)) + (later && candidate.element.closest(later) ? 100_000 : 0) };
+    const gap = Math.max(to.left - from.right, from.left - to.right);
+    return { row: unit, edge: Math.max(0, past(to)) + (gap < 0 ? 0 : gap * 2 + 1000) + (later && candidate.element.closest(later) ? 100_000 : 0) };
   }) : [];
   const nearest = reach.reduce<number>((best, unit, index) => unit.edge < reach[best]!.edge ? index : best, 0);
   const next = reach[nearest]?.row;
