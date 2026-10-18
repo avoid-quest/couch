@@ -1,27 +1,22 @@
-import { useContext, useState, type ComponentProps, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Circle, CircleCheck, Ellipsis, SlidersVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { RangeControl } from "@/components/RangeControl";
-import { PlaybackVolume, useEndTime } from "@/components/PlaybackTransport";
-import { useDetailNavigation } from "@/detail-navigation";
+import { PlaybackVolume } from "@/components/PlaybackTransport";
 import { cn } from "@/lib/utils";
-import { formatEndTime } from "@/time-format";
 import { deviceId, type playsOn } from "@/session/device-id";
 import { isTvPresentation } from "@/session/presentation";
 import { SessionGateContext } from "@/session/gate-context";
 import type { ClientSessionState } from "@/session/session";
-import { chooserFor, chooserRequest, overview, picker, reopens, type Control, type Row } from "@/session/where-it-plays";
+import { chooserFor, chooserRequest, picker, reopens, type Control, type Row } from "@/session/where-it-plays";
 import type { Action } from "../../../shared/protocol";
-import { pathForSection } from "../../../shared/page-paths";
-import { settingsPages } from "../../../shared/settings-pages";
 
 // Radix Dialog's controlled open state: a changed defaultOpen would not open a mounted Sheet. The
 // session remembers the closed request, so the now-playing bar and Now Playing each open it at most once.
@@ -40,30 +35,37 @@ type Props = { state: ClientSessionState; connected: boolean; run: (action: Acti
 const columns = "grid grid-cols-[minmax(0,1fr)_2.75rem] gap-x-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.75rem]";
 
 /**
- * Where it plays: the Playback's artwork, title and status, its Volume, In sync where it applies, then one row
- * per device, and "Every device" at its foot for the overview. Each request to choose a shared source's receivers
- * opens it, so Play on the publisher leads here. The rules are the model's (session/where-it-plays.ts).
+ * Where it plays, the one place to choose it: the Playback's artwork, title and status, its Volume, In sync where it
+ * applies, then the devices it plays on, each with its fader, then the other devices, each saying what it plays now.
+ * Each request to choose a shared source's receivers opens it, so Play on the publisher leads here. The rules are the
+ * model's (session/where-it-plays.ts).
  */
 export function WhereItPlays({ state, connected, run, className }: Props & { className?: string }) {
   const tv = isTvPresentation();
   const { title, status, hint, inSync, rows } = picker(state, { here: deviceId(), tv });
   const entry = state.queue.find(item => item.id === state.currentEntryId);
+  // The model lists the Playback's devices first. The others take a heading once both are there, so a long list
+  // still shows where the faders end; a waiting source's list is all others, and needs none.
+  const playing = rows.filter(row => row.output), others = rows.filter(row => !row.output);
+  const list = (label: string, items: Row[]) => items.length > 0 && <ul aria-label={label} className="divide-y border-y">{items.map(row => deviceRow({ state, row, run, tv }))}</ul>;
   return <ChooserSheet key={state.playback} request={chooserRequest(state)} playback={state.playback ?? null}>
     {/* Device icons stand for individual devices; the mixer opens all output rows. */}
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     {/* It opens on the first device you can choose; Up reaches the Volume. */}
     <SheetContent side="bottom" onOpenAutoFocus={event => { const check = (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-device-check]:not(:disabled)"); if (check) { event.preventDefault(); check.focus(); } }}
       className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
-      <div className="grid w-full max-w-4xl">
+      <SyncScope><div className="grid w-full max-w-4xl">
         <SheetHeader className="flex-row items-center gap-4 p-0 pr-12">
           <div className="size-14 shrink-0 overflow-hidden bg-muted [&>*]:size-full [&_img]:object-contain">{entry && <MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />}</div>
           <div className="grid min-w-0 gap-0.5"><SheetTitle className="text-base font-medium [overflow-wrap:anywhere]">{title ?? "Nothing is playing"}</SheetTitle><SheetDescription>{status}</SheetDescription></div>
         </SheetHeader>
         {levels({ state, connected, run, inSync })}
-        <ul aria-label="Devices" className="divide-y border-y">{rows.map(row => deviceRow({ state, row, run, tv }))}</ul>
-        {hint && <p className="pt-4 text-sm text-muted-foreground">{hint}</p>}
-        <SheetClose asChild><EveryDevice variant="ghost" className="-ml-2.5 mt-4 justify-self-start">Every device</EveryDevice></SheetClose>
-      </div>
+        {/* The TV's fader hint, where its faders start rather than below a long list. */}
+        {hint && <p className="pb-4 text-sm text-muted-foreground">{hint}</p>}
+        {list("Playing", playing)}
+        {playing.length > 0 && others.length > 0 && <h3 className="pt-8 pb-2 text-base font-medium">Other devices</h3>}
+        {list(playing.length ? "Other devices" : "Devices", others)}
+      </div></SyncScope>
     </SheetContent>
   </ChooserSheet>;
 }
@@ -78,14 +80,14 @@ function levels({ state, connected, run, inSync }: Props & { inSync?: boolean })
 }
 
 /**
- * A device's row, in the picker and the overview: a check (in or out) that adds or removes the device, then while it
- * is in its fader and number, Sync under them where `sync` asks and it applies, and a "…" menu with Picture, Mute and
- * Only here. Called rather than rendered, so tests can walk its controls without a DOM.
+ * A device's row: a check (in or out) that adds or removes the device, then while it is in its fader and number,
+ * its Sync line while it plays in sync (see Delay), and a "…" menu with Picture, Mute, Only here and Sync…. Called
+ * rather than rendered, so tests can walk its controls without a DOM.
  */
-function deviceRow({ state, row, run, tv, sync = false, pageFirst = false }: Omit<Props, "connected"> & { row: Row; tv: boolean; sync?: boolean; pageFirst?: boolean }) {
+function deviceRow({ state, row, run, tv }: Omit<Props, "connected"> & { row: Row; tv: boolean }) {
   const { device, output, status, check, level, picture, mute, only } = row;
   return <li key={device.id} data-nav-row className={cn(columns, "items-start py-2")}>
-    <Button data-device-check data-page-first={pageFirst || undefined} variant="ghost" role="checkbox" aria-checked={!!output} aria-label={device.name} aria-describedby={`where-it-plays-${device.id}`} disabled={!check.enabled} onClick={() => { if (check.action) void run(check.action); }}
+    <Button data-device-check variant="ghost" role="checkbox" aria-checked={!!output} aria-label={device.name} aria-describedby={`where-it-plays-${device.id}`} disabled={!check.enabled} onClick={() => { if (check.action) void run(check.action); }}
       className="-ml-2.5 h-auto min-h-11 min-w-0 justify-start gap-3 px-2.5 py-1.5 text-left font-normal whitespace-normal">
       {/* In, a filled check; out, its empty outline, so a row reads as a device you can add, as AirPlay's list does. */}
       {output ? <CircleCheck aria-hidden="true" className="size-5 fill-foreground text-background" /> : <Circle aria-hidden="true" className="size-5 text-muted-foreground" />}
@@ -95,76 +97,45 @@ function deviceRow({ state, row, run, tv, sync = false, pageFirst = false }: Omi
         <span id={`where-it-plays-${device.id}`} data-output-status className={cn("text-sm [overflow-wrap:anywhere]", output?.error ? "text-destructive" : "text-muted-foreground")}>{status}</span>
       </span>
     </Button>
-    {output && <div className="col-span-2 row-start-2 grid min-w-0 gap-1 md:col-span-1 md:col-start-2 md:row-start-1">
-      <div data-volume className="flex min-h-11 min-w-0 items-center gap-3">
-        <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} keyboardStep={tv ? 5 : 1} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} />
-        <span className="w-[3ch] shrink-0 text-right tabular-nums">{level.sound ? Math.round(level.value) : "–"}</span>
-      </div>
-      {sync && row.sync && <Delay label={`${device.name} sync`} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
+    {output && <div data-volume className="col-span-2 row-start-2 flex min-h-11 min-w-0 items-center gap-3 md:col-span-1 md:col-start-2 md:row-start-1">
+      <RangeControl label={`${device.name} volume`} value={level.value} max={100} disabled={!level.enabled} keyboardStep={tv ? 5 : 1} onCommit={value => run({ type: "output", deviceId: device.id, level: value })} />
+      <span className="w-[3ch] shrink-0 text-right tabular-nums">{level.sound ? Math.round(level.value) : "–"}</span>
     </div>}
+    {row.sync && <Delay id={device.id} label={`${device.name} sync`} delay={row.sync.delay} onCommit={delay => void run({ type: "output", deviceId: device.id, delay })} />}
     {output && <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon-lg" className="col-start-2 row-start-1 mt-0.5 justify-self-end md:col-start-3" aria-label={`Options for ${device.name}`} title="Options"><Ellipsis aria-hidden="true" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <Options id={device.id} sync={!!row.sync}>
         <DropdownMenuCheckboxItem aria-label={`${device.name} picture`} checked={picture.on} disabled={!picture.enabled} onCheckedChange={on => void run({ type: "output", deviceId: device.id, picture: on })}>Picture<Why {...picture} /></DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem aria-label={`Mute ${device.name}`} checked={mute.on} disabled={!mute.enabled} onCheckedChange={muted => void run({ type: "mute", deviceId: device.id, muted })}>Mute<Why {...mute} /></DropdownMenuCheckboxItem>
         {/* Pressed again it still commits: a publisher held out for its own capture would otherwise return. */}
         <DropdownMenuCheckboxItem aria-label={`Only on ${device.name}`} checked={only.on} disabled={!only.enabled} onSelect={() => void run({ type: "solo", deviceId: device.id })}>Only here<Why {...only} /></DropdownMenuCheckboxItem>
-      </DropdownMenuContent>
+      </Options>
     </DropdownMenu>}
   </li>;
 }
 
-// "Every device" opens the overview; Back returns to the page that opened the picker, with focus on its button.
-// A component of its own, since the picker renders without hooks in tests.
-function EveryDevice(props: ComponentProps<typeof Button>) {
-  const navigation = useDetailNavigation();
-  return <Button {...props} onClick={event => { props.onClick?.(event); navigation.open(pathForSection("Where it plays"), 'button[aria-label="Where it plays"]'); }} />;
+// The Sync line a row's "Sync…" revealed. Local to the open Sheet, so closing it hides the line again.
+const RevealedSync = createContext<{ id: string | null; reveal: (id: string | null) => void }>({ id: null, reveal: () => {} });
+function SyncScope({ children }: { children: ReactNode }) {
+  const [id, reveal] = useState<string | null>(null);
+  return <RevealedSync value={{ id, reveal }}>{children}</RevealedSync>;
 }
 
-/**
- * Where it plays' overview (/where-it-plays): the picker grouped by where each device plays now, since a window acts
- * only on the Playback it controls. That Playback comes first with its Volume and In sync, then each other Playback
- * that plays somewhere, then Not playing. Every row is the picker's, its check meaning "in the Playback you control",
- * with Sync under each in-sync row. Like the picker it renders without hooks, so tests can walk its controls.
- */
-export function Overview({ state, connected, run }: Props) {
-  const tv = isTvPresentation();
-  const { title, status, hint, inSync, controls, rows, elsewhere, free } = overview(state, { here: deviceId(), tv });
-  const entry = state.queue.find(item => item.id === state.currentEntryId);
-  // The TV starts on the first device you can choose; Up reaches the Volume.
-  const first = [...rows, ...elsewhere.flatMap(group => group.rows), ...free].find(row => row.check.enabled)?.device.id;
-  const list = (label: string, items: Row[]) => items.length > 0 && <ul aria-labelledby={label} className="divide-y border-y">{items.map(row => deviceRow({ state, row, run, tv, sync: true, pageFirst: row.device.id === first }))}</ul>;
-  return <div className="grid w-full max-w-4xl gap-12 [&_[data-slot=slider]]:min-h-11">
-    <section>
-      <Heading id="where-it-plays-here" thumbnail={entry?.thumbnail} title={title ?? "Nothing is playing"} status={status} time={<EndTime state={state} />} />
-      {/* Volume acts on the Playback you control; without one Core would turn the device itself. */}
-      {controls && levels({ state, connected, run, inSync })}
-      {list("where-it-plays-here", rows)}
-    </section>
-    {elsewhere.map(({ playback, status, rows }) => <section key={playback.id}>
-      <Heading id={`where-it-plays-${playback.id}`} thumbnail={playback.thumbnail} title={playback.title ?? "Something else"} status={status} time={playback.live ? "Live" : playback.ends && `ends ${formatEndTime(0, playback.ends)}`} />
-      {list(`where-it-plays-${playback.id}`, rows)}
-    </section>)}
-    {free.length > 0 && <section><h2 id="where-it-plays-free" className="pb-4 text-base font-medium">Not playing</h2>{list("where-it-plays-free", free)}</section>}
-    <div className="grid justify-items-start gap-4">
-      {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
-      {/* Consent is each device's own: what this one shares. */}
-      <Button asChild variant="ghost" className="-ml-2.5"><Link to={settingsPages.sharing.path}>Choose what this device shares</Link></Button>
-    </div>
-  </div>;
+// A row's "…": its items, then Sync… while Sync applies, which reveals the row's Sync line and moves focus to its
+// slider rather than back to "…". The items stay children, so tests walk them without a DOM.
+function Options({ id, sync, children }: { id: string; sync: boolean; children: ReactNode }) {
+  const { reveal } = useContext(RevealedSync);
+  const picked = useRef(false);
+  return <DropdownMenuContent align="end" onCloseAutoFocus={event => {
+    if (!picked.current) return;
+    picked.current = false;
+    event.preventDefault();
+    document.querySelector<HTMLElement>(`[data-sync-line="${id}"] [role="slider"]`)?.focus();
+  }}>
+    {children}
+    {sync && <><DropdownMenuSeparator /><DropdownMenuItem className="pl-8" onSelect={() => { picked.current = true; reveal(id); }}>Sync…</DropdownMenuItem></>}
+  </DropdownMenuContent>;
 }
-
-// A Playback in the overview, as a line of a departures board: its artwork, title and status, and its end time.
-function Heading({ id, thumbnail, title, status, time }: { id: string; thumbnail?: string; title: string; status: string; time: ReactNode }) {
-  return <div className="flex items-center gap-4 pb-4">
-    <div className="size-14 shrink-0 overflow-hidden bg-muted [&>*]:size-full [&_img]:object-contain"><MediaArtwork thumbnail={thumbnail} title={title} /></div>
-    <div className="grid min-w-0 flex-1 gap-0.5"><h2 id={id} className="text-base font-medium [overflow-wrap:anywhere]">{title}</h2><p className="text-sm text-muted-foreground">{status}</p></div>
-    <p className="shrink-0 tabular-nums empty:hidden">{time}</p>
-  </div>;
-}
-
-/** The Playback you control's end time, from its own clock. */
-const EndTime = ({ state }: Pick<Props, "state">) => useEndTime(state) ?? null;
 
 /** A disabled menu item's one-word reason, at its end. */
 const Why = ({ reason }: Control) => reason ? <span className="ml-auto pl-6 text-xs">{reason}</span> : null;
@@ -177,12 +148,36 @@ export function PlaysOn({ at }: { at: NonNullable<ReturnType<typeof playsOn>> })
 // A speaker that sounds late (Bluetooth, a far room) plays this much earlier to line up with the other
 // devices: Sendspin's static delay. It reads "earlier", because "Delay" suggested the opposite (#644 ticket 12),
 // and "Sync" so it isn't mistaken for Playback's audio delay against the picture.
-// It shows only while the device plays in sync, and its own value while focused, so arrow keys keep stepping from it.
-function Delay({ label, delay, onCommit }: { label: string; delay: number; onCommit: (delay: number) => void }) {
+// It applies only while the device plays in sync, and its own value shows while focused, so arrow keys keep stepping
+// from it. Few people touch it, so a row shows it only while it isn't 0, or once its "…" revealed it.
+// A line of the row's own grid (subgrid): its words under the device's status, its slider under the fader, as long.
+function Delay({ id, label, delay, onCommit }: { id: string; label: string; delay: number; onCommit: (delay: number) => void }) {
+  const revealed = useContext(RevealedSync);
   const [draft, setDraft] = useState<number | null>(null);
   const value = draft ?? delay;
-  return <div data-volume className="grid w-full gap-1 pb-1">
-    <span className="text-sm text-muted-foreground tabular-nums">Sync {value} ms earlier</span>
-    <Slider aria-label={label} aria-valuetext={`${value} milliseconds earlier`} value={[value]} min={0} max={500} step={10} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => onCommit(next!)} onBlur={() => setDraft(null)} />
+  // A line taken to 0 while its slider is in use stays until focus leaves it, as a revealed one would.
+  const shown = revealed.id === id || draft !== null;
+  const hides = shown && !delay;
+  // Back or Esc on a revealed slider still at 0 hides it, with focus back on "…", rather than closing the Sheet.
+  // Radix listens on the document, so this listens on the window first, after the TV fader's own Back has had its turn.
+  useEffect(() => {
+    if (!hides) return;
+    const hide = (event: KeyboardEvent) => {
+      const slider = event.target instanceof HTMLElement ? event.target.closest(`[data-sync-line="${id}"] [role="slider"]`) : null;
+      if (event.key !== "Escape" || event.defaultPrevented || !slider) return;
+      event.preventDefault(); event.stopPropagation();
+      slider.closest("li")?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+      revealed.reveal(null);
+    };
+    window.addEventListener("keydown", hide, true);
+    return () => window.removeEventListener("keydown", hide, true);
+  }, [hides, id]);
+  if (!delay && !shown) return null;
+  return <div data-volume data-sync-line={id} className="col-span-2 flex min-h-11 min-w-0 items-center gap-3 md:grid md:grid-cols-subgrid">
+    <span className="shrink-0 text-sm text-muted-foreground tabular-nums md:pl-15">Sync {value} ms earlier</span>
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <Slider aria-label={label} aria-valuetext={`${value} milliseconds earlier`} value={[value]} min={0} max={500} step={10} onValueChange={([next]) => setDraft(next!)} onValueCommit={([next]) => onCommit(next!)} onBlur={() => setDraft(null)} />
+      <span aria-hidden="true" className="w-[3ch] shrink-0" />
+    </div>
   </div>;
 }

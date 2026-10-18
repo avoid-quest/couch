@@ -23,7 +23,7 @@ the only highlight; no hover style applies on the TV. The TV has no hover: under
 never applies, so a stray pointer can't compete with focus.
 
 Back closes an open
-overlay, then leaves a detail page or Where it plays' overview for the page
+overlay, then leaves a detail page for the page
 that opened it with its focus restored, then takes any section to Home, where
 Back does nothing. Opening
 Up next changes the player URL without losing its opener. Settings' own OK
@@ -79,10 +79,11 @@ footer (the now-playing bar) only after the page's own controls, and keeps
 focus clear of the footer. Up and Down from a row (`data-nav-row`: a Home
 shelf, the hero's verbs, Details' verbs, a media row) reach the nearest row first, so Home's
 shelves are walked one by one and never skipped for a farther control that
-lines up. In their own row they reach only a control past them (a wrapped
-line, Continue's Details), never a tile beside them whose caption is shorter
-or taller. The tab bar scrolls away with the page, as on Apple TV and on every
-Couch screen. Up from a page's first row reaches it on the current tab, and
+lines up. In their own row they reach only a control past them and in line
+with them (a wrapped line, Continue's Details under its tile, a device's Sync
+under its fader in Where it plays), never a tile beside them whose caption is
+shorter or taller, nor a device's Sync from its check. The tab bar scrolls
+away with the page, as on Apple TV and on every Couch screen. Up from a page's first row reaches it on the current tab, and
 Down from it returns to the page's first control. Up again, past the top,
 reaches a toast's action, such as Undo ([Design](../design.md), Messages). After a page change the first key starts at the page's first
 control. Screens shown before the shell (the first-run chooser) bring the
