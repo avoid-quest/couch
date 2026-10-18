@@ -40,8 +40,9 @@ posters:
   by group (`group`), Filter (`filter`) and page (`page`).
 - **One shelf per source with a home**: Twitch ("Live now"),
   StreamingCommunity ("Films and series"), RaiPlay ("Programmes"),
-  123MoviesFree ("Films"), and AnimeSaturn and AnimeUnity ("Anime"). Each holds the first twelve of the source's own
-  home, the same query its page makes (`ProviderPage`, `url` ""), so opening
+  123MoviesFree ("Films"), AnimeSaturn and AnimeUnity ("Films and series").
+  Each holds the first twelve of the source's own home, the same query its
+  page makes (`ProviderPage`, `url` ""), so opening
   the heading shows them at once. A tile opens its Details; its menu holds its
   search hit's verbs.
 - **Sources**: the sources that start from a search, YouTube, Bandcamp and
@@ -58,6 +59,11 @@ opened them. As a section root, Discover carries no breadcrumb.
 
 Not yet: a programme grid for Live TV, and any Core endpoint it would need;
 it waits for a source that needs one.
+
+The film and series catalogue homes (StreamingCommunity, 123MoviesFree,
+AnimeSaturn and AnimeUnity) use the same poster-tile grid on TV, desktop
+and phone; the available width sets its column count. Titles, seasons,
+episodes and tracks keep their divided rows.
 
 ## Details
 
@@ -146,6 +152,8 @@ its History Details, which holds the others and Remove from Continue with Undo;
 the rows have no menu.
 Removing from For later or Channels & stations says "Removed … from Saved."
 An empty tab says what goes there and offers Discover.
+Saved channels and collections keep their contained artwork and the same
+Channel, List, Album, Series or Season label as Search.
 
 ## MediaRow / MediaList
 

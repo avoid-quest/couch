@@ -15,6 +15,7 @@ import { radioFavoritesListQuery } from "@/api/radio";
 import { apiSend } from "@/api/client";
 import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
 import { savedNotice } from "@/copy";
+import { collectionLabel, providerNames } from "@/sections/find/SearchOnlineResults";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean, deviceId?: string) => Promise<boolean>;
@@ -22,12 +23,11 @@ export type SavedFavoriteActions = {
   onOpenProvider: (item: ProviderItem) => void;
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
-const providers = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
 const meta = (favorite: Favorite) => (favorite.kind === "provider"
-  ? [providers[favorite.item.provider], favorite.item.kind === "channel" ? "Channel" : favorite.item.kind === "collection" ? favorite.item.provider === "bandcamp" ? "Album" : "Playlist" : "", favorite.item.subtitle]
+  ? [providerNames[favorite.item.provider], collectionLabel(favorite.item), favorite.item.subtitle]
   : ["Radio", favorite.item.groupTitle || favorite.item.countryCode]).filter(Boolean).join(" · ");
 
 // Favorites live in the provider and radio stores, so Move up and Move down move a favorite within its own kind.
@@ -101,6 +101,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     const move = (offset: number) => { const plan = moveFavorite(favorites, favorite, offset); if (plan && !blocked) reorder.mutate(plan); };
     // A station's page holds no Remove or ordering, so the row keeps its "…".
     return <MediaRow key={key(favorite)}
+      artFit="contain"
       art={<MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} collection={favorite.kind === "provider" && favorite.item.kind !== "media"} />}
       title={itemTitle}
       meta={meta(favorite)}

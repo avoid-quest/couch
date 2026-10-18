@@ -23,7 +23,7 @@ export type SearchHit = SearchFacet & {
   id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
   /** What an openable hit is, shown instead of a length. */
-  collection?: "Channel" | "List" | "Series" | "Season";
+  collection?: "Channel" | "List" | "Album" | "Series" | "Season";
   thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   /** Every verb, the primary's included; MediaRow's menu holds the rest. */
@@ -42,9 +42,10 @@ export type SearchPlaybackProps = {
 };
 export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", soundcloud: "SoundCloud", streamingcommunity: "StreamingCommunity", movies123: "123MoviesFree", animesaturn: "AnimeSaturn", animeunity: "AnimeUnity" };
 export const searchError = (reason: unknown) => reason instanceof Error ? reason.message : "Didn't respond.";
-function collectionLabel(item: ProviderItem): SearchHit["collection"] {
+export function collectionLabel(item: ProviderItem): SearchHit["collection"] {
   if (item.kind === "media") return;
   if (item.kind === "channel") return "Channel";
+  if (item.provider === "bandcamp") return "Album";
   const path = new URL(item.url).pathname;
   if (item.provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path)) return "Season";
   if (item.provider === "streamingcommunity") return /\/season-\d+$/.test(path) ? "Season" : "Series";
