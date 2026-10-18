@@ -94,7 +94,7 @@ test("only a successful Play whose destination is the playing source's publisher
   expect(choosesHere({ ...play, deviceId: "mac" }, before, null)).toBe(false);
 });
 
-type Props = { children?: ReactNode; id?: string; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
+type Props = { children?: ReactNode; id?: string; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "aria-describedby"?: string; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
 const inSync = { deviceId: "tv", picture: true, sound: true, delay: 80, delayActive: true };
@@ -139,3 +139,15 @@ test("a source waiting for receivers lists every device without a heading", () =
   expect(all.filter(item => item.type === "h3")).toEqual([]);
 });
 
+test("a receiver's check describes its status and buffered explanation, including Core's failure reason", () => {
+  for (const output of [{ deviceId: "tv", picture: true, sound: true, buffered: true }, { deviceId: "tv", picture: true, sound: true, buffered: true, error: "The live input encoder stopped." }]) {
+    const state = { ...waiting(0), outputs: [output] } as unknown as ClientSessionState;
+    const all = elements(WhereItPlays({ state, connected: true, run: async () => true }));
+    const check = all.find(item => item.props["data-device-check"] && item.props["aria-label"] === "TV")!;
+    const description = all.find(item => item.props.id === check.props["aria-describedby"])!;
+    expect(text(description.props.children)).toBe(output.error
+      ? `Can't play It couldn't connect directly to this source, and Couch's buffered stream failed: ${output.error}`
+      : "Buffered It couldn't connect directly to this source, so it plays a few seconds behind.");
+    expect(elements(check.props.children)).toContain(description);
+  }
+});

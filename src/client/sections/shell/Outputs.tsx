@@ -85,7 +85,7 @@ function levels({ state, connected, run, inSync }: Props & { inSync?: boolean })
  * rather than rendered, so tests can walk its controls without a DOM.
  */
 function deviceRow({ state, row, run, tv }: Omit<Props, "connected"> & { row: Row; tv: boolean }) {
-  const { device, output, status, check, level, picture, mute, only } = row;
+  const { device, output, status, explanation, check, level, picture, mute, only } = row;
   return <li key={device.id} data-nav-row className={cn(columns, "items-start py-2")}>
     <Button data-device-check variant="ghost" role="checkbox" aria-checked={!!output} aria-label={device.name} aria-describedby={`where-it-plays-${device.id}`} disabled={!check.enabled} onClick={() => { if (check.action) void run(check.action); }}
       className="-ml-2.5 h-auto min-h-11 min-w-0 justify-start gap-3 px-2.5 py-1.5 text-left font-normal whitespace-normal">
@@ -94,7 +94,10 @@ function deviceRow({ state, row, run, tv }: Omit<Props, "connected"> & { row: Ro
       <DeviceIcon {...signalOf(state, device.id)} />
       <span className="grid min-w-0">
         <span data-output-name className="text-base [overflow-wrap:anywhere]">{device.name}</span>
-        <span id={`where-it-plays-${device.id}`} data-output-status className={cn("text-sm [overflow-wrap:anywhere]", output?.error ? "text-destructive" : "text-muted-foreground")}>{status}</span>
+        <span id={`where-it-plays-${device.id}`} className={cn("grid text-sm [overflow-wrap:anywhere]", output?.error ? "text-destructive" : "text-muted-foreground")}>
+          <span data-output-status>{status}</span>
+          {explanation && <span>{explanation}</span>}
+        </span>
       </span>
     </Button>
     {output && <div data-volume className="col-span-2 row-start-2 flex min-h-11 min-w-0 items-center gap-3 md:col-span-1 md:col-start-2 md:row-start-1">

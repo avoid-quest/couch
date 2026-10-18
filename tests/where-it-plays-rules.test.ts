@@ -135,10 +135,24 @@ describe("what a device is doing", () => {
     expect(status(both("tv"), { volume: 0 })).toBe("Picture and sound");
   });
 
-  test("a live input's receiver says when it plays buffered, or can't play", () => {
-    const status = (output: Output) => row(session({ outputs: [output] }), "tv").status;
-    expect(status(both("tv", { buffered: true }))).toBe("Buffered");
-    expect(status(both("tv", { error: "stopped" }))).toBe("Can't play");
+  test("a buffered receiver explains why it plays a few seconds behind", () => {
+    const state = session({ outputs: [both("tv", { buffered: true })], film: { liveSourceId: "s" }, liveSources: [screen] });
+    expect(row(state, "tv")).toMatchObject({ status: "Buffered", explanation: "It couldn't connect directly to this source, so it plays a few seconds behind." });
+    expect(picker(state, { here: "tv", tv: true }).rows[0]).toMatchObject({ status: "This device · Buffered", explanation: row(state, "tv").explanation });
+  });
+
+  test("a failed buffered receiver explains the failure with Core's reason instead of saying it plays behind", () => {
+    const error = "The live input encoder stopped.";
+    for (const buffered of [true, undefined]) {
+      const state = session({ outputs: [both("tv", { buffered, error })], film: { liveSourceId: "s" }, liveSources: [screen] });
+      expect(row(state, "tv")).toMatchObject({ status: "Can't play", explanation: `It couldn't connect directly to this source, and Couch's buffered stream failed: ${error}` });
+    }
+  });
+
+  test("direct, in-sync and unselected receivers have no buffered explanation", () => {
+    for (const outputs of [[], [both("tv")], [both("tv", { delayActive: true })]]) {
+      expect(row(session({ outputs, film: { liveSourceId: "s" }, liveSources: [screen] }), "tv").explanation).toBeUndefined();
+    }
   });
 
   test("a device busy elsewhere names what it plays there before you press", () => {
