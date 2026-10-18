@@ -151,6 +151,8 @@ its History Details, which holds the others and Remove from Continue with Undo;
 the rows have no menu.
 Removing from For later or Channels & stations says "Removed … from Saved."
 An empty tab says what goes there and offers Discover.
+Saved channels and collections keep their contained artwork and the same
+Channel, List, Album, Series or Season label as Search.
 
 ## MediaRow / MediaList
 
