@@ -5,11 +5,13 @@ import type { SessionState } from "../../shared/protocol";
 /** What a Device renders: its Output in the Playback it serves, its one volume and mute, and whether it is online. */
 export type Signal = { picture: boolean; sound: boolean; volume: number; muted: boolean; online: boolean };
 
-/** The Signal of a Device in `state`: its Output in whichever Playback it serves, if any. */
-export function signalOf(state: Pick<SessionState, "devices" | "playbacks" | "outputs"> | null | undefined, deviceId: string): Signal {
+/** The Signal of a Device in `state`: its Output in whichever Playback it serves, if any, with no picture or sound for media that has none. */
+export function signalOf(state: Pick<SessionState, "devices" | "playbacks" | "outputs" | "liveSources"> | null | undefined, deviceId: string): Signal {
   const device = state?.devices?.find(item => item.id === deviceId);
-  const output = [...state?.playbacks?.flatMap(playback => playback.outputs) ?? [], ...state?.outputs ?? []].find(item => item.deviceId === deviceId);
-  return { picture: !!output?.picture, sound: !!output?.sound, volume: device?.volume ?? 0, muted: !!device?.muted, online: !!device?.online };
+  const playback = state?.playbacks?.find(item => item.outputs.some(output => output.deviceId === deviceId));
+  const output = playback?.outputs.find(item => item.deviceId === deviceId) ?? state?.outputs?.find(item => item.deviceId === deviceId);
+  const silent = state?.liveSources?.find(source => source.id === playback?.liveSourceId)?.audio === false;
+  return { picture: !!output?.picture && !playback?.audioOnly, sound: !!output?.sound && !silent, volume: device?.volume ?? 0, muted: !!device?.muted, online: !!device?.online };
 }
 
 /**

@@ -105,15 +105,19 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, pr
   </div>;
 }
 
-/** Whether the controlled Devices are muted: every one in the controlled Playback's sound, else the controlled Device. */
+/**
+ * Whether the controlled Devices are muted: every one in the controlled Playback's sound, else the controlled Device.
+ * Like Core's Volume, it reads only the sound this device may control while there is any, since that is what Mute moves.
+ */
 export function muted(state: ClientSessionState | null | undefined) {
   const sounding = new Set(state?.outputs?.filter(output => output.sound).map(output => output.deviceId));
   if (!sounding.size) sounding.add(state?.controlling ?? deviceId());
-  const devices = state?.devices?.filter(device => sounding.has(device.id)) ?? [];
-  return devices.length > 0 && devices.every(device => device.muted);
+  const devices = state?.devices?.filter(device => sounding.has(device.id)) ?? [], moved = devices.filter(device => device.id === deviceId() || device.sharing?.audio === true);
+  const read = moved.length ? moved : devices;
+  return read.length > 0 && read.every(device => device.muted);
 }
 
-/** The controlled Devices' volume: the loudest one's, as Core reports it; moving it scales them all. */
+/** The controlled Devices' volume: the loudest one this device may control, as Core reports it; moving it scales those. */
 export function PlaybackVolume({ state, connected, run, showSlider = true, showValue = true, className }: Props & { showSlider?: boolean; showValue?: boolean; className?: string }) {
   const { available, audioReady } = playbackCapabilities(state, connected);
   const silent = muted(state);

@@ -100,18 +100,20 @@ test("All is independent attenuation, restores from zero and preserves individua
     for (const trim of [50, 0, 100]) {
       await device.command({ type: "allSpeakers", level: trim });
       assert.equal(device.state.mixTrim, trim);
-      // At 0 the band says so; otherwise it shows the Device's own level.
-      assert.equal(device.state.player.volume, trim ? 70 : 0);
+      // The one Volume shows the level the sound plays at, the trim older clients set (All) included.
+      assert.equal(device.state.player.volume, Math.round(70 * trim / 100));
       assert.equal(device.state.devices?.find(item => item.id === device.id)?.volume, 70);
       assert.deepEqual(device.state.outputs, outputs);
       assert.equal(level(device.messages), Math.round(70 * trim / 100));
     }
     assert.throws(() => parseCommand(JSON.stringify({ type: "command", requestId: "1", action: { type: "allSpeakers", level: 50.5 } })));
+    // Moving the one Volume folds that trim into the Device's level, so it plays at what Volume shows.
     await device.command({ type: "allSpeakers", level: 50 });
     await device.command({ type: "volume", volume: 41 });
-    assert.equal(device.state.mixTrim, 50);
+    assert.equal(device.state.mixTrim, 100);
     assert.equal(device.state.player.volume, 41);
-    assert.equal(level(device.messages), 21);
+    assert.equal(device.state.devices?.find(item => item.id === device.id)?.volume, 41);
+    assert.equal(level(device.messages), 41);
     await device.command({ type: "volume", volume: 0 });
     await device.command({ type: "allSpeakers", level: 100 });
     assert.equal(device.state.outputs?.[0]?.sound, true);
@@ -183,20 +185,48 @@ test("Raising sound while All is at 0 brings All back and leaves muted devices s
   } finally { await f.close(); }
 });
 
-test("The band at All 0 lowers nothing and raising it only brings All back", { timeout: 15_000 }, async () => {
+test("The one Volume folds a trim into device levels, keeping their proportion even from All at 0", { timeout: 15_000 }, async () => {
   const f = await fixture(), [a, b] = f.devices;
   try {
     await a!.command(f.queue("mix"));
     await a!.command({ type: "output", deviceId: b!.id, level: 40 });
     const volumes = () => [a, b].map(device => a!.state.devices?.find(item => item.id === device!.id)?.volume);
-    await a!.command({ type: "allSpeakers", level: 0 });
-    await a!.command({ type: "volume", volume: 0 });
-    assert.deepEqual(volumes(), [70, 40]);
-    assert.equal(a!.state.mixTrim, 0);
-    await a!.command({ type: "volume", volume: 5 });
+    // At 50 they play at 35 and 20: raising the Volume to 70 doubles both and leaves no trim.
+    await a!.command({ type: "allSpeakers", level: 50 });
+    assert.equal(a!.state.player.volume, 35);
+    await a!.command({ type: "volume", volume: 70 });
     assert.deepEqual(volumes(), [70, 40]);
     assert.equal(a!.state.mixTrim, 100);
-    assert.equal(a!.state.player.volume, 70);
+    // At 0 nothing plays, and the Volume says 0. Raising it keeps the devices' proportion; lowering it shows the 0 on each.
+    await a!.command({ type: "allSpeakers", level: 0 });
+    assert.equal(a!.state.player.volume, 0);
+    await a!.command({ type: "volume", volume: 35 });
+    assert.deepEqual(volumes(), [35, 20]);
+    assert.equal(a!.state.mixTrim, 100);
+    assert.equal(a!.state.player.volume, 35);
+    await a!.command({ type: "allSpeakers", level: 0 });
+    await a!.command({ type: "volume", volume: 0 });
+    assert.deepEqual(volumes(), [0, 0]);
+    assert.equal(a!.state.mixTrim, 100);
+    await a!.command({ type: "volume", volume: 70 });
+    assert.deepEqual(volumes(), [70, 40]);
+  } finally { await f.close(); }
+});
+
+test("The one Volume at 0 keeps the devices' proportion for when it rises again", { timeout: 15_000 }, async () => {
+  const f = await fixture(), [a, b] = f.devices;
+  try {
+    await a!.command(f.queue("mix"));
+    await a!.command({ type: "output", deviceId: b!.id, level: 40 });
+    const volumes = () => [a, b].map(device => a!.state.devices?.find(item => item.id === device!.id)?.volume);
+    // 70 and 40 each go to 0, as their faders show, and come back at 35 and 20 rather than 35 each.
+    await a!.command({ type: "volume", volume: 0 });
+    assert.deepEqual(volumes(), [0, 0]);
+    assert.equal(a!.state.player.volume, 0);
+    await a!.command({ type: "volume", volume: 0 });
+    await a!.command({ type: "volume", volume: 35 });
+    assert.deepEqual(volumes(), [35, 20]);
+    assert.equal(a!.state.player.volume, 35);
   } finally { await f.close(); }
 });
 

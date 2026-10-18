@@ -377,8 +377,10 @@ window.runTvNavigationRegression = async () => {
     // Where it plays opened before Play on lands closes as the bar moves to the recipient's Playback.
     await until(() => !!document.querySelector('[data-now-playing] button[aria-label="Where it plays"]:not(:disabled)') && !!document.querySelector("[data-now-playing]")?.textContent?.includes(`on ${targetName}`));
     await click('[data-now-playing] button[aria-label="Where it plays"]');
-    await until(() => document.querySelector(`[aria-label="Only on ${CSS.escape(targetName!)}"]`)?.getAttribute("aria-pressed") === "true");
-    assert(control(`[aria-label="${CSS.escape(targetName!)} picture"]`).getAttribute("aria-pressed") === "true", "Play on did not select the recipient's picture");
+    // The recipient's row is the only one checked, and it shows the picture.
+    const checked = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] [data-device-check][aria-checked="true"]')];
+    await until(() => checked().length === 1 && checked()[0]!.getAttribute("aria-label") === targetName);
+    assert(/^(This device · )?Picture/.test(document.getElementById(checked()[0]!.getAttribute("aria-describedby")!)?.textContent ?? ""), "Play on did not select the recipient's picture");
     assert(document.querySelector('[role="dialog"]')?.textContent?.includes(title), "Play on did not select the queued channel");
     await key("Escape"); await wait(350);
     assert(location.pathname === "/live", "Play on lost the controller's browse page");

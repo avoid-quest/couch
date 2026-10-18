@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { CheckIcon } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,13 @@ function DropdownMenuItem({ className, ...props }: ComponentProps<typeof Dropdow
   return <DropdownMenuPrimitive.Item data-slot="dropdown-menu-item" className={cn(item, className)} {...props} />;
 }
 
+function DropdownMenuCheckboxItem({ className, children, ...props }: ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return <DropdownMenuPrimitive.CheckboxItem data-slot="dropdown-menu-checkbox-item" className={cn(item, "pl-8", className)} {...props}>
+    <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center"><DropdownMenuPrimitive.ItemIndicator><CheckIcon /></DropdownMenuPrimitive.ItemIndicator></span>
+    {children}
+  </DropdownMenuPrimitive.CheckboxItem>;
+}
+
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 function DropdownMenuLabel({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Label>) {
   return <DropdownMenuPrimitive.Label className={cn("px-2 py-1.5 text-xs text-muted-foreground", className)} {...props} />;
@@ -23,4 +31,4 @@ function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof Dr
   return <DropdownMenuPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
 }
 
-export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuGroup, DropdownMenuLabel };
+export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuGroup, DropdownMenuLabel };

@@ -67,7 +67,8 @@ export type SessionState = {
   playedBy?: PlaybackActor;
   // The looked-at Playback, its outputs, and every Playback and Device (#644 ticket 9).
   playback?: string | null;
-  // All's attenuation of this Playback's selected sound: 100 preserves Device levels, 0 silences them.
+  // All's attenuation of this Playback's selected sound: 100 preserves Device levels, 0 silences them. Only older
+  // clients still set it; the one Volume folds it into Device levels.
   mixTrim?: number;
   outputs?: Output[];
   playbacks?: PlaybackSummary[];
@@ -114,8 +115,8 @@ export type Action =
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
-  // A Device's volume or mute. Without deviceId: every Device in the controlled Playback's sound, the
-  // volumes scaled so the loudest reaches `volume`, or the controlled Device when none is.
+  // A Device's volume or mute. Without deviceId, the one Volume: every Device in the controlled Playback's sound
+  // you may control, scaled so the loudest plays at `volume` with any trim folded in, or the controlled Device when none is.
   | { type: "mute"; muted: boolean; deviceId?: string }
   | { type: "volume"; volume: number; deviceId?: string }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
@@ -127,8 +128,8 @@ export type Action =
   | { type: "next"; playbackId: string }
   | { type: "stop"; playbackId?: string }
   // Solo: only that Device keeps the controlled Playback, with its picture (when it shows one) and
-  // sound. allSpeakers trims the Playback's existing sound from 0 to 100, preserving its outputs and
-  // every Device's volume and mute.
+  // sound. allSpeakers (All, which only older clients offer) trims the Playback's existing sound from 0 to 100,
+  // preserving its outputs and every Device's volume and mute.
   | { type: "solo"; deviceId: string }
   | { type: "allSpeakers"; level: number }
   // A Device's picture and sound in the controlled Playback. level is the fader: 0 takes the
