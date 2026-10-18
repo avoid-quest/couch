@@ -20,8 +20,9 @@ Up next changes the player URL without losing its opener. Settings' own OK
 and Back: [Settings](settings.md#section-nav).
 
 After every page change, focus is on the page's first control. When that control renders
-after later ones (Home's hero waits for its data, a collection's Play for its source), focus moves
-to it as it appears, unless a key or pointer came first. On Details the first control is the
+after later ones (Home's hero waits for its data, Live's first On air tile for the shows, a collection's Play for its source), focus moves
+to it as it appears, unless a key or pointer came first. Library starts on its rail's current section, and OK on
+another section opens it and keeps the rail; Right reaches its rows. On Details the first control is the
 primary verb, so OK plays, and Right walks the other verbs one stop each. The header holds the sections as centred tabs,
 the TV's name at the left and the clock at the right, as plain text; the Couch choice lives in Settings → Couch
 connection, and the TV has no Remote tab or Keyboard shortcuts. Layout per screen: [Shell](shell.md#header-and-section-nav).

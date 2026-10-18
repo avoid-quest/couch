@@ -5,9 +5,9 @@
 | Section | Path | Holds |
 | --- | --- | --- |
 | Home | `/` | one hero (what plays now, else what to continue, else what's on air), then shelves |
-| Live | `/live` | radio stations, then Live TV channels once a Live TV source has some |
+| Live | `/live` | stations on air, then every station, then Live TV channels once a Live TV source has some |
 | Search | `/search` | the search field, results and sources |
-| Library | `/library` | For later, Channels & stations and Lists (`?tab=`) |
+| Library | `/library` | For later, Channels & stations, Lists and Played (`?tab=`) |
 | Settings | `/settings` | the device's and the Couch's pages |
 | Remote | `/remote` | drives a TV; on non-TV devices while the Couch has one (`DeviceSummary.tv`, online or not) |
 

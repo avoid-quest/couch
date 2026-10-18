@@ -26,16 +26,6 @@ type or copy rules.
 - **Fewer exceptions.** A rule that needs an exception for one surface is a
   sign the structure is wrong. Prefer changing the structure.
 
-## Browse
-
-- **Live:** an "On air" shelf of saved and built-in stations, each with its
-  show and "until" time, then every station (today's Radio browse). Then
-  channels (today's Live TV browse), only when a Live TV source exists. No
-  programme grid: that waits for a source that needs one.
-- **Library:** For later, Saved, playlists and Played: today's Saved
-  sections plus Played, with the rail on wide screens and the Select on
-  phones.
-
 ## Player
 
 - **Over a video:** with controls up, the title and subtitle sit at the top
@@ -117,7 +107,7 @@ release notes ([ci.md](ci.md)).
 | `shell` | Navigate Couch with tabs and a now-playing bar | Shell; new section paths with redirects; existing pages render inside them (landed) | `design/shell.md` |
 | `home` | Open Home on what you'll most likely play next | Home (landed) | `design/home.md` |
 | `browse` | Search everything and open each source from its own home | Search, source homes, details (landed) | `design/browse.md` |
-| `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library | `design/browse.md` |
+| `live-library` | Find radio and channels in Live, and what you keep in Library | Live, Library (landed) | `design/browse.md` |
 | `player` | Show the time and title over the playing picture | Player | `design/player.md` |
 | `where-it-plays` | Choose where it plays from a simple list of devices | rules model and tests; picker | `design/where-it-plays.md` |
 | `devices` | See every device and what it plays on one page | overview | `design/where-it-plays.md` |

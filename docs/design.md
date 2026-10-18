@@ -106,6 +106,8 @@ Shared building blocks in `src/client/components`:
 - `ChoiceGroup`: inline choices with a check on the selected option.
 - `DetailHeader`: an item or collection page's artwork, title, meta, synopsis
   and row of verbs ([Browse](design/browse.md#details)).
+- `Shelf`: a section heading over a plain overflow row of `MediaTile`s, for
+  Home's shelves and Live's On air ([Browse](design/browse.md#mediatile)).
 
 Release notes use `react-markdown` with GitHub-flavoured Markdown because the
 [shadcn catalog](https://ui.shadcn.com/docs/components) has no Markdown renderer.

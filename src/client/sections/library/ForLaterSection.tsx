@@ -16,7 +16,7 @@ import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
 import { apiSend } from "@/api/client";
-import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
+import { LibraryEmpty, LibraryError, LibraryStatus, useRemovalFocus } from "./LibraryStatus";
 import { savedNotice } from "@/copy";
 
 // The gesture for one drop, as the ordered ids the server persists.
@@ -88,10 +88,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
 
   return <section ref={section} aria-labelledby="for-later-title">
     <h2 ref={heading} tabIndex={-1} id="for-later-title" className={showHeading ? "mb-2 text-base font-medium outline-none" : "sr-only"}>For later</h2>
-    <SavedStatus connected={connected} loading={loading} />
-    {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
-    {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Use Save on anything in Search.</SavedEmpty>}
+    <LibraryStatus connected={connected} loading={loading} />
+    {connected && loadError && <LibraryError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
+    {connected && failure && <LibraryError message={failure} />}
+    {connected && !loading && !loadError && !items.length && <LibraryEmpty action={onFind && <Button variant="outline" onClick={onFind}>Search</Button>}>Nothing saved yet. Use Save on anything in Search.</LibraryEmpty>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       {!!items.length && <MediaList ref={list} aria-label="For later">
         <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
