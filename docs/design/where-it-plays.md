@@ -123,10 +123,11 @@ Another Playback's artwork and end time come with Core's Playback summary
 (`thumbnail`, `live`, `ends`). Core sends `ends` only while it plays, since a
 paused item's end time moves, so a paused Playback elsewhere shows none.
 
-It isn't a tab. The now-playing bar hides there, since the overview shows
-the same Playback with its Volume. Back, the page's or a remote's, returns to
-the page that opened the picker, with focus on the picker's button
-([TV](tv.md#the-tv-has-its-own-layout)). On the TV it opens on
+It isn't a tab, so it shows its title on every screen. The now-playing bar
+hides there, since the overview shows the same Playback with its Volume. Back
+returns to the page that opened the picker, with focus on the picker's button
+([TV](tv.md#the-tv-is-driven-by-a-remote)): the page's Back button for a
+pointer, which the TV hides, or a remote's Back. On the TV it opens on
 the first device you can choose, whose check carries `data-page-first`; Up
 reaches the Volume.
 

@@ -65,23 +65,23 @@
     click(`[data-playlist-id='${id}'] button[aria-label^='Open ']`);
     await wait(() => [...document.querySelectorAll("section[aria-label='Lists'] button")].some(node => node.textContent === "Queue"), "saved list detail Queue");
   };
-  const queueChannel = async name => {
-    await page("/live");
-    await wait(() => document.querySelector(`button[aria-label='Options for ${name}']`), "channel options");
-    // Send Enter to the real Radix trigger; T3's click alone doesn't open it.
-    document.querySelector(`button[aria-label='Options for ${name}']`).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    await wait(() => document.querySelector("[role='menuitem']"), "channel Queue menu");
-    click("[role='menuitem']", "Queue");
-    await wait(() => toasts().some(text => text.includes(`Queued ${name}`)), "channel confirmation");
-  };
+  // A row is one target; its other verbs wait in its context menu, which a right-click opens on the real Radix trigger.
+  const row = title => [...document.querySelectorAll("li[data-nav-row]")].find(node => node.querySelector("[data-play] span")?.textContent === title);
   const menu = async (title, label) => {
-    const trigger = [...document.querySelectorAll("button[aria-label]")].find(node => node.getAttribute("aria-label") === `Options for ${title}`);
-    if (!trigger || trigger.disabled) throw new Error(`Unavailable options: ${title}`);
-    trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    await wait(() => document.querySelector("[role='menuitem']"), "item action menu");
+    const target = row(title);
+    if (!target) throw new Error(`Unavailable row: ${title}`);
+    const box = target.getBoundingClientRect();
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: box.left + 8, clientY: box.top + 8 }));
+    await wait(() => document.querySelector("[role='menuitem']"), "row context menu");
     click("[role='menuitem']", label);
   };
-  // Details holds Queue in its row of verbs; rows keep it in their "…" menu.
+  const queueChannel = async name => {
+    await page("/live");
+    await wait(() => row(name), "channel row");
+    await menu(name, "Queue");
+    await wait(() => toasts().some(text => text.includes(`Queued ${name}`)), "channel confirmation");
+  };
+  // Details holds Queue in its row of verbs; rows keep it in their context menu.
   const queue = title => location.pathname === "/item" ? click("[data-page='Item'] header button", "Queue") : menu(title, "Queue");
   const confirmation = title => {
     const queued = [...document.querySelectorAll("[data-sonner-toast]")].filter(node => node.querySelector("[data-title]")?.textContent.startsWith("Queued"));
@@ -92,7 +92,7 @@
     const item = surface.startsWith("history") ? historyItem : savedItem;
     const home = surface.startsWith("history");
     await page(surface === "saved-row" || surface === "saved-details" ? "/library" : "/");
-    await wait(() => document.querySelector(`button[aria-label='${home ? "Details" : "Options for"} ${item.title}']`), `${surface} ${home ? "Details" : "options"}`);
+    await wait(() => document.querySelector(`button[aria-label='Details ${item.title}']`), `${surface} Details`);
     if (surface.endsWith("details") || home && (verbs || surface === "history-recent")) {
       click(`button[aria-label='Details ${item.title}']`);
       await wait(() => location.pathname === "/item" && document.querySelector("h1")?.textContent === item.title, "item Details");
@@ -201,7 +201,8 @@
       await quiet();
       const before = gate().state.player.playbackId;
       if (location.pathname === "/item") click("[data-page='Item'] header button", surface.startsWith("history") ? "Resume" : "Play");
-      else click(`button[aria-label='${surface.startsWith("history") ? "Resume" : "Play"} ${item.title}']`);
+      else if (surface.startsWith("history")) click(`button[aria-label='Resume ${item.title}']`);
+      else await menu(item.title, "Play");
       await wait(() => gate().state.player.playbackId !== before && gate().state.queue.find(entry => entry.id === gate().state.currentEntryId)?.title === item.title && document.querySelector("video")?.readyState === 4, "actual REST Play decodes");
       check(`${surface} actual Play has no Queued feedback`, !toasts().some(text => text.startsWith("Queued")));
       await pause();

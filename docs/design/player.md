@@ -9,7 +9,8 @@ The now-playing bar opens the player through its
 artwork and title ([Shell](shell.md#now-playing-bar)). The bar and the player band hold one control
 order: Play/Pause, Stop and Next, the timeline, volume, Where it plays and Up
 next, then in the band Playback settings (a
-gear; Audio & subtitles lives inside) and fullscreen, whose
+gear; Audio & subtitles lives inside) and, on desktop and phones, fullscreen,
+which their window can leave and the TV's never does; the band's
 timeline takes its own row above. On phones the bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
@@ -69,12 +70,13 @@ current track follows in muted ink.
 
 Audio keeps its solid controls visible. Over a video, two bands show and hide
 together, like a media centre's on-screen display: the band at the bottom, and
-a top band. The top band holds, on desktop and phones, the
-[player header](#player-header) at the app header's height; then, at the
-left, the title (wrapping to two lines before it truncates) and the subtitle
-(series, episode, channel or source) in muted ink, and at the right the clock
-and the end time. Each of its two rows sizes itself, so a narrow screen gives
-the title all but the clock. The TV's top band has no header.
+a top band. The top band holds, at the left, the title (wrapping to two lines
+before it truncates) and the subtitle (series, episode, channel or source) in
+muted ink, and at the right the clock and the end time, with no collection
+trail, Couch switch or Details button: Details is in the Playback sheet. Each
+of its two rows sizes itself, so a narrow screen gives the title all but the
+clock. Paused shows a large Pause glyph and "Paused" over the picture, which
+reads from the sofa.
 
 Both bands shade the picture with one transparent black scrim, mirrored: it
 eases in over `--fade` (3.75rem, 1.75rem on short screens) to 88% where their
@@ -85,33 +87,38 @@ viewport at every interface size. Plain playback glyphs keep artwork central;
 Playback settings use Sheets. Stage CSS handles native video bounds
 and the responsive queue workspace; controls reuse shadcn components.
 
-## Player header
+## Back on desktop and phones
 
-On desktop and phones the header is the top band's first row, so the trail
-stays a short line above the title and fades with the controls. The ordinary
-player's fixed-height header uses a compact trail of the same
-collection links as [`ContentBreadcrumb`](browse.md#contentbreadcrumb), with single-line, truncated labels and at least `min-w-11`
-targets. Its title already appears in the player; Search and the provider remain
-in the full browse trail. Without a collection, the player links to Live,
-its provider or Search. The Couch switch takes at most two fifths of the header's
-content width so a long device name leaves room for the trail. The
-[shadcn Breadcrumb](https://ui.shadcn.com/docs/components/radix/breadcrumb)
-supports composing links, but its wrapping default overlaps the switch on a
-phone; a collapsed menu would add a step to these existing destinations.
+A pointer has no Back key, so desktop and phones lead the top band with a Back
+arrow ("Back to {section}", or "Back to Remote" for a Remote's player): before
+the title over a video, and leading the band over artwork, where the TV
+shows no top band unless this device shares. It returns to the page that
+opened the player, as Escape and a remote's Back do. A Remote's player keeps
+its TV's status beside it.
 
-The ordinary player's transient Buffering status has its own row above the
-transport: keeping it beside two 44px collection links
-obscures a link and clips the status at 320px and 130% interface size.
-The scoped Remote header keeps its own status arrangement.
+The player's transient Buffering status has its own row above the transport.
+
+## Stop sharing stays on screen
+
+While this device shares its screen or sound, the player's top band keeps
+"Sharing {screen}" and Stop sharing at its right, as the header does while
+browsing ([Live inputs](../live-inputs.md)): just before the clock over a
+video, and at the end of the band's row over artwork, where the TV then shows
+a top band too. Phones keep only Stop sharing, as in the header. While it
+shares, the bands don't hide on their own; a TV's Back still hides them, and
+OK shows them again.
 
 ## Up next is a deliberate list
 
 Keep Playing separate and Played collapsed.
-Compact artwork rows have one menu for Play next, ordering, Save for later
-and Remove. Removal leaves focus on an adjacent action menu. Save as list
-asks for a name and preserves errors there for retry. Queue-specific rows
-keep actions beside titles where MediaRow would stack them; shadcn/Radix
-Dropdown Menu supplies keyboard navigation and typeahead.
+Compact artwork rows are one target that plays the entry, with one menu for
+Details, Play next, ordering, Save for later and Remove: the row's context menu
+on desktop and phones, and on the TV a "…" beside the title, since an entry's
+page holds only Play and Save ([Browse](browse.md#mediarow--medialist)).
+Removal leaves focus on the adjacent row, so a keyboard keeps editing: on its
+"…" on the TV, else on the row itself. Save as list asks for a name and
+preserves errors there for retry. shadcn/Radix menus supply keyboard
+navigation and typeahead.
 
 Autoplay is a
 separate preview with a profile switch, continuing only the current series,

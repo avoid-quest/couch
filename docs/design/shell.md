@@ -30,29 +30,39 @@ Radio and Live TV share Live's address, so Live TV's page and filter are
 
 ## Header and section nav
 
-One set of tabs, laid out per screen:
+One header on every screen, on a three-column grid: at the left, the Couch
+switch in muted ink (the TV names itself there instead, as plain muted text,
+since it has no switch); in the middle, centred text tabs (Home, Live, Search,
+Library, then Remote while the Couch has a TV, then Settings); at the right,
+Stop sharing while this device shares its screen or sound (the player's top
+band keeps it: [Player](player.md#stop-sharing-stays-on-screen)), then the
+clock. The header scrolls away with the page, so the page gets the screen;
+on the TV, Up from a page's first row reaches it
+([TV](tv.md#every-journey-step-works-with-a-remote)). The current tab names
+the page, so section roots carry no visible title of their own. The current
+tab is underlined; a focused tab inverts, as every control does.
 
-- **TV:** centred text tabs (Home, Live, Search, Library, Settings), the TV's
-  name at the left in muted ink, the clock at the right. The tab bar scrolls
-  away with the page: [TV](tv.md#every-journey-step-works-with-a-remote).
-- **Desktop and wide browsers:** tabs at the left (Home, Live, Search,
-  Library, then Remote while the Couch has a TV, then Settings); the Couch
-  switch, Keyboard shortcuts (outside Remote) and the clock at the right. The
-  header stays sticky.
-- **Phones** (`touch:`, below 960px): a compact top bar with the page title,
-  the Couch switch and a Settings gear (`aria-label="Settings"`), and a bottom
-  tab bar with Home, Live, Search, Library, and Remote while the Couch has a
-  TV, each a lucide icon (House, Radio, Search, Library, Tv) over its label.
-  A page whose own heading repeats the title hides it on phones.
+Input exceptions:
 
-The current tab is underlined; a focused tab inverts, as every control does.
-The header and the phone tab bar render the same `SectionTabs`; `tv:`
-undoes `touch:` so a narrow TV keeps the TV layout. The player's header
-carries the Couch switch too.
+- **Keyboard:** the desktop puts Keyboard shortcuts (outside Remote) just
+  before the clock; the TV, phones and Remote have none.
+- **Touch** (`touch:`, phones and windows below 960px): the tabs move to a
+  bottom tab bar for thumb reach (Home, Live, Search, Library, and Remote while
+  the Couch has a TV), each a lucide icon (House, Radio, Search, Library, Tv)
+  over its label. The top bar keeps the same left/right pair: the Couch switch
+  at the left and a Settings gear (`aria-label="Settings"`) where the clock
+  is. A narrow TV has no touch, so `tv:` undoes `touch:` and it keeps its
+  tabs and clock.
+- **The Mac window:** its buttons and the region that drags it live in the
+  header, so there the header stays sticky (`[data-window-controls]` in
+  `index.css`).
+
+The header and the phone tab bar render the same `SectionTabs`.
 
 ## Couch switch
 
-The Popover reuses Settings → Couch connection's
+It sits where the TV names itself, muted like that name, and its Popover
+opens from the left. The Popover reuses Settings → Couch connection's
 choice: saved servers, the app's This computer option, and another address.
 On the host with sharing on, it ends with Pair a device. It scrolls within
 the available space and keeps the same flat, divided settings rows.
@@ -64,9 +74,10 @@ Where it plays after a switch: [Where it plays](where-it-plays.md#switching-serv
 `NowPlayingBar` is one row above the page, and above the phone tab bar. Its
 artwork and title ("Open player: …") open the player; the row underneath
 names the radio or collection (a link), the status and, below `lg`, the time.
-The TV and desktop then carry the band's controls in its order: Play/Pause,
-Stop and Next, the timeline or "Live", Volume, Where it plays and Up next.
-Phones keep Play/Pause and Where it plays; the player keeps the rest. It
+The bar then carries the band's controls in its order: Play/Pause, Stop and
+Next, the timeline or "Live", Volume, Where it plays and Up next. Phones, for
+their width and reach, keep Play/Pause and Where it plays; the player keeps
+the rest. It
 hides on the player, on Remote and on Where it plays' overview, which shows
 the same Playback, and grows into the player band (`couch-player-band`) and
 back.
@@ -77,8 +88,7 @@ publishes its own. Transport details: [Player](player.md#the-player-is-one-tap-a
 
 ## Browsing stays grounded
 
-The sticky header and scroll edges share the
-solid black page background on desktop and web. Native video alone clears
+The header and scroll edges share the solid black page background. Native video alone clears
 its full-screen ancestors so the picture can show through.
 
 ## A picture you start opens the player

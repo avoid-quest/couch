@@ -19,7 +19,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import type { GuideChannel, GuideRow } from "../../../shared/iptv";
-import { BrowseActions } from "./SearchPanel";
 import { searchError } from "./SearchOnlineResults";
 
 type LiveTvSearch = { page?: number; filter?: string; group?: string };
@@ -32,7 +31,7 @@ const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-dig
 /** Live's Live TV: the guide's channels with what's on now and next, a page at a time. */
 export function BrowseLiveTv() {
   const { credentials, available } = useShell();
-  const { connected, state, tvPresentation, queue } = useSessionGate();
+  const { connected, state, queue } = useSessionGate();
   const search: Record<string, unknown> = useLocation().search;
   const navigate = useNavigate();
   const filter = typeof search.channelFilter === "string" ? search.channelFilter.slice(0, 100) : "";
@@ -62,14 +61,14 @@ export function BrowseLiveTv() {
   const disabled = !available || action.isPending;
   const row = (channel: GuideRow) => {
     const run = (playNow: boolean, deviceId?: string) => action.mutate({ channel, playNow, deviceId });
-    return <MediaRow key={channel.id} compact title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} tvSecondaryActions
+    // A channel has no page, so the TV keeps its verbs on the row.
+    return <MediaRow key={channel.id} compact title={channel.name} artFit="contain" art={<ChannelLogo channel={channel} />} tvMenu
       meta={[channel.now?.title, channel.next && `${clock(channel.next.start)} ${channel.next.title}`, !group && channel.group].filter(Boolean).join(" · ")}
       primary={{ label: "Play", disabled, onClick: () => run(true) }}
-      actions={<BrowseActions title={channel.name} actions={[
-        ...(tvPresentation ? [] : [{ label: "Play", disabled, run: () => run(true) }]),
+      menu={[
         { label: "Play on", disabled, playOn: deviceId => run(true, deviceId) },
         { label: "Queue", disabled: !connected || action.isPending, run: () => run(false) },
-      ]} />} />;
+      ]} />;
   };
   return <section className="min-w-0 space-y-6" aria-labelledby="channels-heading">
     <h2 id="channels-heading" className="mb-3 text-base font-medium">Channels</h2>

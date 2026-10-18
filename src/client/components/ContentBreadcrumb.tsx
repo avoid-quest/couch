@@ -10,23 +10,10 @@ import { providerNames } from "@/sections/find/SearchOnlineResults";
 
 const linkClassName = "inline-flex min-h-11 items-center px-1";
 
-export function ContentBreadcrumb({ title, collection, provider, radio = false, compact = false }: { title: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean; compact?: boolean }) {
+export function ContentBreadcrumb({ title, collection, provider, radio = false }: { title: string; collection?: MediaCollection; provider?: ProviderId; radio?: boolean }) {
   const { section, sectionUrl } = useShell();
   const source = provider ?? (collection ? providerForUrl(collection.url) : undefined);
   const collections = collectionLinks(collection);
-  // The player already shows the title; keep its containing destinations beside the Couch switch.
-  if (compact) {
-    const path = collections.length ? collections.map(item => ({ title: item.title, href: collectionLocation(item) }))
-      : [{ title: radio ? "Live" : source ? providerNames[source] : "Search", href: radio ? "/live" : source ? collectionLocation({ provider: source, url: "" }) : "/search" }];
-    return <Breadcrumb aria-label="Content path">
-      <BreadcrumbList className="flex-nowrap gap-1 text-sm">
-        {path.map((item, index) => <Fragment key={item.href}>
-          {index > 0 && <BreadcrumbSeparator className="shrink-0" />}
-          <BreadcrumbItem className="min-w-11"><BreadcrumbLink asChild><Link to={item.href} className={`${linkClassName} min-w-11`} title={item.title}><span className="truncate">{item.title}</span></Link></BreadcrumbLink></BreadcrumbItem>
-        </Fragment>)}
-      </BreadcrumbList>
-    </Breadcrumb>;
-  }
   return <Breadcrumb aria-label="Content path">
     <BreadcrumbList className="text-sm">
       {/* It starts at the section the page opened in (the shell's tab): a station's at Live, otherwise Search. */}
