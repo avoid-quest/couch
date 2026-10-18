@@ -9,7 +9,8 @@ The now-playing bar opens the player through its
 artwork and title ([Shell](shell.md#now-playing-bar)). The bar and the player band hold one control
 order: Play/Pause, Stop and Next, the timeline, volume, Where it plays and Up
 next, then in the band Playback settings (a
-gear; Audio & subtitles lives inside) and, on desktop and phones, fullscreen,
+gear opening Playback, separate from the shell's Settings tab; Audio &
+subtitles lives inside) and, on desktop and phones, fullscreen,
 which their window can leave and the TV's never does; the band's
 timeline takes its own row above. On phones the bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
@@ -29,7 +30,8 @@ only in a Sheet. The keyboard and the timeline seek.
 Volume is a speaker icon that opens its slider and Mute in a Popover. A
 timeline shows only where it means something: seekable media, or media with
 a length it will seek through once loaded. Live media that can't seek shows
-no bar, no position and no total, just "Live" in the timeline's slot.
+no bar, no position and no total; the player's "Live" is in its top band or
+Now playing, as below.
 
 The player says when it ends once on screen: the top band over a video, or
 Now playing's departures line, reads "ends 21:42" (or "Live", with no end
