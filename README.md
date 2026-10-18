@@ -11,7 +11,8 @@ Couch runs as one Electron app where every client is a full Device.
 ## Take a seat
 
 - **Pick something online.** Browse YouTube, Twitch, RaiPlay,
-  StreamingCommunity or [123MoviesFree](docs/123moviesfree.md), open Bandcamp
+  StreamingCommunity, [123MoviesFree](docs/123moviesfree.md),
+  [AnimeSaturn](docs/animesaturn.md) or [AnimeUnity](docs/animeunity.md), open Bandcamp
   albums and tracks, or play other website links through yt-dlp. Automatic
   quality is up to 1080p.
 - **Tune in.** Add avoid radio in one click, import a radio M3U playlist, find

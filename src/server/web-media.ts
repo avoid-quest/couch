@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
@@ -5,11 +6,17 @@ import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
 import { movies123Title } from "./providers/movies123";
+import { isAnimeSaturnHost } from "../shared/animesaturn";
+import { isAnimeUnityHost } from "../shared/animeunity";
+import { resolveAnimeSaturnLink } from "./animesaturn";
+import { resolveAnimeUnityLink } from "./animeunity";
+import { animeSaturnTitle } from "./providers/animesaturn";
+import { animeUnityTitle } from "./providers/animeunity";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
 // headers: what yt-dlp sends for these streams; Core's pass-through sends them too (#644 ticket 7).
 // audioOnly: the one stream has no video (Bandcamp, SoundCloud).
-export type WebMediaSource = { source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
+export type WebMediaSource = { publicNetwork?: boolean; source: string; audioSource?: string; audioOnly?: boolean; subtitles?: ExternalSubtitle[]; headers?: Record<string, string>; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
@@ -73,7 +80,7 @@ function publicMetadata(info: Metadata): WebMediaMetadata {
 async function rejectDrm(info: Metadata, signal?: AbortSignal) {
   const stream = (Array.isArray(info.requested_formats) ? info.requested_formats : [info]).find(stream => object(stream) && String(stream.protocol).startsWith("m3u8"));
   if (!stream) return;
-  const playlist = await fetch(mediaUrl(stream.url), { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).then(response => response.text()).catch(() => "");
+  const playlist = await publicFetch(mediaUrl(stream.url), { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).then(response => response.text()).catch(() => "");
   if (/#EXT-X-(?:SESSION-)?KEY:.*?(?:URI="skd:\/\/|KEYFORMAT="com\.(?:apple\.streamingkeydelivery|microsoft\.playready)")/.test(playlist)) throw new Error("This item requires DRM playback, which is not supported.");
 }
 
@@ -137,25 +144,28 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const plugin = streamingCommunity ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
-    const movies123 = isMovies123Host(host) ? await resolveMovies123Link(source, signal, globalThis.fetch, subtitleLanguage) : undefined;
+    const direct = isMovies123Host(host) ? await resolveMovies123Link(source, signal, publicFetch, subtitleLanguage)
+      : isAnimeSaturnHost(host) ? await resolveAnimeSaturnLink(source, signal)
+      : isAnimeUnityHost(host) ? await resolveAnimeUnityLink(source, signal) : undefined;
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
-    const sourceHeaders = Object.entries(movies123?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", movies123?.url ?? streamingCommunity ?? source], { ...options, signal, plugin });
+    const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin });
     const info = parseInfo(output);
     if (info._has_drm === true) await rejectDrm(info, signal);
     const media = parseMedia(info, subtitleLanguage);
-    if (movies123) {
-      media.metadata = { ...media.metadata, ...movies123.metadata };
-      if (movies123.subtitles.length) media.subtitles = movies123.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
+    media.publicNetwork = true;
+    if (direct) {
+      media.metadata = { ...media.metadata, ...direct.metadata };
+      if (direct.subtitles?.length) media.subtitles = direct.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
     }
     try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
-    if (movies123) media.headers = { ...media.headers, ...headers(movies123.headers) };
+    if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
     // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
     // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
     // its own headers, opens the master playlist instead.
     if (media.metadata?.live && !media.audioSource && typeof info.manifest_url === "string" && String(info.protocol).startsWith("m3u8")) {
-      const response = await fetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
+      const response = await publicFetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
       await response?.body?.cancel();
       if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
     }
@@ -168,7 +178,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       media.expiry = { at, recover: async cancellation => {
         if (Date.now() < at) return null;
         cancellation.throwIfAborted();
-        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
+        const response = await publicFetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;
@@ -185,8 +195,10 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
 export function createWebMediaInspector(options: ResolverOptions = {}) {
   return async function inspectWebMedia(url: string, signal?: AbortSignal, streamingCommunityOrigin?: string): Promise<WebMediaMetadata> {
     const source = mediaUrl(url);
-    if (isMovies123Host(new URL(source).hostname)) {
-      const { title, thumbnail, duration } = (await movies123Title(source, signal)).item;
+    const host = new URL(source).hostname;
+    const inspectTitle = isMovies123Host(host) ? movies123Title : isAnimeSaturnHost(host) ? animeSaturnTitle : isAnimeUnityHost(host) ? animeUnityTitle : undefined;
+    if (inspectTitle) {
+      const { title, thumbnail, duration } = (await inspectTitle(source, signal)).item;
       return { title, thumbnail, duration };
     }
     const streamingCommunity = streamingCommunityLink(source, streamingCommunityOrigin);

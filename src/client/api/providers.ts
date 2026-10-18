@@ -25,6 +25,7 @@ export const providerPageQuery = (credentials: ApiCredentials, provider: Provide
 });
 
 async function browse(credentials: ApiCredentials, provider: ProviderId, target: BrowseRequest, signal: AbortSignal): Promise<ProviderSearchPage> {
+  if (!target.url && target.query && target.query.trim().length < 2 && ["animesaturn", "animeunity"].includes(provider)) return { items: [] };
   const read = (request: BrowseRequest) => apiFetch(credentials,
     `/api/providers/${provider}/items?${new URLSearchParams(Object.entries({ q: request.query, url: request.url, cursor: request.cursor }).filter((entry): entry is [string, string] => !!entry[1]))}`,
     { signal }, 30_000).then(response => response.json() as Promise<ProviderPage>);

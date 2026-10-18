@@ -1,4 +1,6 @@
-import { publicProviderMediaUrl, type ProviderItem } from "../../../shared/providers";
+import { providerForUrl, publicProviderMediaUrl, type ProviderItem } from "../../../shared/providers";
+import { animeSaturnPageUrl } from "../../../shared/animesaturn";
+import { animeUnityPageUrl } from "../../../shared/animeunity";
 import type { HistoryItem } from "../../../shared/viewing";
 import { collectionLinks } from "../../collection-target";
 
@@ -25,6 +27,15 @@ export function nextEpisode(items: ProviderItem[], history: HistoryItem[]) {
 }
 
 export function seriesResumeFor(series: ProviderItem, history: HistoryItem[]) {
+  const animeCollection = (value: string) => {
+    const url = series.provider === "animesaturn" ? animeSaturnPageUrl(value) : series.provider === "animeunity" ? animeUnityPageUrl(value) : undefined;
+    return url && /^\/anime\/[^/]+\/?$/.test(url.pathname) ? url.href : undefined;
+  };
+  const anime = series.kind === "collection" ? animeCollection(series.url) : undefined;
+  if (anime) return history.filter(progress => progress.playable && !progress.watched && progress.position > 0
+    && progress.url && providerForUrl(progress.url) === series.provider && !!publicProviderMediaUrl(progress.url)
+    && progress.collection && animeCollection(progress.collection.url) === anime)
+    .sort((a, b) => (b.lastPlayedAt ?? 0) - (a.lastPlayedAt ?? 0))[0];
   const key = series.provider === "streamingcommunity" && series.kind === "collection" ? identity(series.url) : undefined;
   const episodePrefix = key?.replace(/:film$/, ":");
   return key ? history.find(progress => {

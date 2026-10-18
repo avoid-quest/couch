@@ -15,6 +15,10 @@ and paired remotes.
 - **123MoviesFree** film and TV-season browsing, search, saved items and episode
   selection. Its direct player integration is experimental: live manifests
   returned HTTP 502 during verification. See [source details](123moviesfree.md).
+- **[AnimeSaturn](animesaturn.md) and [AnimeUnity](animeunity.md)** anime browsing,
+  search, episode selection, saved items and lists, with direct playback from
+  their public players. Whole-anime queueing and automatic continuation support
+  lists of up to 500 episodes; choose individual episodes for longer anime.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites.
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
@@ -39,6 +43,7 @@ a Mac.
 | Bandcamp | Yes | Yes | Yes | Yes | Not tested | Not tested |
 | StreamingCommunity | Yes | Not tested | Yes | Not tested | Not tested | Not tested |
 | 123MoviesFree | Not verified | Not verified | Not verified | Not verified | Not verified | Not verified |
+| AnimeSaturn and AnimeUnity | Not verified | Not verified | Yes | Not verified | Not verified | Not verified |
 | Radio | Yes | Yes | Yes | Yes | Not tested | Yes |
 | Other yt-dlp sites (Dailymotion, SoundCloud) | Yes | Yes | Yes | Yes | Not tested | Yes |
 | Vimeo | Depends on item | Not tested | Depends on item | Not tested | Not tested | Not tested |
@@ -81,7 +86,7 @@ a Mac.
    typing; Enter searches immediately. The **Music** filter shows Bandcamp and
    SoundCloud results. **Play** starts an item now; **Queue** in
    its **…** menu adds it to Up next. A YouTube, Twitch, RaiPlay, Bandcamp,
-   StreamingCommunity or 123MoviesFree link opens its page.
+   StreamingCommunity, 123MoviesFree, AnimeSaturn or AnimeUnity link opens its page.
 
 **Settings > This device > Viewing > Online video you start** saves this
 browser's default quality for online video it starts, wherever it plays (Auto is up to 1080p).

@@ -1,3 +1,4 @@
+import { publicFetch } from "./public-network";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,7 +28,7 @@ const healing = new WeakMap<object, Promise<string>>();
 async function servingOrigin(origin: string, signal?: AbortSignal): Promise<string | undefined> {
   try {
     const requestSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
-    const response = await fetch(origin, { headers: { "User-Agent": userAgent }, signal: requestSignal });
+    const response = await publicFetch(origin, { headers: { "User-Agent": userAgent }, signal: requestSignal });
     requestSignal.throwIfAborted();
     const current = new URL(response.url).origin;
     if (response.ok && validStreamingCommunityOrigin(current) && parseInertiaPage(await response.text())) {
@@ -53,7 +54,7 @@ export async function healStreamingCommunityOrigin(store: { streamingCommunityOr
       if (found) break;
       signal?.throwIfAborted();
       const requestSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]);
-      const text = await fetch(page, { headers: { "User-Agent": userAgent }, signal: requestSignal }).then(response => response.text(), () => "");
+      const text = await publicFetch(page, { headers: { "User-Agent": userAgent }, signal: requestSignal }).then(response => response.text(), () => "");
       signal?.throwIfAborted();
       if (requestSignal.aborted) continue;
       for (const candidate of new Set(text.toLowerCase().match(/https:\/\/[a-z0-9.-]+/g))) {
@@ -155,7 +156,7 @@ function titleUrl(id: number, slug: string, origin: string) {
   return `${origin}/${locale}/titles/${id}-${slug}`;
 }
 
-export async function streamingCommunityWatchContext(value: string, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<{ title: string; titleUrl: string; seasonUrl?: string; episodeId?: number }> {
+export async function streamingCommunityWatchContext(value: string, signal?: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<{ title: string; titleUrl: string; seasonUrl?: string; episodeId?: number }> {
   signal?.throwIfAborted();
   let url: URL;
   try { url = new URL(value); } catch { throw new ProviderError("Choose a StreamingCommunity watch link.", 400); }
@@ -301,7 +302,7 @@ function listPage(page: InertiaPage, origin: string, pageNumber: number, label?:
   };
 }
 
-export async function streamingCommunityBrowse(request: BrowseRequest, origin = streamingCommunityOrigin, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function streamingCommunityBrowse(request: BrowseRequest, origin = streamingCommunityOrigin, signal?: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   if (!validStreamingCommunityOrigin(origin)) throw needsOrigin();
   const query = clean(request.query, 200);
@@ -340,7 +341,7 @@ export async function streamingCommunityBrowse(request: BrowseRequest, origin = 
   return withProviderItem("streamingcommunity", target.href, "collection", result);
 }
 
-export async function streamingCommunityPreview(id: number, origin = streamingCommunityOrigin, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<StreamingCommunityPreview> {
+export async function streamingCommunityPreview(id: number, origin = streamingCommunityOrigin, signal?: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<StreamingCommunityPreview> {
   signal?.throwIfAborted();
   if (!Number.isSafeInteger(id) || id <= 0 || id > 99999999) throw new ProviderError("Choose a StreamingCommunity title.", 400);
   if (!validStreamingCommunityOrigin(origin)) throw needsOrigin();
@@ -365,7 +366,7 @@ export async function streamingCommunityPreview(id: number, origin = streamingCo
 
 // Saved source lists keep their captured origin in their items; their pages load
 // from the current origin.
-export async function streamingCommunityList(value: string, signal?: AbortSignal, fetchPage: typeof fetch = globalThis.fetch): Promise<ProviderPage> {
+export async function streamingCommunityList(value: string, signal?: AbortSignal, fetchPage: typeof fetch = publicFetch): Promise<ProviderPage> {
   signal?.throwIfAborted();
   let url: URL;
   try { url = new URL(value); } catch { throw new ProviderError("Choose a StreamingCommunity film, series or season to save.", 400); }
