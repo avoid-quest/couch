@@ -63,7 +63,7 @@ The clear button stays, with a 44px touch target. The field never changes
 width on focus, so the surrounding header stays still. `/` focuses it from any page
 (from the player, its page comes back first). Typing searches after a second
 without typing, and Enter at once. The delay coalesces edits because one
-search fills Core's eight provider slots, including two yt-dlp jobs; the
+search fills every one of Core's provider slots, including two yt-dlp jobs; the
 spinner makes that wait visible. The first search from another page opens
 `/search?q=…`, later ones replace it, and focus stays in the field while
 typing (Enter goes on to the results; Down reaches the page's first result).

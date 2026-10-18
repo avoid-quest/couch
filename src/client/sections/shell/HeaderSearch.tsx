@@ -42,7 +42,7 @@ export function HeaderSearch({ className }: { className?: string }) {
   const commit = useEffectEvent(() => search(value.trim()));
   useEffect(() => {
     if (composing || !connected || value.trim() === routeQuery) return;
-    // One query fills Core's eight provider slots (including two yt-dlp jobs); keep edits coalesced.
+    // One query fills every one of Core's provider slots (including two yt-dlp jobs); keep edits coalesced.
     const timer = setTimeout(commit, 1000);
     return () => clearTimeout(timer);
   }, [value, routeQuery, composing, connected]);
