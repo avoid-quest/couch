@@ -26,10 +26,10 @@ const message = (reason: unknown) => reason instanceof Error ? reason.message : 
 export const usePlaybackDevice = () => useContext(Context);
 
 // Tells the app window that a usable screen committed: the mode chooser, or the shell
-// once the startup gates passed. Their loading, errors and failed renders never do
-// (app/renderer-status.ts).
-export function useShellReady() {
-  useEffect(() => { void couchApp?.shellReady?.().catch(() => {}); }, []);
+// once every startup gate passed (`usable`). Their loading, errors and failed renders
+// never do (app/renderer-status.ts).
+export function useShellReady(usable = true) {
+  useEffect(() => { if (usable) void couchApp?.shellReady?.().catch(() => {}); }, [usable]);
 }
 
 // The app window shows this computer's Couch (Full mode) or another Couch's own

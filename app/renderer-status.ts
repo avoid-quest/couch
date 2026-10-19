@@ -1,4 +1,4 @@
-import { renameSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
 // The window's own lifecycle in <data>/renderer-status.json, for `couch-session
 // diagnose`: whether this run's page works, apart from Core's health and from
@@ -9,8 +9,21 @@ import { renameSync, writeFileSync } from "node:fs";
 export type RendererState = "starting" | "loading" | "page-loaded" | "ready" | "failed" | "unresponsive" | "gone";
 type Contents = { on(event: string, listener: (...args: any[]) => void): unknown };
 
+// This process as Linux knows it: its boot and its start in clock ticks since that boot.
+// With the PID they name one process, whose clock changes or a reused PID can't fake;
+// a diagnosis compares them with the running service's (packaging/tv/diagnose.js).
+function kernelIdentity() {
+  try {
+    const stat = readFileSync("/proc/self/stat", "utf8");
+    // Fields after the parenthesized name, which may hold spaces; the start time is the 22nd.
+    const processStart = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]);
+    const bootId = readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    return Number.isSafeInteger(processStart) && bootId ? { bootId, processStart } : {};
+  } catch { return {}; }
+}
+
 export function rendererStatus(path: string, run: { run: string; version: string }, page: () => "local" | "remote") {
-  const identity = { ...run, pid: process.pid, startedAt: new Date().toISOString() };
+  const identity = { ...run, pid: process.pid, ...kernelIdentity(), startedAt: new Date().toISOString() };
   let state: RendererState = "starting", navigation = 0, committed = false, failed = false, beforeHang: RendererState = "starting";
   const set = (next: RendererState, reason?: string) => {
     state = next;

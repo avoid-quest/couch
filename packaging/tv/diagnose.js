@@ -66,12 +66,17 @@ const observations = {
   // The window's lifecycle as Main last recorded it (app/renderer-status.ts).
   window: pid.then(main => observe(limit, async () => {
     const status = await jsonFile(`${data}/renderer-status.json`);
+    const running = main ? await processIdentity(main).catch(() => null) : null;
     return {
       state: word(status.state), page: word(status.page), navigation: Number.isInteger(status.navigation) ? status.navigation : null, reason: status.reason ? redact(status.reason, 80) : null,
       run: word(status.run), version: word(status.version), startedAt: time(status.startedAt), at: time(status.at),
-      // Only the service's running process makes it this run's. A different process
-      // wrote it in an earlier run; null when the service couldn't be asked.
-      current: main === null ? null : !!main && status.pid === main,
+      // This run's only when the service's running process wrote it: the same PID, boot and
+      // start (app/renderer-status.ts). Another PID or start is an earlier process, even one
+      // whose PID was reused. null when that can't be told: the service couldn't be asked,
+      // or the report or the process lacks the identity.
+      current: main === null ? null : !main || status.pid !== main ? false
+        : !running || typeof status.bootId !== "string" || !Number.isSafeInteger(status.processStart) ? null
+        : status.bootId === running.bootId && status.processStart === running.processStart,
     };
   })),
   mode: observe(limit, async () => {
@@ -91,6 +96,15 @@ const observations = {
   }),
   log: observe(limit, () => log(`${data}/logs/couch.log`)),
 };
+
+// The kernel's identity of a running process, as Main records its own. procfs files
+// report no size, so these are read whole; the kernel bounds them.
+async function processIdentity(pid) {
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+  const processStart = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]);
+  const bootId = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
+  return Number.isSafeInteger(processStart) && bootId ? { bootId, processStart } : null;
+}
 
 // Core's record of the helpers it selected (src/server/helper-status.ts). Never
 // runs, checks or updates a helper, or guesses one from the cache.
@@ -170,7 +184,7 @@ else {
   console.log(`Setup: ${report.setup}`);
   line("Service", "service", value => `${value.active} (${value.sub}), ${value.restarts} restarts${value.since ? `, since ${value.since}` : ""}`);
   line("Core", "health", value => value.ok ? value.core ? "healthy" : "not run here (Another Couch mode)" : `failed: ${value.error}`);
-  line("Window", "window", value => value.current === null ? `unknown: the service couldn't be asked which process runs (last report: ${value.state} at ${value.at})`
+  line("Window", "window", value => value.current === null ? `unknown: can't tell whether the running Couch wrote it (last report: ${value.state} at ${value.at})`
     : !value.current ? `no report from a running Couch (last: ${value.state} at ${value.at})`
     : value.state === "failed" && value.page === "remote" ? `couldn't load another Couch (${value.reason}); the local app is running`
     : value.state === "page-loaded" ? `${value.page === "remote" ? "another Couch's" : "this Couch's"} page loaded, but its app hasn't reported mounting (it failed to start, or that Couch predates the report)`

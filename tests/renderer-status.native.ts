@@ -31,7 +31,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 const read = () => JSON.parse(readFileSync(${JSON.stringify(statusPath)}, 'utf8'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const evidence = { mainPid: process.pid, starting: null, ready: null, gates: {}, unmounted: null, failed: null, iframeTried: false };
+// The kernel's identity of this process, which Main must record as its own.
+const stat = readFileSync('/proc/self/stat', 'utf8');
+const kernel = { bootId: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(), processStart: Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]) };
+const evidence = { mainPid: process.pid, kernel, starting: null, ready: null, gates: {}, unmounted: null, failed: null, iframeTried: false };
 const record = () => writeFileSync(${JSON.stringify(join(directory, "native-events.json"))}, JSON.stringify(evidence, null, 2));
 // HTML whose script throws before any app mounts, with a cross-origin frame that tries to acknowledge.
 createServer((request, response) => {
@@ -42,11 +45,10 @@ createServer((request, response) => {
 }).listen(${fixture}, '127.0.0.1');
 app.on('browser-window-created', async (_event, window) => {
   const until = async (state, limit = 20_000) => { const deadline = Date.now() + limit; while (read().state !== state) { if (Date.now() > deadline) return read(); await sleep(50); } return read(); };
-  // Reloads Couch's page with Main's mode answer replaced, and reads the status once that
+  // Reloads Couch's page with Main's answers replaced, and reads the status once that
   // navigation settles: ready, or loaded and given time to acknowledge.
-  const gate = async (name, answer) => {
-    ipcMain.removeHandler('couch:mode');
-    ipcMain.handle('couch:mode', answer);
+  const gate = async (name, answers) => {
+    for (const [channel, answer] of Object.entries(answers)) { ipcMain.removeHandler('couch:' + channel); ipcMain.handle('couch:' + channel, answer); }
     const navigation = read().navigation;
     window.webContents.reload();
     const deadline = Date.now() + 20_000;
@@ -57,12 +59,16 @@ app.on('browser-window-created', async (_event, window) => {
   try {
     evidence.ready = await until('ready');
     // The startup gate before the shell: its loading, error and a render failure are not ready.
-    await gate('held', () => new Promise(() => {}));
-    await gate('rejected', () => ({ error: "Couch couldn't read its mode." }));
-    await gate('malformed', () => ({ value: { mode: null, address: null, targets: null } }));
+    await gate('held', { mode: () => new Promise(() => {}) });
+    await gate('rejected', { mode: () => ({ error: "Couch couldn't read its mode." }) });
+    await gate('malformed', { mode: () => ({ value: { mode: null, address: null, targets: null } }) });
     // The mode chooser and the shell after it are.
-    await gate('chooser', () => ({ value: { mode: null, address: null, targets: [], localSetupComplete: false } }));
-    await gate('shell', () => ({ value: { mode: 'local', address: null, targets: [], localSetupComplete: true } }));
+    await gate('chooser', { mode: () => ({ value: { mode: null, address: null, targets: [], localSetupComplete: false } }) });
+    const local = () => ({ value: { mode: 'local', address: null, targets: [], localSetupComplete: true } });
+    await gate('shell', { mode: local });
+    // This computer's Core still starting, or failing to, is not a started shell either.
+    await gate('connection-held', { mode: local, connection: () => new Promise(() => {}) });
+    await gate('connection-rejected', { mode: local, connection: () => ({ error: 'Core did not start.' }) });
     void window.webContents.loadURL(${JSON.stringify(`http://127.0.0.1:${fixture}/`)}).catch(() => {});
     await until('page-loaded');
     // Give the frame and any acknowledgement time to arrive.
@@ -91,13 +97,14 @@ assert.equal(events.starting.state, "starting");
 for (const state of [events.starting, events.ready, events.unmounted, events.failed]) {
   assert.equal(state.run, header[2], "Every status names the run in couch.log");
   assert.equal(state.pid, events.mainPid);
+  assert.deepEqual({ bootId: state.bootId, processStart: state.processStart }, events.kernel, "Every status names this process as the kernel does");
   assert.equal(state.pid, Number(header[3]));
   assert.equal(state.version, header[1]);
   assert.equal(state.page, "local");
 }
 assert.equal(events.ready.state, "ready", "Couch's mounted shell must acknowledge through the real preload");
 let navigation = events.ready.navigation;
-for (const [name, state, text] of [["held", "page-loaded", /Loading/], ["rejected", "page-loaded", /couldn't read its mode[\s\S]*Try again/], ["malformed", "page-loaded", /^$/], ["chooser", "ready", /Where is your Couch\?/], ["shell", "ready", /./]] as const) {
+for (const [name, state, text] of [["held", "page-loaded", /Loading/], ["rejected", "page-loaded", /couldn't read its mode[\s\S]*Try again/], ["malformed", "page-loaded", /^$/], ["chooser", "ready", /Where is your Couch\?/], ["shell", "ready", /./], ["connection-held", "page-loaded", /Starting…/], ["connection-rejected", "page-loaded", /Couldn't start Couch[\s\S]*Try again/]] as const) {
   const gate = events.gates[name];
   assert.equal(gate.state, state, `${name}: ${JSON.stringify(gate)}`);
   assert.match(gate.text, text, name);

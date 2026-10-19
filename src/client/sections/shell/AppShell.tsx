@@ -262,11 +262,10 @@ function PairingPage() {
 }
 
 export function ShellChrome({ children }: PropsWithChildren) {
-  useShellReady();
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
-  const { nativeHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, error, setError } = useSessionGate();
+  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, error, setError } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
   const setupPending = useLocalSetupPending(credentials);
@@ -286,6 +285,9 @@ export function ShellChrome({ children }: PropsWithChildren) {
     else dismiss("activity");
   }, [state?.activity?.id, identity?.device?.id]);
   const paired = !!credentials && !pairingRequired;
+  // This computer's Couch has started once its Core answered with a connection; until
+  // then the shell shows Starting… or Couldn't start Couch (PairingPage).
+  useShellReady(!localHost || paired);
   // The player is full-bleed: its band replaces the header and status line.
   const onPlayer = paired && section === "Now";
   useIdleCursor(tvPresentation && !onPlayer);

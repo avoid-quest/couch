@@ -28,6 +28,15 @@ test("each run identifies itself before its page loads", () => {
   expect(Date.parse(starting.startedAt)).toBeLessThanOrEqual(Date.parse(starting.at));
 });
 
+test.if(process.platform === "linux")("each status names its process as the kernel does, so a reused PID can't pass for it", () => {
+  using renderer = fixture();
+  const stat = readFileSync("/proc/self/stat", "utf8");
+  expect(renderer.read()).toMatchObject({
+    pid: process.pid, bootId: readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(),
+    processStart: Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]),
+  });
+});
+
 test("a loaded page is only page-loaded until its mounted shell acknowledges", () => {
   using renderer = fixture();
   renderer.navigate();

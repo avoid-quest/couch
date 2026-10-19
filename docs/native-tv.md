@@ -254,20 +254,24 @@ environment, executable paths, device names and source URLs. What it quotes
 from errors follows Main's own log redaction ([redact.js](../packaging/tv/redact.js)).
 
 The window's lifecycle comes from Main's `<data>/renderer-status.json`, named by
-the same run ID and process as the header of `couch.log`:
+the same run ID and process as the header of `couch.log`. It counts only when
+the service's running process wrote it: the same PID, boot and kernel start
+time, so a report an earlier process left behind never passes for a reused PID's:
 
 - `page-loaded`: the page and its scripts loaded, but its app shell hasn't said
   it mounted. The app is still loading its mode, showed a startup error or failed
   to render, or another Couch's page predates the report.
-- `ready`: a usable screen mounted, the mode chooser or the app shell after its
-  startup, and acknowledged it from the window's main frame, for the navigation
-  now shown. Core's health and another Couch's reachability are reported apart.
+- `ready`: a usable screen mounted, the mode chooser or the app shell once this
+  computer's Core answered (not `Starting…` or `Couldn't start Couch`), and
+  acknowledged it from the window's main frame, for the navigation now shown.
+  Core's health and another Couch's reachability are reported apart.
 - `failed`, with `page: remote` (summary `remote-failed`): another Couch that
   can't be reached. The local app is running; this is not a broken package.
-- `stale`: written by an earlier or stopped process, so it says nothing about
-  the running app.
-- `unknown`: no report, or the service couldn't say which process runs, so a
-  saved report can't be tied to the running app.
+- `stale`: written by an earlier or stopped process, even one whose PID the
+  running app reuses, so it says nothing about the running app.
+- `unknown`: no report, the service couldn't say which process runs, or the
+  report or process lacks that identity (an older Couch), so a saved report
+  can't be tied to the running app.
 
 Core's health stays separate: it is the check setup and updates use, and
 neither the window's state nor this report changes what rolls an update back.

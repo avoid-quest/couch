@@ -35,6 +35,10 @@ async function report(scenario: Scenario = {}, json = true) {
   const directory = mkdtempSync(join(tmpdir(), "couch-diagnose-"));
   const root = join(directory, "root"), data = join(directory, "data"), bin = join(directory, "bin");
   const file = (path: string, text: string) => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, text); };
+  // The TV service's process: a real one, so its kernel identity is real.
+  const service = spawn("sleep", ["60"], { stdio: "ignore" });
+  const stat = readFileSync(`/proc/${service.pid}/stat`, "utf8");
+  const owner = { pid: service.pid!, bootId: readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(), processStart: Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]) };
   try {
     file(join(root, "etc/os-release"), 'ID=debian\nVERSION_ID="13"\nPRETTY_NAME="Debian GNU/Linux 13 (trixie)"\n');
     file(join(root, "var/lib/couch-update/status"), `at=2026-10-19T04:12:00Z\nmode=auto\nversion=0.3.2\noutcome=rolled-back\nerror=${scenario.leaks ? leaks.update : "Couch 0.3.2 is unhealthy: https://updates.example/x?token=SECRET-UPDATE /var/lib/SECRET-PATH"}\nfailed=0.3.2\nrollback=\nsetup=\n`);
@@ -49,7 +53,7 @@ async function report(scenario: Scenario = {}, json = true) {
     file(join(data, "tls/key.pem"), "SECRET-PRIVATE-KEY");
     // A damaged record: JSON.parse would quote the pin in its error.
     file(join(data, "operating-mode.json"), scenario.leaks ? '{"mode": "remote", "pins": {"h": SECRET-PIN}}' : JSON.stringify({ mode: "remote", address: "https://secret-host.lan:4100", pins: { "secret-host.lan": "SECRET-PIN" }, tvPresentation: true }));
-    if (scenario.renderer !== null) file(join(data, "renderer-status.json"), JSON.stringify({ run: "run-1", version: "0.3.1", pid: 4242, navigation: 1, startedAt: new Date(now - 60_000).toISOString(), state: "ready", page: "local", at: new Date(now).toISOString(), extra: "SECRET-EXTRA", ...scenario.renderer }));
+    if (scenario.renderer !== null) file(join(data, "renderer-status.json"), JSON.stringify({ run: "run-1", version: "0.3.1", ...owner, navigation: 1, startedAt: new Date(now - 60_000).toISOString(), state: "ready", page: "local", at: new Date(now).toISOString(), extra: "SECRET-EXTRA", ...scenario.renderer }));
     if (typeof scenario.helpers === "function") await scenario.helpers(join(data, "helpers"));
     else if (scenario.helpers !== false) {
       file(join(data, "helpers/status.json"), JSON.stringify({ schema: 1,
@@ -72,7 +76,7 @@ async function report(scenario: Scenario = {}, json = true) {
     const command = (name: string, body: string) => writeFileSync(join(bin, name), `#!/bin/bash\n${body}\n`, { mode: 0o755 });
     command("dpkg-query", scenario.leaks ? `printf '%b\\n' ${JSON.stringify(leaks.stderr)} >&2; exit 1` : "echo -n 0.3.1");
     command("systemctl", `case "$*" in
-      "--user show couch-tv.service"*) ${scenario.bus === false ? "echo 'Failed to connect to bus: No such file or directory' >&2; exit 1 ;;" : ""} printf 'ActiveState=active\\nSubState=running\\nMainPID=${scenario.mainPid ?? 4242}\\nNRestarts=1\\nResult=success\\nExecMainStartTimestamp=Sun 2026-10-19 20:00:00 UTC\\n' ;;
+      "--user show couch-tv.service"*) ${scenario.bus === false ? "echo 'Failed to connect to bus: No such file or directory' >&2; exit 1 ;;" : ""} printf 'ActiveState=active\\nSubState=running\\nMainPID=${scenario.mainPid ?? owner.pid}\\nNRestarts=1\\nResult=success\\nExecMainStartTimestamp=Sun 2026-10-19 20:00:00 UTC\\n' ;;
       "--user show-environment") printf 'DISPLAY=:0\\nXAUTHORITY=/var/lib/couch/.Xauthority\\nCOUCH_HOST_TOKEN=SECRET-SESSION-ENV\\n' ;;
       "is-enabled couch-update.timer") echo masked; exit 1 ;;
     esac`);
@@ -96,12 +100,12 @@ async function report(scenario: Scenario = {}, json = true) {
     const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
     const running = existsSync(join(directory, "pids")) ? readFileSync(join(directory, "pids"), "utf8").trim().split("\n").map(Number).filter(alive) : [];
     for (const pid of running) process.kill(pid, "SIGKILL");
-    return { stdout, elapsed: Date.now() - started, running, maxRSS, ...json ? { report: JSON.parse(stdout) } : {} };
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+    return { stdout, elapsed: Date.now() - started, running, maxRSS, owner, ...json ? { report: JSON.parse(stdout) } : {} };
+  } finally { service.kill("SIGKILL"); rmSync(directory, { recursive: true, force: true }); }
 }
 
 test("a report names the installed tuple and observations, and leaves every secret out", options, async () => {
-  const { report: result } = await report();
+  const { report: result, owner } = await report();
   const observed = (name: string) => { assert.equal(result.observations[name].status, "observed", `${name}: ${JSON.stringify(result.observations[name])}`); return result.observations[name].value; };
   assert.equal(result.schema, "couch-evidence/1");
   assert.equal(result.kind, "diagnose");
@@ -110,8 +114,8 @@ test("a report names the installed tuple and observations, and leaves every secr
   assert.deepEqual(observed("package"), { version: "0.3.1" });
   assert.deepEqual(observed("environment").os, { id: "debian", version: "13", name: "Debian GNU/Linux 13 (trixie)" });
   assert.deepEqual(observed("environment").gpus, [{ vendor: "8086", device: "9bc4", driver: "i915" }]);
-  assert.deepEqual(observed("service"), { active: "active", sub: "running", pid: 4242, restarts: 1, result: "success", since: "Sun 2026-10-19 20:00:00 UTC" });
-  assert.equal(observed("health").ok, false, "No real Couch runs as PID 4242 here");
+  assert.deepEqual(observed("service"), { active: "active", sub: "running", pid: owner.pid, restarts: 1, result: "success", since: "Sun 2026-10-19 20:00:00 UTC" });
+  assert.equal(observed("health").ok, false, "The service's process here is not Couch");
   assert.match(observed("health").error, /^Error: /, "The check's error, not Node's version line");
   assert.deepEqual(observed("mode"), { mode: "remote", tvPresentation: true });
   assert.deepEqual(observed("window"), { state: "ready", page: "local", navigation: 1, reason: null, run: "run-1", version: "0.3.1", startedAt: new Date(now - 60_000).toISOString(), at: new Date(now).toISOString(), current: true });
@@ -166,6 +170,23 @@ test("a window report from an earlier or stopped process is stale, not this run'
   }
 });
 
+test("a report from an earlier process whose PID the service's now reuses is stale, not ready", options, async () => {
+  // Main couldn't replace its record (writes fail silently), so an earlier boot's or run's remains.
+  for (const renderer of [{ processStart: 1, run: "earlier-run" }, { bootId: "00000000-0000-4000-8000-000000000000" }]) {
+    const { report: result } = await report({ renderer });
+    assert.equal(result.observations.window.value.current, false, JSON.stringify(renderer));
+    assert.equal(result.summary.window, "stale");
+  }
+});
+
+test("a report without the process identity, as an older Couch writes, is unknown, never ready", options, async () => {
+  const { report: result } = await report({ renderer: { bootId: undefined, processStart: undefined } });
+  assert.equal(result.observations.window.value.current, null);
+  assert.equal(result.summary.window, "unknown");
+  const { stdout } = await report({ renderer: { bootId: undefined, processStart: undefined } }, false);
+  assert.match(stdout, /^Window: unknown: can't tell whether the running Couch wrote it \(last report: ready at /m);
+});
+
 test("another Couch that can't be reached is a remote failure, not a broken local app", options, async () => {
   const { report: result } = await report({ renderer: { state: "failed", page: "remote", reason: "unreachable" } });
   assert.equal(result.summary.window, "remote-failed");
@@ -206,7 +227,7 @@ test("without the service's answer, a saved window report is unknown, not ready"
   assert.equal(result.summary.window, "unknown");
   assert.equal(result.summary.service, "unknown");
   const { stdout } = await report({ bus: false }, false);
-  assert.match(stdout, /^Window: unknown: the service couldn't be asked which process runs \(last report: ready at /m);
+  assert.match(stdout, /^Window: unknown: can't tell whether the running Couch wrote it \(last report: ready at /m);
 });
 
 test("records far larger than the report reads are bounded in memory, not only in output", options, async () => {
