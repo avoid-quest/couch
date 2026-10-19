@@ -31,3 +31,17 @@ General owns this device's
 name, which is also the name of the server it hosts. An administrator
 connected to another host can rename that host in Devices. The Devices list
 manages pairings and roles; New device heads its rows, since a separate untitled section would leave a gap that reads as an empty row. First run and the pairing dialog: [Shell](shell.md#first-run-names-the-computer).
+
+## Shared source prompts
+
+The Couch’s **General** page owns **Ask every device where a shared source
+plays**, off by default and saved by Core across restarts. It changes how the
+Couch asks everyone to choose receivers, so it belongs to the Couch rather than
+This device → Sharing or a watching profile’s Playback preferences. Only admins
+change it; everyone sees the row. Its description is “When someone plays a
+shared source that nothing is playing yet, every device viewing it shows Where
+it plays. Off: only the device that pressed Play.”
+
+It uses the existing divided SettingsRow with its linked Label and shadcn
+Switch, as Autoplay does. One tree serves TV, desktop and phone; the label gets
+the existing touch target treatment. No custom component is needed.

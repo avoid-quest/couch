@@ -6,7 +6,53 @@ import type { PlaybackCommand } from "../src/shared/protocol";
 import { WhereItPlays } from "../src/client/sections/shell/Outputs";
 import { chooserRequest, choosesHere, picker, reopens } from "../src/client/session/where-it-plays";
 import { deviceId } from "../src/client/session/device-id";
-import { liveFixture, until } from "./live-input.fixture";
+import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
+
+// The existing routing suite also locks the opt-in, shared chooser behaviour.
+async function liveFixture({ askEveryDevice = true, ...options }: { local?: boolean; askEveryDevice?: boolean } = {}) {
+  const fixture = await createLiveFixture(options);
+  if (askEveryDevice) {
+    const host = await fixture.connect(-1);
+    assert.equal((await host.command({ type: "askEveryDevice", enabled: true })).ok, true);
+    await until(() => fixture.publisher.state.askEveryDevice === true);
+    host.socket.close();
+  }
+  return fixture;
+}
+
+test("the chooser defaults to this window only; admins can opt every viewing device in, across restarts", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ askEveryDevice: false });
+  try {
+    const host = await f.connect(-1);
+    assert.equal(f.publisher.state.askEveryDevice, false);
+    assert.equal((await f.receiver.command({ type: "askEveryDevice", enabled: true })).ok, false, "controllers cannot change a shared admin setting");
+    await f.publish("screen");
+    await f.publisher.command({ type: "sharing", sharing: { audio: true, video: true } });
+    for (const action of [{ type: "playLive", sourceId: "screen", deviceId: f.publisher.id }, { type: "playLive", sourceId: "screen" }] as const) {
+      const before = f.publisher.state;
+      assert.equal((await f.publisher.command(action)).ok, true);
+      await until(() => f.publisher.state.player.status === "paused");
+      assert.equal(chooserRequest(f.publisher.state), null);
+      assert.equal(choosesHere(action, before, f.publisher.state), true, "each Play opens in the requesting window");
+    }
+    const idle = await f.connect(2);
+    await until(() => idle.state.playback === f.publisher.state.playback);
+    assert.equal(chooserRequest(idle.state), null, "an idle viewer is not prompted");
+    assert.ok(idle.state.liveSources?.some(source => source.id === "screen"), "the source remains discoverable");
+    assert.equal((await host.command({ type: "askEveryDevice", enabled: true })).ok, true);
+    await until(() => !!chooserRequest(idle.state));
+    assert.equal(chooserRequest(idle.state), chooserRequest(f.publisher.state));
+    const request = chooserRequest(idle.state);
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id })).ok, true);
+    await until(() => chooserRequest(idle.state) !== request);
+    await f.restart();
+    const restarted = await f.connect(-1);
+    assert.equal(restarted.state.askEveryDevice, true, "the opt-in survives Core restarting");
+    assert.equal((await restarted.command({ type: "askEveryDevice", enabled: false })).ok, true);
+    await f.restart();
+    assert.equal((await f.connect(-1)).state.askEveryDevice, false, "turning it off also survives a restart");
+  } finally { await f.close(); }
+});
 
 type Fixture = Awaited<ReturnType<typeof liveFixture>>;
 type Client = Fixture["receiver"];

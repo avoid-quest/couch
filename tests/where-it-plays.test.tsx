@@ -94,6 +94,24 @@ test("only a successful Play whose destination is the playing source's publisher
   expect(choosesHere({ ...play, deviceId: "mac" }, before, null)).toBe(false);
 });
 
+test("with shared requests off, a waiting source opens only in the window that pressed Play, including Up next", async () => {
+  const { choosesHere } = await import("../src/client/session/where-it-plays");
+  const state = waiting(0);
+  expect(choosesHere({ type: "playLive", sourceId: "s" }, { ...state, controlling: "mac" }, state)).toBe(true);
+  expect(choosesHere({ type: "play", entryId: "e" }, state, state)).toBe(true);
+  expect(choosesHere({ type: "play", entryId: "different" }, state, state)).toBe(false);
+  const mount = (requestedChooser: string | null, dismissedChooser: string | null = null) => {
+    sheets.length = 0;
+    const gate = { requestedChooser, dismissedChooser, dismissChooser: () => {} } as unknown as SessionGateValue;
+    renderToStaticMarkup(<SessionGateContext.Provider value={gate}><WhereItPlays state={state} run={async () => true} /></SessionGateContext.Provider>);
+    return sheets[0]!.open;
+  };
+  expect(mount(null)).toBe(false);
+  expect(mount("p:here:1")).toBe(true);
+  expect(mount("p:here:1", "p:here:1")).toBe(false);
+  expect(mount("p:here:2", "p:here:1")).toBe(true);
+});
+
 type Props = { children?: ReactNode; id?: string; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "aria-describedby"?: string; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
