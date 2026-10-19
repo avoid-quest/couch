@@ -18,7 +18,7 @@ next, Playback and fullscreen at the right, so the band reads as one line
 with Play at its centre. Up next shows only where it has something to open
 (on wide screens audio keeps the queue beside the artwork), and fullscreen
 only over a picture. F and double-click follow the same rule, while an already
-fullscreen window can always leave it. One lane on every screen, phones included: the eight 44px controls fit a 390px phone at its gutters. When a narrower window or larger text leaves less room, the control lane scrolls horizontally by swipe or keyboard focus; the timeline stays fixed above it. Native CSS scrolling preserves the existing controls and their touch targets. On phones the bar keeps Play/Pause and
+fullscreen window can always leave it. One lane on every screen, phones included: the eight 44px controls fit a 390px phone at its gutters. When a narrower window or larger text leaves less room, the control lane scrolls horizontally by swipe or keyboard focus; the timeline stays fixed above it. On phones the bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
 
