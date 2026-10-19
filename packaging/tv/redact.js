@@ -13,9 +13,9 @@ export function redact(value, limit = 300) {
     .replace(/\b(?:data|blob):[^ ]+/gi, "[url]")
     .replace(/\b(?:authorization|cookie|set-cookie)(?:\\?["'])?\s*[:=][\s\S]*/gi, "[credentials]")
     .replace(/\bBearer\s+[^ ]+/gi, "[credentials]")
-    // Any key naming a credential (access_token, x-api-key), as `key=value`, `key: value` or
+    // Any key naming a credential (access_token, x-api-key, pairing_pin), as `key=value`, `key: value` or
     // JSON, with its whole quoted value. Updater HTTP descriptions JSON-escape quotes once more.
-    .replace(/\b[\w-]*(?:password|passwd|token|secret|key|signature|sig|credentials?)(?:\\?["'])?\s*[:=]\s*(?:\\"(?:\\\\(?:\\["\\]|[^"\\])|[^\\])*\\"|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[^ ]+)/gi, "[credentials]")
+    .replace(/\b[\w-]*(?:password|passwd|token|secret|key|signature|sig|pins?|credentials?)(?:\\?["'])?\s*[:=]\s*(?:\\"(?:\\\\(?:\\["\\]|[^"\\])|[^\\])*\\"|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[^ ]+)/gi, "[credentials]")
     // Native paths may contain quotes too; consume through the last closing quote.
     .replace(/(["'])(?:[a-z]:\\|\\\\|~?\/|\.{1,2}\/)[\s\S]*\1/gi, "[path]")
     // An unquoted path has no reliable boundary before the message ends.

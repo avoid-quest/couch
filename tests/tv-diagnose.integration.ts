@@ -12,14 +12,14 @@ import { updateStatus } from "../src/server/helper-status";
 // read from a fixture tree. Every secret seeded here must stay out of the report.
 const diagnose = resolve("packaging/tv/diagnose.js");
 const options = { skip: process.platform !== "linux", timeout: 20_000 };
-const secrets = ["SECRET", "AA_BB_CC_DD_EE_FF", "secret-host", "/opt/couch-helpers", "Living Room", "Kitchen"];
+const secrets = ["SECRET", "AA_BB_CC_DD_EE_FF", "secret-host", "/opt/couch-helpers", "Living Room", "Kitchen", "683927", "329786", "123456", "471205"];
 const now = Date.now();
 
 // Each failure here carries a credential the report must drop: JSON, quoted with spaces,
 // prefixed (access_token), in a parse error's quoted input, behind a control sequence.
 const leaks = {
-  update: `Couch 0.3.2 is unhealthy: {"token":"SECRET-JSON"} password="two SECRET words" access_token=SECRET-ACCESS`,
-  stderr: `dpkg-query: {"password": "SECRET with spaces"} client_secret='SECRET quoted' \x1b[31m/home/SECRET-USER/x`,
+  update: `Couch 0.3.2 is unhealthy: {"token":"SECRET-JSON"} password="two SECRET words" access_token=SECRET-ACCESS {"pin":"683927","pairing_pin":"329786"} pin="123456"`,
+  stderr: `dpkg-query: {"password": "SECRET with spaces"} pin: 471205 client_secret='SECRET quoted' \x1b[31m/home/SECRET-USER/x`,
 };
 const path = process.env.PATH;
 // Reports the diagnosis' peak memory on stderr as it exits.
@@ -189,8 +189,9 @@ test("missing records are unavailable, never guessed", options, async () => {
 test("credentials in failures, damaged records and command errors never reach either report", options, async () => {
   const { report: result } = await report({ leaks: true });
   assert.equal(result.observations.package.status, "unavailable");
-  assert.match(result.observations.package.reason, /^dpkg-query: \{"\[credentials\]\} \[credentials\] +\[31m\[path\]$/);
+  assert.match(result.observations.package.reason, /^dpkg-query: \{"\[credentials\]\} \[credentials\] \[credentials\] +\[31m\[path\]$/);
   assert.match(result.observations.update.value.error, /^Couch 0\.3\.2 is unhealthy: /);
+  assert.equal((result.observations.update.value.error.match(/\[credentials\]/g) ?? []).length, 6, result.observations.update.value.error);
   assert.deepEqual(result.observations.mode, { ...result.observations.mode, status: "unavailable", reason: "The record is not valid JSON." });
   const { stdout } = await report({ leaks: true }, false);
   assert.match(stdout, /^Package: unavailable \(dpkg-query: \{"\[credentials\]\} \[credentials\]/m);

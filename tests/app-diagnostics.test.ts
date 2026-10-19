@@ -74,8 +74,8 @@ test("app evidence redacts JSON credential keys and escaped HTTP error descripti
 });
 
 // couch-session diagnose shares this rule (packaging/tv/redact.js); these once leaked from its own copy.
-test("prefixed credential keys, quoted values with spaces, home paths and hardware addresses are redacted", () => {
-  for (const message of ['{"token":"synthetic"}', 'password="two synthetic words"', "access_token=synthetic", "x-api-key: synthetic", "client_secret='synthetic value'", "open ~/synthetic/x", "sink bluez_output.AA_BB_CC_DD_EE_F0.1"]) {
+test("prefixed credential keys and PINs, quoted values with spaces, home paths and hardware addresses are redacted", () => {
+  for (const message of ['{"token":"synthetic"}', 'password="two synthetic words"', "access_token=synthetic", "x-api-key: synthetic", "client_secret='synthetic value'", "open ~/synthetic/x", '{"pin":"synthetic","pairing_pin":"synthetic"}', 'pin="synthetic 1"', "pin: synthetic", '"pins": {"host":"synthetic"}', "sink bluez_output.AA_BB_CC_DD_EE_F0.1"]) {
     const line = redact(`Failed: ${message}`);
     expect(line).toStartWith("Failed: ");
     expect(line).not.toContain("synthetic");
