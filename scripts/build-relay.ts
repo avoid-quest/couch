@@ -37,5 +37,4 @@ export async function buildRelay(platform: string, arch: string, destination: st
   console.log(`Built bundled live relay for ${platform}/${arch}`);
 }
 
-
 if (import.meta.main) await buildRelay(process.platform, process.arch, join(root, "build/live-relay"));

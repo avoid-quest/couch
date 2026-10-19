@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Arch, type AfterPackContext } from "electron-builder";
-import { buildAirPlay } from "./build-airplay";
-import { buildRelay } from "./build-relay";
+import { buildAirPlay } from "./build-airplay.ts";
+import { buildRelay } from "./build-relay.ts";
 
 // afterPack runs before signing, and once for each platform/architecture.
 export default async function afterPack(context: AfterPackContext) {
