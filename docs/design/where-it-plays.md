@@ -98,7 +98,10 @@ without a DOM.
 
 The first row is the band's Volume (`PlaybackVolume`, Mute and its fader):
 one level for the whole Playback, with each device's fader below it, its
-number in the same column and read the same way, without "%". It acts on the
+number in the same column and read the same way, without "%". The picker
+shows it while the Playback plays on two or more devices; with one, that
+device's fader is the level, and a Volume above it would say the same number
+twice (the band's Volume popover still opens it). It acts on the
 Playback's sound that you may control: it shows the loudest level that sound
 plays at and moves it so the loudest reaches the new level, keeping their
 proportion. Another device's private sound neither moves nor counts, so it

@@ -11,8 +11,14 @@ order: Play/Pause, Stop and Next, the timeline, volume, Where it plays and Up
 next, then in the band Playback settings (a
 gear opening Playback, separate from the shell's Settings tab; Audio &
 subtitles lives inside) and, on desktop and phones, fullscreen,
-which their window can leave and the TV's never does; the band's
-timeline takes its own row above. On phones the bar keeps Play/Pause and
+which their window can leave and the TV's never does. The band lays that
+order out around the transport: the timeline on its own row above, then
+Volume and Where it plays at the left, the transport in the middle and Up
+next, Playback and fullscreen at the right, so the band reads as one line
+with Play at its centre. Up next shows only where it has something to open
+(on wide screens audio keeps the queue beside the artwork), and fullscreen
+only over a picture. Narrow phones give the transport its own line and set
+the tools under it, at the ends. On phones the bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
 
@@ -22,6 +28,9 @@ The transport is Play/Pause, Stop and Next wherever it appears: the band, the
 now-playing bar, Home's hero and the Remote. Each keeps its slot for every
 kind of media: live media that can't pause keeps Pause, disabled, and Stop is
 enabled whenever something is loading, playing, paused, ended or failed.
+In the band the verb that works is a filled disc at 56px on every screen,
+the band's one filled control: Play/Pause, or Stop for live media that can't
+pause; the others are ghost icons at 44px.
 Stop clears the sequence and offers Undo; it lives in the transport, never
 only in a Sheet. The keyboard and the timeline seek.
 
@@ -172,8 +181,15 @@ Details, Play next, ordering, Save for later and Remove, behind a "…" at the
 row's end, since an entry's page holds only Play and Save
 ([Menus](../design.md#menus)). Removal leaves focus on the adjacent row, so a
 keyboard keeps editing: on its "…" when the "…" opened the menu, else on the
-row itself. Save as list asks for a name and
-preserves errors there for retry. shadcn/Radix menus supply keyboard
+row itself. Each upcoming row is a board line: its name heavy, and at its
+end the time it starts, light in tabular figures ([Scale](../design.md#scale));
+the heading above counts them and says when the list ends ("2 to play · until
+17:05"). Save as list shows while there is something to save, asks for a
+name and preserves errors there for retry. Opened over the player, the panel
+closes from its heading row, an X after Save as list, as a sheet does. Its
+own Playing row heads the list only where the player's title is off screen,
+a phone's Up next over Now playing: beside the artwork and title, or under a
+video's top band, it would repeat them. shadcn/Radix menus supply keyboard
 navigation and typeahead.
 
 Autoplay is a

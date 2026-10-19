@@ -59,7 +59,7 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
           <div className="size-14 shrink-0 overflow-hidden bg-muted [&>*]:size-full [&_img]:object-contain">{entry && <MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />}</div>
           <div className="grid min-w-0 gap-0.5"><SheetTitle className="text-base font-medium [overflow-wrap:anywhere]">{title ?? "Nothing is playing"}</SheetTitle><SheetDescription>{status}</SheetDescription></div>
         </SheetHeader>
-        {levels({ state, connected, run, inSync })}
+        {levels({ state, connected, run, inSync, volume: playing.length !== 1 })}
         {/* The TV's fader hint, where its faders start rather than below a long list. */}
         {hint && <p className="pb-4 text-sm text-muted-foreground">{hint}</p>}
         {list("Playing", playing)}
@@ -72,9 +72,9 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
 
 // The band's Volume: one level for the whole Playback, above each device's own. Then In sync, where it applies:
 // a live input plays directly on each device unless it is chosen (docs/adr/0001).
-function levels({ state, connected, run, inSync }: Props & { inSync?: boolean }) {
+function levels({ state, connected, run, inSync, volume }: Props & { inSync?: boolean; volume: boolean }) {
   return <>
-    <div data-nav-row className={cn(columns, "py-4")}><PlaybackVolume state={state} connected={connected} run={run} className="col-span-2 -ml-2.5" /></div>
+    {volume && <div data-nav-row className={cn(columns, "py-4")}><PlaybackVolume state={state} connected={connected} run={run} className="col-span-2 -ml-2.5" /></div>}
     {inSync !== undefined && <div data-nav-row className="flex min-h-11 items-center justify-between gap-4 pb-4"><Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">In sync</Label><Switch id="where-it-plays-in-sync" checked={inSync} onCheckedChange={on => void run({ type: "inSync", inSync: on })} /></div>}
   </>;
 }

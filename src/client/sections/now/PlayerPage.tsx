@@ -269,10 +269,12 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>
     </div>}
       </div>
+      {/* Opened over the player it closes from its heading row; what plays now heads the list only where the player's
+          own title is off screen: a phone's Up next over Now playing. Beside it, or over a video's top band, the
+          title is already there. */}
       {(artworkStage || queueOpen) && <aside data-player-queue aria-label="Up next" className="player-queue bg-background">
-        {queueOpen && current && <div className="flex shrink-0 justify-end pb-2"><Button ref={queueClose} variant="ghost" className="h-11" onClick={closeQueue}><ArrowLeft aria-hidden="true" />Close Up next</Button></div>}
         <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
-          <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} />
+          <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen && current ? closeQueue : undefined} closeRef={queueClose} />
         </div>
       </aside>}
     </div>
@@ -281,20 +283,24 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={event => {
       if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
     }} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "border-t bg-background" : "player-video-controls", !shown && "opacity-0")}>
-      {/* Gutter to gutter like the now-playing bar, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
-          A timeline takes its own row above (index.css), without the end time or "Live" the top band or Now playing says. Every tool is an icon. */}
+      {/* One line in the now-playing bar's order, laid out around the transport (index.css): the timeline above, then
+          Volume and Where it plays at the left, Play/Pause, Stop and Next in the middle, Up next, Playback and
+          fullscreen at the right. Up next shows only where it has something to open, and fullscreen only over a
+          picture. Every tool is an icon. */}
       <div className="grid gap-1">
         {!playerTarget && bufferingStatus}
         <div className="player-control-row">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
           {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}
-          <div data-player-tools className="flex shrink-0 items-center">
+          <div data-player-tools="sound" className="flex shrink-0 items-center [&_svg]:size-5">
             {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
             {state && <WhereItPlays state={state} connected={connected} run={run} className="size-11" />}
-            <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
+          </div>
+          <div data-player-tools="more" className="flex shrink-0 items-center [&_svg]:size-5">
+            {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
             <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
-            {/* The window can leave fullscreen; the TV's never does. */}
-            {!tvPresentation && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+            {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
+            {!tvPresentation && !artworkStage && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>
       </div>
