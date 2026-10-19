@@ -7,8 +7,9 @@ type Load = Extract<PlaybackCommand, { type: "load" }>;
 type Receiver<Socket> = { socket: Socket; deviceId: string; picture: boolean; sound: boolean; volume: number; relay?: string };
 // Receivers that couldn't connect directly play this source through Core's stream instead.
 // uploadId: Core asks for encoded capture only while something plays it buffered. Each request has its own identity.
-type Publication<Socket> = { source: LiveSource; owner: Socket; uploadToken: string; relayed: Set<string>; uploadId?: string };
-type Peer<Socket> = LivePeer & { publisher: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; relay?: string };
+// A hosted publication (AirPlay) has no capturing window: Core feeds its stream, and every receiver plays that.
+type Publication<Socket> = { source: LiveSource; owner?: Socket; uploadToken?: string; relayed: Set<string>; uploadId?: string };
+type Peer<Socket> = LivePeer & { publisher?: Socket; receiver: Socket; sourceId: string; playbackId: string; loadId: string; relay?: string };
 
 // Core grants each peer to two exact admitted connections. Signaling has no arbitrary target.
 export function createLiveInputs<Socket>(options: {
@@ -22,7 +23,7 @@ export function createLiveInputs<Socket>(options: {
   const peers = new Map<string, Peer<Socket>>();
   const announce = (sourceId: string) => {
     const publication = sources.get(sourceId);
-    if (publication) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
+    if (publication?.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: !!publication.uploadId, uploadId: publication.uploadId, peers: [...peers.values()].filter(peer => peer.sourceId === sourceId && !peer.relay).map(({ peerId, deviceId, picture, sound }) => ({ peerId, deviceId, picture, sound })) });
   };
   const removePeer = (peer: Peer<Socket>) => {
     peers.delete(peer.peerId);
@@ -32,7 +33,7 @@ export function createLiveInputs<Socket>(options: {
     const publication = sources.get(sourceId);
     if (!publication) return;
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
-    options.send(publication.owner, { type: "livePeers", sourceId, upload: false, peers: [] });
+    if (publication.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: false, peers: [] });
     sources.delete(sourceId);
     options.ended(sourceId);
     options.changed();
@@ -50,9 +51,17 @@ export function createLiveInputs<Socket>(options: {
       options.changed();
       return source;
     },
+    // Core's own publication, ended only by Core.
+    host(source: LiveSource) {
+      if (sources.has(source.id)) throw new Error("That live source already exists.");
+      sources.set(source.id, { source, relayed: new Set() });
+      options.changed();
+    },
+    unhost(sourceId: string) { if (sources.has(sourceId) && !sources.get(sourceId)!.owner) end(sourceId); },
+    hosted: (sourceId: string) => sources.has(sourceId) && !sources.get(sourceId)!.owner,
     acceptsUpload(sourceId: string, deviceId: string, key: string) {
       const publication = sources.get(sourceId);
-      if (!publication || publication.source.deviceId !== deviceId) return false;
+      if (!publication?.uploadToken || publication.source.deviceId !== deviceId) return false;
       const expected = Buffer.from(publication.uploadToken), supplied = Buffer.from(key);
       return expected.length === supplied.length && timingSafeEqual(expected, supplied);
     },
@@ -104,7 +113,8 @@ export function createLiveInputs<Socket>(options: {
       const peer = peers.get(message.peerId);
       if (!peer) return; // ICE may arrive after an output was stopped or replaced.
       if (peer.publisher !== socket && peer.receiver !== socket) throw new Error("This connection has no live peer permission.");
-      options.send(peer.publisher === socket ? peer.receiver : peer.publisher, message);
+      const other = peer.publisher === socket ? peer.receiver : peer.publisher;
+      if (other) options.send(other, message);
     },
     // Either end reports a peer that can't connect; its receiver is relayed from now on.
     unreachable(socket: Socket, peerId: string) {
@@ -116,7 +126,7 @@ export function createLiveInputs<Socket>(options: {
       announce(peer.sourceId);
       return peer;
     },
-    relayed: (sourceId: string, deviceId: string) => !!sources.get(sourceId)?.relayed.has(deviceId),
+    relayed: (sourceId: string, deviceId: string) => { const publication = sources.get(sourceId); return !!publication && (!publication.owner || publication.relayed.has(deviceId)); },
     // The tabs a Direct playback's controls reach: each receiver, peer or relay.
     receivers: (playbackId: string) => [...peers.values()].filter(peer => peer.playbackId === playbackId).map(peer => peer.receiver),
     // A Device that leaves a playback takes only its own peers along.

@@ -52,6 +52,7 @@ const hub = await createHub({
   adminRecoveryCode,
   liveTurn,
   relayExecutable: process.env.COUCH_RELAY_PATH ?? join(import.meta.dirname, "live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay"),
+  airplayExecutable: process.env.COUCH_AIRPLAY_PATH ?? join(import.meta.dirname, "airplay", "uxplay"),
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
 });

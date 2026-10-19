@@ -251,7 +251,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         publication = current;
         // For audio-only desktop capture, retain its original video track until End.
         for (const track of capture.getTracks()) track.addEventListener("ended", () => { if (publication === current) void end().catch(() => {}); }, { once: true });
-        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: source.kind, name: source.name, audio: source.audio, video: source.video });
+        await options.command({ type: "publishLive", sourceId: source.id, uploadToken, kind: selection.kind, name: source.name, audio: source.audio, video: source.video });
         if (closed || attempt !== generation || publication !== current) throw new Error("Capture was canceled.");
         current.published = true;
         options.published(source);

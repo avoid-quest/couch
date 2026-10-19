@@ -76,7 +76,7 @@ function startCore() {
   const child = utilityProcess.fork(join(import.meta.dirname, "core.mjs"), [], {
     serviceName: "Couch Core",
     stdio: "pipe",
-    env: { ...process.env, COUCH_RELAY_PATH: join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay"), COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dataDir, COUCH_PORT: String(port), COUCH_TV_PRESENTATION: tv ? "1" : "0", COUCH_TV_APPLIANCE: appliance ? "1" : "0" },
+    env: { ...process.env, COUCH_RELAY_PATH: join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "live-relay", process.platform === "win32" ? "couch-relay.exe" : "couch-relay"), COUCH_AIRPLAY_PATH: join(app.isPackaged ? process.resourcesPath : import.meta.dirname, "airplay", "uxplay"), COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dataDir, COUCH_PORT: String(port), COUCH_TV_PRESENTATION: tv ? "1" : "0", COUCH_TV_APPLIANCE: appliance ? "1" : "0" },
   });
   child.stdout?.pipe(process.stdout, { end: false });
   child.stderr?.pipe(process.stderr, { end: false });

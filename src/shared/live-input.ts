@@ -1,7 +1,9 @@
 import type { CaptureKind } from "./capture";
 
-// Publications belong to the capturing connection and disappear when it closes.
-export type LiveSource = { id: string; deviceId: string; name: string; kind: CaptureKind; audio: boolean; video: boolean };
+// Publications belong to the capturing connection and disappear when it closes. An AirPlay
+// sender's belongs to Core, under AIRPLAY_PUBLISHER, which is never a Device.
+export const AIRPLAY_PUBLISHER = "airplay";
+export type LiveSource = { id: string; deviceId: string; name: string; kind: CaptureKind | "airplay"; audio: boolean; video: boolean };
 export type LiveVideoQuality = "720p" | "1080p" | "original";
 export type LiveSelection = { kind: CaptureKind; sourceId?: string; audioDeviceId?: string; videoQuality?: LiveVideoQuality; includeAudio?: boolean };
 
