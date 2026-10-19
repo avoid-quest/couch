@@ -61,7 +61,6 @@ const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && 
   : hit.kind === "Radio" ? "radio" : hit.kind === "Live" ? "live" : hit.kind === "Music" ? "music" : hit.collection ? "channels" : "videos";
 const shapeOf = (hit: SearchHit): TileShape => { const shape = groups.find(group => group.id === groupOf(hit))!.shape; return shape === "rows" || hit.source === "RaiPlay" ? "video" : shape; };
 
-
 /**
  * The results of the header's search (`searchState`, the route's): the closest match on top, then every source's hits
  * by kind, each kind in the shape it reads best in (posters, squares, frames, or rows under the time ruler), with the
@@ -82,10 +81,7 @@ export function SearchPanel(props: Props) {
   const filter = searchState.source;
   const until = searchState.until;
   const setFilter = (source: string) => props.onSearchChange({ ...searchState, source });
-  const setUntil = (value: string) => {
-    setSelectedDeadline(value === "any" ? null : { until: value, deadline: searchDeadline(value, now) });
-    props.onSearchChange({ ...searchState, until: value === "any" ? undefined : value });
-  };
+  const setUntil = (value: string) => props.onSearchChange({ ...searchState, until: value === "any" ? undefined : value });
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(query) ? query : undefined;
