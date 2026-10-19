@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { createWriteStream, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { connect as connectTls } from "node:tls";
@@ -15,6 +15,7 @@ import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
 import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
+import { startLog } from "./log-file";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -25,14 +26,15 @@ const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(bas
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 // Chromium's profile, and with it the single-instance lock, lives beside Core's data.
 app.setPath("userData", join(dataDir, "app"));
-// What Main and Core print, for this run and the one before, capped at 10 MB.
+// What Main and Core print, for this run and the one before: the newest 5–10 MB of each.
+// The run ID also names this run in renderer-status.json.
+const run = randomUUID();
 const logPath = join(dataDir, "logs/couch.log");
 mkdirSync(dirname(logPath), { recursive: true });
-try { renameSync(logPath, join(dataDir, "logs/couch.1.log")); } catch {}
-const log = createWriteStream(logPath);
+const log = startLog(logPath, 5_000_000, file => `${new Date().toISOString()} main info: Couch ${app.getVersion()} run ${run} pid ${process.pid} log ${file}\n`);
 for (const stream of [process.stdout, process.stderr]) {
   const write = stream.write.bind(stream) as (chunk: unknown, ...rest: unknown[]) => boolean;
-  stream.write = ((chunk: unknown, ...rest: unknown[]) => { if (log.bytesWritten < 10_000_000) log.write(chunk); return write(chunk, ...rest); }) as typeof stream.write;
+  stream.write = ((chunk: unknown, ...rest: unknown[]) => { log(chunk); return write(chunk, ...rest); }) as typeof stream.write;
 }
 const appliance = process.env.COUCH_TV_PRESENTATION === "1";
 const port = Number(process.env.COUCH_PORT ?? 4100);
