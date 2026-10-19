@@ -2,6 +2,8 @@ import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import fsp from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -387,4 +389,52 @@ test("a renewal that fails while --helpers latest succeeds leaves the latest sel
   assert.equal((await f.status()).hold, null, "the failed renewal doesn't bring back the hold");
   assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
   assert.deepEqual(readdirSync(join(f.helpers, "pins")), [], "the renewal's pin is gone");
+});
+
+test("a hold written while an update decides on that copy keeps it, however their reads interleave", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.08.01", true);
+  f.release("2026.09.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+  await runYtDlp(["--dump-single-json", "--", video]);
+  await until(async () => !!(await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked.youtube, "2026.09.01 worked, so an update would keep it and remove 2026.08.01");
+
+  // The command has checked 2026.08.01 and waits to write its hold. The update sets 2026.08.01
+  // aside, makes its first read of the pins or hold, and waits while the command finishes.
+  const hold = join(f.helpers, "hold.json"), pins = join(f.helpers, "pins"), held = join(f.helpers, "yt-dlp", "2026.08.01");
+  let committing = false, aside = false, deciding = false, commit = () => {}, decide = () => {};
+  const committed = new Promise<void>(resolve => { commit = resolve; }), decided = new Promise<void>(resolve => { decide = resolve; });
+  const { rename, readFile, readdir } = fsp;
+  const after = async <T>(path: unknown, read: () => Promise<T>) => {
+    const result = await read().then(value => ({ value }), (error: unknown) => ({ error }));
+    if (aside && !deciding && (path === hold || path === pins)) { deciding = true; await decided; }
+    if ("error" in result) throw result.error;
+    return result.value;
+  };
+  const mocks = [
+    t.mock.method(fsp, "rename", async (from: string, to: string) => {
+      if (to === hold && !committing) { committing = true; await committed; }
+      await rename(from, to);
+      if (from === held && to === `${held}.removing`) aside = true;
+    }),
+    t.mock.method(fsp, "readFile", (...args: Parameters<typeof readFile>) => after(args[0], () => readFile(...args))),
+    t.mock.method(fsp, "readdir", (...args: Parameters<typeof readdir>) => after(args[0], () => readdir(...args))),
+  ];
+  syncBuiltinESMExports();
+  t.after(() => { for (const { mock } of mocks) mock.restore(); syncBuiltinESMExports(); });
+
+  const recovering = helpersCommand(f.helpers, ["previous"]);
+  await until(() => committing, "the command is writing its hold");
+  f.release("2026.10.01", true);
+  const daily = checkHelper("yt-dlp");
+  await until(() => deciding, "the update is deciding whether to keep 2026.08.01");
+  commit();
+  assert.match(await recovering, /^Couch uses yt-dlp 2026\.08\.01 from its next run/);
+  assert.deepEqual(await readdir(pins), [], "the command has handed its pin over to the hold");
+  decide();
+  assert.equal(await daily, f.path("2026.10.01"));
+  assert.ok(existsSync(f.path("2026.08.01")), "the held copy is still there");
+  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/);
+  assert.equal((await f.status()).selected["yt-dlp"]?.held, true);
 });

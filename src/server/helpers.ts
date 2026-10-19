@@ -117,9 +117,10 @@ const newestFirst = (a: string, b: string) => b.localeCompare(a, "en", { numeric
 const removing = ".removing";
 const unfinished = (entry: string) => entry.endsWith(".partial") || entry.endsWith(removing);
 
-// Whether an operator holds this yt-dlp version, or `--helpers previous` is checking it.
+// Whether `--helpers previous` is checking this yt-dlp version, or an operator holds it. The
+// command writes its hold before removing its pin, so reading pins first can't miss both.
 async function wanted(version: string) {
-  return activeHold(await readHold(root))?.version === version || (await pinned(root)).has(version);
+  return (await pinned(root)).has(version) || activeHold(await readHold(root))?.version === version;
 }
 
 async function remove(name: Helper, entry: string) {

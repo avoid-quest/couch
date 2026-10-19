@@ -324,8 +324,8 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   renames a copy to `<version>.removing` before removing it and puts it back if
   it is held or pinned by then, or, after Core stopped in between, at its next
   check. `--helpers previous` pins the copy in `<data>/helpers/pins` before its
-  last look at it and until its hold is written, so a hold it reports names a
-  copy that is still there; it writes nothing unless the copy passes, so it
+  last look at it and until its hold is written, and Core reads pins before the
+  hold, so a hold it reports names a copy that is still there; it writes nothing unless the copy passes, so it
   never undoes another command. A pin a stopped command left lapses after ten
   minutes. Overlapping commands that succeed apply in the order they finish. A website failing,
   even with a 403, never changes the selection: an update can break one site
