@@ -314,20 +314,20 @@ export function ShellChrome({ children }: PropsWithChildren) {
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. */}
-          <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid">
+          <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
             <div className="flex min-w-0 items-center">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
               {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
-            {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex" />}
+            {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex tv:max-lg:col-span-2 tv:max-lg:row-start-2 tv:max-lg:justify-center" />}
             {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. On a
                 phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
-            <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1">
+            <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
               <LiveSharingStatus header />
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64" />}
+              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64 tv:max-lg:min-w-44" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-2 text-2xl font-light touch:hidden tv:inline" />

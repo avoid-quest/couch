@@ -61,6 +61,10 @@ at the left stays readable. Without sharing, the columns and search keep their
 usual widths. The sharing control and its popover stay local to the publishing
 device: a TV’s own remote can use them; another device’s Remote cannot.
 
+Below `lg`, a TV keeps the name, search, sharing control and clock on the first
+row and centres its tabs on a second row. Search keeps 11rem so Largest text
+and a narrow TV do not collapse its input or overlap the clock.
+
 The header is sticky: it stays at the top on the page's solid ground while
 the page scrolls under it, and the player hides it. It publishes its height
 as `--top-bar` (`useTopBar`, as the footer publishes `--bottom-bar`), and the
