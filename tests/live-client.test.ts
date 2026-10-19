@@ -465,6 +465,17 @@ test("a refused or closed capture prompt says what happened in Couch's words", (
   assert.equal(commands.length, 0, "a refused capture publishes nothing");
 `));
 
+test("choosing an audio input translates permission errors and releases desktop preparation", () => check(`
+  const originalCapture = navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
+  await assert.rejects(session.audioInputs(), /Microphone access wasn't allowed/);
+  assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
+  assert.equal(commands.length, 0, "a refused probe publishes nothing");
+  navigator.mediaDevices.getUserMedia = originalCapture;
+  assert.equal((await session.audioInputs())[0].deviceId, "interface", "a failed probe allows retry");
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+`, desktop));
+
 test("closing while audio input permission is pending releases the eventual capture", () => check(`
   let finish;
   navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { finish = resolve; });

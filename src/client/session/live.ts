@@ -222,7 +222,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         await couchApp?.prepareCapture?.({ kind: "microphone" });
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
         // Browsers expose input names only after microphone access is granted.
-        probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(reason => { throw captureError(reason, "microphone"); });
         const inputs = await navigator.mediaDevices.enumerateDevices();
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
         return inputs.filter(input => input.kind === "audioinput" && input.deviceId);

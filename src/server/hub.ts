@@ -240,7 +240,7 @@ export async function createHub(options: HubOptions) {
     broadcast();
   } });
   const live = createLiveInputs<Socket<SocketData>>({ deviceOf, nameOf, send: (socket, message) => send(socket, JSON.stringify(message)),
-    ended: source => {
+    ended: (source, publisherName = nameOf(source.deviceId)) => {
       const sourceId = source.id;
       liveStreams.end(sourceId);
       for (const playback of all()) {
@@ -250,7 +250,7 @@ export async function createHub(options: HubOptions) {
           clearTimeout(playback.undoable); playback.undoable = undefined;
           // Its receivers' players close with the item, so they hear who stopped sharing first: sent now, since the
           // scheduled flush would find the playback settled and gone. The publisher, as the actor, hears nothing.
-          playback.session.notice({ deviceId: source.deviceId, name: nameOf(source.deviceId) }, `${nameOf(source.deviceId)} stopped sharing`);
+          playback.session.notice({ deviceId: source.deviceId, name: publisherName }, `${publisherName} stopped sharing`);
           flush();
         }
         playback.session.endSource(sourceId);
@@ -1178,7 +1178,7 @@ export async function createHub(options: HubOptions) {
   const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
     if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
     invalidate("devices");
-  }, onRevoke: async id => {
+  }, onRevoke: async (id, name) => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
     for (const playback of all()) {
@@ -1188,6 +1188,7 @@ export async function createHub(options: HubOptions) {
     shared.delete(id);
     targets.delete(id);
     for (const socket of sockets) if (socket.data.deviceId === id) {
+      live.disconnect(socket, name);
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
     }
