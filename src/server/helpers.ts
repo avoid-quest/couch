@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { access, constants, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import { unzipSync } from "fflate";
-import { activeHold, readHelperStatus, readHold, readStatus, removeHold, updateStatus, writeJson, type HelperHold } from "./helper-status";
+import { activeHold, pin, pinned, readHelperStatus, readHold, readStatus, removeHold, updateStatus, writeJson, type HelperHold } from "./helper-status";
 
 // Core's media helpers. It uses the system's copy when it is recent enough.
 // Otherwise it downloads the official build into <data>/helpers/<name>/<version>,
@@ -113,16 +113,25 @@ type Copy = { version: string; path: string };
 type Choice = Copy & { origin: "system" | "managed"; sha256?: string; latest?: string; held?: boolean };
 const newestFirst = (a: string, b: string) => b.localeCompare(a, "en", { numeric: true });
 
+// A yt-dlp copy being removed is first renamed to <version>.removing; see remove.
+const removing = ".removing";
+const unfinished = (entry: string) => entry.endsWith(".partial") || entry.endsWith(removing);
+
+// Whether an operator holds this yt-dlp version, or `--helpers previous` is checking it.
+async function wanted(version: string) {
+  return activeHold(await readHold(root))?.version === version || (await pinned(root)).has(version);
+}
+
 async function remove(name: Helper, entry: string) {
   const directory = join(root, name, entry);
   if ([...inUse.keys()].some(path => path.startsWith(directory + sep))) return false;
-  // `--helpers previous` writes its hold before its last look at the copy, so a yt-dlp copy
-  // is first set aside, as if its download were interrupted, and kept if held by then.
-  if (name === "yt-dlp" && !entry.endsWith(".partial")) {
-    const aside = `${directory}.partial`;
+  // `--helpers previous` pins a copy before its last look at it, so a yt-dlp copy is first set
+  // aside and put back if it is held or pinned by then. If Core stops in between, installed puts it back.
+  if (name === "yt-dlp" && !unfinished(entry)) {
+    const aside = directory + removing;
     await rm(aside, { recursive: true, force: true }).catch(() => {});
     if (!await rename(directory, aside).then(() => true, () => false)) return !existsSync(directory);
-    if (activeHold(await readHold(root))?.version === entry) {
+    if (await wanted(entry)) {
       await rename(aside, directory).catch(() => {});
       return false;
     }
@@ -135,9 +144,16 @@ async function remove(name: Helper, entry: string) {
 
 // The installed copies that run, newest first. Interrupted downloads and copies that don't run are removed.
 async function installed(name: Helper) {
+  const directory = join(root, name);
+  const entries: string[] = await readdir(directory).catch(() => []);
+  // A verified copy Core was removing when it stopped goes back if it is held or being checked.
+  for (const entry of entries.filter(entry => entry.endsWith(removing))) {
+    const version = entry.slice(0, -removing.length);
+    if (!entries.includes(version) && await wanted(version)) await rename(join(directory, entry), join(directory, version)).catch(() => {});
+  }
   const copies: Copy[] = [];
-  for (const entry of (await readdir(join(root, name)).catch(() => [])).sort(newestFirst)) {
-    const path = !entry.endsWith(".partial") && await executable(join(root, name, entry), name);
+  for (const entry of (await readdir(directory).catch(() => [])).sort(newestFirst)) {
+    const path = !unfinished(entry) && await executable(join(directory, entry), name);
     if (path && await version(name, path)) copies.push({ version: entry, path });
     else await remove(name, entry);
   }
@@ -323,20 +339,21 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
   if (!current) throw new Error("Couch hasn't selected a yt-dlp yet.");
   const worked = (version: string) => Object.keys(managed["yt-dlp"]?.[version]?.worked ?? {}).length > 0;
   const earlier = (await readdir(join(directory, "yt-dlp")).catch(() => []))
-    .filter(entry => !entry.endsWith(".partial") && newestFirst(entry, current.version) > 0)
+    .filter(entry => !unfinished(entry) && newestFirst(entry, current.version) > 0)
     .sort((a, b) => Number(worked(b)) - Number(worked(a)) || newestFirst(a, b));
-  const before = await readHold(directory);
   for (const entry of earlier) {
     const path = await executable(join(directory, "yt-dlp", entry));
     if (!path) continue;
-    // Hold first, then check the copy: a running Core's update keeps a copy held before it
-    // removes it (remove), so a copy still here and running afterwards stays.
-    const since = new Date(), until = new Date(since.getTime() + Number(days) * 24 * 60 * 60 * 1000);
-    await writeJson(join(directory, "hold.json"), { schema: 1, helper: "yt-dlp", version: entry, since: since.toISOString(), until: until.toISOString() } satisfies HelperHold);
-    if (await version("yt-dlp", path) === entry && await access(path, constants.X_OK).then(() => true, () => false))
+    // Pinned from before this last look at the copy until its hold is written, so a running
+    // Core keeps it (remove) and the hold this reports names a copy that is still there.
+    // Nothing is written unless the copy passes, so a failure never undoes another command.
+    const unpin = await pin(directory, entry);
+    try {
+      if (await version("yt-dlp", path) !== entry || !await access(path, constants.X_OK).then(() => true, () => false)) continue;
+      const since = new Date(), until = new Date(since.getTime() + Number(days) * 24 * 60 * 60 * 1000);
+      await writeJson(join(directory, "hold.json"), { schema: 1, helper: "yt-dlp", version: entry, since: since.toISOString(), until: until.toISOString() } satisfies HelperHold);
       return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${until.toISOString()}, then the latest again. Return sooner with --helpers latest.`;
+    } finally { await unpin(); }
   }
-  if (before) await writeJson(join(directory, "hold.json"), before);
-  else await removeHold(directory);
   throw new Error(`Couch keeps no earlier yt-dlp than ${current.version} that runs.`);
 }

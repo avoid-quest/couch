@@ -321,9 +321,13 @@ YouTube's challenges) and ffmpeg. The app ships none of them
 - Couch keeps one previous yt-dlp copy beside the selected one, also while it
   uses the copy on `PATH`: the newest that has worked, else the newest. A copy
   an extraction is still using stays until the next check after it ends. Core
-  sets a copy aside before removing it and keeps it if a hold for it appeared;
-  `--helpers previous` writes its hold before its last look at the copy, so a
-  hold it reports always names a copy that is still there. A website failing,
+  renames a copy to `<version>.removing` before removing it and puts it back if
+  it is held or pinned by then, or, after Core stopped in between, at its next
+  check. `--helpers previous` pins the copy in `<data>/helpers/pins` before its
+  last look at it and until its hold is written, so a hold it reports names a
+  copy that is still there; it writes nothing unless the copy passes, so it
+  never undoes another command. A pin a stopped command left lapses after ten
+  minutes. Overlapping commands that succeed apply in the order they finish. A website failing,
   even with a 403, never changes the selection: an update can break one site
   while others work.
 - When an update breaks a website, recover from the account Couch runs as, with

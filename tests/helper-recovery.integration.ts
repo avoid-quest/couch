@@ -1,7 +1,7 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
@@ -16,16 +16,21 @@ const video = "https://www.youtube.com/watch?v=couch";
 
 // A stand-in yt-dlp: prints its version, or "extracts" by reading a file from its own copy,
 // so a copy removed mid-run fails. It waits while `<dir>/block` exists, and logs each run.
-// One --version of the copy named in `<dir>/probe-gate` waits while `probe-gate-held` exists.
+// One --version of the copy named in `<dir>/probe-gate` waits while `probe-gate-held` exists,
+// then fails if the name ends in "!".
 function program(directory: string, version: string, works: boolean) {
   return `#!${process.execPath}
 const fs = process.getBuiltinModule("node:fs"), path = process.getBuiltinModule("node:path");
 const version = ${JSON.stringify(version)}, here = path.dirname(fs.realpathSync(process.argv[1]));
 if (process.argv[2] === "--version") {
   const gate = ${JSON.stringify(join(directory, "probe-gate"))}, held = gate + "-held";
-  let gated = false;
-  try { gated = fs.readFileSync(gate, "utf8") === version && (fs.renameSync(gate, held), true); } catch {}
-  const answer = () => gated && fs.existsSync(held) ? setTimeout(answer, 20) : console.log(version);
+  let gated = false, fails = false;
+  try {
+    const name = fs.readFileSync(gate, "utf8");
+    fails = name.endsWith("!");
+    gated = name.replace(/!$/, "") === version && (fs.renameSync(gate, held), true);
+  } catch {}
+  const answer = () => gated && fs.existsSync(held) ? setTimeout(answer, 20) : gated && fails ? process.exit(1) : console.log(version);
   answer();
 } else {
   fs.appendFileSync(${JSON.stringify(join(directory, "runs"))}, version + "\\n");
@@ -269,7 +274,7 @@ test("an extraction still running on a replaced copy keeps it until it finishes"
   assert.deepEqual(Object.keys((await f.status()).managed["yt-dlp"]!).sort(), ["2026.09.01", "2026.10.01"]);
 });
 
-test("a hold written while an update is removing that copy keeps it, so the command's success stands", options, async t => {
+test("a copy --helpers previous is checking while an update removes it is kept, so the command's success stands", options, async t => {
   const f = fixture(t);
   f.release("2026.08.01", true);
   startHelpers(f.helpers);
@@ -344,4 +349,42 @@ for (const [name, record] of damaged) test(`a status record with ${name} doesn't
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"]);
   const kept = (await f.status()).managed["yt-dlp"]?.["2026.08.01"];
   assert.deepEqual(kept?.worked ?? {}, name === "entries of the wrong shape" ? { twitch: "2026-10-01T00:00:00.000Z" } : {});
+});
+
+test("a held copy Core was removing when it stopped is put back on restart", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.08.01", true);
+  f.release("2026.09.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+  await helpersCommand(f.helpers, ["previous"]);
+
+  // Core sets a copy aside before removing it; a stop right after that rename leaves this state.
+  // A copy set aside that nothing holds is removed as before.
+  renameSync(join(f.helpers, "yt-dlp", "2026.08.01"), join(f.helpers, "yt-dlp", "2026.08.01.removing"));
+  f.cached("2026.07.01.removing", true);
+  f.state.latest = null;
+  startHelpers(f.helpers);
+  assert.equal(await helper("yt-dlp"), f.path("2026.08.01"), "the restarted Core uses the held copy, offline too");
+  assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"]);
+  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/);
+});
+
+test("a renewal that fails while --helpers latest succeeds leaves the latest selected", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.08.01", true);
+  f.release("2026.09.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+  await helpersCommand(f.helpers, ["previous"]);
+
+  writeFileSync(join(f.directory, "probe-gate"), "2026.08.01!");
+  const renewal = helpersCommand(f.helpers, ["previous", "2"]);
+  await until(() => existsSync(join(f.directory, "probe-gate-held")), "the renewal is checking 2026.08.01");
+  await helpersCommand(f.helpers, ["latest"]);
+  rmSync(join(f.directory, "probe-gate-held"));
+  await assert.rejects(renewal, /no earlier yt-dlp/);
+  assert.equal((await f.status()).hold, null, "the failed renewal doesn't bring back the hold");
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+  assert.deepEqual(readdirSync(join(f.helpers, "pins")), [], "the renewal's pin is gone");
 });

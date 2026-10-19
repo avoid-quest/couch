@@ -1,4 +1,5 @@
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Helper } from "./helpers";
 
@@ -98,6 +99,27 @@ export async function removeHold(directory: string) {
   await rm(join(directory, "hold.json"), { force: true });
   // Nothing to flush when Couch has no helpers directory yet.
   await syncDirectory(directory).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+}
+
+// `--helpers previous` pins the copy it checks, in <data>/helpers/pins, so a running Core keeps
+// that copy until the hold is written. Each command has its own pin; one a stopped command left
+// lapses after ten minutes.
+export async function pin(directory: string, version: string) {
+  const file = join(directory, "pins", `${process.pid}-${randomUUID()}.json`);
+  await writeJson(file, { version, until: new Date(Date.now() + 10 * 60 * 1000).toISOString() });
+  return () => rm(file, { force: true });
+}
+
+// The pinned versions. Lapsed or damaged pins are removed; one still being written is skipped.
+export async function pinned(directory: string) {
+  const pins = join(directory, "pins"), versions = new Set<string>();
+  for (const entry of await readdir(pins).catch(() => [])) {
+    if (entry.endsWith(".tmp")) continue;
+    const value = await readJson(join(pins, entry));
+    if (isRecord(value) && typeof value.version === "string" && typeof value.until === "string" && Date.parse(value.until) > Date.now()) versions.add(value.version);
+    else await rm(join(pins, entry), { force: true }).catch(() => {});
+  }
+  return versions;
 }
 
 // The passive view for diagnosis: the recorded selection and the hold, with whether it is still in force.
