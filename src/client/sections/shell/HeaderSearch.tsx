@@ -109,7 +109,8 @@ export function HeaderSearch({ className }: { className?: string }) {
       {value && <InputGroupAddon align="inline-end" className="pr-2.5 group-has-[input:focus]/input-group:text-background/65"><InputGroupButton size="icon-xs" className="touch:size-11" aria-label="Clear search" onClick={clear}><X aria-hidden="true" /></InputGroupButton></InputGroupAddon>}
     </InputGroup>
     {/* The last queries, as divided rows under the field while it is empty and focused; Down walks them, Up returns. */}
-    {recentsShown && <ul data-search-recents aria-label="Recent searches" className="absolute inset-x-0 top-full z-30 grid border-b bg-background py-1" onPointerDown={event => event.preventDefault()} onKeyDown={event => {
+    {/* A press keeps the field focused (a tap or a Safari click would blur it first and take the list away), and Esc returns to it. */}
+    {recentsShown && <ul data-search-recents aria-label="Recent searches" className="absolute inset-x-0 top-full z-30 grid divide-y border-b bg-background" onPointerDown={event => event.preventDefault()} onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); input.current?.focus(); return; }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button")], at = buttons.indexOf(event.target as HTMLElement);

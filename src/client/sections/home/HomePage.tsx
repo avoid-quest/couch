@@ -151,7 +151,8 @@ export function HomePage() {
   const lead = !hero ? null : hero.kind === "playing" ? current && <HomeHero thumbnail={show?.artworkUrl ?? current.thumbnail} shape={entryShape(current)} title={show?.title || current.title} meta={playingMeta}
       time={live ? "Live" : remaining != null && length ? `ends ${formatEndTime(remaining, now)}` : undefined}>
       <Button data-page-first size="lg" onClick={() => shell.changeSection("Now")}>Open player</Button>
-      {state && <PlaybackTransport state={state} connected={connected} run={run} />}
+      {/* Below md the transport starts its own line under the full-width verb, so it pulls back to the text's edge. */}
+      {state && <PlaybackTransport state={state} connected={connected} run={run} className="max-md:-ml-2.5" />}
     </HomeHero>
     : hero.kind === "continue" ? <HomeHero thumbnail={hero.item.thumbnail} shape={tileShape(hero.item.sourceLabel, !!hero.item.collection)} title={hero.item.title} meta={historyMeta(hero.item)}
       time={hero.item.duration ? `ends ${formatEndTime(hero.item.duration - hero.item.position, now)}` : undefined}>

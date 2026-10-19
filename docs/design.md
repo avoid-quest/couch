@@ -127,9 +127,9 @@ actions take `h-8 text-sm` and the touch target through its `actionButton` class
 **Icon controls** for playback are one control wherever they appear: a ghost
 `icon-lg` button with a 1.25rem glyph. That is the transport, Volume, Where
 it plays, Up next, Playback, fullscreen, the player's Back and every Sheet's
-Close. The band and the now-playing bar give each a 44px target (`size-11`,
-in rem); beside Home's hero verbs they keep `icon-lg`'s 40px, the `lg` verbs'
-height (44px on touch). An icon control at the end of a row pulls back
+Close. The band, the now-playing bar and every Sheet's heading row give each
+a 44px target (`size-11`, in rem); beside Home's hero verbs they keep
+`icon-lg`'s 40px, the `lg` verbs' height (44px on touch). An icon control at the end of a row pulls back
 (`-ml-2.5`, `-mr-2.5`) so its glyph lines up with the text above it. A row's
 own "…" stays at its row's size.
 

@@ -273,7 +273,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           own title is off screen: a phone's Up next over Now playing. Beside it, or over a video's top band, the
           title is already there. */}
       {(artworkStage || queueOpen) && <aside data-player-queue aria-label="Up next" className="player-queue bg-background">
-        <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
+        {/* Its controls pull back past the text (Close, Save as list, Played), so the scroller pads for them, with a
+            little to spare: a vertical scroller with a stray pixel of overflow shifts its text when one takes focus. */}
+        <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3 pb-4">
           <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen && current ? closeQueue : undefined} closeRef={queueClose} />
         </div>
       </aside>}

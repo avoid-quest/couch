@@ -145,7 +145,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
       </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after Up next."}</p>}
     </section>}
-    {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="justify-between px-0 text-base">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
+    {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="-mx-2.5 justify-between text-base">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
       <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} verbs={{ credentials, entry, index: queue.indexOf(entry), queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />)}</ul>
     </CollapsibleContent></Collapsible>}
   </section></Dialog>;
