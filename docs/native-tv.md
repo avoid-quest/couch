@@ -33,6 +33,15 @@ sudo couch-setup --tv
 sudo reboot
 ```
 
+Before committing a machine, `sudo couch-setup --inspect` reports what `--tv`
+would do there, with the same checks: the supported target, an earlier setup,
+the `couch-tv` account, the data directory, the display manager and boot
+target, missing packages, the files it would add or keep, the update timer and
+any running session. It lists every refusal `--tv` would stop at (exit status 1)
+and writes nothing: no file, lock, account, package or service. Without `sudo`
+it marks what only root can read as unavailable. It can't foresee APT or
+service failures during setup.
+
 Setup installs Debian's Xorg, Openbox, LightDM, PipeWire and Bluetooth support. It
 creates the locked, unprivileged `couch-tv` account and enables its graphical
 session. Couch runs from the root-owned `/usr/bin/couch` (`/opt/Couch/couch`) in TV presentation, fullscreen on the TV. The mouse pointer hides after a second without movement anywhere on the TV, outside Couch's window and over the recovery notice too, and returns when it moves. No source checkout or

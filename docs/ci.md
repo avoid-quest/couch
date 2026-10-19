@@ -40,6 +40,10 @@ node --test build/<name>.integration.mjs
 The TV health integration needs native Linux `/proc` (CPU emulation changes the
 reported executable). The installed app's Node also runs it:
 `ELECTRON_RUN_AS_NODE=1 /usr/bin/couch --test build/tv-health.integration.mjs`.
+The setup integration (`tests/couch-setup.integration.ts`) runs `couch-setup`
+against a fixture root with its OS commands replaced. Its `--tv` and `--refresh`
+cases run as root in an unprivileged user namespace (`unshare -r`) and skip
+where the runner forbids one; a skip is not setup coverage.
 
 ## Bundled live relay
 
