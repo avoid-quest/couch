@@ -7,7 +7,7 @@ import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
 import { playOnQuery } from "@/components/PlayOn";
-import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
+import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName, useShellReady } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { NowPlayingBar, useBottomBar } from "./NowPlayingBar";
@@ -262,6 +262,7 @@ function PairingPage() {
 }
 
 export function ShellChrome({ children }: PropsWithChildren) {
+  useShellReady();
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();

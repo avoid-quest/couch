@@ -1,9 +1,8 @@
-import { StrictMode, useEffect, useLayoutEffect, type PropsWithChildren } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { NativeModeGate } from "@/sections/shell/PlaybackDevice";
 import { SessionGate, useSessionGate } from "./session/session-context";
-import { couchApp } from "./session/native-context";
 import { registerAppShellWorker } from "./register-sw";
 import { router } from "./router";
 import "./index.css";
@@ -19,19 +18,10 @@ function SessionRouter() {
   return <RouterProvider router={router} context={{ queryClient, identity, localHost, connected }} />;
 }
 
-// Tells the app window that this page's shell mounted: React committed the whole
-// tree, which it doesn't when rendering it fails (app/renderer-status.ts).
-function ShellReady({ children }: PropsWithChildren) {
-  useEffect(() => { void couchApp?.shellReady?.().catch(() => {}); }, []);
-  return children;
-}
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ShellReady>
-      <NativeModeGate>
-        <SessionGate upNext={targetDeviceId => void router.navigate({ to: "/now", search: { queue: true, targetDeviceId } })}><SessionRouter /></SessionGate>
-      </NativeModeGate>
-    </ShellReady>
+    <NativeModeGate>
+      <SessionGate upNext={targetDeviceId => void router.navigate({ to: "/now", search: { queue: true, targetDeviceId } })}><SessionRouter /></SessionGate>
+    </NativeModeGate>
   </StrictMode>,
 );

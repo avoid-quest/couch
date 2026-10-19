@@ -26,12 +26,12 @@ writeFileSync(join(data, "operating-mode.json"), JSON.stringify({ mode: "local",
 const statusPath = join(data, "renderer-status.json");
 // Main's own window, preload and handlers; the probe only navigates it and reads the status file.
 writeFileSync(join(scratch, "probe.mjs"), `
-import { app } from 'electron';
+import { app, ipcMain } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 const read = () => JSON.parse(readFileSync(${JSON.stringify(statusPath)}, 'utf8'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const evidence = { mainPid: process.pid, starting: null, ready: null, unmounted: null, failed: null, iframeTried: false };
+const evidence = { mainPid: process.pid, starting: null, ready: null, gates: {}, unmounted: null, failed: null, iframeTried: false };
 const record = () => writeFileSync(${JSON.stringify(join(directory, "native-events.json"))}, JSON.stringify(evidence, null, 2));
 // HTML whose script throws before any app mounts, with a cross-origin frame that tries to acknowledge.
 createServer((request, response) => {
@@ -42,8 +42,27 @@ createServer((request, response) => {
 }).listen(${fixture}, '127.0.0.1');
 app.on('browser-window-created', async (_event, window) => {
   const until = async (state, limit = 20_000) => { const deadline = Date.now() + limit; while (read().state !== state) { if (Date.now() > deadline) return read(); await sleep(50); } return read(); };
+  // Reloads Couch's page with Main's mode answer replaced, and reads the status once that
+  // navigation settles: ready, or loaded and given time to acknowledge.
+  const gate = async (name, answer) => {
+    ipcMain.removeHandler('couch:mode');
+    ipcMain.handle('couch:mode', answer);
+    const navigation = read().navigation;
+    window.webContents.reload();
+    const deadline = Date.now() + 20_000;
+    while (!(read().navigation > navigation && ['page-loaded', 'ready'].includes(read().state)) && Date.now() < deadline) await sleep(50);
+    if (read().state !== 'ready') await sleep(2_000);
+    evidence.gates[name] = { ...read(), text: await window.webContents.executeJavaScript('document.getElementById("root").innerText') };
+  };
   try {
     evidence.ready = await until('ready');
+    // The startup gate before the shell: its loading, error and a render failure are not ready.
+    await gate('held', () => new Promise(() => {}));
+    await gate('rejected', () => ({ error: "Couch couldn't read its mode." }));
+    await gate('malformed', () => ({ value: { mode: null, address: null, targets: null } }));
+    // The mode chooser and the shell after it are.
+    await gate('chooser', () => ({ value: { mode: null, address: null, targets: [], localSetupComplete: false } }));
+    await gate('shell', () => ({ value: { mode: 'local', address: null, targets: [], localSetupComplete: true } }));
     void window.webContents.loadURL(${JSON.stringify(`http://127.0.0.1:${fixture}/`)}).catch(() => {});
     await until('page-loaded');
     // Give the frame and any acknowledgement time to arrive.
@@ -61,7 +80,7 @@ const { ELECTRON_RUN_AS_NODE: _, ...env } = process.env;
 const output = Bun.file(join(directory, "electron-output.log"));
 const child = Bun.spawn([electron as unknown as string, scratch], { cwd: root, env: { ...env, COUCH_DATA_DIR: data, COUCH_PORT: String(port) }, stdout: output, stderr: output });
 writeFileSync(join(directory, "launched-pid"), `${child.pid}\n`);
-const deadline = setTimeout(() => child.kill("SIGTERM"), 30_000);
+const deadline = setTimeout(() => child.kill("SIGTERM"), 90_000);
 let code: number;
 try { code = await child.exited; } finally { clearTimeout(deadline); }
 assert.equal(code, 0, "Native probe must shut down normally");
@@ -77,9 +96,18 @@ for (const state of [events.starting, events.ready, events.unmounted, events.fai
   assert.equal(state.page, "local");
 }
 assert.equal(events.ready.state, "ready", "Couch's mounted shell must acknowledge through the real preload");
+let navigation = events.ready.navigation;
+for (const [name, state, text] of [["held", "page-loaded", /Loading/], ["rejected", "page-loaded", /couldn't read its mode[\s\S]*Try again/], ["malformed", "page-loaded", /^$/], ["chooser", "ready", /Where is your Couch\?/], ["shell", "ready", /./]] as const) {
+  const gate = events.gates[name];
+  assert.equal(gate.state, state, `${name}: ${JSON.stringify(gate)}`);
+  assert.match(gate.text, text, name);
+  assert.equal(gate.navigation, ++navigation, `${name} is the next navigation`);
+  assert.equal(gate.run, header[2]);
+}
+navigation++;
 assert.equal(events.iframeTried, true, "The fixture frame must have run");
 assert.equal(events.unmounted.state, "page-loaded", "Loaded HTML whose app never mounts is not ready");
-assert.equal(events.unmounted.navigation, events.ready.navigation + 1);
+assert.equal(events.unmounted.navigation, navigation);
 // Chromium shows its error page after the failure; Main keeps reporting the failure.
 assert.equal(events.failed.state, "failed");
 assert.equal(events.failed.reason, "-102 ERR_CONNECTION_REFUSED");

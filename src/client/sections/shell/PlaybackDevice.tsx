@@ -25,6 +25,13 @@ const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 export const usePlaybackDevice = () => useContext(Context);
 
+// Tells the app window that a usable screen committed: the mode chooser, or the shell
+// once the startup gates passed. Their loading, errors and failed renders never do
+// (app/renderer-status.ts).
+export function useShellReady() {
+  useEffect(() => { void couchApp?.shellReady?.().catch(() => {}); }, []);
+}
+
 // The app window shows this computer's Couch (Full mode) or another Couch's own
 // page (Client mode). Switching reloads the window, so the page never outlives its mode.
 export function NativeModeGate({ children }: PropsWithChildren) {
@@ -94,6 +101,7 @@ const targetNames = (): Record<string, string> => { try { return Object.fromEntr
 const confirmationText = (reason: string) => reason === "playback,sharing" ? "Playback here stops and other devices disconnect." : reason === "playback" ? "Playback here stops." : "Other devices can't reach this Couch until you switch back.";
 
 function DeviceForm() {
+  useShellReady();
   const device = usePlaybackDevice()!;
   const [address, setAddress] = useState(device.address ?? "");
   const [confirm, setConfirm] = useState<string | null>(null);
