@@ -197,13 +197,18 @@ async function install(name: Helper, release: Release) {
 }
 
 // Records what was selected and removes the other copies, except yt-dlp's previous one: the
-// newest that worked for an extraction, else the newest, which `--helpers previous` can choose.
+// newest that played media, else the newest, which `--helpers previous` can choose.
 async function select(name: Helper, choice: Choice, copies: Copy[] | null) {
+  // Copies in use now stay through this check: a run ending meanwhile may record that its copy
+  // worked only after the read below, while one that ended before has recorded it (helperWorked).
+  const busy = new Set(inUse.keys());
   const { managed } = await readStatus(root);
   const others = copies?.filter(copy => copy.path !== choice.path) ?? [];
-  const previous = name === "yt-dlp" ? others.find(copy => Object.keys(managed[name]?.[copy.version]?.worked ?? {}).length) ?? others[0] : undefined;
+  // A managed copy of the version PATH provides is no earlier copy `--helpers previous` could hold.
+  const earlier = others.filter(copy => copy.version !== choice.version);
+  const previous = name === "yt-dlp" ? earlier.find(copy => Object.keys(managed[name]?.[copy.version]?.worked ?? {}).length) ?? earlier[0] : undefined;
   const kept = new Set(choice.origin === "managed" ? [choice.version] : []);
-  for (const copy of others) if (copy === previous || !await remove(name, copy.version)) kept.add(copy.version);
+  for (const copy of others) if (copy === previous || busy.has(copy.path) || !await remove(name, copy.version)) kept.add(copy.version);
   const now = new Date().toISOString();
   await updateStatus(root, status => {
     const copiesOf = status.managed[name] ??= {};
@@ -308,16 +313,17 @@ export async function helper(name: Helper): Promise<string> {
 
 const recorded = new Map<string, number>();
 
-// Evidence that a managed copy worked for a provider's extraction, recorded at most hourly.
-// System copies belong to their package manager, so Couch keeps no evidence for them.
-export function helperWorked(name: Helper, path: string, provider: string) {
+// Evidence that a managed copy resolved playable media for a provider, recorded at most hourly;
+// it is written when this returns. System copies belong to their package manager, so Couch keeps
+// no evidence for them.
+export async function helperWorked(name: Helper, path: string, provider: string) {
   const directory = join(root, name);
   if (!path.startsWith(directory + sep)) return;
   const key = `${path}\n${provider}`;
   if (Date.now() - (recorded.get(key) ?? 0) < 60 * 60 * 1000) return;
   recorded.set(key, Date.now());
   const version = path.slice(directory.length + 1).split(sep)[0]!;
-  void updateStatus(root, status => {
+  await updateStatus(root, status => {
     const copy = status.managed[name]?.[version];
     if (copy) copy.worked[provider] = new Date().toISOString();
   });
@@ -330,6 +336,8 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
   if (command === "status") return JSON.stringify(await readHelperStatus(directory), null, 2);
   if (command === "latest") {
     await removeHold(directory);
+    // As for `previous` below: a hold written since then is a later command's, which names the outcome.
+    if (await readHold(directory)) throw new Error("A later --helpers previous held yt-dlp again. See --helpers status.");
     return "Couch returns to the latest yt-dlp from its next run.";
   }
   if (command !== "previous" || !/^([1-9]|[12]\d|30)$/.test(days)) throw new Error("Usage: --helpers status | previous [days: 1-30, default 7] | latest");
@@ -339,8 +347,9 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
   const current = selected["yt-dlp"];
   if (!current) throw new Error("Couch hasn't selected a yt-dlp yet.");
   const worked = (version: string) => Object.keys(managed["yt-dlp"]?.[version]?.worked ?? {}).length > 0;
+  // While a hold is in force, the held copy can be held again, renewing it.
   const earlier = (await readdir(join(directory, "yt-dlp")).catch(() => []))
-    .filter(entry => !unfinished(entry) && newestFirst(entry, current.version) > 0)
+    .filter(entry => !unfinished(entry) && (newestFirst(entry, current.version) > 0 || current.held && entry === current.version))
     .sort((a, b) => Number(worked(b)) - Number(worked(a)) || newestFirst(a, b));
   for (const entry of earlier) {
     const path = await executable(join(directory, "yt-dlp", entry));
@@ -349,12 +358,17 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
     // Core keeps it (remove) and the hold this reports names a copy that is still there.
     // Nothing is written unless the copy passes, so a failure never undoes another command.
     const unpin = await pin(directory, entry);
+    let hold: HelperHold;
     try {
       if (await version("yt-dlp", path) !== entry || !await access(path, constants.X_OK).then(() => true, () => false)) continue;
-      const since = new Date(), until = new Date(since.getTime() + Number(days) * 24 * 60 * 60 * 1000);
-      await writeJson(join(directory, "hold.json"), { schema: 1, helper: "yt-dlp", version: entry, since: since.toISOString(), until: until.toISOString() } satisfies HelperHold);
-      return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${until.toISOString()}, then the latest again. Return sooner with --helpers latest.`;
+      const since = new Date();
+      hold = { schema: 1, helper: "yt-dlp", version: entry, since: since.toISOString(), until: new Date(since.getTime() + Number(days) * 24 * 60 * 60 * 1000).toISOString() };
+      await writeJson(join(directory, "hold.json"), hold);
     } finally { await unpin(); }
+    // Reported only if still in force now the pin is gone: otherwise a later command changed it
+    // and that command, finishing after this check, names the outcome.
+    if (JSON.stringify(await readHold(directory)) !== JSON.stringify(hold)) throw new Error("A later --helpers command changed this hold. See --helpers status.");
+    return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${hold.until}, then the latest again. Return sooner with --helpers latest.`;
   }
   throw new Error(`Couch keeps no earlier yt-dlp than ${current.version} that runs.`);
 }

@@ -21,8 +21,8 @@ export type SelectedHelper = {
   // Selected by an operator's hold (`--helpers previous`), not by the update check.
   held: boolean;
 };
-// A managed copy on disk. `worked` maps a provider (or "other") to the last time an
-// extraction with this copy succeeded; running --version alone doesn't count.
+// A managed copy on disk. `worked` maps a provider (or "other") to the last time Couch resolved
+// playable media with this copy; listing a site, reading a page's details or --version doesn't count.
 export type ManagedCopy = { sha256: string | null; installedAt: string | null; worked: Record<string, string> };
 export type HelperStatus = {
   schema: 1;

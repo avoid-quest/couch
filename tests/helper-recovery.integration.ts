@@ -10,6 +10,7 @@ import { strToU8, zipSync } from "fflate";
 import { checkHelper, helper, helpersCommand, startHelpers } from "../src/server/helpers";
 import { readHelperStatus, updateStatus } from "../src/server/helper-status";
 import { ExtractionError, runYtDlp } from "../src/server/yt-dlp";
+import { inspectWebMedia, resolveWebMedia } from "../src/server/web-media";
 
 // Core's helper selection and yt-dlp runs with real fixture executables in a private PATH and
 // data directory. Only GitHub (release lookups and downloads) is replaced; downloads are real
@@ -17,10 +18,12 @@ import { ExtractionError, runYtDlp } from "../src/server/yt-dlp";
 const video = "https://www.youtube.com/watch?v=couch";
 
 // A stand-in yt-dlp: prints its version, or "extracts" by reading a file from its own copy,
-// so a copy removed mid-run fails. It waits while `<dir>/block` exists, and logs each run.
+// so a copy removed mid-run fails. A copy that works returns playable media titled with that
+// file; an "unusable" one exits cleanly with media information Couch can't play. It waits
+// while `<dir>/block` exists, and logs each run.
 // One --version of the copy named in `<dir>/probe-gate` waits while `probe-gate-held` exists,
 // then fails if the name ends in "!".
-function program(directory: string, version: string, works: boolean) {
+function program(directory: string, version: string, works: boolean | "unusable") {
   return `#!${process.execPath}
 const fs = process.getBuiltinModule("node:fs"), path = process.getBuiltinModule("node:path");
 const version = ${JSON.stringify(version)}, here = path.dirname(fs.realpathSync(process.argv[1]));
@@ -38,8 +41,8 @@ if (process.argv[2] === "--version") {
   fs.appendFileSync(${JSON.stringify(join(directory, "runs"))}, version + "\\n");
   const finish = () => {
     const data = fs.readFileSync(path.join(here, "_internal", "extractor"), "utf8");
-    if (!${works}) { console.error("ERROR: [youtube] couch: HTTP Error 403: Forbidden"); process.exit(1); }
-    console.log(JSON.stringify({ version, data }));
+    if (!${JSON.stringify(works)}) { console.error("ERROR: [youtube] couch: HTTP Error 403: Forbidden"); process.exit(1); }
+    console.log(JSON.stringify(${JSON.stringify(works)} === true ? { url: "https://media.example/" + version + ".mp4", title: data } : { title: data }));
   };
   const wait = () => fs.existsSync(${JSON.stringify(join(directory, "block"))}) ? setTimeout(wait, 20) : finish();
   wait();
@@ -72,7 +75,7 @@ function fixture(t: TestContext) {
   const releases = new Map<string, Uint8Array>();
   // `pause` holds a release lookup until it settles; the answer is the release at that point.
   const state = { latest: null as string | null, requests: [] as string[], pause: null as Promise<void> | null };
-  const release = (version: string, works: boolean) => {
+  const release = (version: string, works: boolean | "unusable") => {
     releases.set(version, zipSync({ "yt-dlp_linux": strToU8(program(directory, version, works)), "_internal/extractor": strToU8(`extractor ${version}`) }));
     state.latest = version;
     return createHash("sha256").update(releases.get(version)!).digest("hex");
@@ -91,7 +94,7 @@ function fixture(t: TestContext) {
   t.mock.method(console, "error", () => {});
 
   // A copy already in Couch's cache, as an earlier Couch left it.
-  const cached = (version: string, works: boolean) => {
+  const cached = (version: string, works: boolean | "unusable") => {
     mkdirSync(join(helpers, "yt-dlp", version, "_internal"), { recursive: true });
     writeFileSync(join(helpers, "yt-dlp", version, "yt-dlp_linux"), program(directory, version, works), { mode: 0o755 });
     writeFileSync(join(helpers, "yt-dlp", version, "_internal", "extractor"), `extractor ${version}`);
@@ -101,7 +104,9 @@ function fixture(t: TestContext) {
   const runs = () => existsSync(join(directory, "runs")) ? readFileSync(join(directory, "runs"), "utf8").trim().split("\n") : [];
   const status = () => readHelperStatus(helpers);
   const block = (on: boolean) => on ? writeFileSync(join(directory, "block"), "") : rmSync(join(directory, "block"), { force: true });
-  return { directory, helpers, state, release, cached, path, copies, runs, status, block };
+  // Playback resolution, the run that records whether a copy worked; its media's title names the copy's file.
+  const play = async (url = video) => (await resolveWebMedia(url)).metadata?.title;
+  return { directory, helpers, state, release, cached, path, copies, runs, status, block, play };
 }
 
 async function until(condition: () => boolean | Promise<boolean>, message: string) {
@@ -118,14 +123,14 @@ test("a runnable update that fails extraction stays selected until the operator 
   const f = fixture(t);
   f.release("2026.08.01", true);
   startHelpers(f.helpers);
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/);
+  assert.match(await f.play(), /extractor 2026\.08\.01/);
   await until(async () => !!(await f.status()).managed["yt-dlp"]?.["2026.08.01"]?.worked.youtube, "a successful extraction is recorded for the copy that ran it");
 
   // The daily check installs a newer release that runs (--version) but breaks extraction.
   const digest = f.release("2026.09.01", false);
   assert.equal(await checkHelper("yt-dlp"), f.path("2026.09.01"));
-  await assert.rejects(runYtDlp(["--dump-single-json", "--", video]), ExtractionError);
-  await assert.rejects(runYtDlp(["--dump-single-json", "--", video]), ExtractionError);
+  await assert.rejects(f.play(), ExtractionError);
+  await assert.rejects(f.play(), ExtractionError);
   assert.equal(await helper("yt-dlp"), f.path("2026.09.01"), "a website's 403 never downgrades yt-dlp by itself");
   let status = await f.status();
   assert.deepEqual(status.selected["yt-dlp"], { ...status.selected["yt-dlp"], origin: "managed", version: "2026.09.01", path: f.path("2026.09.01"), sha256: digest, latest: "2026.09.01", held: false });
@@ -137,7 +142,7 @@ test("a runnable update that fails extraction stays selected until the operator 
   const message = await helpersCommand(f.helpers, ["previous"]);
   assert.match(message, /2026\.08\.01, which worked before,/);
   assert.equal(f.state.requests.length, before, "choosing the previous copy downloads nothing");
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/, "the next run uses the held copy without a restart");
+  assert.match(await f.play(), /extractor 2026\.08\.01/, "the next run uses the held copy without a restart");
   assert.deepEqual(f.runs(), ["2026.08.01", "2026.09.01", "2026.09.01", "2026.08.01"]);
   status = await f.status();
   assert.equal(status.selected["yt-dlp"]?.held, true);
@@ -165,7 +170,7 @@ test("a hold survives restarts and daily checks, and ends with --helpers latest 
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"]);
 
   assert.equal(await helpersCommand(f.helpers, ["latest"]), "Couch returns to the latest yt-dlp from its next run.");
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.09\.02/);
+  assert.match(await f.play(), /extractor 2026\.09\.02/);
   assert.equal((await f.status()).hold, null);
   assert.deepEqual(f.copies(), ["2026.09.01", "2026.09.02"], "at most one previous copy is kept");
 
@@ -219,7 +224,7 @@ test("an interrupted download or status write is discarded and repaired", option
   const digest = f.release("2026.09.01", true);
   assert.equal(await checkHelper("yt-dlp"), f.path("2026.09.01"));
   assert.equal((await f.status()).selected["yt-dlp"]?.sha256, digest);
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.09\.01/);
+  assert.match(await f.play(), /extractor 2026\.09\.01/);
 });
 
 test("a missing or broken previous copy is never held, and a held copy that disappears returns to the latest", options, async t => {
@@ -251,7 +256,7 @@ test("an extraction still running on a replaced copy keeps it until it finishes"
   const f = fixture(t);
   f.release("2026.08.01", true);
   startHelpers(f.helpers);
-  await runYtDlp(["--dump-single-json", "--", video]);
+  await f.play();
   await until(async () => !!(await f.status()).managed["yt-dlp"]?.["2026.08.01"]?.worked.youtube, "the first copy worked");
   f.release("2026.09.01", true);
   await checkHelper("yt-dlp");
@@ -259,14 +264,14 @@ test("an extraction still running on a replaced copy keeps it until it finishes"
   // 2026.09.01 has no evidence yet, so the next update keeps 2026.08.01 as the previous copy;
   // only the run in progress keeps 2026.09.01 on disk.
   f.block(true);
-  const running = runYtDlp(["--dump-single-json", "--", video]);
+  const running = f.play();
   await until(() => f.runs().length === 2, "the extraction started on 2026.09.01");
   f.release("2026.10.01", true);
   assert.equal(await checkHelper("yt-dlp"), f.path("2026.10.01"));
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01", "2026.10.01"]);
   f.block(false);
   assert.match(await running, /extractor 2026\.09\.01/, "the older run reads its own files to the end");
-  assert.match(await runYtDlp(["--dump-single-json", "--", "https://www.twitch.tv/couch"]), /extractor 2026\.10\.01/);
+  assert.match(await f.play("https://www.twitch.tv/couch"), /extractor 2026\.10\.01/);
   assert.deepEqual(f.runs(), ["2026.08.01", "2026.09.01", "2026.10.01"]);
 
   // The next check prunes again; 2026.09.01 has now worked, so it is the previous copy.
@@ -283,7 +288,7 @@ test("a copy --helpers previous is checking while an update removes it is kept, 
   assert.equal(await helper("yt-dlp"), f.path("2026.08.01"));
   f.release("2026.09.01", true);
   await checkHelper("yt-dlp");
-  await runYtDlp(["--dump-single-json", "--", video]);
+  await f.play();
   await until(async () => !!(await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked.youtube, "2026.09.01 worked, so an update would keep it and remove 2026.08.01");
 
   // The daily check has read no hold and waits for GitHub while `previous` checks 2026.08.01.
@@ -302,7 +307,7 @@ test("a copy --helpers previous is checking while an update removes it is kept, 
   assert.ok(f.copies().includes("2026.08.01"), "the update keeps the copy the operator is holding");
   rmSync(join(f.directory, "probe-gate-held"));
   assert.match(await recovering, /^Couch uses yt-dlp 2026\.08\.01 from its next run/);
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/);
+  assert.match(await f.play(), /extractor 2026\.08\.01/);
   assert.equal((await f.status()).selected["yt-dlp"]?.held, true);
 });
 
@@ -310,12 +315,12 @@ test("while PATH's yt-dlp is used, Couch keeps only its previous copy and one a 
   const f = fixture(t);
   f.release("2026.08.01", true);
   startHelpers(f.helpers);
-  await runYtDlp(["--dump-single-json", "--", video]);
+  await f.play();
   await until(async () => !!(await f.status()).managed["yt-dlp"]?.["2026.08.01"]?.worked.youtube, "2026.08.01 worked");
   f.release("2026.09.01", true);
   await checkHelper("yt-dlp");
   f.block(true);
-  const running = runYtDlp(["--dump-single-json", "--", video]);
+  const running = f.play();
   await until(() => f.runs().length === 2, "the extraction started on 2026.09.01");
 
   f.release("2026.10.01", true);
@@ -369,7 +374,7 @@ test("a held copy Core was removing when it stopped is put back on restart", opt
   startHelpers(f.helpers);
   assert.equal(await helper("yt-dlp"), f.path("2026.08.01"), "the restarted Core uses the held copy, offline too");
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"]);
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/);
+  assert.match(await f.play(), /extractor 2026\.08\.01/);
 });
 
 test("a renewal that fails while --helpers latest succeeds leaves the latest selected", options, async t => {
@@ -397,7 +402,7 @@ test("a hold written while an update decides on that copy keeps it, however thei
   f.release("2026.09.01", true);
   startHelpers(f.helpers);
   assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
-  await runYtDlp(["--dump-single-json", "--", video]);
+  await f.play();
   await until(async () => !!(await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked.youtube, "2026.09.01 worked, so an update would keep it and remove 2026.08.01");
 
   // The command has checked 2026.08.01 and waits to write its hold. The update sets 2026.08.01
@@ -435,6 +440,140 @@ test("a hold written while an update decides on that copy keeps it, however thei
   decide();
   assert.equal(await daily, f.path("2026.10.01"));
   assert.ok(existsSync(f.path("2026.08.01")), "the held copy is still there");
-  assert.match(await runYtDlp(["--dump-single-json", "--", video]), /extractor 2026\.08\.01/);
+  assert.match(await f.play(), /extractor 2026\.08\.01/);
   assert.equal((await f.status()).selected["yt-dlp"]?.held, true);
+});
+
+test("--helpers previous renews a hold Core has applied, with the held copy", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.08.01", true);
+  f.release("2026.09.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+  await helpersCommand(f.helpers, ["previous"]);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+  assert.equal((await f.status()).selected["yt-dlp"]?.held, true);
+
+  assert.match(await helpersCommand(f.helpers, ["previous", "2"]), /^Couch uses yt-dlp 2026\.08\.01, which worked before, from its next run until /);
+  const { hold } = await f.status();
+  assert.equal((Date.parse(hold!.until) - Date.parse(hold!.since)) / 86_400_000, 2);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+});
+
+test("only playable media counts as a copy having worked, so an update keeps the copy that played", options, async t => {
+  const f = fixture(t);
+  f.release("2026.08.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+
+  // 2026.09.01 exits cleanly, but with media information Couch can't play.
+  f.release("2026.09.01", "unusable");
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.09.01"));
+  await assert.rejects(f.play(), /Web media must use/);
+  assert.equal((await inspectWebMedia(video)).title, "extractor 2026.09.01", "reading the page's details works");
+  assert.match(await runYtDlp(["--flat-playlist", "--dump-single-json", "--", video]), /extractor 2026\.09\.01/, "and so does listing");
+  assert.deepEqual((await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked, {}, "neither is playback");
+
+  f.release("2026.10.01", true);
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.10.01"));
+  assert.deepEqual(f.copies(), ["2026.08.01", "2026.10.01"], "the copy that played is the previous one");
+  assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.08\.01, which worked before,/);
+});
+
+test("a run that ends while an update decides which copies to keep stays until the next check", options, async t => {
+  const f = fixture(t);
+  f.release("2026.08.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+  f.release("2026.09.01", true);
+  await checkHelper("yt-dlp");
+  f.block(true);
+  const running = f.play();
+  await until(() => f.runs().length === 2, "the extraction started on 2026.09.01");
+
+  // The update reads which copies have worked, when only 2026.08.01 has; then the run on
+  // 2026.09.01 ends and records that it played, before the update removes anything.
+  const status = join(f.helpers, "status.json"), { readFile } = fsp;
+  let armed = true, reading = false, resume = () => {};
+  const resumed = new Promise<void>(resolve => { resume = resolve; });
+  const mock = t.mock.method(fsp, "readFile", async (...args: Parameters<typeof readFile>) => {
+    const result = await readFile(...args);
+    if (armed && args[0] === status) { armed = false; reading = true; await resumed; }
+    return result;
+  });
+  syncBuiltinESMExports();
+  t.after(() => { mock.mock.restore(); syncBuiltinESMExports(); });
+
+  f.release("2026.10.01", true);
+  const daily = checkHelper("yt-dlp");
+  await until(() => reading, "the update has read which copies worked");
+  f.block(false);
+  assert.equal(await running, "extractor 2026.09.01");
+  resume();
+  assert.equal(await daily, f.path("2026.10.01"));
+  assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01", "2026.10.01"], "the copy whose run ended during the check stays");
+  assert.ok((await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked.youtube, "with what its run recorded");
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.10.01"));
+  assert.deepEqual(f.copies(), ["2026.09.01", "2026.10.01"], "the next check keeps it as the previous copy");
+});
+
+test("a managed copy of PATH's version never takes the place of an earlier copy that worked", options, async t => {
+  const f = fixture(t);
+  f.release("2026.08.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+  f.release("2026.09.01", true);
+  await checkHelper("yt-dlp");
+  assert.equal(await f.play(), "extractor 2026.09.01");
+
+  // The package manager catches up with the copy Couch downloaded.
+  const system = join(f.directory, "bin", "yt-dlp");
+  writeFileSync(system, program(f.directory, "2026.09.01", true), { mode: 0o755 });
+  assert.equal(await checkHelper("yt-dlp"), system);
+  assert.deepEqual(f.copies(), ["2026.08.01"], "PATH provides 2026.09.01; the earlier copy that worked stays");
+  assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.08\.01, which worked before,/);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+});
+
+test("of overlapping --helpers commands, the last to succeed names the outcome", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.08.01", true);
+  f.release("2026.09.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+
+  // One command stops right after its first removal under `prefix` while the other runs to the end.
+  const { rm } = fsp;
+  let prefix = "", reached = false, resume = () => {};
+  const mock = t.mock.method(fsp, "rm", async (...args: Parameters<typeof rm>) => {
+    await rm(...args);
+    if (prefix && String(args[0]).startsWith(prefix)) { prefix = ""; reached = true; await new Promise<void>(resolve => { resume = resolve; }); }
+  });
+  syncBuiltinESMExports();
+  t.after(() => { mock.mock.restore(); syncBuiltinESMExports(); });
+  const pause = async (at: string, command: string) => {
+    prefix = at;
+    reached = false;
+    const paused = helpersCommand(f.helpers, [command]);
+    paused.catch(() => {});
+    await until(() => reached, `${command} is paused`);
+    return { paused };
+  };
+
+  // `previous` has written its hold and is removing its pin when `latest` succeeds.
+  let { paused } = await pause(join(f.helpers, "pins"), "previous");
+  assert.equal(await helpersCommand(f.helpers, ["latest"]), "Couch returns to the latest yt-dlp from its next run.");
+  resume();
+  await assert.rejects(paused, /A later --helpers command changed this hold/);
+  assert.equal((await f.status()).hold, null);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+
+  // `latest` has removed the hold and is flushing that when `previous` succeeds.
+  ({ paused } = await pause(join(f.helpers, "hold.json"), "latest"));
+  assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.08\.01 from its next run/);
+  resume();
+  await assert.rejects(paused, /A later --helpers previous held yt-dlp again/);
+  assert.equal((await f.status()).hold?.active, true);
+  assert.equal(await helper("yt-dlp"), f.path("2026.08.01"));
+  assert.deepEqual(readdirSync(join(f.helpers, "pins")), []);
 });

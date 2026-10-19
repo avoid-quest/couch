@@ -2,7 +2,8 @@ import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
-import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import { resolveWithYtDlp, runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import { providerForUrl } from "../shared/providers";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
 import { movies123Title } from "./providers/movies123";
@@ -150,10 +151,11 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin });
-    const info = parseInfo(output);
-    if (info._has_drm === true) await rejectDrm(info, signal);
-    const media = parseMedia(info, subtitleLanguage);
+    const { info, media } = await resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
+      const info = parseInfo(output);
+      if (info._has_drm === true) await rejectDrm(info, signal);
+      return { info, media: parseMedia(info, subtitleLanguage) };
+    });
     media.publicNetwork = true;
     if (direct) {
       media.metadata = { ...media.metadata, ...direct.metadata };
