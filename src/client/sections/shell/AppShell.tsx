@@ -314,7 +314,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid">
             <div className="flex min-w-0 items-center">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
-              {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+              {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
