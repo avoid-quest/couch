@@ -402,6 +402,16 @@ test("a source's refusal is kept for its relay, so Core can report it", async ()
   expect(f.relay.refused("playing", next.source)).toBeUndefined();
 });
 
+test("only HTTP errors are reported as refusals, excluding range exhaustion", async () => {
+  const f = fixture(), video = "https://media.example/video.mp4";
+  const media = await f.prepare(video);
+  for (const [status, refusal] of [[403, 403], [304, undefined], [503, 503], [416, undefined]] as const) {
+    f.replies.set(video, () => new Response(null, { status }));
+    expect((await f.serve(media.source)).status).toBe(status);
+    expect(f.relay.refused("playing", media.source)).toBe(refusal);
+  }
+});
+
 for (const browserStatus of [200, 404]) test(`a browser relay keeps its own ${browserStatus} after Core refuses the same playback`, async () => {
   const f = fixture(), video = "https://media.example/video.mp4";
   const core = await f.prepare(video, "playing", { origin: "http://127.0.0.1:3800", userAgent: "Couch" });

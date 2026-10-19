@@ -183,7 +183,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       try {
         upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay, url), ...(range ? { range } : {}) }, signal: request.signal });
         // The last answer stands: a refusal is forgotten once the source answers again.
-        relay.refused = upstream.ok || upstream.status === 416 ? undefined : upstream.status;
+        relay.refused = upstream.status >= 400 && upstream.status <= 599 && upstream.status !== 416 ? upstream.status : undefined;
         let playlist = kind === "playlist" || playlistType(upstream.headers.get("content-type"), upstream.url || url);
         if (relay.publicNetwork && upstream.ok && !playlist) {
           const sniffed = await sniffPlaylist(upstream);
