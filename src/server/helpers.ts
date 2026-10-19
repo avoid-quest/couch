@@ -116,6 +116,19 @@ const newestFirst = (a: string, b: string) => b.localeCompare(a, "en", { numeric
 async function remove(name: Helper, entry: string) {
   const directory = join(root, name, entry);
   if ([...inUse.keys()].some(path => path.startsWith(directory + sep))) return false;
+  // `--helpers previous` writes its hold before its last look at the copy, so a yt-dlp copy
+  // is first set aside, as if its download were interrupted, and kept if held by then.
+  if (name === "yt-dlp" && !entry.endsWith(".partial")) {
+    const aside = `${directory}.partial`;
+    await rm(aside, { recursive: true, force: true }).catch(() => {});
+    if (!await rename(directory, aside).then(() => true, () => false)) return !existsSync(directory);
+    if (activeHold(await readHold(root))?.version === entry) {
+      await rename(aside, directory).catch(() => {});
+      return false;
+    }
+    await rm(aside, { recursive: true, force: true }).catch(() => {});
+    return true;
+  }
   await rm(directory, { recursive: true, force: true }).catch(() => {});
   return true;
 }
@@ -206,7 +219,8 @@ async function check(name: Helper): Promise<string> {
   // A failed release check must not prefer an older PATH copy over the cached one.
   const offlineCopy = name === "yt-dlp" && !current ? (await managed())[0] : undefined;
   if (system && systemVersion && recentEnough(name, systemVersion, current?.version ?? offlineCopy?.version))
-    return select(name, { origin: "system", path: system, version: systemVersion, latest: current?.version }, copies);
+    // Couch's own yt-dlp copies stay bounded, with their previous one, while PATH's is used.
+    return select(name, { origin: "system", path: system, version: systemVersion, latest: current?.version }, name === "yt-dlp" ? await managed() : copies);
   const copy = (await managed())[0];
   if (copy && (!current || copy.version >= current.version)) return select(name, { ...copy, origin: "managed", latest: current?.version }, copies);
   try { return await select(name, { ...await install(name, current ?? await latest(name)), origin: "managed", latest: current?.version }, copies); }
@@ -311,12 +325,18 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
   const earlier = (await readdir(join(directory, "yt-dlp")).catch(() => []))
     .filter(entry => !entry.endsWith(".partial") && newestFirst(entry, current.version) > 0)
     .sort((a, b) => Number(worked(b)) - Number(worked(a)) || newestFirst(a, b));
+  const before = await readHold(directory);
   for (const entry of earlier) {
     const path = await executable(join(directory, "yt-dlp", entry));
-    if (!path || await version("yt-dlp", path) !== entry) continue;
+    if (!path) continue;
+    // Hold first, then check the copy: a running Core's update keeps a copy held before it
+    // removes it (remove), so a copy still here and running afterwards stays.
     const since = new Date(), until = new Date(since.getTime() + Number(days) * 24 * 60 * 60 * 1000);
     await writeJson(join(directory, "hold.json"), { schema: 1, helper: "yt-dlp", version: entry, since: since.toISOString(), until: until.toISOString() } satisfies HelperHold);
-    return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${until.toISOString()}, then the latest again. Return sooner with --helpers latest.`;
+    if (await version("yt-dlp", path) === entry && await access(path, constants.X_OK).then(() => true, () => false))
+      return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${until.toISOString()}, then the latest again. Return sooner with --helpers latest.`;
   }
+  if (before) await writeJson(join(directory, "hold.json"), before);
+  else await removeHold(directory);
   throw new Error(`Couch keeps no earlier yt-dlp than ${current.version} that runs.`);
 }

@@ -309,11 +309,23 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   that check saw. Under `managed`, each copy on disk has its digest and, for
   yt-dlp, `worked`: the last time an extraction with that copy succeeded, per
   provider. A copy that prints its version has only been verified to run.
-  Reading the file never checks, downloads or selects a helper.
-- Couch keeps one previous yt-dlp copy beside the selected one: the newest that
-  has worked, else the newest. A copy an extraction is still using stays until
-  the next check after it ends. A website failing, even with a 403, never
-  changes the selection: an update can break one site while others work.
+  Reading the file never checks, downloads or selects a helper. Entries of the
+  wrong shape are dropped when it is read, so a damaged file never stops selection.
+- Couch writes `status.json` and `hold.json` to a temporary file, flushes it,
+  renames it into place and flushes the directory; removing the hold flushes
+  the directory too. On Linux, with storage that honours flushes, a power cut
+  after a write returns keeps it. macOS `fsync` can leave it in the drive's
+  cache (Node has no `F_FULLFSYNC`), and Windows can't flush a directory, so
+  there the rename relies on NTFS's journal.
+  Either way a reader sees the old file or the new one, never part of one.
+- Couch keeps one previous yt-dlp copy beside the selected one, also while it
+  uses the copy on `PATH`: the newest that has worked, else the newest. A copy
+  an extraction is still using stays until the next check after it ends. Core
+  sets a copy aside before removing it and keeps it if a hold for it appeared;
+  `--helpers previous` writes its hold before its last look at the copy, so a
+  hold it reports always names a copy that is still there. A website failing,
+  even with a 403, never changes the selection: an update can break one site
+  while others work.
 - When an update breaks a website, recover from the account Couch runs as, with
   its `COUCH_DATA_DIR`: `node build/core.mjs --helpers previous [days]` (the
   installed app: `ELECTRON_RUN_AS_NODE=1 <Couch executable> <resources>/app.asar/build/core.mjs`)

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Helper } from "./helpers";
 
@@ -32,32 +32,73 @@ export type HelperStatus = {
 export type HelperHold = { schema: 1; helper: "yt-dlp"; version: string; since: string; until: string };
 
 const empty = (): HelperStatus => ({ schema: 1, selected: {}, managed: {} });
+const helpers: Helper[] = ["yt-dlp", "qjs", "ffmpeg", "mpv"];
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const text = (value: unknown) => typeof value === "string" ? value : null;
 
-async function readJson(file: string) {
-  try { return JSON.parse(await readFile(file, "utf8")) as unknown; } catch { return null; }
+async function readJson(file: string): Promise<unknown> {
+  try { return JSON.parse(await readFile(file, "utf8")); } catch { return null; }
 }
 
-// Written beside the file and renamed over it, so a reader never sees half of it.
+// Flushes a rename or removal in this directory to disk. Windows can't open a directory to
+// flush it; there NTFS's journal records the rename.
+async function syncDirectory(directory: string) {
+  if (process.platform === "win32") return;
+  const handle = await open(directory, "r");
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+// Written and flushed beside the file, then renamed over it and the rename flushed, so a
+// reader never sees half of it and a power cut after this returns keeps the new version.
 export async function writeJson(file: string, value: unknown) {
   const temporary = `${file}.${process.pid}.tmp`;
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);
+  const created = await mkdir(dirname(file), { recursive: true });
+  if (created) await syncDirectory(dirname(created));
+  const handle = await open(temporary, "w");
+  try {
+    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
+    await handle.sync();
+  } finally { await handle.close(); }
   await rename(temporary, file);
+  await syncDirectory(dirname(file));
 }
 
+// The status as recorded, keeping only entries of the expected shape: a damaged record
+// loses its history but never stops Core choosing a helper.
 export async function readStatus(directory: string): Promise<HelperStatus> {
-  const status = await readJson(join(directory, "status.json")) as HelperStatus | null;
-  return status?.schema === 1 ? status : empty();
+  const value = await readJson(join(directory, "status.json"));
+  const status = empty();
+  if (!isRecord(value) || value.schema !== 1) return status;
+  const { selected, managed } = value;
+  for (const name of helpers) {
+    const choice = isRecord(selected) ? selected[name] : null;
+    if (isRecord(choice) && (choice.origin === "system" || choice.origin === "managed") && typeof choice.version === "string"
+      && typeof choice.path === "string" && typeof choice.verifiedAt === "string" && typeof choice.held === "boolean")
+      status.selected[name] = { origin: choice.origin, version: choice.version, path: choice.path, sha256: text(choice.sha256), verifiedAt: choice.verifiedAt, latest: text(choice.latest), held: choice.held };
+    const copies = isRecord(managed) ? managed[name] : null;
+    if (isRecord(copies)) status.managed[name] = Object.fromEntries(Object.entries(copies).flatMap(([version, copy]): Array<[string, ManagedCopy]> => isRecord(copy) ? [[version, {
+      sha256: text(copy.sha256), installedAt: text(copy.installedAt),
+      worked: isRecord(copy.worked) ? Object.fromEntries(Object.entries(copy.worked).filter((entry): entry is [string, string] => typeof entry[1] === "string")) : {},
+    }]] : []));
+  }
+  return status;
 }
 
 export async function readHold(directory: string): Promise<HelperHold | null> {
-  const hold = await readJson(join(directory, "hold.json")) as HelperHold | null;
-  return hold?.schema === 1 && hold.helper === "yt-dlp" && typeof hold.version === "string" && !Number.isNaN(Date.parse(hold.until)) ? hold : null;
+  const hold = await readJson(join(directory, "hold.json"));
+  if (!isRecord(hold) || hold.schema !== 1 || hold.helper !== "yt-dlp") return null;
+  const { version, since, until } = hold;
+  return typeof version === "string" && typeof since === "string" && typeof until === "string" && !Number.isNaN(Date.parse(until))
+    ? { schema: 1, helper: "yt-dlp", version, since, until } : null;
 }
 
 export const activeHold = (hold: HelperHold | null) => hold && Date.parse(hold.until) > Date.now() ? hold : null;
 
-export const removeHold = (directory: string) => rm(join(directory, "hold.json"), { force: true });
+export async function removeHold(directory: string) {
+  await rm(join(directory, "hold.json"), { force: true });
+  // Nothing to flush when Couch has no helpers directory yet.
+  await syncDirectory(directory).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+}
 
 // The passive view for diagnosis: the recorded selection and the hold, with whether it is still in force.
 export async function readHelperStatus(directory: string) {
