@@ -209,12 +209,6 @@ html { view-transition-name: none; }
   .player-timeline [data-current-chapter] { display: none; }
 }
 /* Narrow phones can't fit the tools beside the transport, so it takes its own line and they sit under it, at the ends. */
-@media (max-width: 399px) {
-  .player-control-row { grid-template-columns: 1fr 1fr; }
-  .player-control-row > .player-transport { grid-column: 1 / -1; }
-  .player-control-row > [data-player-tools="sound"] { grid-column: 1; }
-  .player-control-row > [data-player-tools="more"] { grid-column: 2; }
-}
 @media (max-height: 500px) {
   [data-artwork-stage] .player-workspace, [data-queue-open] .player-workspace { inset-block: 3.5rem calc(var(--bottom-bar, 10rem) + .5rem); }
   [data-artwork-stage] .player-main, .player-summary { gap: .5rem; }

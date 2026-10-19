@@ -17,8 +17,7 @@ Volume and Where it plays at the left, the transport in the middle and Up
 next, Playback and fullscreen at the right, so the band reads as one line
 with Play at its centre. Up next shows only where it has something to open
 (on wide screens audio keeps the queue beside the artwork), and fullscreen
-only over a picture. Narrow phones give the transport its own line and set
-the tools under it, at the ends. On phones the bar keeps Play/Pause and
+only over a picture. One lane on every screen, phones included: the eight 44px controls fit a 390px phone at its gutters. On phones the bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
 
