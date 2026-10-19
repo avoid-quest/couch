@@ -134,7 +134,7 @@ export function SearchPanel(props: Props) {
   return <section ref={panel} className="min-w-0 space-y-8" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && <>
       {(total > 0 || asking.length > 0) && <div className="grid gap-2">
-        <p role="status" className="flex min-h-8 items-center gap-2 text-sm text-muted-foreground tabular-nums">{asking.length > 0 && <Spinner aria-hidden="true" className="size-3.5" />}{relevant.length} results{asking.length > 0 && `, still asking ${asking.join(", ")}`}</p>
+        <p role="status" className="flex min-h-8 items-center gap-2 text-sm text-muted-foreground tabular-nums">{asking.length > 0 && <Spinner aria-hidden="true" className="size-3.5" />}{relevant.length} {relevant.length === 1 ? "result" : "results"}{asking.length > 0 && `, still asking ${asking.join(", ")}`}</p>
         {/* Each row is named once at its left, as a settings row is, so the choices stay short: "From: YouTube", "Ends by: 17:30". */}
         {(relevant.length > 0 || filtered) && <div className="grid gap-x-4 gap-y-1 md:grid-cols-[5rem_minmax(0,1fr)] md:items-center">
           <p className="text-sm text-muted-foreground">From</p>
@@ -159,7 +159,7 @@ export function SearchPanel(props: Props) {
       {props.connected && !asking.length && !relevant.length && !filtered && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
       {loose.length > 0 && <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">
-        <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 justify-self-start text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} results that don't mention “{query}”</Button></CollapsibleTrigger>
+        <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 justify-self-start text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} {loose.length === 1 ? "result that doesn't" : "results that don't"} mention “{query}”</Button></CollapsibleTrigger>
         <CollapsibleContent><HitList hits={loose} label="Other results" timeline={false} /></CollapsibleContent>
       </Collapsible>}
     </>}
