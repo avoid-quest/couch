@@ -294,18 +294,22 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         {!playerTarget && bufferingStatus}
         {/* Every control is a ghost icon (icon-lg) at the band's 44px target, the now-playing bar's too; those at the
             band's ends pull back (-2.5) so their glyphs line up with the timeline's times, as Back does with the title. */}
-        <div className="player-control-row [&_[data-size=icon-lg]]:size-11">
+        <div className="grid gap-2">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
-          {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst className="player-transport" />}
-          <div data-player-tools="sound" className="-ml-2.5 flex shrink-0 items-center gap-0.5">
-            {state && <VolumeButton state={state} connected={connected} run={run} />}
-            {state && <WhereItPlays state={state} connected={connected} run={run} />}
-          </div>
-          <div data-player-tools="more" className="-mr-2.5 flex shrink-0 items-center gap-0.5">
-            {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
-            <Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" aria-expanded={panel !== null} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
-            {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
-            {!tvPresentation && (!artworkStage || fullscreen.fullscreen) && <Button variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+          <div className="player-controls-scroll">
+            <div className="player-control-row [&_[data-size=icon-lg]]:size-11">
+              {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst className="player-transport" />}
+              <div data-player-tools="sound" className="-ml-2.5 flex shrink-0 items-center gap-0.5">
+                {state && <VolumeButton state={state} connected={connected} run={run} />}
+                {state && <WhereItPlays state={state} connected={connected} run={run} />}
+              </div>
+              <div data-player-tools="more" className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
+                <Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" aria-expanded={panel !== null} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
+                {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
+                {!tvPresentation && (!artworkStage || fullscreen.fullscreen) && <Button variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+              </div>
+            </div>
           </div>
         </div>
       </div>
