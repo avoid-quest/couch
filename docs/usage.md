@@ -34,8 +34,7 @@ have no catalogue home or genre feed in Couch. Bandcamp search returns albums
 and tracks in one result list, without a next page. Its catalogue accepts public
 `artist.bandcamp.com/album/...` and `/track/...` links; artist or label homepages,
 tag pages and custom domains are not catalogue links. SoundCloud track searches
-offer **More from SoundCloud**. Opening a SoundCloud search result reuses its
-metadata for up to a minute; playback always resolves a fresh audio stream.
+offer **More from SoundCloud**.
 
 ## What plays where
 
