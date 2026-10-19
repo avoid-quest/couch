@@ -296,7 +296,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             band's ends pull back (-2.5) so their glyphs line up with the timeline's times, as Back does with the title. */}
         <div className="grid gap-2">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
-          <div className="player-controls-scroll">
+          <div className="player-controls-scroll" onFocusCapture={event => event.target.scrollIntoView({ block: "nearest", inline: "nearest" })}>
             <div className="player-control-row [&_[data-size=icon-lg]]:size-11">
               {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst className="player-transport" />}
               <div data-player-tools="sound" className="-ml-2.5 flex shrink-0 items-center gap-0.5">
