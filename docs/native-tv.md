@@ -33,11 +33,13 @@ sudo couch-setup --tv
 sudo reboot
 ```
 
-Setup installs Debian's Xorg, Openbox, LightDM, PipeWire and Bluetooth support,
-and the GStreamer plugins and libplist the optional [AirPlay receiver](airplay.md) uses. It
+Setup installs Debian's Xorg, Openbox, LightDM, PipeWire and Bluetooth support. It
 creates the locked, unprivileged `couch-tv` account and enables its graphical
 session. Couch runs from the root-owned `/usr/bin/couch` (`/opt/Couch/couch`) in TV presentation, fullscreen on the TV. The mouse pointer hides after a second without movement anywhere on the TV, outside Couch's window and over the recovery notice too, and returns when it moves. No source checkout or
 manual verification utility is needed.
+
+Setup also installs the GStreamer plugins and libplist that the optional
+[AirPlay receiver](airplay.md) uses.
 
 If cursor hiding stops, the session logs its exit status once and keeps Couch
 and the recovery notice available. It does not restart the graphical session
