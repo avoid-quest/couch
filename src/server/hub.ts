@@ -919,11 +919,12 @@ export async function createHub(options: HubOptions) {
       // A live source plays only where an output uses it. Once consent leaves none, the shared
       // outputs it cannot use leave too, and it waits in Where it plays; private ones stay. As when
       // consent ends entirely, their controllers follow its publisher, where the choice resumes it.
+      // Core's own source (AirPlay) has no publishing Device: they keep the playback that waits.
       const source = changed && live.source(sourceOf(playback) ?? "");
       if (source && !playback.outputs.some(output => output.picture && source.video || output.sound && source.audio)) {
         const left = playback.outputs.filter(output => !output.local).map(output => output.deviceId);
         for (const deviceId of left) leave(playback, deviceId);
-        follow([changed!, ...left], source.deviceId);
+        if (!live.hosted(source.id)) follow([changed!, ...left], source.deviceId);
         choose(playback, changed!, `${nameOf(changed!)} is not sharing an output this source uses. Choose where it plays.`);
       }
       const trimChanged = refreshTrims(playback);

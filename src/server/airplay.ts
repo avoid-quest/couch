@@ -15,7 +15,7 @@ export type AirPlaySessions = {
 };
 
 const restartWindow = 5 * 60_000, maxRestarts = 3;
-const startTimeout = 20_000, closedGrace = 1_000, quietLimit = 30 * 60_000;
+const startTimeout = 20_000, quietLimit = 30 * 60_000;
 export const airPlayPackages = "gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav and libplist-2.0-4";
 const executable = (path: string) => { try { accessSync(path, constants.X_OK); return true; } catch { return false; } };
 const which = (name: string) => (process.env.PATH ?? "/usr/bin:/bin").split(delimiter).map(directory => join(directory, name)).find(executable);
@@ -37,6 +37,9 @@ function lines(stream: Readable, line: (text: string) => void) {
 // UxPlay keeps the AirPlay protocol, its PIN pairing and one sender at a time. Couch runs it
 // only while an admin has turned it on, and a sender counts as playing here only once its
 // decoded sound arrives, which UxPlay produces only for a sender it admitted.
+// A sender is UxPlay's one RTSP (RAOP) connection, which it refuses to a second while one is open.
+// Its debug log (-d 1, without packet data) names when that connection is made and removed;
+// other connections, such as one refused or one that only asks for /info, never hold a session.
 export function createAirPlay(options: {
   executable?: string;
   directory: string;
@@ -58,9 +61,8 @@ export function createAirPlay(options: {
   let child: ChildProcess | undefined, exited: Promise<void> | undefined, ready = false, name = "";
   let restarts: number[] = [], restartTimer: ReturnType<typeof setTimeout> | undefined;
   const stopping = new WeakSet<ChildProcess>();
-  // UxPlay's open connections, by socket. The last sender to introduce itself names the session.
-  const open = new Set<number>();
-  let sender = "", closedAt = 0;
+  // Whether UxPlay has a sender connection now; the sender that introduced itself on it names its session.
+  let connected = false, sender = "";
   let session: { id: string; sender: string; ingress: ReturnType<typeof createAudioIngress>; timer: ReturnType<typeof setInterval>; media: number } | undefined;
   let pending = Promise.resolve();
 
@@ -95,8 +97,8 @@ export function createAirPlay(options: {
       const pcm = ingress.tick();
       if (session !== current) return;
       if (pcm.length) options.sessions.audio(id, pcm);
-      // The sender left: its connections closed, or it went quiet without UxPlay noticing.
-      if (!open.size && Date.now() - closedAt > closedGrace || Date.now() - current.media > quietLimit) end();
+      // A sender that went quiet without UxPlay noticing has left.
+      if (Date.now() - current.media > quietLimit) end();
     }, 20) };
     current.timer.unref();
     log(`airplay ${id.slice(0, 8)} receiving`);
@@ -104,8 +106,8 @@ export function createAirPlay(options: {
     options.changed();
   };
   const media = (chunk: Buffer) => {
-    // Sound without an open connection is what a pipeline flushed after its sender left.
-    if (!session && !open.size) return;
+    // Sound without a sender connection is what a pipeline flushed after its sender left.
+    if (!session && !connected) return;
     if (!session) begin();
     session!.media = Date.now();
     if (!session!.ingress.push(chunk)) { log("airplay audio framing failed; restarting the receiver"); child?.kill("SIGTERM"); }
@@ -113,9 +115,10 @@ export function createAirPlay(options: {
   const line = (text: string) => {
     let match: RegExpExecArray | null;
     if (!ready && /^Initialized server socket/.test(text)) { ready = true; options.changed(); }
-    else if (match = /^Accepted IPv[46] client on socket (\d+)/.exec(text)) open.add(Number(match[1]));
-    else if (match = /^Connection closed on socket (\d+)/.exec(text)) { open.delete(Number(match[1])); if (!open.size) closedAt = Date.now(); }
-    else if (match = /connection request from (.*) \(.*\) with deviceID = /.exec(text)) { if (!session) sender = label(match[1]!); }
+    // Each sender connection is its own session: one that follows another never continues it.
+    else if (/^New connection \S+ identified as Connection type RAOP$/.test(text)) { end(); connected = true; sender = ""; log("airplay sender connected"); }
+    else if (/^removing connection type RAOP socket \d+ /.test(text)) { end(); connected = false; log("airplay sender disconnected"); }
+    else if (match = /^connection request from (.*) \(.*\) with deviceID = /.exec(text)) { if (connected && !session) sender = label(match[1]!); }
     else if (match = /error while loading shared libraries: ([^:\s]+)/.exec(text)) error = `AirPlay needs ${label(match[1]!)}. Install ${airPlayPackages}.`;
     else if (/Required gstreamer (?:libav )?plugin/.test(text)) error = `AirPlay needs GStreamer. Install ${airPlayPackages}.`;
     // UxPlay exits when it can't announce itself; retrying wouldn't change the network.
@@ -136,11 +139,11 @@ export function createAirPlay(options: {
     await mkdir(join(directory, "cache"), { recursive: true, mode: 0o700 });
     const { code, deviceId } = options.identity();
     name = options.name();
-    ready = false; open.clear(); sender = "";
+    ready = false; connected = false; sender = "";
     // setpriv ends UxPlay with Core however Core ends; stdbuf lets Couch read its log as it happens.
     // Its home is Couch's data, so no ~/.uxplayrc, registration or key outside it applies.
     const args = ["--pdeathsig", "KILL", "--", tools.stdbuf!, "-oL", "-eL", options.executable!,
-      "-n", name, "-nh", "-vs", "0", "-artp", `pt=${payloadType} ! rtpstreampay ! fdsink fd=3 sync=false`,
+      "-n", name, "-nh", "-vs", "0", "-d", "1", "-artp", `pt=${payloadType} ! rtpstreampay ! fdsink fd=3 sync=false`,
       "-pin", code, "-reg", join(directory, "register"), "-key", join(directory, "key.pem"), "-m", deviceId];
     const { UXPLAYRC: _rc, XDG_CONFIG_HOMEDIR: _config, ...environment } = process.env;
     const spawned = child = spawn(tools.setpriv!, args, { stdio: ["ignore", "pipe", "pipe", "pipe"], env: { ...environment, HOME: directory, XDG_CACHE_HOME: join(directory, "cache") } });
@@ -154,7 +157,7 @@ export function createAirPlay(options: {
       clearTimeout(timeout);
       if (child !== spawned) return;
       child = undefined; exited = undefined;
-      end(); open.clear(); ready = false;
+      end(); connected = false; ready = false;
       if (stopping.has(spawned) || closed || !enabled) { options.changed(); return; }
       const now = Date.now();
       restarts = [...restarts.filter(time => now - time < restartWindow), now];

@@ -19,7 +19,8 @@ is on; until then it says it is waiting.
 
 The Couch appears in AirPlay under its own name. The first time a device plays
 here it asks for the **Code** shown below the switch; after that it is
-remembered. **New code** makes every device enter the new code again. The
+remembered. **New code**, once you confirm it, restarts AirPlay, which stops a device
+playing, and makes every device enter the new code again. The
 status line says whether AirPlay is ready, who is playing, or why it can't run.
 
 ## Play it
@@ -47,7 +48,7 @@ Couch runs [UxPlay](https://github.com/FDH2/UxPlay) 1.74, pinned to commit
 (`src/server/airplay.ts`). UxPlay keeps the AirPlay protocol, discovery (its own
 mDNS responder), the code and its one-sender-at-a-time rule. Couch starts it
 only while the switch and **Share on network** are on, with
-`-n <name> -nh -vs 0 -pin <code> -reg <data>/airplay/register -key <data>/airplay/key.pem -m <address>`
+`-n <name> -nh -vs 0 -d 1 -pin <code> -reg <data>/airplay/register -key <data>/airplay/key.pem -m <address>`
 and `-artp "pt=96 ! rtpstreampay ! fdsink fd=3 sync=false"`. The code and
 the locally administered address that keeps it the same receiver to senders are
 in `couch.sqlite` (`installation_airplay`); `HOME` is `<data>/airplay`, so no
@@ -74,8 +75,15 @@ A sender becomes a source only when its decoded sound arrives, which UxPlay
 produces only after the sender was admitted, never from a TCP connection or a
 device announcing its name. Core publishes it as a live source it owns
 (`publisher` `airplay`, never a Device), so no device can end it, send it media
-or play it as its publisher. The source ends when UxPlay's log shows the last
-connection closed, after a second, or after 30 minutes without sound. The
+or play it as its publisher; a device that stops sharing its speakers leaves it
+waiting in **Where it plays**, as for any shared source. A sender is UxPlay's one
+RTSP (RAOP) connection, which it refuses to anyone else while it is open. Couch
+runs UxPlay with `-d 1` (its debug log, without packet data), whose lines name
+when that connection is identified and removed. The source ends as soon as it is
+removed, or after 30 minutes without sound; other connections, such as one UxPlay
+refused or one that only asked for its `/info`, neither keep it nor end it. A
+sender that connects next always gets a new source, which nothing plays until
+someone chooses it. The
 sender's name comes from UxPlay's log, stripped of control characters and cut
 to 60 characters.
 
@@ -85,8 +93,10 @@ AirPlay off where the Couch's other networks shouldn't reach it. Its pairing
 code is its only admission control; Couch pairing doesn't apply to AirPlay
 senders.
 
-Core's log (`couch.log`) records `airplay <id> receiving` and `airplay <id> ended`
-for each sender, and `airplay receiver stopped` with the reason.
+Core's log (`couch.log`) records `airplay sender connected` and `airplay sender
+disconnected` for each sender connection, `airplay <id> receiving` and
+`airplay <id> ended` for each source, and `airplay receiver stopped` with the
+reason. UxPlay's own log stays in Core's memory.
 
 ## Requirements
 
