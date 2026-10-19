@@ -103,7 +103,8 @@ one level for the whole Playback, with each device's fader below it, its
 number in the same column and read the same way, without "%". The picker
 shows it while the Playback plays on two or more devices; with one, that
 device's fader is the level, and a Volume above it would say the same number
-twice (the band's Volume popover still opens it); a shared source still
+twice (the band's Volume popover still opens it). A saved Playback with a legacy
+trim keeps the master Volume until moving it folds that trim into device levels; a shared source still
 waiting for its first receiver shows none, since there is no sound to set. It acts on the
 Playback's sound that you may control: it shows the loudest level that sound
 plays at and moves it so the loudest reaches the new level, keeping their

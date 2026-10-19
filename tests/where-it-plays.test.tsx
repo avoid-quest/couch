@@ -155,3 +155,14 @@ test("a receiver's check describes its status and buffered explanation, includin
     expect(elements(check.props.children)).toContain(description);
   }
 });
+
+
+test("a single output retains the effective Playback Volume until a legacy trim is folded", async () => {
+  const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
+  const outputs = [{ deviceId: "tv", picture: true, sound: true }];
+  for (const trim of [0, 50, 100]) {
+    const state = { ...waiting(0), liveSources: [], outputs, mixTrim: trim, player: { volume: 50 * trim / 100 }, playbacks: [{ id: "p", status: "playing", outputs }] } as unknown as ClientSessionState;
+    const controls = elements(WhereItPlays({ state, connected: true, run: async () => true }));
+    expect(controls.filter(item => item.type === PlaybackVolume).length).toBe(trim === 100 ? 0 : 1);
+  }
+});

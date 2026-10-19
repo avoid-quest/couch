@@ -17,7 +17,8 @@ Volume and Where it plays at the left, the transport in the middle and Up
 next, Playback and fullscreen at the right, so the band reads as one line
 with Play at its centre. Up next shows only where it has something to open
 (on wide screens audio keeps the queue beside the artwork), and fullscreen
-only over a picture. One lane on every screen, phones included: the eight 44px controls fit a 390px phone at its gutters. On phones the bar keeps Play/Pause and
+only over a picture. F and double-click follow the same rule, while an already
+fullscreen window can always leave it. One lane on every screen, phones included: the eight 44px controls fit a 390px phone at its gutters. On phones the bar keeps Play/Pause and
 Where it plays. Every control there is an icon with an
 `aria-label` and a matching `title` tooltip, never visible text.
 
@@ -70,6 +71,8 @@ On phones, Up next replaces the picture too. The top band publishes its
 height as `--player-top`, and toasts sit below it. Opened over a video, Up
 next and the picture start below it too, as it turns solid.
 Queue navigation survives playback changes; track-specific settings reset.
+Up next keeps its heading and Close visible while scrolling, including when
+the current item clears. A row’s start time belongs to its primary Play target.
 Transport, volume and tools share one bottom dock across media modes, divided
 from the stage by a hairline over audio, as the now-playing bar is. Keep
 unavailable controls in their slots so loading and queue changes preserve

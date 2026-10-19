@@ -61,8 +61,8 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
           {/* Every Sheet closes from the end of its heading row; here it is the "…" column's size and place. */}
           <SheetClose asChild><Button variant="ghost" size="icon-lg" className="ml-auto size-11" aria-label="Close" title="Close"><X aria-hidden="true" /></Button></SheetClose>
         </SheetHeader>
-        {/* One Volume over two or more faders; with one its fader is the level, and a source still waiting for receivers has nothing to set. */}
-        {levels({ state, connected, run, inSync, volume: playing.length > 1 })}
+        {/* One Volume over two or more faders; with one its fader is the level, unless a legacy trim still attenuates it. */}
+        {levels({ state, connected, run, inSync, volume: playing.length > 1 || playing.length === 1 && (state.mixTrim ?? 100) !== 100 })}
         {/* The TV's fader hint, where its faders start rather than below a long list. */}
         {hint && <p className="pb-4 text-sm text-muted-foreground">{hint}</p>}
         {list("Playing", playing)}

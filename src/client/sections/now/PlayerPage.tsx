@@ -38,7 +38,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
   const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget, localLiveSourceId } = useSessionGate();
-  useCouchHotkeys([{ hotkey: "F", enabled: !tvPresentation && fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
@@ -86,6 +85,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const separate = !!playback?.hostOnly && showsPicture(state);
   const picture = showsPicture(state) && !separate;
   const artworkStage = audioOnly || !picture;
+  const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending && (!artworkStage || fullscreen.fullscreen);
+  useCouchHotkeys([{ hotkey: "F", enabled: canFullscreen, action: () => void fullscreen.toggle() }]);
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   const sharing = !!localLiveSourceId;
   // While this device shares, the bands stay up, so the top band's Stop sharing stays on screen.
@@ -223,7 +224,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         clicked.current = event.detail % 2 ? playing : !clicked.current;
         void run({ type: "pause", playbackId: player.playbackId, paused: clicked.current });
       }}
-      onDoubleClick={() => { if (tap.current === null && fullscreen.supported && !fullscreen.pending) void fullscreen.toggle(); }}>
+      onDoubleClick={() => { if (tap.current === null && canFullscreen) void fullscreen.toggle(); }}>
     </div>
     {/* The top band shows and hides with the band. Over a video it reads as one board line: the title and subtitle at the
         left, the clock and the end time at the right. Without a video desktop and phones show it for Back and a Remote's
@@ -276,7 +277,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         {/* Its controls pull back past the text (Close, Save as list, Played), so the scroller pads for them, with a
             little to spare: a vertical scroller with a stray pixel of overflow shifts its text when one takes focus. */}
         <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3 pb-4">
-          <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen && current ? closeQueue : undefined} closeRef={queueClose} />
+          <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen ? closeQueue : undefined} closeRef={queueClose} />
         </div>
       </aside>}
     </div>
@@ -304,7 +305,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
             {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
             <Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" aria-expanded={panel !== null} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
             {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
-            {!tvPresentation && !artworkStage && <Button variant="ghost" size="icon-lg" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+            {!tvPresentation && (!artworkStage || fullscreen.fullscreen) && <Button variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>
       </div>
