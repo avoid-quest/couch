@@ -327,7 +327,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1">
               <LiveSharingStatus header />
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64" />}
+              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 tv:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
               <DigitalClock className="ml-2 text-2xl font-light touch:hidden tv:inline" />
