@@ -16,6 +16,7 @@ import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-shar
 import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
 import { startLog } from "./log-file";
+import { rendererStatus } from "./renderer-status";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -52,6 +53,7 @@ type Choice = AppMode & { pins?: Record<string, string>; tvPresentation?: boolea
 const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
 const tv = appliance || choice.tvPresentation === true;
+const renderer = rendererStatus(join(dataDir, "renderer-status.json"), { run, version: app.getVersion() }, () => choice.mode === "remote" ? "remote" : "local");
 // The Mac window hides its title bar; its controls sit in the page's header (index.css).
 const macChrome = process.platform === "darwin" && !tv;
 const save = (next: Choice) => {
@@ -198,6 +200,7 @@ async function load() {
   for (;;) {
     try { return void await window.loadURL(address = await trust(address, false)); } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
+      renderer.unreachable();
       logAppError("main", `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`);
       // Keep trying in the background; a successful probe closes the prompt and loads the page.
       const reachable = new AbortController();
@@ -324,6 +327,7 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  renderer.watch(contents);
   contents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => { if (mainFrame) capture.clear(); });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
