@@ -156,10 +156,12 @@ exits, as it would on such a network.
 
 Checked: the pinned UxPlay built on Ubuntu 24.04 (Package's runner) starts on
 Debian 13 with Couch's arguments, answers an unpaired sender's request without
-Couch publishing anything, and stops on Couch's signal; GStreamer's own framing
+Couch publishing anything, refuses a second connection's request while that one
+is open, logs each sender connection as Couch reads it, and stops on Couch's signal; GStreamer's own framing
 arrives as a continuous tone at the right pitch through Couch's HLS; admission,
-ending, one source per sender, restarts and update busy-ness against UxPlay's
-interface.
+ending, one source per sender (also with an unpaired connection open and a next
+sender straight after), Where it plays when a device stops sharing its speakers,
+restarts and update busy-ness against UxPlay's interface.
 
 Not yet checked with real devices: pairing with the code and its memory,
 AirPlay audio and Screen Mirroring sound from iOS and macOS, a second sender's
