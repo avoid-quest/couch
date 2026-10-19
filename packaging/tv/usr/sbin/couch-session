@@ -28,5 +28,17 @@ case "${1:-status}" in
         printf 'Pair your replacement browser, then use this administrator code within 10 minutes:\n%s\n' "$code"
         ;;
     logs) journalctl "_UID=$uid" --no-pager -n 200 ;;
-    *) echo 'Usage: couch-session {status|restart|stop|logs|recover-admin|autostart enable|autostart disable}' >&2; exit 2 ;;
+    diagnose)
+        # A passive, allowlisted report to attach to a problem; see docs/native-tv.md.
+        case "${2:-}" in ''|--json) ;; *) exit 2 ;; esac
+        setup=none
+        [ ! -f /var/lib/couch-installer/native-tv/pending ] || setup=pending
+        [ ! -f /var/lib/couch-installer/native-tv/complete ] && [ ! -f /var/lib/couch-installer/tv-setup.complete ] || setup=complete
+        data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env 2>/dev/null | tail -1 | sed 's/^"//; s/"$//')
+        # It reads the TV account's files, services and sound as that account, with no other environment.
+        exec timeout 60 runuser -u couch-tv -- env -i PATH=/usr/bin:/bin HOME=/var/lib/couch XDG_RUNTIME_DIR="/run/user/$uid" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" ELECTRON_RUN_AS_NODE=1 \
+            /usr/bin/couch /usr/share/couch/tv/diagnose.js ${2:+"$2"} "${data:-/var/lib/couch/.local/share/quest.avoid.couch}" "$setup"
+        ;;
+    *) echo 'Usage: couch-session {status|restart|stop|logs|diagnose [--json]|recover-admin|autostart enable|autostart disable}' >&2; exit 2 ;;
 esac

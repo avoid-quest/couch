@@ -44,6 +44,14 @@ The setup integration (`tests/couch-setup.integration.ts`) runs `couch-setup`
 against a fixture root with its OS commands replaced. Its `--tv` and `--refresh`
 cases run as root in an unprivileged user namespace (`unshare -r`) and skip
 where the runner forbids one; a skip is not setup coverage.
+The diagnosis integration (`tests/tv-diagnose.integration.ts`) runs
+`packaging/tv/diagnose.js` the same way, with a hung sound server and seeded
+secrets. Set `COUCH_EVIDENCE=<directory>` on the latency integrations to keep
+their measurements ([native TV](native-tv.md#a-repeatable-hardware-run)).
+
+Main's window lifecycle has a native check, after `bun run build`, on a display
+(`xvfb-run -a` without one): `bun tests/renderer-status.native.ts <evidence
+directory>`. It reserves `COUCH_PORT` (default 42870) and the next two ports.
 
 ## Bundled live relay
 
