@@ -27,7 +27,7 @@ export function LiveSharingStatus({ className, header = false }: { className?: s
         Stop sharing as its action, so a stray tap beside the search never ends sharing for every receiver. */}
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-lg" className="sm:hidden" aria-label={`${status} · Stop sharing`} title={`${status} · Stop sharing`}><Radio aria-hidden="true" /></Button>
+        <Button variant="ghost" size="icon-lg" className="sm:hidden" aria-label={`${status} · Show sharing controls`} title={`${status} · Show sharing controls`}><Radio aria-hidden="true" /></Button>
       </PopoverTrigger>
       <PopoverContent data-tv-local-only align="end" collisionPadding={16} className="w-auto flex-row items-center gap-3 py-1.5 pr-1.5"><span className="text-muted-foreground">{status}</span>{stop()}</PopoverContent>
     </Popover>
