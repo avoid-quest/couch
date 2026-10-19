@@ -11,7 +11,7 @@ export function useLiveSourceHits(query: string): SearchHit[] {
       // Play on the publisher, or while controlling it, waits in Where it plays to choose receivers.
       const disabled = !connected;
       const play = () => { void run({ type: "playLive", sourceId: source.id }); };
-      const label = source.video ? source.audio ? "Screen & audio" : "Screen without audio" : source.kind === "system-audio" ? "System audio" : "Audio input";
+      const label = source.video ? source.audio ? "Screen & audio" : "Screen without audio" : source.kind === "system-audio" ? "System audio" : source.kind === "airplay" ? "AirPlay" : "Audio input";
       return {
         id: `live:${source.id}`, source: "Shared sources", title: source.name, meta: label, kind: "Live", live: true, video: source.video,
         primary: { label: "Play", disabled, run: play },
