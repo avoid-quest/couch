@@ -255,7 +255,7 @@ export async function createHub(options: HubOptions) {
     }, changed: () => broadcast() });
   // An admitted AirPlay sender's sound is a live source Core publishes while it plays here
   // (docs/airplay.md). Every receiver plays Core's buffered stream of it.
-  const airplay = createAirPlay({ executable: options.airplayExecutable, directory: join(dirname(options.databasePath), "airplay"), enabled: store.airplayEnabled(),
+  const airplay = createAirPlay({ executable: options.airplayExecutable, directory: join(dirname(options.databasePath), "airplay"), enabled: store.airplayEnabled(), network: () => store.remoteControlEnabled(),
     name: () => store.installationName(), identity: () => store.airplayIdentity(), log: line => log(line), changed: () => broadcast(),
     sessions: {
       started: (id, sender) => live.host({ id, deviceId: AIRPLAY_PUBLISHER, name: `AirPlay · ${sender}`, kind: "airplay", audio: true, video: false }),
@@ -1021,7 +1021,7 @@ export async function createHub(options: HubOptions) {
     if (domains.includes("devices")) {
       Object.assign(common, { installationName: store.installationName(), setupStep: store.setupStep(), administratorClaimed: store.administratorExists() });
       for (const playback of all()) playback.session.renamed();
-      void airplay.renamed();
+      void airplay.refresh();
     }
     broadcast();
   };
@@ -1469,6 +1469,7 @@ export async function createHub(options: HubOptions) {
         // listener would let it overwrite an Off accepted meanwhile.
         if (enabled ? !store.remoteControlEnabled() : loopbackPeer(requestPeer(request))) await lan?.setEnabled(enabled);
         store.saveRemoteControlEnabled(enabled);
+        void airplay.refresh();
         // The listener queues that stop now, so a host enabling sharing again restarts it afterwards.
         if (!enabled && lan && !loopbackPeer(requestPeer(request))) void lan.setEnabled(false, new Promise<void>(resolve => afterResponse(request, resolve))).catch(error => console.error("Couch: couldn't stop the LAN listener.", error));
         if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {

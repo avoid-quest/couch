@@ -15,6 +15,11 @@ polkitd
 x11-xserver-utils
 va-driver-all
 mpv
+libplist-2.0-4
+gstreamer1.0-plugins-base
+gstreamer1.0-plugins-good
+gstreamer1.0-plugins-bad
+gstreamer1.0-libav
 curl
 ca-certificates
 unclutter-xfixes

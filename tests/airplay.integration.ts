@@ -1,8 +1,9 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { access, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { createServer, type Socket as NetSocket } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -20,6 +21,13 @@ import type { Action, PlaybackCommand, ServerMessage, SessionState } from "../sr
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const hasFfmpeg = spawnSync(ffmpeg, ["-version"], { stdio: "ignore" }).status === 0;
 const linux = process.platform === "linux" && spawnSync("setpriv", ["--version"], { stdio: "ignore" }).status === 0;
+
+// A stand-in Core for the test that kills one: it runs only the receiver, until killed.
+if (process.env.COUCH_TEST_AIRPLAY_CORE) {
+  const { executable, directory } = JSON.parse(process.env.COUCH_TEST_AIRPLAY_CORE) as { executable: string; directory: string };
+  createAirPlay({ executable, directory, enabled: true, network: () => true, name: () => "Couch", identity: () => ({ code: "1234", deviceId: "02:00:00:00:00:01" }), sessions: { started() {}, audio() {}, ended() {} }, changed() {} });
+  await new Promise(() => {});
+}
 
 const fakeUxPlay = `#!${process.execPath}
 const net = require('node:net'), fs = require('node:fs');
@@ -64,19 +72,20 @@ process.on('SIGTERM', () => process.exit(0));
 `;
 
 type Fake = { argv: string[]; home: string; cache: string; rc: string | null; pid: number; send: (command: object) => void; closed: Promise<unknown> };
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// A process nobody has reaped yet (a container's init may not) has still ended.
+const alive = (pid: number) => { try { process.kill(pid, 0); return !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, "utf8")); } catch { return false; } };
 async function until(check: () => boolean | Promise<boolean>, timeout = 8_000) {
   const deadline = Date.now() + timeout;
   while (!await check()) { if (Date.now() > deadline) throw new Error("AirPlay did not reach the expected state."); await new Promise(resolve => setTimeout(resolve, 20)); }
 }
 
-async function fixture(t: TestContext, { executable = true } = {}) {
+async function fixture(t: TestContext, { executable = true, uxplay: replacement }: { executable?: boolean; uxplay?: string } = {}) {
   // Core's provider checks stay offline.
   const fetchLocal = globalThis.fetch;
   globalThis.fetch = ((input, init) => /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::|\/)/.test(String(input)) ? fetchLocal(input, init) : Promise.resolve(new Response(""))) as typeof fetch;
   const directory = await mkdtemp(join(tmpdir(), "couch-airplay-")), databasePath = join(directory, "data", "couch.sqlite");
   const uxplay = join(directory, "uxplay"), control = join(directory, "control.sock");
-  await writeFile(uxplay, fakeUxPlay, { mode: 0o755 });
+  await writeFile(uxplay, replacement ?? fakeUxPlay, { mode: 0o755 });
   await writeFile(join(directory, "package.json"), '{ "type": "commonjs" }'); // Wherever the checkout puts temporary files
   // Real FFmpeg, found through Couch's own helper lookup.
   const previousPath = process.env.PATH, previousControl = process.env.COUCH_TEST_UXPLAY_CONTROL;
@@ -179,6 +188,14 @@ test("AirPlay stays off until an admin turns it on, and runs UxPlay only in Couc
   const again = await next(2);
   assert.equal(again.argv[again.argv.indexOf("-m") + 1], identity);
   assert.equal(again.argv[again.argv.indexOf("-pin") + 1], initial.code);
+
+  // UxPlay listens on every interface: it runs only while the Couch is shared on the network.
+  await ready(again, airplay);
+  assert.equal((await request("/api/settings/sharing", { body: { enabled: false } })).status, 200);
+  await until(() => !alive(again.pid));
+  assert.equal((await airplay()).status, "waiting");
+  await request("/api/settings/sharing", { body: { enabled: true } });
+  await next(3);
 });
 
 test("a connection is not admission: only a sender's decoded sound publishes a source, and nobody plays it until asked", { skip: !linux }, async t => {
@@ -323,10 +340,21 @@ test("a missing runtime says what to install instead of restarting, and a new co
   assert.match((await airplay()).error!, /gstreamer1\.0-libav/);
   await new Promise(resolve => setTimeout(resolve, 1_500));
   assert.equal(fakes.length, 1);
-
+  // What UxPlay 1.74 prints, then exits 0, where multicast can't be used.
   await request("/api/settings/airplay", { body: { enabled: false } });
   await request("/api/settings/airplay", { body: { enabled: true } });
   fake = await next(2);
+  fake.send({ log: "Initialized server socket(s)" });
+  fake.send({ log: "*** ERROR: dnssd_register_raop failed with error code -19" });
+  fake.send({ exit: 0 });
+  await until(async () => (await airplay()).status === "error");
+  assert.match((await airplay()).error!, /multicast and UDP port 5353/);
+  await new Promise(resolve => setTimeout(resolve, 1_500));
+  assert.equal(fakes.length, 2);
+
+  await request("/api/settings/airplay", { body: { enabled: false } });
+  await request("/api/settings/airplay", { body: { enabled: true } });
+  fake = await next(3);
   await ready(fake, airplay);
   const before = (await airplay()).code;
   await writeFile(join(directory, "data", "airplay", "register"), "key,AA:BB:CC:DD:EE:FF,Old iPhone\n");
@@ -334,7 +362,7 @@ test("a missing runtime says what to install instead of restarting, and a new co
   assert.equal(response.status, 200);
   const after = (await response.json() as AirPlayState).code;
   await until(() => !alive(fake.pid));
-  fake = await next(3);
+  fake = await next(4);
   assert.equal(fake.argv[fake.argv.indexOf("-pin") + 1], after);
   await assert.rejects(access(join(directory, "data", "airplay", "register")), "senders paired with the old code are forgotten");
   // 1 in 10,000 that a fresh code repeats.
@@ -342,7 +370,7 @@ test("a missing runtime says what to install instead of restarting, and a new co
 });
 
 test("AirPlay explains where it can't run", async t => {
-  const darwin = createAirPlay({ executable: "/nonexistent", directory: "/nonexistent", enabled: true, name: () => "Couch", identity: () => ({ code: "1234", deviceId: "02:00:00:00:00:01" }), sessions: { started() {}, audio() {}, ended() {} }, changed() {}, platform: "darwin" });
+  const darwin = createAirPlay({ executable: "/nonexistent", directory: "/nonexistent", enabled: true, network: () => true, name: () => "Couch", identity: () => ({ code: "1234", deviceId: "02:00:00:00:00:01" }), sessions: { started() {}, audio() {}, ended() {} }, changed() {}, platform: "darwin" });
   assert.equal(darwin.state().status, "unsupported");
   assert.match(darwin.state().error!, /Linux/);
   await darwin.close();
@@ -353,4 +381,87 @@ test("AirPlay explains where it can't run", async t => {
     assert.equal(refused.status, 409);
     assert.match((await refused.json() as { error: string }).error, /doesn't include the AirPlay receiver/);
   }
+});
+
+test("UxPlay ends with Core however Core ends", { skip: !linux }, async t => {
+  const { directory, uxplay, fakes, next } = await fixture(t);
+  const core = spawn(process.execPath, [process.argv[1]!], { env: { ...process.env, COUCH_TEST_AIRPLAY_CORE: JSON.stringify({ executable: uxplay, directory: join(directory, "core") }) }, stdio: "ignore" });
+  t.after(() => { core.kill("SIGKILL"); });
+  const fake = await next(1);
+  assert.ok(alive(fake.pid));
+  core.kill("SIGKILL");
+  await until(() => !alive(fake.pid));
+  assert.equal(fakes.length, 1);
+});
+
+// GStreamer's own payloader and framing, exactly as Couch asks UxPlay to configure them.
+const gstLaunch = process.env.COUCH_TEST_GST_LAUNCH;
+test("sound framed by GStreamer's rtpL16pay and rtpstreampay plays as sent", { skip: !linux || !hasFfmpeg || !gstLaunch, timeout: 60_000 }, async t => {
+  const pipeline = "audiotestsrc is-live=true freq=440 volume=0.3 ! audioconvert ! audio/x-raw,format=S16BE,rate=44100,channels=2 ! rtpL16pay pt=96 ! rtpstreampay ! fdsink fd=3 sync=false";
+  const script = `#!/bin/sh
+echo 'Initialized server socket(s)'
+echo 'Accepted IPv4 client on socket 30, port 7000'
+echo 'connection request from GStreamer (gst-launch) with deviceID = 02:00:00:00:00:02'
+exec ${gstLaunch} -q ${pipeline}
+`;
+  const { airplay, next, request, connect, receiver } = await fixture(t, { uxplay: script });
+  void next;
+  await request("/api/settings/airplay", { body: { enabled: true } });
+  const device = await connect(receiver.id, receiver.token);
+  await until(() => !!device.state.liveSources?.length, 15_000);
+  assert.equal((await airplay()).sender, "GStreamer");
+  assert.equal((await device.command({ type: "playLive", sourceId: device.state.liveSources![0]!.id, deviceId: receiver.id })).ok, true);
+  await until(() => !!device.load()?.hls, 30_000);
+  const load = device.load()!;
+  let playlist = "";
+  await until(async () => (playlist = await (await fetch(load.source)).text()).split("#EXTINF").length > 3, 15_000);
+  const media = Buffer.from(await (await fetch(new URL(playlist.split("\n").findLast(line => line.endsWith(".ts"))!, load.source))).arrayBuffer());
+  const decoded = spawnSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "44100", "-f", "s16le", "pipe:1"], { input: media });
+  const samples = Array.from({ length: decoded.stdout.length / 2 }, (_, index) => decoded.stdout.readInt16LE(index * 2));
+  const crossings = samples.slice(1).filter((value, index) => value >= 0 !== samples[index]! >= 0).length;
+  const frequency = crossings / 2 / (samples.length / 44100);
+  assert.ok(Math.abs(frequency - 440) < 15, `GStreamer's 440 Hz tone (${frequency.toFixed(1)} Hz)`);
+  // A continuous tone: no gaps from framing, timestamps or pacing.
+  const quiet = samples.findIndex((_, index) => index + 441 <= samples.length && samples.slice(index, index + 441).every(value => Math.abs(value) < 500));
+  assert.equal(quiet, -1, "no 10 ms of silence inside a segment of a continuous tone");
+});
+
+// The UxPlay build Couch ships, with the arguments Couch gives it. No sender is involved.
+const realUxPlay = process.env.COUCH_TEST_UXPLAY;
+const listening = async (pid: number) => {
+  const sockets = new Set((await Promise.all((await readdir(`/proc/${pid}/fd`)).map(fd => readlink(`/proc/${pid}/fd/${fd}`).catch(() => "")))).flatMap(link => /^socket:\[(\d+)\]$/.exec(link)?.[1] ?? []));
+  const table = (await readFile(`/proc/${pid}/net/tcp`, "utf8")).split("\n").slice(1).map(line => line.trim().split(/\s+/));
+  return table.filter(fields => fields[3] === "0A" && sockets.has(fields[9]!)).map(fields => parseInt(fields[1]!.split(":")[1]!, 16));
+};
+test("the real UxPlay starts with Couch's arguments, and a connection that never pairs publishes nothing", { skip: !linux || !realUxPlay, timeout: 60_000 }, async t => {
+  const { airplay, player, request, connect, hostToken, directory } = await fixture(t, { uxplay: `#!/bin/sh\nexec ${realUxPlay} "$@"\n` });
+  await request("/api/settings/airplay", { body: { enabled: true } });
+  await until(async () => ["ready", "error"].includes((await airplay()).status), 20_000);
+  const state = await airplay();
+  assert.equal(state.status, "ready", state.error ?? "");
+  const host = await connect(Identity.generate().peerId, hostToken);
+  const commands = await Promise.all((await readdir("/proc")).filter(entry => /^\d+$/.test(entry)).map(async entry => [Number(entry), await readFile(`/proc/${entry}/cmdline`, "utf8").catch(() => "")] as const));
+  const pid = commands.find(([, command]) => command.startsWith(`${realUxPlay}\0`))?.[0] ?? 0;
+  assert.ok(pid, "UxPlay runs");
+  const ports = await listening(pid);
+  assert.ok(ports.length, "UxPlay listens for senders");
+  assert.ok((await readFile(`/proc/${pid}/environ`, "utf8")).split("\0").includes(`HOME=${join(directory, "data", "airplay")}`));
+  // Speak to it as a sender that hasn't paired: it answers, but Couch publishes nothing.
+  const { createConnection } = await import("node:net");
+  const socket = createConnection({ host: "127.0.0.1", port: ports[0]! });
+  await once(socket, "connect");
+  socket.write("GET /info RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: AirPlay/800.0\r\n\r\n");
+  const [answer] = await once(socket, "data") as [Buffer];
+  assert.match(String(answer), /^RTSP\/1\.0 200/);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.equal(await player(), "idle");
+  assert.deepEqual(host.state.liveSources ?? [], []);
+  socket.end();
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.equal((await airplay()).status, "ready");
+  // Off ends it promptly, through its own shutdown.
+  const stopped = Date.now();
+  await request("/api/settings/airplay", { body: { enabled: false } });
+  await until(() => !alive(pid));
+  assert.ok(Date.now() - stopped < 3_000, "UxPlay exits on SIGTERM without being killed");
 });

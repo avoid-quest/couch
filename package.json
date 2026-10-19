@@ -143,6 +143,14 @@
         "pulseaudio-utils",
         "pulseaudio | pipewire-pulse"
       ],
+      "recommends": [
+        "libappindicator3-1",
+        "libplist-2.0-4",
+        "gstreamer1.0-plugins-base",
+        "gstreamer1.0-plugins-good",
+        "gstreamer1.0-plugins-bad",
+        "gstreamer1.0-libav"
+      ],
       "fpm": [
         "packaging/tv/=/usr/share/couch/tv/",
         "packaging/couch-setup=/usr/sbin/couch-setup"
@@ -153,6 +161,6 @@
       "owner": "avoid-quest",
       "repo": "couch"
     },
-    "afterPack": "./scripts/build-relay.ts"
+    "afterPack": "./scripts/after-pack.ts"
   }
 }

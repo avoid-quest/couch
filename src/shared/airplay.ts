@@ -1,6 +1,7 @@
 // The AirPlay receiver on the computer that runs Couch: off until an admin turns it on.
-// unsupported: not this platform; unavailable: this build or computer lacks what it needs.
-export type AirPlayStatus = "unsupported" | "unavailable" | "off" | "starting" | "ready" | "receiving" | "error";
+// unsupported: not this platform; unavailable: this build or computer lacks what it needs;
+// waiting: on, but the Couch isn't shared on the network, so nothing listens.
+export type AirPlayStatus = "unsupported" | "unavailable" | "off" | "waiting" | "starting" | "ready" | "receiving" | "error";
 export type AirPlayState = {
   enabled: boolean;
   status: AirPlayStatus;

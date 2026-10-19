@@ -27,6 +27,7 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
     : state.status === "receiving" ? `${state.sender} is playing. Play AirPlay · ${state.sender} from Shared sources to hear it.`
     : state.status === "ready" ? `Ready. On your device, choose ${state.name} in AirPlay and enter ${state.code} the first time.`
     : state.status === "starting" ? "Starting AirPlay…"
+    : state.status === "waiting" ? "Waiting for Share on network. AirPlay listens only while this Couch is shared on the network."
     : state.status === "off" ? "Off. Nothing on the network can find or play to this Couch over AirPlay." : null;
   const failure = state?.error ?? query.error?.message ?? toggle.error?.message ?? renew.error?.message;
   return <SettingsSection title="AirPlay" description={description}>

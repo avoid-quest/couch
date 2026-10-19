@@ -41,6 +41,8 @@ export function createAirPlay(options: {
   executable?: string;
   directory: string;
   enabled: boolean;
+  /** Share on network: UxPlay listens on every interface, so it runs only while the Couch is shared. */
+  network: () => boolean;
   name: () => string;
   identity: () => { code: string; deviceId: string };
   sessions: AirPlaySessions;
@@ -70,7 +72,7 @@ export function createAirPlay(options: {
     const missing = unavailable();
     return {
       enabled,
-      status: !supported ? "unsupported" : missing ? "unavailable" : !enabled ? "off" : error ? "error" : session ? "receiving" : ready ? "ready" : "starting",
+      status: !supported ? "unsupported" : missing ? "unavailable" : !enabled ? "off" : !options.network() ? "waiting" : error ? "error" : session ? "receiving" : ready ? "ready" : "starting",
       error: missing ?? (enabled ? error : null),
       name: options.name(),
       code: options.identity().code,
@@ -116,6 +118,8 @@ export function createAirPlay(options: {
     else if (match = /connection request from (.*) \(.*\) with deviceID = /.exec(text)) { if (!session) sender = label(match[1]!); }
     else if (match = /error while loading shared libraries: ([^:\s]+)/.exec(text)) error = `AirPlay needs ${label(match[1]!)}. Install ${airPlayPackages}.`;
     else if (/Required gstreamer (?:libav )?plugin/.test(text)) error = `AirPlay needs GStreamer. Install ${airPlayPackages}.`;
+    // UxPlay exits when it can't announce itself; retrying wouldn't change the network.
+    else if (/dnssd_register_(?:raop|airplay) failed|mDNSResponder .* failed/.test(text)) error = "AirPlay couldn't announce this Couch on the network. Allow multicast and UDP port 5353, then turn AirPlay off and on.";
   };
 
   const stop = async () => {
@@ -162,7 +166,7 @@ export function createAirPlay(options: {
   };
   // One child at a time follows the switch, the name and the code; a failure waits for the admin.
   const reconcile = () => pending = pending.catch(() => {}).then(async () => {
-    const want = enabled && !closed && !unavailable();
+    const want = enabled && !closed && options.network() && !unavailable();
     if (child && (!want || name !== options.name())) await stop();
     if (!want || child || error) { options.changed(); return; }
     try { await start(); } catch { error = "Couch couldn't start the AirPlay receiver."; }
@@ -175,8 +179,8 @@ export function createAirPlay(options: {
     /** An admitted sender is connected, playing or paused. */
     active: () => !!session,
     async setEnabled(value: boolean) { enabled = value; error = null; restarts = []; await reconcile(); },
-    /** Senders see the installation's name. */
-    async renamed() { await reconcile(); },
+    /** Follow the installation's name and Share on network. */
+    async refresh() { await reconcile(); },
     /** After a new code: forget every sender paired with the old one. */
     async forget() {
       pending = pending.catch(() => {}).then(async () => {
