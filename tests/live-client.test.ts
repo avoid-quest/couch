@@ -453,6 +453,17 @@ test("choosing an audio input releases its permission probe and captures the sel
   await assert.rejects(session.audioInputs(), /Stop sharing/);
 `));
 
+test("a refused or closed capture prompt says what happened in Couch's words", () => check(`
+  navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException("Permission denied", "NotAllowedError"); };
+  await assert.rejects(session.start({ kind: "screen" }), /Screen capture wasn't allowed\\. Choose a screen or window/);
+  await assert.rejects(session.start({ kind: "system-audio" }), /System audio capture wasn't allowed/);
+  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Requested device not found", "NotFoundError"); };
+  await assert.rejects(session.start({ kind: "microphone" }), /No audio input was found/);
+  navigator.mediaDevices.getUserMedia = async () => { throw new Error("Live capture needs a secure Couch connection."); };
+  await assert.rejects(session.start({ kind: "microphone" }), /secure Couch connection/, "other errors keep their message");
+  assert.equal(commands.length, 0, "a refused capture publishes nothing");
+`));
+
 test("closing while audio input permission is pending releases the eventual capture", () => check(`
   let finish;
   navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { finish = resolve; });

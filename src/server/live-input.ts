@@ -15,7 +15,7 @@ export function createLiveInputs<Socket>(options: {
   deviceOf: (socket: Socket) => string;
   nameOf: (id: string) => string;
   send: (socket: Socket, message: ServerMessage) => void;
-  ended: (sourceId: string) => void;
+  ended: (source: LiveSource) => void;
   changed: () => void;
 }) {
   const sources = new Map<string, Publication<Socket>>();
@@ -34,7 +34,7 @@ export function createLiveInputs<Socket>(options: {
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
     options.send(publication.owner, { type: "livePeers", sourceId, upload: false, peers: [] });
     sources.delete(sourceId);
-    options.ended(sourceId);
+    options.ended(publication.source);
     options.changed();
   };
   return {

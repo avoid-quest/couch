@@ -566,6 +566,9 @@ test("Stop ends reception and keeps capture; Stop sharing ends the source everyw
     assert.equal((await f.publisher.command({ type: "endLive", sourceId: "screen" })).ok, true);
     await until(() => !f.receiver.state.liveSources?.length && !sharedPlaybacks(f.receiver).length);
     assert.equal(lastCommand(f.receiver), "stop");
+    // Its player closes with the item, so the receiver hears who stopped sharing; the publisher is the actor and gets no toast.
+    const stopped = f.receiver.messages.find(message => message.type === "state" && message.state.activity?.text === "Publisher stopped sharing");
+    assert.ok(stopped && stopped.type === "state" && stopped.state.activity?.actor.deviceId === f.publisher.id, "receivers are told who stopped sharing");
   } finally { await f.close(); }
 });
 

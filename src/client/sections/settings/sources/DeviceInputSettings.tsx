@@ -90,10 +90,10 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
 
   // Capture runs with this device's authority, so a paired phone's Remote never drives it on a TV.
   return <SettingsSection title={title} description="Add this device's screen or sound as a source for everyone on this Couch." data-tv-local-only>
-    {mine ? <SettingsRow label={mine.name} description="Available in Search while this device is sharing.">
+    {mine ? <SettingsRow label={mine.name} description="Shown in Discover and Search while this device is sharing.">
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
-      <SettingsRow label="Input">
+      <SettingsRow label="What to share">
         <ChoiceGroup label="What to share" value={kind} disabled={!available || !supported} onValueChange={value => { setKind(value); setError(null); setBlocked(null); }} options={Object.entries(labels).map(([value, label]) => ({ value: value as CaptureKind, label, disabled: value !== "microphone" && !displaySupported }))} />
       </SettingsRow>
       {choosesSource && <SettingsRow label="Screen or window" htmlFor={sources?.length ? "live-capture-source" : undefined} description={kind === "system-audio" ? "Only sound is sent. The picture stays private." : "Choose the picture to share."}>
@@ -121,8 +121,8 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
           <Switch id="live-include-audio" checked={includeAudio} disabled={!available} onCheckedChange={setIncludeAudio} />
         </SettingsRow>
       </>}
-      <SettingsRow label="Share with Couch" description="Available in Search until you stop sharing.">
-        <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Adding…</> : "Add source"}</Button>
+      <SettingsRow label="Share with Couch" description="Shown in Discover and Search until you stop sharing.">
+        <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
         {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>
     </>}

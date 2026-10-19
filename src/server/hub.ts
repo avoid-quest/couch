@@ -240,12 +240,19 @@ export async function createHub(options: HubOptions) {
     broadcast();
   } });
   const live = createLiveInputs<Socket<SocketData>>({ deviceOf, nameOf, send: (socket, message) => send(socket, JSON.stringify(message)),
-    ended: sourceId => {
+    ended: source => {
+      const sourceId = source.id;
       liveStreams.end(sourceId);
       for (const playback of all()) {
         const state = stateOf(playback);
         const affected = state.queue.some(entry => entry.liveSourceId === sourceId);
-        if (state.queue.find(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId))?.liveSourceId === sourceId) { clearTimeout(playback.undoable); playback.undoable = undefined; }
+        if (state.queue.find(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId))?.liveSourceId === sourceId) {
+          clearTimeout(playback.undoable); playback.undoable = undefined;
+          // Its receivers' players close with the item, so they hear who stopped sharing first: sent now, since the
+          // scheduled flush would find the playback settled and gone. The publisher, as the actor, hears nothing.
+          playback.session.notice({ deviceId: source.deviceId, name: nameOf(source.deviceId) }, `${nameOf(source.deviceId)} stopped sharing`);
+          flush();
+        }
         playback.session.endSource(sourceId);
         if (affected) settle(playback);
       }
