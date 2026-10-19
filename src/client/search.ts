@@ -10,11 +10,12 @@ export function mergeSearchHits(sources: readonly string[], hits: Record<string,
 export const searchSources = ["All", "Shared sources", "YouTube", "Bandcamp", "SoundCloud", "RaiPlay", "StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity", "avoid radio", "Radio playlists", "Radio directory", "Twitch"];
 export const searchKinds: SearchKind[] = ["Video", "Music", "Live", "Radio", "Channels"];
 export const searchLengths: SearchLength[] = ["Under 10 min", "10–60 min", "Over 1 hr"];
-export type SearchRouteState = { query: string; source: string; kind?: SearchKind; length?: SearchLength };
+export type SearchRouteState = { query: string; source: string; kind?: SearchKind; length?: SearchLength; /** Ends by this clock time ("HH:MM"). */ until?: string };
 export function readSearchState(search: string | Record<string, string | string[] | undefined>): SearchRouteState {
   const params = typeof search === "string" ? new URLSearchParams(search) : new URLSearchParams(Object.entries(search).flatMap(([key, value]) => value === undefined ? [] : [[key, Array.isArray(value) ? value[0] ?? "" : value]] as [string, string][]));
   const kind = searchKinds.find(value => value === params.get("kind")), length = searchLengths.find(value => value === params.get("length"));
-  return { ...(kind ? { kind } : {}), ...(length ? { length } : {}), query: (params.get("q") ?? "").slice(0, 4096), source: searchSources.find(source => source === params.get("source")) ?? "All" };
+  const until = params.get("until");
+  return { ...(kind ? { kind } : {}), ...(length ? { length } : {}), ...(until && /^\d{2}:\d{2}$/.test(until) ? { until } : {}), query: (params.get("q") ?? "").slice(0, 4096), source: searchSources.find(source => source === params.get("source")) ?? "All" };
 }
 export function searchLocation(state: SearchRouteState) {
   const params = new URLSearchParams();
@@ -22,6 +23,7 @@ export function searchLocation(state: SearchRouteState) {
   if (state.source !== "All" && searchSources.includes(state.source)) params.set("source", state.source);
   if (state.kind && searchKinds.includes(state.kind)) params.set("kind", state.kind);
   if (state.length && searchLengths.includes(state.length)) params.set("length", state.length);
+  if (state.until) params.set("until", state.until);
   return `/search${params.size ? `?${params}` : ""}`;
 }
 /** A pasted web address, which opens as a page or as media rather than searching. */

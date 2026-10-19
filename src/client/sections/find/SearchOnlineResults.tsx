@@ -23,7 +23,7 @@ export type SearchHit = SearchFacet & {
   id: string; source: string; title: string; meta: string; description?: string; url?: string;
   position?: number; live?: boolean;
   /** What an openable hit is, shown instead of a length. */
-  collection?: "Channel" | "List" | "Album" | "Series" | "Season";
+  collection?: "Channel" | "List" | "Album" | "Series" | "Season" | "Programme";
   thumbnail?: string; video?: boolean;
   primary: { label: string; disabled?: boolean; run: () => void; href?: string };
   /** Every verb, the primary's included; MediaRow's menu holds the rest. */
@@ -46,6 +46,7 @@ export function collectionLabel(item: ProviderItem): SearchHit["collection"] {
   if (item.kind === "media") return;
   if (item.kind === "channel") return "Channel";
   if (item.provider === "bandcamp") return "Album";
+  if (item.provider === "raiplay") return "Programme";
   const path = new URL(item.url).pathname;
   if (item.provider === "movies123" && /^\/season\/[\w-]+-\d+\/?$/.test(path)) return "Season";
   if (item.provider === "streamingcommunity") return /\/season-\d+$/.test(path) ? "Season" : "Series";
