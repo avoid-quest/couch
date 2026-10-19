@@ -146,6 +146,8 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // headers. One capability per preparation keeps every child on its route.
       // The single source-header map authorizes only the main source's origin;
       // a separate audio URL or redirected playlist cannot expand that trust.
+      // A new load starts clean: an earlier transport's refusal must not explain this one's failure.
+      for (const saved of relays.values()) if (saved.playbackId === playbackId) saved.refused = undefined;
       const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now() };
       const route = async (url: string) => {
         const answer = await probe(url, relay, !!media.mpegts, signal, relay.publicNetwork ? publicRequest : fetch);
@@ -177,6 +179,8 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       let upstream: Response;
       try {
         upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay, url), ...(range ? { range } : {}) }, signal: request.signal });
+        // The last answer stands: a refusal is forgotten once the source answers again.
+        relay.refused = upstream.ok || upstream.status === 416 ? undefined : upstream.status;
         let playlist = kind === "playlist" || playlistType(upstream.headers.get("content-type"), upstream.url || url);
         if (relay.publicNetwork && upstream.ok && !playlist) {
           const sniffed = await sniffPlaylist(upstream);
@@ -188,7 +192,6 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
           return new Response(await rewrite(text, upstream.url || url, destination), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
         }
       } catch { return new Response("The media destination could not be read.", { status: 502 }); }
-      if (upstream.status >= 400 && upstream.status !== 416) relay.refused = upstream.status;
       const headers = new Headers();
       for (const name of forwarded) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
       return new Response(upstream.body, { status: upstream.status, headers });

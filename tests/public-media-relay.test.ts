@@ -389,4 +389,15 @@ test("a source's refusal is kept for its Playback, so Core can report it", async
   expect(f.relay.refused("playing")).toBeUndefined();
   expect((await f.serve(media.source)).status).toBe(403);
   expect(f.relay.refused("playing")).toBe(403);
+  // The last answer stands: once the source answers again the refusal is forgotten, so a later failure keeps its own reason.
+  f.replies.delete(video);
+  expect((await f.serve(media.source)).status).toBe(200);
+  expect(f.relay.refused("playing")).toBeUndefined();
+  f.replies.set(video, () => response(video, "", { status: 403 }));
+  expect((await f.serve(media.source)).status).toBe(403);
+  expect(f.relay.refused("playing")).toBe(403);
+  // A new load of the Playback starts clean, and another Playback never sees it.
+  expect(f.relay.refused("other")).toBeUndefined();
+  await f.prepare("https://media.example/other.mp4");
+  expect(f.relay.refused("playing")).toBeUndefined();
 });
