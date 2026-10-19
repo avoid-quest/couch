@@ -125,6 +125,9 @@ function useShellValue() {
     if (section === "Now") void router.navigate({ href: lastBrowsePath.current }).then(focus);
     else focus();
   };
+  // A source without a home scopes the header's field to itself, so there is one search field, not two.
+  const [searchScope, setSearchScope] = useState<string | null>(null);
+  const scopeSearch = (source: string) => { setSearchScope(source); focusSearch(); };
   const leavePlayer = () => {
     detailNavigation.back(playerTarget ? "/remote" : lastBrowsePath.current);
   };
@@ -192,7 +195,7 @@ function useShellValue() {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(...lastBrowsePath.current.split("?") as [string, string?]) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
-    changeSection, openPlayer, leavePlayer, focusSearch, changeSearch, changeSettingsSection,
+    changeSection, openPlayer, leavePlayer, focusSearch, changeSearch, changeSettingsSection, searchScope, setSearchScope, scopeSearch,
     openProvider,
     enqueueProvider, enqueueRadio, playHistory,
     sectionUrl: (name: string) => name === "Search" ? searchLocation(rememberedSearch.current) : pathForSection(name),

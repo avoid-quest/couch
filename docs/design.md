@@ -41,8 +41,8 @@ first-run screens.
   verb; its one menu holds the rest ([Menus](#menus)).
 - **Real content only.** A browse page shows what its source returns, never
   suggestions Couch picked: Discover samples each source's own home. A source
-  without one (YouTube, Bandcamp, SoundCloud) opens on an Empty with a search
-  field scoped to it.
+  without one (YouTube, Bandcamp, SoundCloud) scopes the header's search field
+  to itself.
 - **Sources are peers.** Every provider uses the same search, Details, Saved
   and Home surfaces. Source-specific behaviour follows the site's content
   and pagination, with no separate genre-specific layout or copy.

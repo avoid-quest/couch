@@ -70,10 +70,20 @@ A fine pointer sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
 stays while the results page's sources answer.
 The clear button stays, with a 44px touch target. The field never changes
 width on focus, so the surrounding header stays still. `/` focuses it from any page
-(from the player, its page comes back first). Typing searches after a second
-without typing, and Enter at once. The delay coalesces edits because one
-search fills every one of Core's provider slots, including two yt-dlp jobs; the
-spinner makes that wait visible. The first search from another page opens
+(from the player, its page comes back first). Typing searches once it pauses
+for half a second (TanStack Pacer's debouncer), and Enter at once. The pause
+coalesces edits because one search fills every one of Core's provider slots,
+including two yt-dlp jobs; the spinner makes that wait visible.
+
+Empty and focused, the field lists the last eight queries typed into it on
+this Couch (`search-recents.ts`, per installation, like radio recents) as
+divided rows under it, inside the header so a remote reaches them: Down walks
+them, Up returns to the field, a press searches at once. A source without a
+home of its own (Discover's YouTube, Bandcamp and SoundCloud) scopes the field
+to itself (`scopeSearch`): its placeholder reads "Search YouTube" and the
+next query carries that source, so there is one search field, never two. On
+a results page, Enter plays the closest match when its press plays (a station,
+a live stream); otherwise it moves focus to it. The first search from another page opens
 `/search?q=…`, later ones replace it, and focus stays in the field while
 typing (Enter goes on to the results; Down reaches the page's first result).
 Off the TV, Esc clears the field, which is Discover, then leaves it; the TV's

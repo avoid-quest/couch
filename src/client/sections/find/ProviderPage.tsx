@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
 import { collectionLocation, keepSection } from "@/detail-navigation";
-import { searchLocation } from "@/search";
-import { SearchBar } from "@/components/SearchBar";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import { ContentBreadcrumb } from "@/components/ContentBreadcrumb";
@@ -19,7 +17,7 @@ import { HitList, SourceProblems } from "./SearchPanel";
 import { providerNames, SearchOnlineResults, type SearchCollection, type SearchResultSummary } from "./SearchOnlineResults";
 import { DetailHeader } from "@/components/DetailHeader";
 import { tileShape, type TileShape } from "@/components/MediaTile";
-import { providerForUrl, type ProviderId } from "../../../shared/providers";
+import type { ProviderId } from "../../../shared/providers";
 import { movies123Origin } from "../../../shared/movies123";
 
 export function ProviderPage() {
@@ -134,14 +132,12 @@ function CollectionHeader({ collection: c, canPlay, shape }: { collection: Searc
     more={c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []} />;
 }
 
-// Sources without a home page of their own start from a search.
+// Sources without a home page of their own start from the header's field, scoped to them.
 function EmptyRoot({ provider }: { provider: ProviderId }) {
-  const navigate = useNavigate();
-  const [value, setValue] = useState("");
+  const { scopeSearch } = useShell();
   const name = providerNames[provider];
-  const open = () => { const query = value.trim(); if (query) void navigate({ href: providerForUrl(query) === provider ? collectionLocation({ provider, url: query }) : searchLocation({ query, source: name }) }); };
   return <Empty className="py-0">
-    <EmptyHeader><EmptyDescription>{provider === "youtube" ? "Search YouTube or paste a channel, playlist or video link." : `Search ${name} or paste a ${name} link.`}</EmptyDescription></EmptyHeader>
-    <EmptyContent><SearchBar id="collection-search" pageFirst className="w-full" ariaLabel={`Search ${name}`} value={value} onValueChange={setValue} onSubmit={open} onClear={() => setValue("")} /></EmptyContent>
+    <EmptyHeader><EmptyDescription>{provider === "youtube" ? "Search YouTube above, or paste a channel, playlist or video link." : `Search ${name} above, or paste a ${name} link.`}</EmptyDescription></EmptyHeader>
+    <EmptyContent><Button data-page-first onClick={() => scopeSearch(name)}>Search {name}</Button></EmptyContent>
   </Empty>;
 }

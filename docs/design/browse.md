@@ -81,8 +81,10 @@ posters:
   the heading shows them at once. A tile opens its Details; its menu holds its
   search hit's verbs.
 - **Sources**: the sources that start from a search, YouTube, Bandcamp and
-  SoundCloud, as a compact row of names over a muted line, each opening its
-  scoped search (`/collection?provider=…`, an Empty with a search field).
+  SoundCloud, as a compact row of names over a muted line, each scoping the
+  header's field to itself ([Shell](shell.md#header-and-section-nav)). Their
+  root (`/collection?provider=…`, reached from a breadcrumb) says so and offers
+  the same.
 
 Shelves load side by side and hold about a tile's height meanwhile, so the
 ones below don't move under the focus. One that fails says "Couldn't load
