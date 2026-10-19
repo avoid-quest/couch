@@ -59,7 +59,8 @@ On phones, Up next replaces the picture too. The top band publishes its
 height as `--player-top`, and toasts sit below it. Opened over a video, Up
 next and the picture start below it too, as it turns solid.
 Queue navigation survives playback changes; track-specific settings reset.
-Transport, volume and tools share one bottom dock across media modes. Keep
+Transport, volume and tools share one bottom dock across media modes, divided
+from the stage by a hairline over audio, as the now-playing bar is. Keep
 unavailable controls in their slots so loading and queue changes preserve
 muscle memory (the live timeline is the exception: it gives way to "Live",
 which the player says in its top band or Now playing);
@@ -68,7 +69,7 @@ adapt the rows to screen width, with content above the dock.
 ### Now playing echoes Home's hero
 
 Audio (and media playing elsewhere) shows Now playing as
-[Home's hero](home.md#the-hero) does, stacked: the artwork contained at its own
+[Home's hero](home.md#the-hero) does, stacked at the page's gutter: the artwork contained at its own
 aspect ratio on black, set down on the copy below it (the box hugs the image up
 to a square, and short screens shrink it whole, never cropping it); the title
 at display size; one muted meta line, which reads the show's station, else the

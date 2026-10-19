@@ -6,6 +6,7 @@ import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
+import { CouchMark } from "@/components/CouchMark";
 import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
@@ -313,7 +314,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid">
             <div className="flex min-w-0 items-center">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
-              {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+              {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
@@ -325,7 +326,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
               {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
-              <DigitalClock className="ml-2 touch:hidden tv:inline" />
+              <DigitalClock className="ml-2 text-2xl font-light touch:hidden tv:inline" />
             </div>
           </header>
           {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && section !== "Remote" && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
@@ -367,7 +368,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   const { tvPresentation, state } = useSessionGate();
   const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
   return <nav data-app-nav aria-label="Main navigation" className={className}>
-    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-t-0 border-b-2 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 px-1 py-1.5 text-xs" : "min-h-11 min-w-11 px-2.5 text-base")}>
+    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 border-t-2 border-b-0 px-1 py-1.5 text-xs" : "min-h-11 min-w-11 border-t-0 border-b-2 px-2.5 text-base")}>
       <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
     </Button>)}
   </nav>;

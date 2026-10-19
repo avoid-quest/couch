@@ -243,9 +243,9 @@ function HomeHero({ thumbnail, shape, title, meta, time, children }: { thumbnail
     {/* Artwork as it comes, at its own aspect ratio on black; missing artwork keeps its shape's frame. */}
     <div aria-hidden="true" className="h-56 min-w-0 md:h-72 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={thumbnail} title={title} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shape])} /></div>
     <div className="grid min-w-0 gap-2">
-      <h2 title={title} className="line-clamp-2 text-3xl font-semibold tracking-tight">{title}</h2>
+      <h2 title={title} className="line-clamp-2 text-4xl font-semibold tracking-tight md:text-5xl">{title}</h2>
       {meta && <p className="truncate text-sm text-muted-foreground">{meta}</p>}
-      {time && <p className="text-2xl tabular-nums">{time}</p>}
+      {time && <p className="text-3xl font-light tabular-nums md:text-4xl">{time}</p>}
       <div data-nav-row className="mt-4 flex flex-wrap items-center gap-1 max-md:[&>[data-page-first]]:w-full">{children}</div>
     </div>
   </section>;
