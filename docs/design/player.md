@@ -81,7 +81,7 @@ adapt the rows to screen width, with content above the dock.
 ### Now playing echoes Home's hero
 
 Audio (and media playing elsewhere) shows Now playing as
-[Home's hero](home.md#the-hero) does, stacked at the page's gutter: the artwork contained at its own
+[Home's hero](home.md#the-hero) does, one column centred in its stage, its lines starting together at the column's left: the artwork contained at its own
 aspect ratio on black, set down on the copy below it (the box hugs the image up
 to a square, and short screens shrink it whole, never cropping it); the title
 at display size; one muted meta line, which reads the show's station, else the
