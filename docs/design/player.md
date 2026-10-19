@@ -174,7 +174,8 @@ While this device shares its screen or sound, the player's top band keeps
 "Sharing {screen}" and Stop sharing at its right, as the header does while
 browsing ([Live inputs](../live-inputs.md)): just before the clock over a
 video, and at the end of the band's row over artwork, where the TV then shows
-a top band too. Phones keep only Stop sharing, as in the header. While it
+a top band too. Phones show the header's sharing icon, whose press opens the
+status and Stop sharing ([Shell](shell.md#header-and-section-nav)). While it
 shares, the bands don't hide on their own; a TV's Back still hides them, and
 OK shows them again.
 
