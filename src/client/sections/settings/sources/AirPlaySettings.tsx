@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend, type ApiCredentials } from "@/api/client";
 import { airplayQuery } from "@/api/settings";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ADMIN_ONLY } from "@/copy";
@@ -20,6 +22,7 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
   const query = useQuery({ ...airplayQuery(credentials), enabled: connected });
   const saved = (result: AirPlayState) => client.setQueryData(airplayQuery(credentials).queryKey, result);
   const toggle = useMutation({ mutationFn: (enabled: boolean) => apiSend<AirPlayState>(credentials, "/api/settings/airplay", { enabled }), onSuccess: saved });
+  const [confirming, setConfirming] = useState(false);
   const renew = useMutation({ mutationFn: () => apiSend<AirPlayState>(credentials, "/api/settings/airplay/code", {}), onSuccess: saved });
   const state = query.data;
   const usable = !!state && state.status !== "unsupported" && state.status !== "unavailable";
@@ -30,15 +33,28 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
     : state.status === "waiting" ? "Waiting for Share on network. AirPlay listens only while this Couch is shared on the network."
     : state.status === "off" ? "Off. Nothing on the network can find or play to this Couch over AirPlay." : null;
   const failure = state?.error ?? query.error?.message ?? toggle.error?.message ?? renew.error?.message;
-  return <SettingsSection title="AirPlay" description={description}>
+  return <><SettingsSection title="AirPlay" description={description}>
     <SettingsRow label="Receive AirPlay" description="Sound only. It plays a few seconds behind the sending device.">
       <Switch aria-label="Receive AirPlay" checked={toggle.isPending ? toggle.variables : state?.enabled ?? false} disabled={!connected || !usable || toggle.isPending || renew.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />
     </SettingsRow>
     {state?.enabled && usable && <SettingsRow label="Code" description="A device enters it the first time it plays here. A new code makes every device enter it again.">
       <span className="mr-auto text-sm tabular-nums">{state.code}</span>
-      <Button variant="outline" disabled={!connected || renew.isPending || toggle.isPending} onClick={() => renew.mutate()}>{renew.isPending ? "Changing…" : "New code"}</Button>
+      <Button variant="outline" disabled={!connected || renew.isPending || toggle.isPending} onClick={() => setConfirming(true)}>{renew.isPending ? "Changing…" : "New code"}</Button>
     </SettingsRow>}
     {failure ? <Alert variant="destructive"><AlertDescription>{failure}</AlertDescription>{query.isError && <AlertAction><Button variant="outline" onClick={() => void query.refetch()}>Try again</Button></AlertAction>}</Alert>
       : status && <p role="status" className="text-sm text-muted-foreground">{status}</p>}
-  </SettingsSection>;
+  </SettingsSection>
+    <AlertDialog open={confirming} onOpenChange={setConfirming}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change the AirPlay code?</AlertDialogTitle>
+          <AlertDialogDescription>AirPlay restarts now{state?.sender ? `, so ${state.sender} stops playing here` : ""}. Every device that played here before must enter the new code the next time.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => renew.mutate()}>New code</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>;
 }

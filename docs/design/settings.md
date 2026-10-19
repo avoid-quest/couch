@@ -10,7 +10,7 @@ This device → Home lists Home's shelves, Continue, For later, Radio, Played re
 
 Settings is the last tab in the TV and wide desktop header, and in the bottom bar on phones and narrow desktop windows; every page renders inside the shell on all three. On phones, choose Sharing or Network from the Settings page menu. The player's gear opens Playback, a separate surface for the current media.
 
-The Couch's Sources page lists its source pages, then **AirPlay**: an admin's **Receive AirPlay** switch, its **Code** with **New code** while it is on, and one status line. Others see the row with "Only an admin can change this." It uses the page's existing rows, Switch, Button and Alert; nothing custom.
+The Couch's Sources page lists its source pages, then **AirPlay**: an admin's **Receive AirPlay** switch, its **Code** with **New code** while it is on, and one status line. New code confirms in an AlertDialog, since it restarts AirPlay and every device must enter the new code. Others see the row with "Only an admin can change this." It uses the page's existing rows, Switch, Button, Alert and AlertDialog; nothing custom.
 
 Not yet: restructuring Settings beyond fitting the shell. #761 settled its two owners and their pages.
 
