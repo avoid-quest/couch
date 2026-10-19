@@ -37,9 +37,11 @@ Before committing a machine, `sudo couch-setup --inspect` reports what `--tv`
 would do there, with the same checks: the supported target, an earlier setup,
 the `couch-tv` account, the data directory, the display manager and boot
 target, missing packages, the files it would add or keep, the update timer and
-any running session. It lists every refusal `--tv` would stop at (exit status 1)
-and writes nothing: no file, lock, account, package or service. Without `sudo`
-it marks what only root can read as unavailable. It can't foresee APT or
+any running session. It lists every refusal `--tv` would stop at (exit status 1),
+including another installation or recovery holding setup's lock, which it finds
+in the kernel's lock table rather than by taking the lock. It writes nothing: no
+file, lock, account, package or service. Without `sudo` it marks what only root
+can read as unavailable, as it does a lock it can't match to that table. It can't foresee APT or
 service failures during setup.
 
 Setup installs Debian's Xorg, Openbox, LightDM, PipeWire and Bluetooth support. It

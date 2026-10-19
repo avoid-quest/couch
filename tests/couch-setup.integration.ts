@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -177,6 +178,34 @@ for (const [refusal, scenario] of conflicts) test(`inspection and --tv agree on 
   assert.equal(applied.status, 1);
   assert.match(applied.stderr, new RegExp(`^couch-setup: ${refusal.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`, "m"));
   assert.doesNotMatch(applied.events, /^(apt-get|adduser|chgrp|couch) |^systemctl /m, "A refused setup changes no package, account or service");
+});
+
+test("inspection refuses as --tv does while another installation holds the lock, without taking it", rootOptions, async () => {
+  using environment = fixture({ installed: packages, state: "complete", displayManager: "/usr/sbin/lightdm" });
+  const lock = join(environment.root, "var/lib/couch-install-locks/tv.lock"), held = join(environment.directory, "held");
+  mkdirSync(join(lock, ".."), { recursive: true });
+  writeFileSync(lock, "");
+  // An installation or recovery in progress, as a real flock holder.
+  const holder = spawn("flock", ["-x", lock, "-c", `touch ${JSON.stringify(held)}; exec sleep 30`], { stdio: "ignore", detached: true });
+  try {
+    while (!existsSync(held)) await new Promise(resolve => setTimeout(resolve, 20));
+    const plan = inspect(environment);
+    assert.equal(plan.status, 1, plan.stdout);
+    assert.deepEqual(plan.refuse, ["Another Couch installation or recovery is running."]);
+    const applied = environment.run("--tv", true);
+    assert.equal(applied.status, 1);
+    assert.match(applied.stderr, /^couch-setup: Another Couch installation or recovery is running\.$/m);
+  } finally {
+    // The lock goes with its last holder: flock and the command it started.
+    const exited = once(holder, "exit");
+    process.kill(-holder.pid!, "SIGKILL");
+    await exited;
+    while (readFileSync("/proc/locks", "utf8").includes(`:${lstatSync(lock).ino} `)) await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  const plan = inspect(environment);
+  assert.equal(plan.status, 0, plan.stdout);
+  assert.deepEqual(plan.refuse, []);
+  assert.ok(!plan.unavailable.some(line => line.includes("installation or recovery")), plan.stdout);
 });
 
 test("several conflicts are all listed, where --tv would stop at the first", rootOptions, () => {

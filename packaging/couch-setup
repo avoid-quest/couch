@@ -62,7 +62,20 @@ for directory in /var/lib/couch-installer /var/lib/couch-install-locks "$state";
     [[ $(stat -c %u "$root$directory") = 0 && -z $(find "$root$directory" -maxdepth 0 -perm /022 -print) ]] || refuse "Root must own $directory."
 done
 [[ ! -L $root$lock ]] || refuse 'The installation lock is a symbolic link.'
-if ! $inspect; then
+# Inspection never takes the lock: it looks for a holder in the kernel's lock table,
+# whose entries name the file's device (hex major:minor) and inode.
+# 0 held, 1 free, 2 unknown (the table and the file's identity can't be matched).
+lock_held() {
+    local device inode key
+    [[ -e $root$lock ]] || return 1
+    read -r device inode < <(stat -c '%d %i' -- "$root$lock" 2>/dev/null) && [[ -r /proc/locks ]] || return 2
+    key=$(printf '%02x:%02x:%d' $(( (device >> 8 & 0xfff) | (device >> 32 & ~0xfff) )) $(( (device & 0xff) | (device >> 12 & ~0xff) )) "$inode")
+    awk -v key="$key" -v inode=":$inode" '$0 ~ " " key " " { held = 1 } index($0, inode " ") { other = 1 } END { exit held ? 0 : other ? 2 : 1 }' /proc/locks
+}
+if $inspect; then
+    if lock_held; then refuse 'Another Couch installation or recovery is running.'
+    elif [[ $? = 2 ]]; then unknown+=('Whether another Couch installation or recovery is running'); fi
+else
     chmod 0700 "$root$state"
     [[ -e $root$lock ]] || touch "$root$lock"
     exec 9<"$root$lock"
