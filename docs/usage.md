@@ -21,6 +21,8 @@ and paired remotes.
   lists of up to 500 episodes; choose individual episodes for longer anime.
 - **Radio**: avoid radio in one click, extended M3U radio playlists and Radio
   Browser search, with shared favorites.
+- **AirPlay** sound from an iPhone, iPad or Mac, on a Couch that runs on Linux,
+  once an admin turns it on in **Settings > Sources**: [Receive AirPlay](airplay.md).
 - **Live TV**: M3U playlists, with an optional XMLTV guide, in **Settings >
   Sources > Live TV**. Channels that need custom headers or DRM are skipped.
   Edit keeps saved URLs unless you type new ones; **Remove guide** drops a

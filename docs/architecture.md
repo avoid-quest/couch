@@ -203,6 +203,13 @@ is excluded from persistent queues and removed when its publication ends. Captur
 cleanup closes the upload, stops its encoder and removes its temporary segments.
 For publishing, receiving and capture checks, see [Share a live device](live-inputs.md).
 
+On Linux, an admin can also turn on an AirPlay receiver ([Receive AirPlay](airplay.md)).
+Core runs the pinned UxPlay it ships as a separate process, only while that switch and
+Share on network are on, and reads the decoded sound of an admitted sender from a private
+pipe. Core owns that publication (`airplay`, never a Device): every receiver plays it
+through the same buffered HLS, and In sync, as a capture's fallback. It ends when the
+sender leaves, and an admitted sender counts as playing for unattended updates.
+
 When a Playback has outputs on several Devices, its sound is Synced
 (`src/server/sendspin.ts`). Core runs a Sendspin server on its own port at
 `/sendspin` (`@sonn-audio/node-sendspin`, Noise with AES-GCM, because Electron's
@@ -263,7 +270,7 @@ can't decode, play in an mpv process on the Device that runs Core
 starts. mpv comes from `PATH` or, on macOS and Windows, from mpv's GitHub
 releases (SHA-256 checked); Linux uses the system's package.
 
-Sources include live device inputs and external internet media: yt-dlp sites
+Sources include live device inputs, AirPlay senders and external internet media: yt-dlp sites
 (YouTube, Twitch, RaiPlay, Bandcamp and others), StreamingCommunity, radio and
 IPTV playlists.
 Couch serves no local files.
@@ -278,7 +285,9 @@ extraction; playback retains its full format extraction and public-network proxy
 
 Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
 YouTube's challenges) and ffmpeg. The app ships none of them
-(`src/server/helpers.ts`).
+(`src/server/helpers.ts`). The AirPlay receiver is not one of them: Linux packages
+ship its pinned UxPlay build, like the live relay, and nothing updates it apart
+from Couch ([Receive AirPlay](airplay.md)).
 
 - Core uses the copy on `PATH` when it is recent enough: yt-dlp at its latest
   release, QuickJS-NG 0.12 or later, ffmpeg 7 or later.
