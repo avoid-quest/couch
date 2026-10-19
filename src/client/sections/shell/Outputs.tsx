@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Circle, CircleCheck, Ellipsis, SlidersVertical } from "lucide-react";
+import { Circle, CircleCheck, Ellipsis, SlidersVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
@@ -53,11 +53,13 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     {/* It opens on the first device you can choose; Up reaches the Volume. */}
     <SheetContent side="bottom" onOpenAutoFocus={event => { const check = (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-device-check]:not(:disabled)"); if (check) { event.preventDefault(); check.focus(); } }}
-      className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
+      showCloseButton={false} className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11">
       <SyncScope><div className="grid w-full max-w-4xl">
-        <SheetHeader className="flex-row items-center gap-4 p-0 pr-12">
+        <SheetHeader className="flex-row items-center gap-4 p-0">
           <div className="size-14 shrink-0 overflow-hidden bg-muted [&>*]:size-full [&_img]:object-contain">{entry && <MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />}</div>
           <div className="grid min-w-0 gap-0.5"><SheetTitle className="text-base font-medium [overflow-wrap:anywhere]">{title ?? "Nothing is playing"}</SheetTitle><SheetDescription>{status}</SheetDescription></div>
+          {/* Every Sheet closes from the end of its heading row; here it is the "…" column's size and place. */}
+          <SheetClose asChild><Button variant="ghost" size="icon-lg" className="ml-auto" aria-label="Close" title="Close"><X aria-hidden="true" /></Button></SheetClose>
         </SheetHeader>
         {levels({ state, connected, run, inSync, volume: playing.length !== 1 })}
         {/* The TV's fader hint, where its faders start rather than below a long list. */}

@@ -28,9 +28,12 @@ The transport is Play/Pause, Stop and Next wherever it appears: the band, the
 now-playing bar, Home's hero and the Remote. Each keeps its slot for every
 kind of media: live media that can't pause keeps Pause, disabled, and Stop is
 enabled whenever something is loading, playing, paused, ended or failed.
-In the band the verb that works is a filled disc at 56px on every screen,
-the band's one filled control: Play/Pause, or Stop for live media that can't
-pause; the others are ghost icons at 44px.
+In the band all three are ghost icons at 44px, as in the now-playing bar:
+no disc, no fill, the same control at the same size wherever it appears
+([icon controls](../design.md#scale)). A slot that can't act stays at half
+ink. Up next and Playback are toggles that open a panel: both say
+`aria-expanded` and keep the hover tint while their panel is open, as Volume
+and Where it plays do.
 Stop clears the sequence and offers Undo; it lives in the transport, never
 only in a Sheet. The keyboard and the timeline seek.
 
@@ -181,12 +184,17 @@ Details, Play next, ordering, Save for later and Remove, behind a "…" at the
 row's end, since an entry's page holds only Play and Save
 ([Menus](../design.md#menus)). Removal leaves focus on the adjacent row, so a
 keyboard keeps editing: on its "…" when the "…" opened the menu, else on the
-row itself. Each upcoming row is a board line: its name heavy, and at its
-end the time it starts, light in tabular figures ([Scale](../design.md#scale));
-the heading above counts them and says when the list ends ("2 to play · until
-17:05"). Save as list shows while there is something to save, asks for a
-name and preserves errors there for retry. Opened over the player, the panel
-closes from its heading row, an X after Save as list, as a sheet does. Its
+row itself. Each upcoming row is a board line: its name heavy at the row
+title's size (two lines, then it clamps), and at its end the time it starts,
+light at the same size in tabular figures ([Scale](../design.md#scale)). Its
+meta line reads the subtitle and length, and "added by {device}" only when
+another device queued it. The list's status line counts the rows and says
+when the list ends ("2 to play · until 17:05"), with Save as list at its end,
+beside what it saves; Save as list shows while there is something to save,
+asks for a name and preserves errors there for retry. The panel's sections,
+Up next, Autoplay and Played, are headed alike (section titles). Opened over
+the player, the panel closes from an X at the end of its "Up next" heading
+row, as every Sheet does; in Home's Sheet that row is the Sheet's header. Its
 own Playing row heads the list only where the player's title is off screen,
 a phone's Up next over Now playing: beside the artwork and title, or under a
 video's top band, it would repeat them. shadcn/Radix menus supply keyboard

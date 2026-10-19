@@ -61,7 +61,9 @@ Other devices
 ```
 
 - **Its header** is the Playback's artwork, title and status ("Choose where
-  it plays" while a shared source waits for receivers).
+  it plays" while a shared source waits for receivers), then its Close at the
+  row's end, above the rows' "…" and their size, as every Sheet closes from
+  the end of its heading row.
 - **Its levels:** the [Volume](#volume), then [In sync](#in-sync) where it
   applies. On the TV the fader hint, "Press OK to adjust a level, then OK or
   Back to finish.", follows them, where the faders start; it is the Sheet's

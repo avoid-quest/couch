@@ -89,13 +89,13 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false, com
 }
 
 /**
- * Play/Pause, Stop and Next, each in its slot for every kind of media: the band (`prominent`, larger), the now-playing bar and the remote pad.
+ * Play/Pause, Stop and Next, each in its slot for every kind of media: the band, the now-playing bar, Home's hero and the remote pad,
+ * the same ghost icons everywhere (`icon-lg`: a 1.25rem glyph); each place sets only the target's size.
  * The first slot is Replay once ended, Try again after an error, else Play or Pause (disabled for live media that can't pause).
- * In the band the verb that works is a filled disc, the band's one filled control: Play/Pause, or Stop where live media can't pause.
  * With `pageFirst`, a page change's first key lands on the first enabled slot. Keys and the timeline seek.
  * `moreClassName` styles Stop and Next, which the now-playing bar hides on phones.
  */
-export function PlaybackTransport({ state, connected, run, pageFirst = false, prominent = false, moreClassName }: Props & { pageFirst?: boolean; prominent?: boolean; moreClassName?: string }) {
+export function PlaybackTransport({ state, connected, run, pageFirst = false, className, moreClassName }: Props & { pageFirst?: boolean; className?: string; moreClassName?: string }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { available, transportReady, pausable, stoppable, nextReady, hasNext } = playbackCapabilities(state, connected);
@@ -105,16 +105,13 @@ export function PlaybackTransport({ state, connected, run, pageFirst = false, pr
   const label = ended ? "Replay" : failed ? "Try again" : pause ? "Pause" : "Play";
   const enabled = [ended || failed ? available : transportReady && pausable, stoppable, nextReady && hasNext];
   const first = (slot: number) => pageFirst && enabled.indexOf(true) === slot || undefined;
-  const primary = enabled[0] || !enabled[1] ? 0 : 1;
-  const disc = "size-14 touch:size-14 rounded-full [&_svg]:size-7";
-  const size = cn(prominent && (primary === 1 ? disc : "size-11 [&_svg]:size-5"), moreClassName);
-  return <div className={cn("flex shrink-0 items-center gap-0.5", prominent && "player-transport gap-2")} role="group" aria-label="Playback controls">
-    <Button data-page-first={first(0)} data-play-button variant={prominent && primary === 0 ? "default" : "ghost"} size="icon-lg" className={prominent ? primary === 0 ? disc : "size-11 [&_svg]:size-5" : undefined} aria-label={label} title={label} disabled={!enabled[0]}
+  return <div className={cn("flex shrink-0 items-center gap-0.5", className)} role="group" aria-label="Playback controls">
+    <Button data-page-first={first(0)} data-play-button variant="ghost" size="icon-lg" aria-label={label} title={label} disabled={!enabled[0]}
       onClick={() => { if ((ended || failed) && current) void run({ type: "play", entryId: current.id, fromStart: ended }); else if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {ended ? <RotateCcw aria-hidden="true" /> : pause ? <Pause aria-hidden="true" className="fill-current" /> : <Play aria-hidden="true" className="fill-current" />}
     </Button>
-    <Button data-page-first={first(1)} variant={prominent && primary === 1 ? "default" : "ghost"} size="icon-lg" className={size} aria-label="Stop" title="Stop" disabled={!enabled[1]} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
-    <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={cn(prominent && "size-11 [&_svg]:size-5", moreClassName)} aria-label="Next" title="Next" disabled={!enabled[2]}
+    <Button data-page-first={first(1)} variant="ghost" size="icon-lg" className={moreClassName} aria-label="Stop" title="Stop" disabled={!enabled[1]} onClick={() => void run({ type: "stop" })}><Square aria-hidden="true" className="fill-current" /></Button>
+    <Button data-page-first={first(2)} variant="ghost" size="icon-lg" className={moreClassName} aria-label="Next" title="Next" disabled={!enabled[2]}
       onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><SkipForward aria-hidden="true" className="fill-current" /></Button>
   </div>;
 }

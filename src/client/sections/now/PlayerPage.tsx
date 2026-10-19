@@ -188,7 +188,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   };
   // A pointer has no Back key, so desktop and phones lead the top band with Back; the TV's remote has its own.
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
-  const back = !tvPresentation && <Button variant="ghost" size="icon" className="-ml-2.5 size-11 shrink-0" aria-label={backLabel} title={backLabel} onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /></Button>;
+  const back = !tvPresentation && <Button variant="ghost" size="icon-lg" className="-ml-2.5 size-11 shrink-0" aria-label={backLabel} title={backLabel} onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
@@ -289,25 +289,27 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
           picture. Every tool is an icon. */}
       <div className="grid gap-1">
         {!playerTarget && bufferingStatus}
-        <div className="player-control-row">
+        {/* Every control is a ghost icon (icon-lg) at the band's 44px target, the now-playing bar's too; those at the
+            band's ends pull back (-2.5) so their glyphs line up with the timeline's times, as Back does with the title. */}
+        <div className="player-control-row [&_[data-size=icon-lg]]:size-11">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
-          {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}
-          <div data-player-tools="sound" className="flex shrink-0 items-center [&_svg]:size-5">
-            {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
-            {state && <WhereItPlays state={state} connected={connected} run={run} className="size-11" />}
+          {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst className="player-transport" />}
+          <div data-player-tools="sound" className="-ml-2.5 flex shrink-0 items-center gap-0.5">
+            {state && <VolumeButton state={state} connected={connected} run={run} />}
+            {state && <WhereItPlays state={state} connected={connected} run={run} />}
           </div>
-          <div data-player-tools="more" className="flex shrink-0 items-center [&_svg]:size-5">
-            {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
-            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
+          <div data-player-tools="more" className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+            {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
+            <Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" aria-expanded={panel !== null} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
             {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
-            {!tvPresentation && !artworkStage && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+            {!tvPresentation && !artworkStage && <Button variant="ghost" size="icon-lg" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
           </div>
         </div>
       </div>
     </div>
     <Sheet modal={false} open={panel !== null} onOpenChange={open => { if (!open) setPanelState(null); }}>
       <SheetContent side="right" data-player-sheet aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); panelClose.current?.focus(); }} onCloseAutoFocus={event => { event.preventDefault(); panelTrigger.current?.focus(); }}>
-        <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-2 border-b bg-background px-6 py-4"><SheetTitle className="text-base font-medium">{panel && panelTitles[panel]}</SheetTitle><SheetClose asChild><Button ref={panelClose} variant="ghost" size="icon" aria-label="Close"><X aria-hidden="true" /></Button></SheetClose></SheetHeader>
+        <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-2 border-b bg-background px-6 py-4"><SheetTitle className="text-base font-medium">{panel && panelTitles[panel]}</SheetTitle><SheetClose asChild><Button ref={panelClose} variant="ghost" size="icon-lg" className="-mr-2.5 size-11" aria-label="Close" title="Close"><X aria-hidden="true" /></Button></SheetClose></SheetHeader>
         <div className="px-6 pt-4 pb-8">
           {panel === "tracks" && <Button variant="ghost" className="-ml-2.5 mb-4 h-11" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "settings" }); }}><ArrowLeft aria-hidden="true" />Playback</Button>}
           {panel === "settings" && <div className="grid divide-y border-b">

@@ -128,7 +128,8 @@ Where it plays after a switch: [Where it plays](where-it-plays.md#switching-serv
 
 `NowPlayingBar` is one row above the page, and above the phone tab bar. Its
 artwork and title ("Open player: …") open the player; the row underneath
-names the radio or collection (a link), the status and, below `lg`, the time.
+names the radio (a link to Discover's every station, as Home's Radio shelf
+heading is) or collection (a link), the status and, below `lg`, the time.
 The bar then carries the band's controls in its order: Play/Pause, Stop and
 Next, the timeline or "Live", Volume, Where it plays and Up next. Phones, for
 their width and reach, keep Play/Pause and Where it plays; the player keeps
