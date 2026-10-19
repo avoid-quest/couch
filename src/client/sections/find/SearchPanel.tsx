@@ -1,4 +1,4 @@
-import { isLink, mergeSearchHits, searchSources, type SearchRouteState } from "../../search";
+import { isLink, mergeSearchHits, searchSources, searchEndBounds, searchDeadline, searchSecondsLeft, searchRelevance, type SearchRouteState } from "../../search";
 import { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer/debouncer";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { PlayOnMenu, usePlayOn } from "@/components/PlayOn";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import type { Action } from "../../../shared/protocol";
 import { providerForUrl, type ProviderId, type ProviderItem, type VideoQuality } from "../../../shared/providers";
-import { collectionLocation, useDetailNavigation } from "@/detail-navigation";
+import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
 import { SearchOnlineResults, providerNames, type SearchHit, type SearchResultSummary } from "./SearchOnlineResults";
 import { Shelf } from "@/components/Shelf";
 import { MediaTile, tileAspect, type TileShape } from "@/components/MediaTile";
@@ -60,9 +60,7 @@ const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "Anime
 const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List" || hit.source === "RaiPlay" && !!hit.collection ? "films"
   : hit.kind === "Radio" ? "radio" : hit.kind === "Live" ? "live" : hit.kind === "Music" ? "music" : hit.collection ? "channels" : "videos";
 const shapeOf = (hit: SearchHit): TileShape => { const shape = groups.find(group => group.id === groupOf(hit))!.shape; return shape === "rows" || hit.source === "RaiPlay" ? "video" : shape; };
-const mentions = (text: string, word: string) => text.split(" ").some(part => part.startsWith(word));
-const normalize = (value: string) => value.normalize("NFC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-const clock = (minutes: number) => `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
 
 /**
  * The results of the header's search (`searchState`, the route's): the closest match on top, then every source's hits
@@ -84,7 +82,10 @@ export function SearchPanel(props: Props) {
   const filter = searchState.source;
   const until = searchState.until;
   const setFilter = (source: string) => props.onSearchChange({ ...searchState, source });
-  const setUntil = (value: string) => props.onSearchChange({ ...searchState, until: value === "any" ? undefined : value });
+  const setUntil = (value: string) => {
+    setSelectedDeadline(value === "any" ? null : { until: value, deadline: searchDeadline(value, now) });
+    props.onSearchChange({ ...searchState, until: value === "any" ? undefined : value });
+  };
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const panel = useRef<HTMLElement>(null);
   const url = isLink(query) ? query : undefined;
@@ -94,16 +95,16 @@ export function SearchPanel(props: Props) {
   const total = Object.values(summaries).reduce((sum, summary) => sum + summary.count, 0);
   // Ends by: three clock times ahead, on the half hour, the first at least twenty minutes out. Live and radio always fit.
   const now = useDurationClock();
-  const nowMinutes = Math.floor((now - new Date(now).setHours(0, 0, 0, 0)) / 60_000);
-  const first = Math.ceil((nowMinutes + 20) / 30) * 30;
-  const bounds = [first, first + 60, first + 180].map(minutes => ({ value: clock(minutes), seconds: (minutes - nowMinutes) * 60 }));
-  const fits = until ? ((Number(until.slice(0, 2)) * 60 + Number(until.slice(3)) - nowMinutes + 1440) % 1440) * 60 : null;
+  const [selectedDeadline, setSelectedDeadline] = useState(() => until ? { until, deadline: searchDeadline(until, now) } : null);
+  const deadline = selectedDeadline?.until === until ? selectedDeadline : until ? { until, deadline: searchDeadline(until, now) } : null;
+  if (deadline !== selectedDeadline) setSelectedDeadline(deadline);
+  const bounds = searchEndBounds(now);
+  if (deadline && !bounds.some(bound => bound.value === until)) bounds.unshift({ value: deadline.until, deadline: deadline.deadline });
+  const fits = deadline ? searchSecondsLeft(deadline.deadline, now) : null;
   const fitsBy = (hit: SearchHit, seconds: number | null) => seconds == null || !!hit.live || hit.kind === "Radio" || !hit.collection && hit.duration != null && hit.duration - (hit.position ?? 0) <= seconds;
   // What the search asked for, and what merely came back: a hit is close when it mentions a word of the query, and
   // strong when its title holds every word.
-  const words = normalize(query).split(" ").filter(word => word.length >= 2);
-  const close = (hit: SearchHit) => !words.length || words.some(word => mentions(normalize(`${hit.title} ${hit.meta}`), word));
-  const strong = (hit: SearchHit) => words.length > 0 && words.every(word => mentions(normalize(hit.title), word));
+  const { close, strong } = searchRelevance(query);
   const merged = useMemo(() => mergeSearchHits(sourceOrder, Object.fromEntries(Object.entries(summaries).map(([source, summary]) => [source, summary.hits ?? []])), query), [summaries, query]);
   const scoped = merged.filter(hit => inScope(hit.source) && fitsBy(hit, fits));
   const relevant = scoped.filter(close);
@@ -111,14 +112,20 @@ export function SearchPanel(props: Props) {
   // The closest match leads: the first strong hit of the first kind that has one, as Home's hero leads its shelves. Once
   // every source has answered it holds still for the query, so nothing moves under the focus while browsing.
   const candidate = groups.map(group => relevant.find(hit => groupOf(hit) === group.id && strong(hit))).find(Boolean);
-  const held = useRef<{ key: string; id: string } | null>(null);
-  if (candidate && !asking.length && held.current?.key !== resultsKey) held.current = { key: resultsKey, id: candidate.id };
-  const top = (held.current?.key === resultsKey && relevant.find(hit => hit.id === held.current!.id)) || candidate;
+  const [held, setHeld] = useState<{ key: string; id: string } | null>(null);
+  useEffect(() => {
+    if (candidate && !asking.length && summaries === latest) {
+      setHeld(current => current?.key === resultsKey ? current : { key: resultsKey, id: candidate.id });
+    }
+  }, [candidate, asking.length, summaries, latest, resultsKey]);
+  const top = (held?.key === resultsKey && relevant.find(hit => hit.id === held.id)) || candidate;
+  const [expanded, setExpanded] = useState<{ key: string; groups: GroupId[] }>({ key: resultsKey, groups: [] });
+  const expandedGroups = expanded.key === resultsKey ? expanded.groups : [];
   const grouped = groups.map(group => ({ ...group, hits: relevant.filter(hit => hit !== top && groupOf(hit) === group.id) })).filter(group => group.hits.length);
   const focusedHit = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!props.active || !focusedHit.current || document.activeElement !== document.body) return;
-    const row = panel.current?.querySelector<HTMLElement>(`[data-hit-id="${CSS.escape(focusedHit.current)}"] [data-play], [data-hit-id="${CSS.escape(focusedHit.current)}"] [data-media-tile]`)
+    const row = panel.current?.querySelector<HTMLElement>(`[data-hit-id="${CSS.escape(focusedHit.current)}"] [data-play], [data-hit-id="${CSS.escape(focusedHit.current)}"][data-media-tile]`)
       ?? panel.current?.querySelector<HTMLElement>("[data-play], [data-media-tile]");
     row?.focus({ preventScroll: true });
   }, [relevant, props.active]);
@@ -137,18 +144,18 @@ export function SearchPanel(props: Props) {
           <p className="text-sm text-muted-foreground">From</p>
           <ChoiceGroup label="From" value={filter} onValueChange={setFilter} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "All", label: "All sources", count: sourceCount("All") }, ...fromSources.map(source => ({ value: source, label: source, count: summaries[source]?.loading ? "…" : sourceCount(source) }))]} />
           <p className="text-sm text-muted-foreground">Ends by</p>
-          <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.seconds)).length }))]} />
+          <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.value === until ? fits : searchSecondsLeft(bound.deadline, now))).length }))]} />
         </div>}
       </div>}
-      {top && <TopResult hit={top} now={now} />}
+      {top && <TopResult key={top.id} hit={top} now={now} />}
       {grouped.map((group, index) => group.shape === "rows"
         ? <section key={group.id} aria-label={group.title} className="grid min-w-0 gap-3">
           <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{count(group, group.hits.length)}</p></header>
           <HitList pageFirst={!top && index === 0} hits={group.hits} label={group.title} />
         </section>
         : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)}>
-          {group.hits.slice(0, 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
-          {group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setFilter(group.hits[12]!.source)}>{group.hits.length - 12} more</Button></li>}
+          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
+          {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
       <SourceProblems summaries={shown} />
@@ -168,6 +175,8 @@ export function SearchPanel(props: Props) {
 
 /** The closest match, laid out like Home's hero at a smaller size: artwork, title, meta, when it ends, then its verbs. */
 function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
+  const { on } = usePlayOn();
+  const label = hit.primary.label === "Play" || hit.primary.label === "Resume" ? on(hit.primary.label) : hit.primary.label;
   const play = hit.primary.label !== "Play" ? hit.actions.find(action => action.label === "Play") : undefined;
   const queue = hit.actions.find(action => action.label === "Queue");
   const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action.label !== hit.primary.label));
@@ -179,8 +188,12 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
       <p className="truncate text-sm text-muted-foreground">{hit.meta}</p>
       {time && <p className="text-xl font-light tabular-nums">{time}</p>}
       <div data-nav-row className="mt-3 flex flex-wrap items-center gap-1">
-        <Button data-page-first data-play size="lg" disabled={hit.primary.disabled} onClick={hit.primary.run}>{hit.primary.label}</Button>
-        {play && <Button variant="ghost" size="lg" disabled={play.disabled} onClick={play.run}>Play</Button>}
+        <Button data-page-first data-play size="lg" asChild={!!hit.primary.href && !hit.primary.disabled} disabled={hit.primary.disabled} onClick={event => {
+          if (hit.primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
+          if (hit.primary.href) event.preventDefault();
+          hit.primary.run();
+        }}>{hit.primary.href && !hit.primary.disabled ? <a href={detailHref(hit.primary.href)}>{label}</a> : label}</Button>
+        {play && <Button variant="ghost" size="lg" disabled={play.disabled} onClick={play.run}>{on("Play")}</Button>}
         {queue && <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>Queue</Button>}
         <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
       </div>
@@ -193,7 +206,7 @@ function HitTile({ hit, shape, pageFirst }: { hit: SearchHit; shape: TileShape; 
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
   return <MediaTile data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} title={hit.title} meta={hit.meta} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
-    href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={hit.actions.filter(action => action.label !== primary.label)} />;
+    href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]} />;
 }
 
 /** Search hits as media rows under one time ruler. */
