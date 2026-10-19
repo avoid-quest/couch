@@ -1649,7 +1649,7 @@ export async function createHub(options: HubOptions) {
         if (player) {
           // A browser can't tell a relayed source's refusal from a format it can't play.
           const loaded = browserLoads.get(socket);
-          const refused = player.status === "error" && player.playbackId && loaded?.playbackId === player.playbackId ? passThrough.refused(player.playbackId, loaded.source) : undefined;
+          const refused = player.status === "error" && player.playbackId && loaded?.playbackId === player.playbackId ? passThrough.refused(player.playbackId, loaded.source) ?? (loaded.audioSource ? passThrough.refused(player.playbackId, loaded.audioSource) : undefined) : undefined;
           if (refused) player.error = `The website refused this stream (HTTP ${refused}). Play it again.`;
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
           // Once per error a tab reports for this load. Core already logged a group's
