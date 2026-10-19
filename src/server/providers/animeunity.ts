@@ -84,17 +84,18 @@ async function servingOrigin(origin: string, signal: AbortSignal, request: typeo
   } catch { signal.throwIfAborted(); /* An unreachable or changed candidate is not adopted. */ }
 }
 
-export async function animeUnityText(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch, init: RequestInit = {}) {
+export async function animeUnityText<T = undefined>(url: string, signal?: AbortSignal, request: typeof fetch = publicFetch, init: RequestInit = {}, parse?: (text: string) => T) {
   const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(25_000)]);
   cancellation.throwIfAborted();
   let state = origins.get(request);
-  if (!state) { state = { origin: animeUnityOrigin, retryAt: 0 }; origins.set(request, state); }
+  if (!state) { state = { origin: "https://www.animeunity.to", retryAt: 0 }; origins.set(request, state); }
   const attemptedOrigin = state.origin;
-  const load = () => {
+  const load = async () => {
     const target = new URL(url);
     const referer = new Headers(init.headers).get("Referer");
     if (init.method === "POST" && referer && new URL(referer).origin !== state.origin) throw changed();
-    return readText(state.origin + target.pathname + target.search, cancellation, request, init);
+    const result = await readText(state.origin + target.pathname + target.search, cancellation, request, init);
+    return { ...result, parsed: parse?.(result.text) };
   };
   try { return await load(); } catch (error) {
     cancellation.throwIfAborted();
@@ -103,23 +104,32 @@ export async function animeUnityText(url: string, signal?: AbortSignal, request:
     if (state.origin !== attemptedOrigin) return load();
     if (!state.pending && Date.now() >= state.retryAt) {
       const current = state;
+      const recovery = AbortSignal.timeout(20_000);
       current.pending = (async () => {
-        let found = await servingOrigin(current.origin, cancellation, request);
+        let found = await servingOrigin(current.origin, recovery, request);
         if (!found) {
           try {
-            const result = json((await readText(addressPage, cancellation, request, { headers: { Accept: "application/json" } })).text);
+            const result = json((await readText(addressPage, recovery, request, { headers: { Accept: "application/json" } })).text);
             const entry = object(result) && object(result.animeunity) ? result.animeunity : undefined;
             const candidate = typeof entry?.full_url === "string" && siteOrigin(entry.full_url);
-            if (candidate && candidate !== current.origin) found = await servingOrigin(candidate, cancellation, request);
-          } catch { cancellation.throwIfAborted(); /* The tracker can be unavailable too. */ }
+            if (candidate && candidate !== current.origin) found = await servingOrigin(candidate, recovery, request);
+          } catch { recovery.throwIfAborted(); /* The tracker can be unavailable too. */ }
         }
-        cancellation.throwIfAborted();
+        recovery.throwIfAborted();
         if (found) current.origin = found;
-        current.retryAt = Date.now() + 600_000;
         return found;
-      })().finally(() => { current.pending = undefined; });
+      })().finally(() => { current.pending = undefined; current.retryAt = Date.now() + 600_000; });
     }
-    if (!state.pending || !await state.pending) throw error;
+    if (!state.pending) throw error;
+    // A caller may leave immediately without cancelling another caller's recovery.
+    let abort!: () => void;
+    const cancelled = new Promise<never>((_, reject) => {
+      abort = () => reject(cancellation.reason);
+      cancellation.addEventListener("abort", abort, { once: true });
+      if (cancellation.aborted) abort();
+    });
+    try { if (!await Promise.race([state.pending, cancelled])) throw error; }
+    finally { cancellation.removeEventListener("abort", abort); }
     cancellation.throwIfAborted();
     return load();
   }
@@ -158,7 +168,11 @@ function episodeItem(collection: ProviderItem, episode: Episode, index?: number)
 export async function animeUnityTitle(value: string, signal?: AbortSignal, request: typeof fetch = publicFetch) {
   const url = animeUnityPageUrl(value);
   if (!url) throw new ProviderError("Choose an AnimeUnity anime or episode link.", 400);
-  const { text, origin } = await animeUnityText(url.href, signal, request);
+  const { parsed, origin } = await animeUnityText(url.href, signal, request, {}, text => parseTitle(text, url));
+  return { ...parsed!, origin };
+}
+
+function parseTitle(text: string, url: URL) {
   const attributes_ = attributes(/<video-player\b[^>]*>/i.exec(text)?.[0] ?? "");
   const anime = json(attributes_.anime), selected = json(attributes_.episode || "null");
   const collection = animeItem(anime);
@@ -173,7 +187,7 @@ export async function animeUnityTitle(value: string, signal?: AbortSignal, reque
   const firstRange = rows.length > 0 && Number(rows[0]!.number.split("-")[0]) <= 120;
   const index = firstRange && episode ? rows.findIndex(row => row.id === episode.id) : undefined;
   return { item: episodeId && episode ? episodeItem(collection, episode, index) : collection, collection, episodes: rows,
-    episodeNumbers: rawRows.flatMap(row => row.number.split("-").map(Number)), episode, count, embedUrl: attributes_.embed_url, origin };
+    episodeNumbers: rawRows.flatMap(row => row.number.split("-").map(Number)), episode, count, embedUrl: attributes_.embed_url };
 }
 
 async function episodeRange(title: Awaited<ReturnType<typeof animeUnityTitle>>, start: number, signal: AbortSignal | undefined, request: typeof fetch): Promise<Episode[]> {
@@ -201,6 +215,18 @@ function catalogTarget(value: string): URL {
   } catch { throw new ProviderError("Use an AnimeUnity anime or catalogue link.", 400); }
 }
 
+function catalogRows(rows: unknown, total: number, offset = 0) {
+  if (!Array.isArray(rows) || rows.length > 30 || !Number.isSafeInteger(total) || total < 0 || total > 100_000 || !rows.length && offset < total) throw changed();
+  const items = [...new Map(rows.flatMap(row => { const item = animeItem(row); return item ? [[item.url, item] as const] : []; })).values()];
+  if (rows.length && !items.length) throw changed();
+  return { rows, total, items };
+}
+
+function parseCatalog(text: string) {
+  const attrs = attributes(/<archivio\b[^>]*>/i.exec(text)?.[0] ?? "");
+  return catalogRows(json(attrs.records), Number(attrs.tot_count));
+}
+
 async function catalog(request_: BrowseRequest, signal: AbortSignal | undefined, request: typeof fetch): Promise<ProviderPage> {
   const target = catalogTarget(request_.url || `${animeUnityOrigin}/archivio`);
   const query = (request_.query ?? target.searchParams.get("title") ?? "").trim();
@@ -208,9 +234,8 @@ async function catalog(request_: BrowseRequest, signal: AbortSignal | undefined,
   if (query) target.searchParams.set("title", query); else target.search = "";
   const offset = Number(request_.cursor ?? 0);
   if (request_.cursor !== undefined && (!/^\d{1,6}$/.test(request_.cursor) || offset > 100_000)) throw new ProviderError("Invalid AnimeUnity catalogue cursor.", 400);
-  const first = await animeUnityText(target.href, signal, request);
-  const attrs = attributes(/<archivio\b[^>]*>/i.exec(first.text)?.[0] ?? "");
-  let rows = json(attrs.records), total = Number(attrs.tot_count);
+  const first = await animeUnityText(target.href, signal, request, {}, parseCatalog);
+  let { rows, total, items } = first.parsed!;
   if (offset) {
     const token = [...first.text.matchAll(/<meta\b[^>]*>/gi)].map(match => attributes(match[0])).find(attr => attr.name === "csrf-token")?.content;
     // These anonymous cookies belong only to this catalogue request, never an account.
@@ -218,11 +243,8 @@ async function catalog(request_: BrowseRequest, signal: AbortSignal | undefined,
     if (!token || !/^[a-zA-Z0-9]{20,100}$/.test(token) || !cookies || cookies.length > 8192 || /[\r\n]/.test(cookies)) throw changed();
     const result = json((await animeUnityText(`${animeUnityOrigin}/archivio/get-animes`, signal, request, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest", "X-CSRF-TOKEN": token, Cookie: cookies, Referer: first.origin + target.pathname + target.search }, body: JSON.stringify({ title: query || false, offset, type: false, year: false, order: false, status: false, genres: false, dubbed: false, season: false }) })).text);
     if (!object(result)) throw changed();
-    rows = result.records; total = Number(result.tot);
+    ({ rows, total, items } = catalogRows(result.records, Number(result.tot), offset));
   }
-  if (!Array.isArray(rows) || rows.length > 30 || !Number.isSafeInteger(total) || total < 0 || total > 100_000 || !rows.length && offset < total) throw changed();
-  const items = [...new Map(rows.flatMap(row => { const item = animeItem(row); return item ? [[item.url, item] as const] : []; })).values()];
-  if (rows.length && !items.length) throw changed();
   return { title: query ? `AnimeUnity: ${query}` : "AnimeUnity", items, ...(rows.length && offset + rows.length < total ? { nextCursor: String(offset + rows.length) } : {}) };
 }
 
