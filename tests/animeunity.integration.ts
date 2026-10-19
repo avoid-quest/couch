@@ -7,11 +7,11 @@ import { resolveAnimeUnityLink } from "../src/server/animeunity";
 const anime = `${animeUnityOrigin}/anime/12-one-piece`;
 const episode = `${anime}/5987`;
 // Reduced public fields observed in /archivio, /anime/12-one-piece, /info_api
-// and the linked Vixcloud embed on 2026-10-17. IDs/numbers vary in edge cases.
+// and the linked Vixcloud embed; domains rechecked on 2026-10-19. IDs/numbers vary in edge cases.
 const row = { id: 12, slug: "one-piece", title: null, title_eng: "One Piece", imageurl: "https://img.animeunity.so/anime/one-piece.jpg", plot: "A pirate&#039;s adventure.", date: "1999", type: "TV", dub: 0, episodes_length: 24 };
 const ep = (number = 1, extra: Record<string, unknown> = {}) => ({ id: 5986 + number, anime_id: 12, number: String(number), public: 1, scws_id: 304644 + number, link: "One.Piece.mkv", ...extra });
 const attribute = (value: unknown) => JSON.stringify(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-const embed = "https://vixcloud.co/embed/304645?token=55119f2c6d8c2ba4fc85ee216976e62e&expires=1797414560&canPlayFHD=1";
+const embed = "https://vixcloud.cc/embed/304645?token=55119f2c6d8c2ba4fc85ee216976e62e&expires=1797414560&canPlayFHD=1";
 function titleHtml(rows = [ep(), ep(2)], count = 2, selected: unknown = rows[0], extra: Record<string, unknown> = {}) {
   return `<video-player anime="${attribute({ ...row, ...extra })}" episode="${attribute(selected)}" episodes="${attribute(rows)}" episodes_count="${count}" embed_url="${embed.replace(/&/g, "&amp;")}"></video-player>`;
 }
@@ -33,7 +33,28 @@ test("AnimeUnity canonical references distinguish title and database episode IDs
   assert.equal(animeUnityPageUrl("http://animeunity.so/anime/12-one-piece/5987/")?.href, episode);
   assert.equal(animeUnityPageUrl(`${anime}/`)?.href, anime);
   assert.equal(isAnimeUnityHost("www.animeunity.so"), true);
-  for (const value of [episode.replace("animeunity.so", "animeunity.so.evil.example"), episode.replace("www.", "cdn."), `${episode}?token=private`, `${episode}#x`, episode.replace("https://", "https://user:secret@"), episode.replace(".so/", ".so:444/"), `${anime}/0`, `${anime}/1/2`, `${anime}/%31`, `${anime}/5987\n`]) assert.equal(animeUnityPageUrl(value), undefined, value);
+  for (const value of [episode.replace("/anime/", ".evil.example/anime/"), episode.replace("www.", "cdn."), `${episode}?token=private`, `${episode}#x`, episode.replace("https://", "https://user:secret@"), episode.replace("/anime/", ":444/anime/"), `${anime}/0`, `${anime}/1/2`, `${anime}/%31`, `${anime}/5987\n`]) assert.equal(animeUnityPageUrl(value), undefined, value);
+});
+
+test("AnimeUnity uses its moved origin for browsing and legacy saved episode playback", async () => {
+  assert.equal(animeUnityOrigin, "https://www.animeunity.to");
+  for (const host of ["animeunity.to", "www.animeunity.to", "animeunity.so", "www.animeunity.so"]) {
+    assert.equal(isAnimeUnityHost(host), true);
+    assert.equal(animeUnityPageUrl(`https://${host}/anime/12-one-piece/5987`)?.href, episode);
+  }
+  for (const host of ["animeunity.to.evil.example", "cdn.animeunity.to", "notanimeunity.to"]) assert.equal(isAnimeUnityHost(host), false);
+  const calls: Call[] = [];
+  await browseAnimeUnity({}, undefined, fixture(archiveHtml([row]), calls));
+  await browseAnimeUnity({ url: "https://www.animeunity.so/archivio?title=naruto" }, undefined, fixture(archiveHtml([row]), calls));
+  await browseAnimeUnity({ url: "https://www.animeunity.so/anime/12-one-piece" }, undefined, fixture(titleHtml(), calls));
+  await resolveAnimeUnityLink("https://www.animeunity.so/anime/12-one-piece/5987", undefined, playback(playerHtml, manifest, calls));
+  assert.deepEqual(calls.slice(0, 4).map(call => call.url), [
+    "https://www.animeunity.to/archivio",
+    "https://www.animeunity.to/archivio?title=naruto",
+    "https://www.animeunity.to/anime/12-one-piece",
+    "https://www.animeunity.to/anime/12-one-piece/5987",
+  ]);
+  assert.equal((calls[4]?.init?.headers as Record<string, string>).Referer, "https://www.animeunity.to/");
 });
 
 test("catalogue and search read only public collection metadata", async () => {
@@ -47,6 +68,134 @@ test("catalogue and search read only public collection metadata", async () => {
   assert.equal(page.items[0]?.kind, "collection");
   assert.equal(page.items[0]?.description, "A pirate's adventure.");
   assert.equal(page.items[0]?.subtitle, "1999 · TV · SUB ITA");
+});
+
+const tracker = "https://domains-tracker.server66.workers.dev/get";
+const moved = "https://www.animeunity.test";
+const recoveryFixture = (handle: (call: Call) => Response | Promise<Response>, calls: Call[] = []) => (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const call = { url: String(input), init };
+  calls.push(call);
+  assert.equal(init?.credentials, "omit");
+  assert.ok(init?.signal);
+  return handle(call);
+}) as typeof fetch;
+
+test("a domain redirect heals browsing, search pagination and saved title requests", async () => {
+  const calls: Call[] = [];
+  const request = recoveryFixture(call => {
+    if (call.url.startsWith("https://vixcloud.cc/")) {
+      if (call.url.includes("/embed/")) assert.equal(new Headers(call.init?.headers).get("referer"), `${moved}/`);
+      return new Response(call.url.includes("/embed/") ? playerHtml : manifest);
+    }
+    if (call.url.startsWith(animeUnityOrigin)) return new Response(null, { status: 302, headers: { Location: moved } });
+    assert.ok(call.url.startsWith(moved));
+    if (call.init?.method === "POST") {
+      const headers = new Headers(call.init.headers);
+      assert.equal(headers.get("referer"), `${moved}/archivio?title=naruto`);
+      assert.equal(headers.get("cookie"), "animeunity_session=anonymous");
+      return new Response(JSON.stringify({ records: [row], tot: 31 }));
+    }
+    return call.url.includes("/anime/") ? new Response(titleHtml()) : new Response(archiveHtml([row], 31), { headers: cookies });
+  }, calls);
+  assert.equal((await browseAnimeUnity({}, undefined, request)).items[0]?.url, anime);
+  assert.equal((await browseAnimeUnity({ query: "naruto", cursor: "30" }, undefined, request)).items.length, 1);
+  assert.equal((await browseAnimeUnity({ url: "https://animeunity.so/anime/12-one-piece" }, undefined, request)).items.length, 2);
+  assert.equal((await resolveAnimeUnityLink(episode, undefined, request)).metadata.title, "One Piece — Episode 1");
+  const before = calls.length;
+  await assert.rejects(() => animeUnityText(`${animeUnityOrigin}/archivio/get-animes`, undefined, request, { method: "POST", headers: { Referer: `${animeUnityOrigin}/archivio`, Cookie: "animeunity_session=old" } }), /changed this page/);
+  assert.equal(calls.length, before);
+  assert.deepEqual(calls.slice(0, 4).map(call => [call.url, call.init?.redirect]), [
+    [`${animeUnityOrigin}/archivio`, "error"], [`${animeUnityOrigin}/archivio`, "manual"],
+    [`${moved}/archivio`, "manual"], [`${moved}/archivio`, "error"],
+  ]);
+  assert.equal(calls.some(call => call.url === tracker), false);
+});
+
+test("a dead origin recovers from the tracker's AnimeUnity entry only after validating the catalogue", async () => {
+  const calls: Call[] = [];
+  const request = recoveryFixture(call => {
+    if (call.url.startsWith(animeUnityOrigin)) throw new TypeError("getaddrinfo ENOTFOUND");
+    if (call.url === tracker) return new Response(JSON.stringify({ animeunity: { full_url: `${moved}/` } }));
+    assert.equal(new URL(call.url).origin, moved);
+    return new Response(archiveHtml([row]));
+  }, calls);
+  assert.equal((await browseAnimeUnity({ query: "naruto" }, undefined, request)).items.length, 1);
+  assert.equal((await browseAnimeUnity({}, undefined, request)).items.length, 1);
+  assert.equal(calls.filter(call => call.url === tracker).length, 1);
+  assert.ok(calls.some(call => call.url === `${moved}/archivio?title=naruto`));
+});
+
+test("concurrent failures share recovery and redirected loops stay bounded", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let lookups = 0;
+  const request = recoveryFixture(async call => {
+    if (call.url.startsWith(animeUnityOrigin)) throw new TypeError("getaddrinfo ENOTFOUND");
+    if (call.url === tracker) {
+      lookups++;
+      release();
+      return new Response(JSON.stringify({ animeunity: { full_url: moved } }));
+    }
+    await gate;
+    return new Response(archiveHtml([row]));
+  });
+  const pages = await Promise.all([browseAnimeUnity({}, undefined, request), browseAnimeUnity({ query: "naruto" }, undefined, request)]);
+  assert.deepEqual(pages.map(page => page.items.length), [1, 1]);
+  assert.equal(lookups, 1);
+  const calls: Call[] = [];
+  const loop = recoveryFixture(call => call.url === tracker ? new Response("{}") : new Response(null, { status: 302, headers: { Location: call.url.startsWith(animeUnityOrigin) ? moved : animeUnityOrigin } }), calls);
+  await assert.rejects(() => browseAnimeUnity({}, undefined, loop), /did not load/);
+  assert.equal(calls.filter(call => call.init?.redirect === "manual").length, 4);
+});
+
+test("invalid redirects and tracker addresses are never fetched", async () => {
+  for (const candidate of ["https://animeunity.to.evil.example", "https://127.0.0.1", "https://cdn.animeunity.to", "http://animeunity.test", "https://user:secret@animeunity.test", "https://animeunity.test:444", "https://animeunity.test/?token=private"]) {
+    const request = recoveryFixture(call => {
+      if (call.url.startsWith(animeUnityOrigin)) return new Response(null, { status: 302, headers: { Location: candidate } });
+      assert.equal(call.url, tracker);
+      return new Response(JSON.stringify({ animeunity: { full_url: candidate } }));
+    });
+    await assert.rejects(() => browseAnimeUnity({}, undefined, request), /did not load/);
+  }
+});
+
+test("a tracker candidate serving a challenge is rejected and failed recovery is throttled", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  let lookups = 0;
+  const request = recoveryFixture(call => {
+    if (call.url.startsWith(animeUnityOrigin)) throw new TypeError("getaddrinfo ENOTFOUND");
+    if (call.url === tracker) { lookups++; return new Response(JSON.stringify({ animeunity: { full_url: moved } })); }
+    assert.equal(call.url, `${moved}/archivio`);
+    return new Response("<html>Just a moment...</html>");
+  });
+  for (let i = 0; i < 2; i++) await assert.rejects(() => browseAnimeUnity({}, undefined, request), /ENOTFOUND/);
+  assert.equal(lookups, 1);
+  t.mock.timers.tick(600_001);
+  await assert.rejects(() => browseAnimeUnity({}, undefined, request), /ENOTFOUND/);
+  assert.equal(lookups, 2);
+});
+
+test("missing titles and failed POSTs do not trigger domain recovery", async () => {
+  for (const init of [{}, { method: "POST" }]) {
+    const calls: Call[] = [];
+    const request = recoveryFixture(() => new Response(null, { status: init.method ? 419 : 404 }), calls);
+    await assert.rejects(() => animeUnityText(anime, undefined, request, init));
+    assert.equal(calls.length, 1);
+  }
+});
+
+test("cancelled recovery does not adopt a late candidate or suppress the next attempt", async () => {
+  const abort = new AbortController();
+  let probes = 0;
+  const request = recoveryFixture(call => {
+    if (call.url.startsWith(animeUnityOrigin)) throw new TypeError("getaddrinfo ENOTFOUND");
+    if (call.url === tracker) return new Response(JSON.stringify({ animeunity: { full_url: moved } }));
+    if (++probes === 1) abort.abort();
+    return new Response(archiveHtml([row]));
+  });
+  await assert.rejects(() => browseAnimeUnity({}, abort.signal, request), error => error === abort.signal.reason);
+  assert.equal((await browseAnimeUnity({}, undefined, request)).items.length, 1);
+  assert.equal(probes, 3);
 });
 
 test("catalogue pagination follows the public CSRF protocol with temporary anonymous cookies", async () => {
@@ -179,9 +328,9 @@ test("provider requests cancel streamed bodies and enforce a response bound", as
   await assert.rejects(() => animeUnityText(anime, undefined, fixture(() => new Response(new Uint8Array(4 * 1024 * 1024 + 1)))), /changed this page/);
 });
 
-const playerHtml = `<script>window.masterPlaylist = { params: { 'token': 'aff47512f4e237ec21d794b0d15b03c7', 'expires': '1797414595', 'asn': '', }, url: 'https://vixcloud.co/playlist/304645?b=1', }</script>`;
-const manifest = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480\nhttps://vixcloud.co/playlist/304645?type=video\n";
-const playback = (html = playerHtml, hls = manifest, calls: Call[] = []) => fixture(call => call.url.startsWith(`${animeUnityOrigin}/anime/`) ? titleHtml() : call.url.startsWith("https://vixcloud.co/embed/") ? html : hls, calls);
+const playerHtml = `<script>window.masterPlaylist = { params: { 'token': 'aff47512f4e237ec21d794b0d15b03c7', 'expires': '1797414595', 'asn': '', }, url: 'https://vixcloud.cc/playlist/304645?b=1', }</script>`;
+const manifest = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480\nhttps://vixcloud.cc/playlist/304645?type=video\n";
+const playback = (html = playerHtml, hls = manifest, calls: Call[] = []) => fixture(call => call.url.startsWith(`${animeUnityOrigin}/anime/`) ? titleHtml() : call.url.startsWith("https://vixcloud.cc/embed/") ? html : hls, calls);
 
 test("Vixcloud resolution copies the public playlist protocol and retains episode metadata", async () => {
   const calls: Call[] = [];
@@ -194,14 +343,26 @@ test("Vixcloud resolution copies the public playlist protocol and retains episod
   assert.equal(url.searchParams.has("asn"), false);
   assert.equal(media.metadata.title, "One Piece — Episode 1");
   assert.equal(media.metadata.duration, 1440);
-  assert.deepEqual(media.headers, { "User-Agent": "Mozilla/5.0", Referer: "https://vixcloud.co/" });
+  assert.deepEqual(media.headers, { "User-Agent": "Mozilla/5.0", Referer: "https://vixcloud.cc/" });
   assert.deepEqual(media.subtitles, []);
   assert.equal(calls.length, 3);
   assert.equal(calls[1]?.url, embed);
 });
 
+test("playback follows the Vixcloud domain published by AnimeUnity and pins the playlist to it", async () => {
+  for (const host of ["vixcloud.co", "vixcloud.test"]) {
+    const request = fixture(call => call.url.startsWith(animeUnityOrigin) ? titleHtml().replaceAll("vixcloud.cc", host)
+      : call.url.includes("/embed/") ? playerHtml.replaceAll("vixcloud.cc", host) : manifest.replaceAll("vixcloud.cc", host));
+    assert.equal(new URL((await resolveAnimeUnityLink(episode, undefined, request)).url).hostname, host);
+  }
+  for (const host of ["vixcloud.cc.evil.example", "cdn.vixcloud.cc", "localhost"]) {
+    await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, fixture(titleHtml().replaceAll("vixcloud.cc", host))), /changed its player/);
+  }
+  await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(playerHtml.replaceAll("vixcloud.cc", "vixcloud.co"))), /changed its player/);
+});
+
 test("changed player fields, foreign playlists and non-HLS responses fail closed", async () => {
-  for (const html of [playerHtml.replace("/playlist/304645", "/playlist/999"), playerHtml.replace("vixcloud.co/playlist", "evil.example/playlist"), playerHtml.replace("aff47512f4e237ec21d794b0d15b03c7", "'+runCode()+'"), playerHtml.replace("'asn': ''", "'arbitrary': 'secret'"), "<script>window.masterPlaylist = eval('remote')</script>"]) await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(html)), /changed its player/);
+  for (const html of [playerHtml.replace("/playlist/304645", "/playlist/999"), playerHtml.replace("vixcloud.cc/playlist", "evil.example/playlist"), playerHtml.replace("aff47512f4e237ec21d794b0d15b03c7", "'+runCode()+'"), playerHtml.replace("'asn': ''", "'arbitrary': 'secret'"), "<script>window.masterPlaylist = eval('remote')</script>"]) await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(html)), /changed its player/);
   await assert.rejects(() => resolveAnimeUnityLink(episode, undefined, playback(playerHtml, "<html>Challenge</html>")), /direct stream is unavailable/);
   const calls: Call[] = [];
   await assert.rejects(() => resolveAnimeUnityLink(anime, undefined, playback(playerHtml, manifest, calls)), /Choose an episode/);
