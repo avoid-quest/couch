@@ -302,6 +302,27 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   newer release exists, and downloads again any helper that is missing or
   doesn't run. Before each yt-dlp run it also replaces a missing yt-dlp or
   QuickJS-NG, and a yt-dlp that won't start.
+- Core records what it actually selected in `<data>/helpers/status.json`
+  (`HelperStatus` in `src/server/helper-status.ts`, `schema: 1`): per helper its
+  origin (`system` or `managed`), version, path, the SHA-256 it verified when it
+  downloaded that copy, when the check last ran it and the latest yt-dlp release
+  that check saw. Under `managed`, each copy on disk has its digest and, for
+  yt-dlp, `worked`: the last time an extraction with that copy succeeded, per
+  provider. A copy that prints its version has only been verified to run.
+  Reading the file never checks, downloads or selects a helper.
+- Couch keeps one previous yt-dlp copy beside the selected one: the newest that
+  has worked, else the newest. A copy an extraction is still using stays until
+  the next check after it ends. A website failing, even with a 403, never
+  changes the selection: an update can break one site while others work.
+- When an update breaks a website, recover from the account Couch runs as, with
+  its `COUCH_DATA_DIR`: `node build/core.mjs --helpers previous [days]` (the
+  installed app: `ELECTRON_RUN_AS_NODE=1 <Couch executable> <resources>/app.asar/build/core.mjs`)
+  holds the previous copy that still runs for 1–30 days, 7 by default, in
+  `<data>/helpers/hold.json`. Core uses it from its next yt-dlp run, across
+  restarts, without checking for releases, then returns to the latest;
+  `--helpers latest` returns sooner and `--helpers status` prints the record and
+  the hold. A held copy that has gone missing is replaced by the latest as usual.
+  Couch never changes a system yt-dlp; its package manager does.
 - SoundCloud runs use yt-dlp's cache at `<data>/yt-dlp-cache`, so the extractor
   retains its public client ID between searches and playback. yt-dlp refreshes
   that ID on HTTP 401/403. This does not cache signed audio URLs or account

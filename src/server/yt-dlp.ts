@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { resolve } from "node:path";
 import { providerForUrl } from "../shared/providers";
-import { helper, checkHelper } from "./helpers";
+import { helper, checkHelper, helperWorked, useHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 import { soundCloudPlugin } from "./soundcloud";
 import { createPublicMediaProxy } from "./public-media-proxy";
@@ -90,10 +90,17 @@ async function extract(command: string, quickjs: string, args: string[], signal:
   } finally { kill(); await exited.catch(() => {}); }
 }
 
-export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plugin }: YtDlpOptions = {}): Promise<string> {
-  signal?.throwIfAborted();
+export async function runYtDlp(args: string[], options: YtDlpOptions = {}): Promise<string> {
+  options.signal?.throwIfAborted();
   // A first run waits here for its helper downloads, outside the website's deadline.
-  const [command, quickjs] = await Promise.all([helper("yt-dlp"), helper("qjs")]);
+  // The yt-dlp copy stays on disk until this run ends, even if an update replaces it meanwhile.
+  const ytDlp = await useHelper("yt-dlp");
+  try { return await extractWith(ytDlp.path, args, options); }
+  finally { ytDlp.release(); }
+}
+
+async function extractWith(command: string, args: string[], { signal, timeoutMs = 30_000, plugin }: YtDlpOptions): Promise<string> {
+  const quickjs = await helper("qjs");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
@@ -108,7 +115,12 @@ export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plu
         // Keep it in Couch's data, so each search and playback needn't fetch the site's JS again.
         const settings = plugin === "streamingcommunity" ? ["--use-extractors", "StreamingCommunity,end", "--flat-playlist"]
           : soundcloud ? ["--cache-dir", resolve(process.env.COUCH_DATA_DIR ?? ".data", "yt-dlp-cache")] : [];
-        try { return await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory] : []), ...settings, ...args], cancellation, proxy.url); }
+        try {
+          const output = await extract(command, quickjs, [...(bundled ? ["--plugin-dirs", bundled.directory] : []), ...settings, ...args], cancellation, proxy.url);
+          // Evidence that this yt-dlp copy works, beyond printing its version.
+          helperWorked("yt-dlp", command, plugin ?? (soundcloud ? "soundcloud" : providerForUrl(target)) ?? "other");
+          return output;
+        }
         finally { await proxy.close(); }
       }
       finally { await bundled?.close(); }
