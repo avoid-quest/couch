@@ -94,7 +94,7 @@ export function HeaderSearch({ className }: { className?: string }) {
         onChange={event => edit(event.target.value)}
         onCompositionStart={() => { composing.current = true; debouncer.cancel(); }} onCompositionEnd={event => { composing.current = false; edit(event.currentTarget.value); }}
         onKeyDown={event => {
-          if (event.key === "Enter" && (event.nativeEvent.isComposing || composing.current)) event.preventDefault();
+          if (event.key === "Enter" && (event.nativeEvent.isComposing || composing.current || event.nativeEvent.keyCode === 229)) event.preventDefault();
           // Off the TV, Esc clears the field, then leaves it; the TV's Back stays Back.
           else if (event.key === "Escape" && !isTvPresentation()) { event.preventDefault(); if (value) clear(); else { shell.setSearchScope(null); input.current?.blur(); } }
           // Down reaches the recent searches while they show, else goes on to the page, as it does from the header's tabs.

@@ -47,8 +47,18 @@ export async function runSearchFieldRegression() {
     await wait(600);
     assert(query() === "old", "IME draft escaped during composition");
     field().dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "日本" }));
+    const confirmation = new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true, cancelable: true });
+    field().dispatchEvent(confirmation);
+    assert(confirmation.defaultPrevented && query() === "old", "IME confirmation Enter was allowed to submit after composition ended");
     await wait(650);
     assert(query() === "日本", `Completed IME query never searched: ${router.state.location.href}, input=${field().value}, busy=${host.querySelector("form")?.getAttribute("aria-busy")}`);
+    await input("ordinary enter");
+    const enter = new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true });
+    field().dispatchEvent(enter);
+    assert(!enter.defaultPrevented, "Ordinary Enter was blocked");
+    field().form!.requestSubmit();
+    await wait();
+    assert(query() === "ordinary enter", "Ordinary Enter did not submit immediately");
     await input("");
     const recent = [...host.querySelectorAll<HTMLButtonElement>("[data-search-recents] button")].find(button => button.textContent === "Recent query")!;
     assert(recent, "Recent choices did not appear after clearing the field");
@@ -87,7 +97,7 @@ export async function runSearchFieldRegression() {
     document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     await wait();
     assert(document.activeElement === field(), "Escape did not return from recents to the input");
-    return { passed: true, checks: ["IME cancellation and completion", "recents never submit", "section navigation cancels", "query navigation cancels", "scope changes cancel", "busy indicator settles", "type-to-search schedules", "recents keyboard focus"] };
+    return { passed: true, checks: ["IME cancellation and completion", "IME confirmation Enter suppressed", "ordinary Enter submits", "recents never submit", "section navigation cancels", "query navigation cancels", "scope changes cancel", "busy indicator settles", "type-to-search schedules", "recents keyboard focus"] };
   } finally {
     root.unmount(); client.clear();
     if (savedRecents === null) localStorage.removeItem(recentKey); else localStorage.setItem(recentKey, savedRecents);
