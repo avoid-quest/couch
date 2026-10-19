@@ -43,16 +43,18 @@ const sourceOrder = ["Shared sources", "YouTube", "Bandcamp", "SoundCloud", "Twi
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
 
 type GroupId = "films" | "radio" | "live" | "music" | "videos" | "channels";
-type Group = { id: GroupId; title: string; shape: TileShape | "rows" };
-// What's on the board first, then what you'd listen to, then the long tail of videos and channels.
+type Group = { id: GroupId; title: string; shape: TileShape | "rows"; noun: [one: string, many: string] };
+// What's on the board first, then what you'd listen to, then the long tail of videos and channels. Each heading counts
+// what it holds by name, as Home's shelves say "3 unfinished" or "2 saved".
 const groups: Group[] = [
-  { id: "films", title: "Films and series", shape: "poster" },
-  { id: "radio", title: "Radio", shape: "square" },
-  { id: "live", title: "Live now", shape: "video" },
-  { id: "music", title: "Music", shape: "square" },
-  { id: "videos", title: "Videos", shape: "rows" },
-  { id: "channels", title: "Channels and lists", shape: "rows" },
+  { id: "films", title: "Films and series", shape: "poster", noun: ["title", "titles"] },
+  { id: "radio", title: "Radio", shape: "square", noun: ["station", "stations"] },
+  { id: "live", title: "Live now", shape: "video", noun: ["stream", "streams"] },
+  { id: "music", title: "Music", shape: "square", noun: ["track", "tracks"] },
+  { id: "videos", title: "Videos", shape: "rows", noun: ["video", "videos"] },
+  { id: "channels", title: "Channels and lists", shape: "rows", noun: ["channel", "channels"] },
 ];
+const count = (group: Group, n: number) => `${n} ${group.noun[n === 1 ? 0 : 1]}`;
 const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
 // RaiPlay's programmes are series too; they come as 16:9 frames rather than posters.
 const groupOf = (hit: SearchHit): GroupId => catalogues.includes(hit.source) && hit.collection !== "Channel" && hit.collection !== "List" || hit.source === "RaiPlay" && !!hit.collection ? "films"
@@ -130,18 +132,21 @@ export function SearchPanel(props: Props) {
     {!url && <>
       {(total > 0 || asking.length > 0) && <div className="grid gap-2">
         <p role="status" className="flex min-h-8 items-center gap-2 text-sm text-muted-foreground tabular-nums">{asking.length > 0 && <Spinner aria-hidden="true" className="size-3.5" />}{relevant.length} results{asking.length > 0 && `, still asking ${asking.join(", ")}`}</p>
-        {(relevant.length > 0 || filtered) && <>
+        {/* Each row is named once at its left, as a settings row is, so the choices stay short: "From: YouTube", "Ends by: 17:30". */}
+        {(relevant.length > 0 || filtered) && <div className="grid gap-x-4 gap-y-1 md:grid-cols-[5rem_minmax(0,1fr)] md:items-center">
+          <p className="text-sm text-muted-foreground">From</p>
           <ChoiceGroup label="From" value={filter} onValueChange={setFilter} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "All", label: "All sources", count: sourceCount("All") }, ...fromSources.map(source => ({ value: source, label: source, count: summaries[source]?.loading ? "…" : sourceCount(source) }))]} />
-          <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any length" }, ...bounds.map(bound => ({ value: bound.value, label: `Ends by ${bound.value}`, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.seconds)).length }))]} />
-        </>}
+          <p className="text-sm text-muted-foreground">Ends by</p>
+          <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.seconds)).length }))]} />
+        </div>}
       </div>}
       {top && <TopResult hit={top} now={now} />}
       {grouped.map((group, index) => group.shape === "rows"
         ? <section key={group.id} aria-label={group.title} className="grid min-w-0 gap-3">
-          <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{group.hits.length} results</p></header>
+          <header className="flex min-h-8 items-baseline gap-3"><h2 className="text-base font-medium">{group.title}</h2><p className="text-sm text-muted-foreground tabular-nums">{count(group, group.hits.length)}</p></header>
           <HitList pageFirst={!top && index === 0} hits={group.hits} label={group.title} />
         </section>
-        : <Shelf key={group.id} title={group.title} time={`${group.hits.length} results`}>
+        : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)}>
           {group.hits.slice(0, 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
           {group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setFilter(group.hits[12]!.source)}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}

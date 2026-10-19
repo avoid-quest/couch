@@ -11,9 +11,11 @@ the page takes each burst as one change (a debounced value, TanStack Pacer),
 so rows and tiles don't shuffle in step with every source.
 
 Under that line sit two rows of choices (`ChoiceGroup`, scrolling sideways on
-phones): From, the sources with results and their counts, and Ends by, three
-clock times ahead on the half hour, the first at least twenty minutes out
-(`?until=HH:MM`). A hit fits when it would end by then; live media and radio
+phones), each named once at its left as a settings row is: From, the sources
+with results and their counts, and Ends by, three clock times ahead on the
+half hour, the first at least twenty minutes out (`?until=HH:MM`). Each kind's
+heading counts what it holds by name ("2 titles", "28 stations"), as Home's
+shelves do. A hit fits when it would end by then; live media and radio
 always fit, and channels and lists never do. There is no What or Length filter:
 the kinds are headings, and a length is read as the clock time it ends.
 
