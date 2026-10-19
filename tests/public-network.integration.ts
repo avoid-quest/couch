@@ -265,6 +265,14 @@ for (const [label, referer, expected] of [
   });
 }
 
+test("a redirect to plain HTTP for a URL that requires SSL stays on HTTPS", async t => {
+  const calls = transport(t, call => call.url.hostname === "rr5.public.test" ? { status: 302, headers: { Location: "http://rr2.public.test/videoplayback?requiressl=yes&sig=1" } } : { body: "media" });
+  const response = await publicFetch("https://rr5.public.test/videoplayback?requiressl=yes&sig=1");
+  assert.equal(await response.text(), "media");
+  assert.equal(response.url, "https://rr2.public.test/videoplayback?requiressl=yes&sig=1");
+  assert.equal(calls[1]?.url.protocol, "https:");
+});
+
 test("manual and forbidden redirects do not issue another request; loops are bounded", async t => {
   const calls = transport(t, () => ({ status: 302, headers: { Location: "/next" } }));
   const response = await publicFetch("https://public.test/start", { redirect: "manual" });

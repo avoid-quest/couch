@@ -380,3 +380,13 @@ test("explicitly selected LAN media retains its existing direct route", async ()
   expect(f.requests).toHaveLength(0);
   expect(rawRequest).toHaveBeenCalledTimes(1);
 });
+
+test("a source's refusal is kept for its Playback, so Core can report it", async () => {
+  const f = fixture();
+  const video = "https://media.example/video.mp4";
+  f.replies.set(video, () => response(video, "", { status: 403 }));
+  const media = await f.prepare(video);
+  expect(f.relay.refused("playing")).toBeUndefined();
+  expect((await f.serve(media.source)).status).toBe(403);
+  expect(f.relay.refused("playing")).toBe(403);
+});

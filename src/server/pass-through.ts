@@ -10,7 +10,8 @@ import { serve, type Listener } from "./http";
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
 type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
-type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean> };
+// refused: the last error status the source answered, which a browser reports as an unsupported format.
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -132,6 +133,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       return `http://127.0.0.1:${listener.port}`;
     },
     async close() { closed = true; relays.clear(); await (await internal)?.stop(); },
+    refused: (playbackId: string) => [...relays.values()].find(relay => relay.playbackId === playbackId && relay.refused)?.refused,
     // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
     async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal): Promise<T> {
       signal.throwIfAborted();
@@ -186,6 +188,7 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
           return new Response(await rewrite(text, upstream.url || url, destination), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
         }
       } catch { return new Response("The media destination could not be read.", { status: 502 }); }
+      if (upstream.status >= 400 && upstream.status !== 416) relay.refused = upstream.status;
       const headers = new Headers();
       for (const name of forwarded) { const value = upstream.headers.get(name); if (value) headers.set(name, value); }
       return new Response(upstream.body, { status: upstream.status, headers });

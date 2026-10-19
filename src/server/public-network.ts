@@ -141,6 +141,8 @@ export async function publicFetch(input: RequestInfo | URL, init?: RequestInit):
     incoming.destroy();
     if (request.redirect === "error" || redirects === 20) throw new TypeError("The website redirected this request.");
     const next = target(new URL(location, url));
+    // A googlevideo cache node can redirect a signed requiressl=yes URL to http://, which then answers 403.
+    if (url.protocol === "https:" && next.protocol === "http:" && next.searchParams.get("requiressl") === "yes") next.protocol = "https:";
     if (next.origin !== url.origin) stripCrossOriginHeaders(headers);
     if (status === 303 && method !== "HEAD" || [301, 302].includes(status) && method === "POST") {
       method = "GET"; body = null;
