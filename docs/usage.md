@@ -29,6 +29,13 @@ and paired remotes.
 Local files, media folders, the music library and Jellyfin were removed.
 Existing databases still open; their old entries stay readable but no longer play.
 
+Bandcamp and SoundCloud open a search prompt from **Discover > Sources**; they
+have no catalogue home or genre feed in Couch. Bandcamp search returns albums
+and tracks in one result list, without a next page. Its catalogue accepts public
+`artist.bandcamp.com/album/...` and `/track/...` links; artist or label homepages,
+tag pages and custom domains are not catalogue links. SoundCloud track searches
+offer **More from SoundCloud**.
+
 ## What plays where
 
 A Couch app hosts with **This computer** chosen and joins with **Another

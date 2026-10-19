@@ -268,6 +268,12 @@ Sources include live device inputs and external internet media: yt-dlp sites
 IPTV playlists.
 Couch serves no local files.
 
+SoundCloud Details reuse track metadata from Core's one-minute provider cache.
+Its bundled [yt-dlp extractor plugin](https://github.com/yt-dlp/yt-dlp#developing-plugins)
+uses SoundCloud's known JPEG artwork sizes, up to 500px, instead of probing each
+original image with a serial HEAD request. Search still uses yt-dlp's flat
+extraction; playback retains its full format extraction and public-network proxy.
+
 ## Helpers
 
 Core runs three helpers: yt-dlp, QuickJS-NG (yt-dlp's JavaScript runtime for
@@ -296,6 +302,10 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   newer release exists, and downloads again any helper that is missing or
   doesn't run. Before each yt-dlp run it also replaces a missing yt-dlp or
   QuickJS-NG, and a yt-dlp that won't start.
+- SoundCloud runs use yt-dlp's cache at `<data>/yt-dlp-cache`, so the extractor
+  retains its public client ID between searches and playback. yt-dlp refreshes
+  that ID on HTTP 401/403. This does not cache signed audio URLs or account
+  credentials. Other sites keep the extractor cache disabled.
 
 ## Delivery
 
