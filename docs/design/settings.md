@@ -16,6 +16,10 @@ Not yet: restructuring Settings beyond fitting the shell. #761 settled its two o
 
 Every paired device opens every shared page: rows that need an admin say so ("Only an admin can change this.") instead of disappearing, and the server enforces it. A device's own consent, its capture, Quit Couch and the first-admin code on the host stay local. On the hosting app, Sharing explains that its speakers and screen are shared while Share on network is on; paired devices have their own Speakers and Screen switches.
 
+After Stop sharing releases capture, keep the source's name and disabled
+Stopping… button until Couch acknowledges the stop. Then return to capture
+setup, retaining any error. A pending stop never shows Starting… or Cancel.
+
 ## Section nav
 
 Saved and Settings share one section nav: a rail with a check on wide screens and a Select on phones. In Settings' rail each owner heads its pages, with its device name or role beneath, wrapping where the rail is too narrow. On the TV, Settings starts on the rail's current entry, as Saved does, and OK on a rail entry opens its page and moves focus to the page's first control.

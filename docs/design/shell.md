@@ -51,7 +51,7 @@ the sharing status gives up "Sharing screen" (or sound) before the search
 gives up that width. On a phone (below `sm`) the status is one icon control,
 lucide Radio (a broadcast: one glyph for screen, system audio and microphone,
 where ScreenShare would misname sound; Couch draws no other live glyph, as
-Live is a word), labelled and titled "Sharing screen · Stop sharing" (or
+Live is a word), labelled and titled "Sharing screen · Show sharing controls" (or
 "Sharing system audio", "Sharing microphone"), so a pointer's hover and a
 screen reader read the state. Touch has no hover, so pressing it opens a
 Popover with the status and Stop sharing, its one action; on a phone a stray

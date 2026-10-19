@@ -25,12 +25,14 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
   const [videoQuality, setVideoQuality] = useState<LiveVideoQuality>("1080p");
   const [includeAudio, setIncludeAudio] = useState(true);
   const [pending, setPending] = useState(false);
+  const [stopping, setStopping] = useState<string | null>(null);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // What to turn on in the system's settings, once capturing failed without it. A check that
   // ends after the choice changed answers for the previous kind, so it shows only for that one.
   const [blocked, setBlocked] = useState<{ kind: CaptureKind; text: string } | null>(null);
   const mine = state?.liveSources?.find(source => source.id === localLiveSourceId);
+  const sharedName = mine?.name ?? stopping;
   const supported = !!navigator.mediaDevices?.getUserMedia;
   const displaySupported = !!navigator.mediaDevices?.getDisplayMedia;
   const choosesSource = !!couchApp?.captureSources && kind !== "microphone";
@@ -81,16 +83,18 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
     finally { setPending(false); }
   };
   const stop = async () => {
-    if (pending) return;
+    if (pending || !mine) return;
+    // Capture is released before Core acknowledges; keep its row while Stop is pending.
+    setStopping(mine.name);
     setPending(true); setError(null);
     try { await endLive(); }
     catch (reason) { setError(errorText(reason)); }
-    finally { setPending(false); }
+    finally { setStopping(null); setPending(false); }
   };
 
   // Capture runs with this device's authority, so a paired phone's Remote never drives it on a TV.
   return <SettingsSection title={title} description="Add this device's screen or sound as a source for everyone on this Couch." data-tv-local-only>
-    {mine ? <SettingsRow label={mine.name} description="Shown in Discover and Search while this device is sharing.">
+    {sharedName ? <SettingsRow label={sharedName} description="Shown in Discover and Search while this device is sharing.">
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
       <SettingsRow label="What to share">
