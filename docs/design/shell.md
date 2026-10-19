@@ -58,7 +58,8 @@ Popover with the status and Stop sharing, its one action; on a phone a stray
 tap beside the search then never ends sharing for every receiver. Below `sm`
 the search also keeps no minimum: it gives way to the icon so the Couch name
 at the left stays readable. Without sharing, the columns and search keep their
-usual widths.
+usual widths. The sharing control and its popover stay local to the publishing
+device: a TV’s own remote can use them; another device’s Remote cannot.
 
 The header is sticky: it stays at the top on the page's solid ground while
 the page scrolls under it, and the player hides it. It publishes its height

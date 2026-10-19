@@ -31,10 +31,11 @@ export function createLiveInputs<Socket>(options: {
   const end = (sourceId: string) => {
     const publication = sources.get(sourceId);
     if (!publication) return;
+    sources.delete(sourceId);
+    // Publish the ending notice before any peer's Stop can close its player.
+    options.ended(publication.source);
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
     options.send(publication.owner, { type: "livePeers", sourceId, upload: false, peers: [] });
-    sources.delete(sourceId);
-    options.ended(publication.source);
     options.changed();
   };
   return {

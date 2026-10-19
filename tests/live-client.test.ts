@@ -11,6 +11,7 @@ const check = (source: string, couchApp = "undefined") => {
   const result = spawnSync(process.execPath, ["-e", `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
+    globalThis.window = new EventTarget();
     const windowClosed = new Set(), prepared = [];
     let preparing;
     const closeWindow = () => { for (const listener of [...windowClosed]) listener(); };
@@ -476,6 +477,17 @@ test("closing while audio input permission is pending releases the eventual capt
   await assert.rejects(selecting, /canceled/);
   assert.equal(microphone.stopped, true);
   assert.equal(commands.length, 0);
+`));
+
+test("leaving a publishing page ends capture before its control socket closes", () => check(`
+  const source = await session.start({ kind: "screen" });
+  window.dispatchEvent(new Event("pagehide"));
+  await flush();
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  assert.deepEqual(commands.filter(action => action.type === "endLive"), [{ type: "endLive", sourceId: source.id }]);
+  window.dispatchEvent(new Event("pagehide"));
+  await flush();
+  assert.equal(commands.filter(action => action.type === "endLive").length, 1);
 `));
 
 test("closing the desktop window ends this device's sharing, while its playback and Couch continue", () => check(`

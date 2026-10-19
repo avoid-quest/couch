@@ -113,7 +113,11 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     if (sourceId) await options.command({ type: "endLive", sourceId });
   };
   // The desktop window hides on Close to keep Couch hosting; Close still ends sharing.
-  const unsubscribeWindowClosed = couchApp?.onWindowClosed?.(() => void end().catch(() => {}));
+  const leaving = () => { void end().catch(() => {}); };
+  const unsubscribeWindowClosed = couchApp?.onWindowClosed?.(leaving);
+  // Navigation can freeze the page before Core observes its socket closing. End capture now;
+  // the socket's close remains Core's fallback when the page cannot deliver this command.
+  window.addEventListener("pagehide", leaving);
   // Core's buffered stream (In sync, or a receiver that couldn't connect directly) reads one continuous
   // recording. Its failure ends only that upload; Core stops buffered delivery and receivers keep their peers.
   const stopUpload = (current: Publication, error?: Error) => {
@@ -284,6 +288,6 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         closePublication();
       }
     },
-    close() { closed = true; unsubscribeWindowClosed?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
+    close() { closed = true; window.removeEventListener("pagehide", leaving); unsubscribeWindowClosed?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
   };
 }

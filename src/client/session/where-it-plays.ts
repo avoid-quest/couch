@@ -26,7 +26,9 @@ export const choosesHere = (action: Action, before: ClientSessionState | null, a
   const playback = after.playbacks?.find(item => item.id === after.playback);
   if (!playback?.liveSourceId) return false;
   // Play from Up next can also leave the source waiting for its first receiver.
-  if (action.type === "play") return action.entryId === after.currentEntryId && !playback.outputs.length;
+  const source = after.liveSources?.find(source => source.id === playback.liveSourceId);
+  if (action.type === "play") return action.entryId === after.currentEntryId && !!source
+    && !playback.outputs.some(output => output.sound && source.audio || output.picture && source.video);
   return action.type === "playLive" && action.playNow !== false && playback.liveSourceId === action.sourceId
     && after.liveSources?.find(source => source.id === action.sourceId)?.deviceId === (action.deviceId ?? before?.controlling);
 };

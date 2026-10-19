@@ -20,7 +20,7 @@ export function LiveSharingStatus({ className, header = false }: { className?: s
     finally { setPending(false); }
   }}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>;
   // No background of its own: the header has one, and the player's top band shades a picture with its scrim.
-  return <div data-live-sharing className={cn("flex shrink-0 items-center gap-1 text-sm whitespace-nowrap", className)}>
+  return <div data-live-sharing data-tv-local-only className={cn("flex shrink-0 items-center gap-1 text-sm whitespace-nowrap", className)}>
     <span role="status" className={cn("text-muted-foreground max-sm:sr-only", header && "max-xl:sr-only")}>{status}</span>
     {stop("max-sm:hidden")}
     {/* On a phone the status is one icon: hover reads its title, and a press (touch has no hover) opens the status with
@@ -29,7 +29,7 @@ export function LiveSharingStatus({ className, header = false }: { className?: s
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon-lg" className="sm:hidden" aria-label={`${status} · Stop sharing`} title={`${status} · Stop sharing`}><Radio aria-hidden="true" /></Button>
       </PopoverTrigger>
-      <PopoverContent align="end" collisionPadding={16} className="w-auto flex-row items-center gap-3 py-1.5 pr-1.5"><span className="text-muted-foreground">{status}</span>{stop()}</PopoverContent>
+      <PopoverContent data-tv-local-only align="end" collisionPadding={16} className="w-auto flex-row items-center gap-3 py-1.5 pr-1.5"><span className="text-muted-foreground">{status}</span>{stop()}</PopoverContent>
     </Popover>
   </div>;
 }

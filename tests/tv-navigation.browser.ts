@@ -177,7 +177,7 @@ window.runTvNavigationRegression = async () => {
     assert(items.length > 0, "Radio fixture missing");
     // A tile's "…" is no stop on the TV (tabindex -1); a held OK opens its menu.
     assert(items.every(item => item.querySelectorAll('button:not(:disabled):not([tabindex="-1"]), a[href]').length === 1), "Radio has multiple stops per item");
-    assert(!document.querySelector('.app-header [data-slot="popover-trigger"]'), "TV header still has Couch switch");
+    assert(!document.querySelector('.app-header [data-slot="popover-trigger"]:not([data-live-sharing] *)'), "TV header still has Couch switch");
   });
   await check("A held OK opens a Home tile's menu, Back returns to the tile, a short OK acts on release, and the Remote's hold does the same", async () => {
     await click('[data-app-nav] a[href="/"]');
