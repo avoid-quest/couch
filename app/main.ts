@@ -429,6 +429,8 @@ handle("set-update-channel", (_event, channel) => updates.action({ op: "channel"
 // this turn; newer renderers always send their selected version through action.
 handle("install-update", (_event, version) => updates.action({ op: "install", version: version === undefined ? updates.state().available : version }, 250));
 handle("show-logs", () => shell.showItemInFolder(logPath));
+// The page's app shell mounted (renderer-status.json); handle() admits only the main frame.
+handle("shell-ready", () => renderer.acknowledge());
 handle("quit", () => { setImmediate(() => app.quit()); });
 handle("update-playback", (_event, status) => {
   if (typeof status !== "string" || !["unavailable", "idle", "loading", "playing", "paused", "ended", "error"].includes(status)) throw new Error("Invalid playback status.");

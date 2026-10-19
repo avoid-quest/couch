@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld("couchApp", {
   showLogs: () => call("show-logs"),
   quit: () => call("quit"),
   reportPlayback: status => call("update-playback", status),
+  shellReady: () => call("shell-ready"),
 } satisfies CouchApp);
 
 function update(action: UpdateAction) { return call<UpdateState>("update-action", action); }
