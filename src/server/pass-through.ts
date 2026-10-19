@@ -133,7 +133,12 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       return `http://127.0.0.1:${listener.port}`;
     },
     async close() { closed = true; relays.clear(); await (await internal)?.stop(); },
-    refused: (playbackId: string) => [...relays.values()].find(relay => relay.playbackId === playbackId && relay.refused)?.refused,
+    // The reporting window names its loaded capability, not another Core or screen relay.
+    refused(playbackId: string, source: string) {
+      const relayId = URL.parse(source)?.pathname.split("/")[5]?.split("-", 1)[0];
+      const relay = relayId ? relays.get(relayId) : undefined;
+      return relay?.playbackId === playbackId ? relay.refused : undefined;
+    },
     // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
     async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal): Promise<T> {
       signal.throwIfAborted();
@@ -146,8 +151,6 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       // headers. One capability per preparation keeps every child on its route.
       // The single source-header map authorizes only the main source's origin;
       // a separate audio URL or redirected playlist cannot expand that trust.
-      // A new load starts clean: an earlier transport's refusal must not explain this one's failure.
-      for (const saved of relays.values()) if (saved.playbackId === playbackId) saved.refused = undefined;
       const relay: Relay = { id: randomBytes(16).toString("hex"), playbackId, credentialOrigin: new URL(media.source).origin, target, headers, publicNetwork: media.publicNetwork, createdAt: Date.now() };
       const route = async (url: string) => {
         const answer = await probe(url, relay, !!media.mpegts, signal, relay.publicNetwork ? publicRequest : fetch);

@@ -381,23 +381,39 @@ test("explicitly selected LAN media retains its existing direct route", async ()
   expect(rawRequest).toHaveBeenCalledTimes(1);
 });
 
-test("a source's refusal is kept for its Playback, so Core can report it", async () => {
+test("a source's refusal is kept for its relay, so Core can report it", async () => {
   const f = fixture();
   const video = "https://media.example/video.mp4";
   f.replies.set(video, () => response(video, "", { status: 403 }));
   const media = await f.prepare(video);
-  expect(f.relay.refused("playing")).toBeUndefined();
+  expect(f.relay.refused("playing", media.source)).toBeUndefined();
   expect((await f.serve(media.source)).status).toBe(403);
-  expect(f.relay.refused("playing")).toBe(403);
+  expect(f.relay.refused("playing", media.source)).toBe(403);
   // The last answer stands: once the source answers again the refusal is forgotten, so a later failure keeps its own reason.
   f.replies.delete(video);
   expect((await f.serve(media.source)).status).toBe(200);
-  expect(f.relay.refused("playing")).toBeUndefined();
+  expect(f.relay.refused("playing", media.source)).toBeUndefined();
   f.replies.set(video, () => response(video, "", { status: 403 }));
   expect((await f.serve(media.source)).status).toBe(403);
-  expect(f.relay.refused("playing")).toBe(403);
+  expect(f.relay.refused("playing", media.source)).toBe(403);
   // A new load of the Playback starts clean, and another Playback never sees it.
-  expect(f.relay.refused("other")).toBeUndefined();
-  await f.prepare("https://media.example/other.mp4");
-  expect(f.relay.refused("playing")).toBeUndefined();
+  expect(f.relay.refused("other", media.source)).toBeUndefined();
+  const next = await f.prepare("https://media.example/other.mp4");
+  expect(f.relay.refused("playing", next.source)).toBeUndefined();
+});
+
+for (const browserStatus of [200, 404]) test(`a browser relay keeps its own ${browserStatus} after Core refuses the same playback`, async () => {
+  const f = fixture(), video = "https://media.example/video.mp4";
+  const core = await f.prepare(video, "playing", { origin: "http://127.0.0.1:3800", userAgent: "Couch" });
+  const browser = await f.prepare(video);
+  f.replies.set(video, () => response(video, "", { status: 403 }));
+  expect((await f.serve(core.source)).status).toBe(403);
+  f.replies.set(video, () => response(video, "", { status: browserStatus }));
+  expect((await f.serve(browser.source)).status).toBe(browserStatus);
+  expect(f.relay.refused("playing", browser.source)).toBe(browserStatus === 200 ? undefined : browserStatus);
+  expect(f.relay.refused("playing", core.source)).toBe(403);
+  // Another screen preparing must not clear this screen's outstanding refusal.
+  const other = await f.prepare(video);
+  expect(f.relay.refused("playing", other.source)).toBeUndefined();
+  expect(f.relay.refused("playing", browser.source)).toBe(browserStatus === 200 ? undefined : browserStatus);
 });
