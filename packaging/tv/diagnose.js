@@ -8,7 +8,8 @@ import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { open, readFile, readdir } from "node:fs/promises";
 import process from "node:process";
-import { environment, observe, physical, record, scrub } from "./evidence.js";
+import { environment, observe, physical, record } from "./evidence.js";
+import { redact } from "./redact.js";
 
 const json = process.argv[2] === "--json";
 const [data, setup = "unknown"] = process.argv.slice(json ? 3 : 2);
@@ -22,12 +23,24 @@ const limit = 3_000;
 const children = new Set();
 const run = (command, args, options = {}) => new Promise((resolve, reject) => children.add(execFile(command, args, { timeout: limit + 500, killSignal: "SIGKILL", maxBuffer: 256 * 1024, ...options }, (error, stdout, stderr) => {
   if (!error || (typeof error.code === "number" && options.anyExit)) resolve(stdout);
-  else reject(new Error(scrub(stderr.trim().split("\n").at(-1) || `${command} did not run`)));
+  // Node ends an uncaught error's report with its version; the error line, `Error: …`
+  // or, for an error with properties, `[Error: …] {`, says what failed.
+  else reject(new Error(redact(stderr.split("\n").findLast(line => /^\[?\w*Error\b/.test(line))?.replace(/^\[(.*)\](?: \{)?$/, "$1") || stderr.trim().split("\n").at(-1) || `${command} did not run`, 200)));
 })));
+// At most `bytes` of a regular file, from its start or its end: nothing larger is ever read.
 // Non-blocking, so a FIFO planted in place of a file can't hold a reader (or exit) forever.
-const nonblocking = constants.O_RDONLY | constants.O_NONBLOCK;
-const text = (path, bytes = 64 * 1024) => readFile(path, { encoding: "utf8", flag: nonblocking }).then(value => value.slice(0, bytes));
-const jsonFile = async path => JSON.parse(await text(path));
+async function text(path, bytes = 64 * 1024, end = false) {
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const stats = await file.stat(), { size } = stats;
+    if (!stats.isFile()) throw new Error("Not a regular file.");
+    const length = Math.min(size, bytes), buffer = Buffer.alloc(length);
+    const { bytesRead } = await file.read(buffer, 0, length, end ? size - length : 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally { await file.close(); }
+}
+// A parse error quotes the text it failed on, which may be a pairing pin or a token.
+const jsonFile = async path => { const value = await text(path); try { return JSON.parse(value); } catch { throw new Error("The record is not valid JSON."); } };
 const word = (value, pattern = /^[\w.+~:@-]{1,80}$/) => typeof value === "string" && pattern.test(value) ? value : null;
 const time = value => typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value.slice(0, 40) : null;
 const properties = output => Object.fromEntries(output.trim().split("\n").map(line => line.split(/=(.*)/s).slice(0, 2)));
@@ -54,10 +67,11 @@ const observations = {
   window: pid.then(main => observe(limit, async () => {
     const status = await jsonFile(`${data}/renderer-status.json`);
     return {
-      state: word(status.state), page: word(status.page), navigation: Number.isInteger(status.navigation) ? status.navigation : null, reason: status.reason ? scrub(status.reason, 80) : null,
+      state: word(status.state), page: word(status.page), navigation: Number.isInteger(status.navigation) ? status.navigation : null, reason: status.reason ? redact(status.reason, 80) : null,
       run: word(status.run), version: word(status.version), startedAt: time(status.startedAt), at: time(status.at),
-      // A different process wrote it: an earlier run, so it says nothing about this one.
-      current: main === null ? null : status.pid === main,
+      // Only the service's running process makes it this run's. A different process
+      // wrote it in an earlier run; null when the service couldn't be asked.
+      current: main === null ? null : !!main && status.pid === main,
     };
   })),
   mode: observe(limit, async () => {
@@ -67,13 +81,13 @@ const observations = {
   helpers: observe(limit, () => helpers(`${data}/helpers`)),
   update: observe(limit, async () => {
     const status = properties(await text(`${root}/var/lib/couch-update/status`, 4096));
-    return { at: time(status.at), mode: word(status.mode), version: word(status.version), outcome: word(status.outcome), error: status.error ? scrub(status.error) : null, failed: word(status.failed), rollback: word(status.rollback), setup: word(status.setup) };
+    return { at: time(status.at), mode: word(status.mode), version: word(status.version), outcome: word(status.outcome), error: status.error ? redact(status.error, 200) : null, failed: word(status.failed), rollback: word(status.rollback), setup: word(status.setup) };
   }),
   timer: observe(limit, async () => ({ state: word((await run("systemctl", ["is-enabled", "couch-update.timer"], { anyExit: true })).trim()) })),
   display: observe(limit, display),
   audio: observe(limit, async () => {
     const [sink, sinks] = await Promise.all([run("pactl", ["get-default-sink"]), run("pactl", ["list", "short", "sinks"])]);
-    return { defaultSink: scrub(sink.trim(), 120), sinks: sinks.trim().split("\n").filter(Boolean).slice(0, 16).map(line => { const [, name, , , state] = line.split("\t"); return { name: scrub(name ?? "", 120), state: word(state) }; }) };
+    return { defaultSink: redact(sink.trim(), 120), sinks: sinks.trim().split("\n").filter(Boolean).slice(0, 16).map(line => { const [, name, , , state] = line.split("\t"); return { name: redact(name ?? "", 120), state: word(state) }; }) };
   }),
   log: observe(limit, () => log(`${data}/logs/couch.log`)),
 };
@@ -87,7 +101,7 @@ async function helpers(directory) {
   const names = ["yt-dlp", "qjs", "ffmpeg", "mpv"];
   const selected = Object.fromEntries(names.filter(name => status.selected?.[name]).map(name => {
     const helper = status.selected[name];
-    return [name, { origin: ["system", "managed"].includes(helper.origin) ? helper.origin : null, version: scrub(helper.version ?? "", 80) || null, sha256: word(helper.sha256, /^[\da-f]{64}$/), verifiedAt: time(helper.verifiedAt), latest: word(helper.latest), held: helper.held === true }];
+    return [name, { origin: ["system", "managed"].includes(helper.origin) ? helper.origin : null, version: redact(helper.version ?? "", 80) || null, sha256: word(helper.sha256, /^[\da-f]{64}$/), verifiedAt: time(helper.verifiedAt), latest: word(helper.latest), held: helper.held === true }];
   }));
   const managed = Object.fromEntries(names.filter(name => status.managed?.[name]).map(name => [name, Object.entries(status.managed[name]).slice(0, 8).map(([version, copy]) => ({
     version: word(version), installedAt: time(copy?.installedAt), worked: Object.fromEntries(Object.entries(copy?.worked ?? {}).slice(0, 16).map(([provider, at]) => [word(provider) ?? "other", time(at)])),
@@ -113,15 +127,7 @@ async function display() {
 // Only structured lines from the newest 256 KB: the run header, the last delivery
 // route (without device names), player error hosts and Main's redacted errors.
 async function log(path) {
-  const file = await open(path, nonblocking);
-  if (!(await file.stat()).isFile()) { await file.close(); throw new Error("The log is not a file."); }
-  let tail;
-  try {
-    const { size } = await file.stat();
-    const length = Math.min(size, 256 * 1024), buffer = Buffer.alloc(length);
-    await file.read(buffer, 0, length, size - length);
-    tail = buffer.toString("utf8").split("\n");
-  } finally { await file.close(); }
+  const tail = (await text(path, 256 * 1024, true)).split("\n");
   const iso = "(\\d{4}-\\d\\d-\\d\\dT[\\d:.]+Z)";
   const header = tail.map(line => new RegExp(`^${iso} main info: Couch (\\S+) run (\\S+) pid \\d+ log (\\d+)$`).exec(line)).filter(Boolean).at(-1);
   const delivery = tail.map(line => new RegExp(`^${iso} playback [\\da-f]+ (Direct|Synced) on (.*)$`).exec(line)).filter(Boolean).at(-1);
@@ -131,7 +137,7 @@ async function log(path) {
     run: header ? { at: header[1], version: word(header[2]), run: word(header[3]), file: Number(header[4]) } : null,
     delivery: delivery ? { at: delivery[1], route: delivery[2], buffered: delivery[3].includes(" (buffered)"), unavailable: delivery[3].includes(" (unavailable)") } : null,
     playerErrors: { count: playerErrors.length, hosts: [...new Set(playerErrors.map(match => match[2]))].slice(-5), last: playerErrors.at(-1)?.[1] ?? null },
-    errors: errors.map(([, at, component, message]) => ({ at, component, message: scrub(message, 300) })),
+    errors: errors.map(([, at, component, message]) => ({ at, component, message: redact(message, 300) })),
   };
 }
 
@@ -145,7 +151,7 @@ const report = record("diagnose", {
   summary: {
     service: value("service")?.active ?? "unknown",
     core: !value("health") ? "unknown" : value("health").ok ? value("health").core ? "healthy" : "not-run" : "failed",
-    window: !window ? "unknown" : window.current === false ? "stale" : window.state === "failed" && window.page === "remote" ? "remote-failed" : window.state ?? "unknown",
+    window: !window || window.current === null ? "unknown" : !window.current ? "stale" : window.state === "failed" && window.page === "remote" ? "remote-failed" : window.state ?? "unknown",
   },
   observations: results,
   measured: [],
@@ -164,7 +170,8 @@ else {
   console.log(`Setup: ${report.setup}`);
   line("Service", "service", value => `${value.active} (${value.sub}), ${value.restarts} restarts${value.since ? `, since ${value.since}` : ""}`);
   line("Core", "health", value => value.ok ? value.core ? "healthy" : "not run here (Another Couch mode)" : `failed: ${value.error}`);
-  line("Window", "window", value => value.current === false ? `no report from a running Couch (last: ${value.state} at ${value.at})`
+  line("Window", "window", value => value.current === null ? `unknown: the service couldn't be asked which process runs (last report: ${value.state} at ${value.at})`
+    : !value.current ? `no report from a running Couch (last: ${value.state} at ${value.at})`
     : value.state === "failed" && value.page === "remote" ? `couldn't load another Couch (${value.reason}); the local app is running`
     : value.state === "page-loaded" ? `${value.page === "remote" ? "another Couch's" : "this Couch's"} page loaded, but its app hasn't reported mounting (it failed to start, or that Couch predates the report)`
     : `${value.state}, ${value.page === "remote" ? "another Couch's" : "this Couch's"} page${value.reason ? ` (${value.reason})` : ""}, Couch ${value.version}`);

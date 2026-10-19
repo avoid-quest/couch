@@ -246,23 +246,28 @@ window's lifecycle, the mode, the helpers Core selected, display connectors and
 the X screen's current mode, the sound server's sinks, the last update outcome,
 the update timer, and from the log only the run header, the last delivery route,
 player error hosts and Main's redacted errors. Each observation has its own time
-limit and is reported unavailable or timed out on its own. It never opens
+limit and is reported unavailable or timed out on its own, and it reads at
+most a bounded start (or, for the log, end) of each record. It never opens
 `couch.sqlite`, runs or updates a helper, plays, captures or tests media, or
 changes anything, and it leaves out keys, tokens, pairing, settings, the
-environment, executable paths, device names and source URLs.
+environment, executable paths, device names and source URLs. What it quotes
+from errors follows Main's own log redaction ([redact.js](../packaging/tv/redact.js)).
 
 The window's lifecycle comes from Main's `<data>/renderer-status.json`, named by
 the same run ID and process as the header of `couch.log`:
 
 - `page-loaded`: the page and its scripts loaded, but its app shell hasn't said
-  it mounted. Either the app failed to start, or another Couch's page predates
-  the report.
-- `ready`: the page's app shell mounted and acknowledged it from the window's
-  main frame, for the navigation now shown.
+  it mounted. The app is still loading its mode, showed a startup error or failed
+  to render, or another Couch's page predates the report.
+- `ready`: a usable screen mounted, the mode chooser or the app shell after its
+  startup, and acknowledged it from the window's main frame, for the navigation
+  now shown. Core's health and another Couch's reachability are reported apart.
 - `failed`, with `page: remote` (summary `remote-failed`): another Couch that
   can't be reached. The local app is running; this is not a broken package.
 - `stale`: written by an earlier or stopped process, so it says nothing about
   the running app.
+- `unknown`: no report, or the service couldn't say which process runs, so a
+  saved report can't be tied to the running app.
 
 Core's health stays separate: it is the check setup and updates use, and
 neither the window's state nor this report changes what rolls an update back.

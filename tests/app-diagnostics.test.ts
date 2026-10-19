@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { appDiagnostic } from "../app/diagnostics";
+import { redact } from "../packaging/tv/redact.js";
 
 test("app evidence keeps only hosts for complete URL tokens, including embedded separators", () => {
   for (const separator of ["", "\t", "\n", "\u0085", "\u2028", "\u2029"]) {
@@ -70,6 +71,17 @@ test("app evidence redacts JSON credential keys and escaped HTTP error descripti
       }
     }
   }
+});
+
+// couch-session diagnose shares this rule (packaging/tv/redact.js); these once leaked from its own copy.
+test("prefixed credential keys, quoted values with spaces, home paths and hardware addresses are redacted", () => {
+  for (const message of ['{"token":"synthetic"}', 'password="two synthetic words"', "access_token=synthetic", "x-api-key: synthetic", "client_secret='synthetic value'", "open ~/synthetic/x", "sink bluez_output.AA_BB_CC_DD_EE_F0.1"]) {
+    const line = redact(`Failed: ${message}`);
+    expect(line).toStartWith("Failed: ");
+    expect(line).not.toContain("synthetic");
+    expect(line).not.toContain("AA_BB");
+  }
+  expect(redact("dpkg-query: no packages found matching couch")).toBe("dpkg-query: no packages found matching couch");
 });
 
 test("app failure records carry current ISO time, component and a bounded single line", () => {

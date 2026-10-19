@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { checkHelper, startHelpers } from "../src/server/helpers";
+import { updateStatus } from "../src/server/helper-status";
 
 // Run the shipped diagnosis with its OS commands replaced and fixed system paths
 // read from a fixture tree. Every secret seeded here must stay out of the report.
@@ -13,7 +15,21 @@ const options = { skip: process.platform !== "linux", timeout: 20_000 };
 const secrets = ["SECRET", "AA_BB_CC_DD_EE_FF", "secret-host", "/opt/couch-helpers", "Living Room", "Kitchen"];
 const now = Date.now();
 
-type Scenario = { renderer?: object | null; mainPid?: number; hang?: boolean; log?: boolean; helpers?: boolean };
+// Each failure here carries a credential the report must drop: JSON, quoted with spaces,
+// prefixed (access_token), in a parse error's quoted input, behind a control sequence.
+const leaks = {
+  update: `Couch 0.3.2 is unhealthy: {"token":"SECRET-JSON"} password="two SECRET words" access_token=SECRET-ACCESS`,
+  stderr: `dpkg-query: {"password": "SECRET with spaces"} client_secret='SECRET quoted' \x1b[31m/home/SECRET-USER/x`,
+};
+const path = process.env.PATH;
+// Reports the diagnosis' peak memory on stderr as it exits.
+const peak = `--import=data:text/javascript,${encodeURIComponent('import { writeSync } from "node:fs"; process.on("exit", () => writeSync(2, `\nmaxRSS=${process.resourceUsage().maxRSS}\n`));')}`;
+
+type Scenario = {
+  renderer?: object | null; mainPid?: number; hang?: boolean; log?: boolean; leaks?: boolean; bus?: boolean; huge?: boolean;
+  // false: none recorded; a function records them in <data>/helpers.
+  helpers?: boolean | ((directory: string) => Promise<void>);
+};
 
 async function report(scenario: Scenario = {}, json = true) {
   const directory = mkdtempSync(join(tmpdir(), "couch-diagnose-"));
@@ -21,7 +37,7 @@ async function report(scenario: Scenario = {}, json = true) {
   const file = (path: string, text: string) => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, text); };
   try {
     file(join(root, "etc/os-release"), 'ID=debian\nVERSION_ID="13"\nPRETTY_NAME="Debian GNU/Linux 13 (trixie)"\n');
-    file(join(root, "var/lib/couch-update/status"), `at=2026-10-19T04:12:00Z\nmode=auto\nversion=0.3.2\noutcome=rolled-back\nerror=Couch 0.3.2 is unhealthy: https://updates.example/x?token=SECRET-UPDATE /var/lib/SECRET-PATH\nfailed=0.3.2\nrollback=\nsetup=\n`);
+    file(join(root, "var/lib/couch-update/status"), `at=2026-10-19T04:12:00Z\nmode=auto\nversion=0.3.2\noutcome=rolled-back\nerror=${scenario.leaks ? leaks.update : "Couch 0.3.2 is unhealthy: https://updates.example/x?token=SECRET-UPDATE /var/lib/SECRET-PATH"}\nfailed=0.3.2\nrollback=\nsetup=\n`);
     file(join(root, "sys/class/drm/card0/device/vendor"), "0x8086\n");
     file(join(root, "sys/class/drm/card0/device/device"), "0x9bc4\n");
     mkdirSync(join(root, "sys/bus/pci/drivers/i915"), { recursive: true });
@@ -31,9 +47,11 @@ async function report(scenario: Scenario = {}, json = true) {
     file(join(root, "sys/class/drm/card0-HDMI-A-1/modes"), "3840x2160\n1920x1080\n");
     file(join(data, "couch.sqlite"), "SECRET-DATABASE");
     file(join(data, "tls/key.pem"), "SECRET-PRIVATE-KEY");
-    file(join(data, "operating-mode.json"), JSON.stringify({ mode: "remote", address: "https://secret-host.lan:4100", pins: { "secret-host.lan": "SECRET-PIN" }, tvPresentation: true }));
+    // A damaged record: JSON.parse would quote the pin in its error.
+    file(join(data, "operating-mode.json"), scenario.leaks ? '{"mode": "remote", "pins": {"h": SECRET-PIN}}' : JSON.stringify({ mode: "remote", address: "https://secret-host.lan:4100", pins: { "secret-host.lan": "SECRET-PIN" }, tvPresentation: true }));
     if (scenario.renderer !== null) file(join(data, "renderer-status.json"), JSON.stringify({ run: "run-1", version: "0.3.1", pid: 4242, navigation: 1, startedAt: new Date(now - 60_000).toISOString(), state: "ready", page: "local", at: new Date(now).toISOString(), extra: "SECRET-EXTRA", ...scenario.renderer }));
-    if (scenario.helpers !== false) {
+    if (typeof scenario.helpers === "function") await scenario.helpers(join(data, "helpers"));
+    else if (scenario.helpers !== false) {
       file(join(data, "helpers/status.json"), JSON.stringify({ schema: 1,
         selected: { "yt-dlp": { origin: "managed", version: "2026.10.01", path: "/opt/couch-helpers/yt-dlp", sha256: "a".repeat(64), verifiedAt: "2026-10-19T03:00:00Z", latest: "2026.10.10", held: true, token: "SECRET-HELPER" },
           ffmpeg: { origin: "system", version: "ffmpeg version 7.1.1-1+b1 Copyright https://ffmpeg.example/?sig=SECRET-SIG", path: "/usr/bin/ffmpeg", sha256: null, verifiedAt: "2026-10-19T03:00:00Z", latest: null, held: false } },
@@ -52,18 +70,20 @@ async function report(scenario: Scenario = {}, json = true) {
     ].join("\n") + "\n");
     mkdirSync(bin);
     const command = (name: string, body: string) => writeFileSync(join(bin, name), `#!/bin/bash\n${body}\n`, { mode: 0o755 });
-    command("dpkg-query", "echo -n 0.3.1");
+    command("dpkg-query", scenario.leaks ? `printf '%b\\n' ${JSON.stringify(leaks.stderr)} >&2; exit 1` : "echo -n 0.3.1");
     command("systemctl", `case "$*" in
-      "--user show couch-tv.service"*) printf 'ActiveState=active\\nSubState=running\\nMainPID=${scenario.mainPid ?? 4242}\\nNRestarts=1\\nResult=success\\nExecMainStartTimestamp=Sun 2026-10-19 20:00:00 UTC\\n' ;;
+      "--user show couch-tv.service"*) ${scenario.bus === false ? "echo 'Failed to connect to bus: No such file or directory' >&2; exit 1 ;;" : ""} printf 'ActiveState=active\\nSubState=running\\nMainPID=${scenario.mainPid ?? 4242}\\nNRestarts=1\\nResult=success\\nExecMainStartTimestamp=Sun 2026-10-19 20:00:00 UTC\\n' ;;
       "--user show-environment") printf 'DISPLAY=:0\\nXAUTHORITY=/var/lib/couch/.Xauthority\\nCOUCH_HOST_TOKEN=SECRET-SESSION-ENV\\n' ;;
       "is-enabled couch-update.timer") echo masked; exit 1 ;;
     esac`);
     command("xrandr", '[[ $DISPLAY = :0 && -z $COUCH_HOST_TOKEN ]] || exit 1\nprintf "HDMI-A-1 connected primary 1920x1080+0+0 (normal) 1600mm x 900mm\\n   3840x2160     60.00 +\\n   1920x1080     60.00*   50.00\\neDP-1 disconnected (normal)\\n"');
     // A hung sound server, as an unresponsive PipeWire can be.
     command("pactl", scenario.hang ? `echo $$ >> ${JSON.stringify(join(directory, "pids"))}; exec sleep 30` : 'case "$1" in get-default-sink) echo bluez_output.AA_BB_CC_DD_EE_FF.1 ;; list) printf "1\\tbluez_output.AA_BB_CC_DD_EE_FF.1\\tPipeWire\\ts16le 2ch 48000Hz\\tRUNNING\\n2\\talsa_output.pci-0000_00_1f.3.hdmi-stereo\\tPipeWire\\ts32le 2ch 48000Hz\\tSUSPENDED\\n" ;; esac');
+    // Records far larger than the report reads, sparse so they cost no disk.
+    if (scenario.huge) for (const record of [join(data, "renderer-status.json"), join(data, "operating-mode.json"), join(root, "var/lib/couch-update/status")]) truncateSync(record, 256 * 2 ** 20);
     const started = Date.now();
-    const child = spawn(process.execPath, [diagnose, ...json ? ["--json"] : [], data, "complete"], {
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, COUCH_DIAGNOSE_ROOT: root, COUCH_HOST_TOKEN: "SECRET-ENV-TOKEN", COUCH_ADMIN_RECOVERY_CODE: "SECRET-RECOVERY" },
+    const child = spawn(process.execPath, [peak, diagnose, ...json ? ["--json"] : [], data, "complete"], {
+      env: { ...process.env, PATH: `${bin}:${path}`, COUCH_DIAGNOSE_ROOT: root, COUCH_HOST_TOKEN: "SECRET-ENV-TOKEN", COUCH_ADMIN_RECOVERY_CODE: "SECRET-RECOVERY" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "", stderr = "";
@@ -71,11 +91,12 @@ async function report(scenario: Scenario = {}, json = true) {
     child.stderr.on("data", chunk => { stderr += chunk; });
     const [code] = await once(child, "exit");
     assert.equal(code, 0, stderr);
-    for (const secret of secrets) assert.ok(!stdout.includes(secret), `The report must not contain ${secret}:\n${stdout}`);
+    for (const secret of secrets) assert.ok(!stdout.includes(secret) && !stderr.includes(secret), `The report must not contain ${secret}:\n${stdout}\n${stderr}`);
+    const maxRSS = Number(/^maxRSS=(\d+)$/m.exec(stderr)?.[1]) * 1024;
     const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
     const running = existsSync(join(directory, "pids")) ? readFileSync(join(directory, "pids"), "utf8").trim().split("\n").map(Number).filter(alive) : [];
     for (const pid of running) process.kill(pid, "SIGKILL");
-    return { stdout, elapsed: Date.now() - started, running, ...json ? { report: JSON.parse(stdout) } : {} };
+    return { stdout, elapsed: Date.now() - started, running, maxRSS, ...json ? { report: JSON.parse(stdout) } : {} };
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
@@ -91,6 +112,7 @@ test("a report names the installed tuple and observations, and leaves every secr
   assert.deepEqual(observed("environment").gpus, [{ vendor: "8086", device: "9bc4", driver: "i915" }]);
   assert.deepEqual(observed("service"), { active: "active", sub: "running", pid: 4242, restarts: 1, result: "success", since: "Sun 2026-10-19 20:00:00 UTC" });
   assert.equal(observed("health").ok, false, "No real Couch runs as PID 4242 here");
+  assert.match(observed("health").error, /^Error: /, "The check's error, not Node's version line");
   assert.deepEqual(observed("mode"), { mode: "remote", tvPresentation: true });
   assert.deepEqual(observed("window"), { state: "ready", page: "local", navigation: 1, reason: null, run: "run-1", version: "0.3.1", startedAt: new Date(now - 60_000).toISOString(), at: new Date(now).toISOString(), current: true });
   const helpers = observed("helpers");
@@ -162,4 +184,65 @@ test("missing records are unavailable, never guessed", options, async () => {
   const { report: result } = await report({ renderer: null, helpers: false, log: false });
   for (const name of ["window", "helpers", "log"]) assert.equal(result.observations[name].status, "unavailable", name);
   assert.equal(result.summary.window, "unknown");
+});
+
+test("credentials in failures, damaged records and command errors never reach either report", options, async () => {
+  const { report: result } = await report({ leaks: true });
+  assert.equal(result.observations.package.status, "unavailable");
+  assert.match(result.observations.package.reason, /^dpkg-query: \{"\[credentials\]\} \[credentials\] +\[31m\[path\]$/);
+  assert.match(result.observations.update.value.error, /^Couch 0\.3\.2 is unhealthy: /);
+  assert.deepEqual(result.observations.mode, { ...result.observations.mode, status: "unavailable", reason: "The record is not valid JSON." });
+  const { stdout } = await report({ leaks: true }, false);
+  assert.match(stdout, /^Package: unavailable \(dpkg-query: \{"\[credentials\]\} \[credentials\]/m);
+  assert.match(stdout, /^Updates: last auto run rolled-back 0\.3\.2 at .*: Couch 0\.3\.2 is unhealthy: /m);
+});
+
+test("without the service's answer, a saved window report is unknown, not ready", options, async () => {
+  const { report: result } = await report({ bus: false });
+  assert.equal(result.observations.service.status, "unavailable");
+  assert.equal(result.observations.window.value.state, "ready");
+  assert.equal(result.observations.window.value.current, null);
+  assert.equal(result.summary.window, "unknown");
+  assert.equal(result.summary.service, "unknown");
+  const { stdout } = await report({ bus: false }, false);
+  assert.match(stdout, /^Window: unknown: the service couldn't be asked which process runs \(last report: ready at /m);
+});
+
+test("records far larger than the report reads are bounded in memory, not only in output", options, async () => {
+  const { report: normal, maxRSS: baseline } = await report();
+  const { report: result, maxRSS } = await report({ huge: true });
+  assert.ok(baseline > 0 && maxRSS > 0, "The diagnosis reports its peak memory");
+  // Reading any one 256 MiB record whole would add at least that much.
+  assert.ok(maxRSS - baseline < 64 * 2 ** 20, `Peak memory ${maxRSS} bytes against ${baseline} for the ordinary report`);
+  for (const name of ["window", "mode"]) assert.deepEqual(result.observations[name], { ...result.observations[name], status: "unavailable", reason: "The record is not valid JSON." });
+  assert.equal(result.observations.update.status, "observed");
+  assert.equal(normal.observations.window.status, "observed");
+});
+
+test("the helpers Core's own selection recorded are reported, without their paths", options, async t => {
+  // Core's real helper checks, with stand-in executables on a private PATH and no network.
+  const select = async (helpers: string) => {
+    const bin = join(helpers, "..", "bin-SECRET");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "yt-dlp"), "#!/bin/sh\necho 2026.10.01\n", { mode: 0o755 });
+    writeFileSync(join(bin, "qjs"), "#!/bin/sh\necho 0.17.0\n", { mode: 0o755 });
+    writeFileSync(join(bin, "ffmpeg"), "#!/bin/sh\necho 'ffmpeg version 7.0 https://ffmpeg.example/?sig=SECRET-SIG'\n", { mode: 0o755 });
+    t.mock.method(globalThis, "fetch", async () => { throw new Error("Network unavailable"); });
+    t.mock.method(console, "error", () => {});
+    process.env.PATH = bin;
+    try {
+      startHelpers(helpers);
+      await Promise.all((["yt-dlp", "qjs", "ffmpeg"] as const).map(checkHelper));
+      // Status writes are serialized; this one lands after the checks'.
+      await updateStatus(helpers, () => {});
+    } finally { process.env.PATH = path; }
+  };
+  const { report: result } = await report({ helpers: select });
+  const { selected, managed, hold } = result.observations.helpers.value;
+  for (const [name, version] of [["yt-dlp", "2026.10.01"], ["qjs", "0.17.0"]] as const)
+    assert.deepEqual(selected[name], { origin: "system", version, sha256: null, verifiedAt: selected[name].verifiedAt, latest: null, held: false }, name);
+  assert.equal(selected.ffmpeg.version, "ffmpeg version 7.0 ffmpeg.example");
+  assert.ok(Date.parse(selected["yt-dlp"].verifiedAt) >= now);
+  assert.deepEqual(managed, { "yt-dlp": [], qjs: [], ffmpeg: [] }, "System copies leave no managed ones");
+  assert.equal(hold, null);
 });

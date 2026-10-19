@@ -4,27 +4,13 @@
 import { readFile, readdir, readlink } from "node:fs/promises";
 import { basename } from "node:path";
 import os from "node:os";
+import { redact } from "./redact.js";
 
 export const schema = "couch-evidence/1";
 // Physical conditions that neither a passive report nor a loopback test exercises.
 export const physical = ["decoded picture on the TV", "audible output", "HDMI hotplug", "standby resume", "physical remote input", "speaker and screen alignment"];
 
 export const record = (kind, fields) => ({ schema, kind, at: new Date().toISOString(), ...fields });
-
-// Like the app's own diagnostics: URLs keep only their host; credentials, paths,
-// hardware addresses and controls go; the text is bounded.
-export function scrub(value, limit = 200) {
-  return String(value)
-    .replace(/\b[a-z][a-z\d+.-]*:\/\/[^\s'"]+/gi, url => { try { return new URL(url).hostname || "[url]"; } catch { return "[url]"; } })
-    .replace(/\b(?:authorization|cookie|set-cookie)\s*[:=][\s\S]*/gi, "[credentials]")
-    .replace(/\bBearer\s+\S+/gi, "[credentials]")
-    .replace(/\b[\w-]*(?:password|passwd|token|secret|key|signature|sig|code|credentials?)\s*[:=]\s*\S+/gi, "[credentials]")
-    .replace(/(['"])[^'"]*\/[^'"]*\1/g, "[path]")
-    .replace(/(?:^|(?<=[\s(=]))(?:~|\.{0,2})\/[^\s'")]*/g, "[path]")
-    .replace(/\b(?:[\da-f]{2}[:_-]){5}[\da-f]{2}\b/gi, "[address]")
-    .replace(/[\p{Cc}\u2028\u2029]/gu, " ")
-    .slice(0, limit);
-}
 
 class Timeout extends Error {}
 // One observation can't hold up the rest: it is observed, unavailable or timed out.
@@ -36,7 +22,7 @@ export async function observe(timeout, read) {
     const value = await Promise.race([read(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Timeout()), timeout); })]);
     return { status: "observed", ms: ms(), value };
   } catch (error) {
-    return error instanceof Timeout ? { status: "timeout", ms: ms() } : { status: "unavailable", ms: ms(), reason: scrub(error?.message ?? error) };
+    return error instanceof Timeout ? { status: "timeout", ms: ms() } : { status: "unavailable", ms: ms(), reason: redact(error, 200) };
   } finally { clearTimeout(timer); }
 }
 
