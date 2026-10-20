@@ -1,6 +1,7 @@
 // Bun.build({ entrypoints:[this file], target:"browser", format:"iife" }).
 // Inject the bundle into the already paired, secure-context Couch worker.
-import { SendspinPlayer } from "@sendspin/sendspin-js";
+import { AudioScheduler, SendspinPlayer } from "@sendspin/sendspin-js";
+import { observePlayback } from "./playback-telemetry";
 
 const worklet = `
 class LabCapture extends AudioWorkletProcessor {
@@ -208,10 +209,25 @@ async function receive(options: { origin: string; requiredLeadTimeMs?: number; m
     suite: "aesgcm", storage: localStorage, codecs: ["pcm"], syncDelay: 0,
     requiredLeadTimeMs: options.requiredLeadTimeMs ?? 10, minBufferMs: options.minBufferMs ?? 10,
     useOutputLatencyCompensation: options.outputCompensation ?? true, reconnect: { maxAttempts: 0 } });
-  try { await player.unlock(); await player.connect(); }
+  // Observe the context created by this exact SDK player. The pinned SDK exports
+  // these methods; preserve their implementation and restore the hook before
+  // connecting. No replacement rendering path or private property access.
+  const contexts = new Set<AudioContext>();
+  const initialize = AudioScheduler.prototype.initAudioContext;
+  AudioScheduler.prototype.initAudioContext = function () {
+    initialize.call(this);
+    const context = this.getAudioContext();
+    if (context) contexts.add(context);
+  };
+  try { await player.unlock(); }
+  catch (error) { player.disconnect("user_request"); throw error; }
+  finally { AudioScheduler.prototype.initAudioContext = initialize; }
+  try { await player.connect(); }
   catch (error) { player.disconnect("user_request"); throw error; }
   return { stop: () => player.disconnect("user_request"), snapshot: () => ({ id: player.clientId, connected: player.isConnected,
     playing: player.isPlaying, format: player.currentFormat, timeSync: player.timeSyncInfo, sync: player.syncInfo,
+    renderer: { contextCount: contexts.size, visibility: document.visibilityState,
+      playback: observePlayback(contexts.size === 1 ? contexts.values().next().value! : null) },
     requiredLeadTimeMs: options.requiredLeadTimeMs ?? 10, minBufferMs: options.minBufferMs ?? 10,
     outputCompensation: options.outputCompensation ?? true, sdk: "@sendspin/sendspin-js@5.0.0" }) };
 }

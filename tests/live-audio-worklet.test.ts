@@ -123,7 +123,7 @@ async function publisherFixture(t: TestContext) {
       connect() {} disconnect() {}
     },
   };
-  runInNewContext(stripTypeScriptTypes(browserSource.replace(/^import .*;\n/m, "")), scope);
+  runInNewContext(stripTypeScriptTypes(browserSource.replace(/^import .*;\n/gm, "")), scope);
   const publisher = await scope.window.__ingressLab.publish({ origin: "http://lab", token: "fixture", packetMs: 10 });
   t.after(() => publisher.stop());
   const f = capture(10);
