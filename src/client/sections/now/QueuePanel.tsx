@@ -21,6 +21,7 @@ import { offline } from "@/copy";
 import { deviceId } from "@/session/device-id";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
+import { browserActions, queuePageUrl } from "@/original-page";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
 
 type Props = {
@@ -155,7 +156,8 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
 // One target that plays the entry, with its other verbs in its menu. An entry's page holds only Play and Save, so the
 // row keeps its "…". Its start time ends the row as a board line does: the name heavy, the time light (docs/design.md).
 function QueueRow({ entry, meta, time, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; time?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
-  const options = useItemMenu(useQueueActions(verbs));
+  const actions = useQueueActions(verbs);
+  const options = useItemMenu(verbs ? actions : browserActions(queuePageUrl(entry)));
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
   const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className="line-clamp-2 text-base font-medium break-words">{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 items-center gap-2 py-2", options.item.className)}>

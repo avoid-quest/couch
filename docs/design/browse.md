@@ -157,10 +157,32 @@ them; a Home tile's menu holds the row of verbs, and reaches Details for the
 - **For later:** Play, Queue and Play on; "…" holds Move up, Move down and
   Remove, with Undo. It is already saved, so it has no Save.
 - **A station:** Play, Queue, Save or Saved (its favourite, the toggle its
-  tiles' menus share) and Play on; "…" holds Open show page.
+  tiles' menus share) and Play on; "…" holds Open in browser for its show page or homepage.
 - **An Up next entry:** Play and Save.
 - **A source's page:** Play, Play all or Resume, From start, Queue or Queue
   all, Save and Play on; "…" holds Play next.
+
+## Open in browser
+
+An item's existing menu offers **Open in browser** when its model has an
+original webpage: provider media and collections, History and For later,
+Up next, and stations with a homepage. Details keeps the same action in its
+"…" menu; a station's current show page takes precedence over its homepage.
+Open and Details still navigate within Couch. The action stays usable when
+Couch cannot play the item.
+
+The shared `browserActions` helper uses a native anchor inside the existing
+shadcn Dropdown Menu; the catalog needs no new component. It opens on the
+device invoking it: a browser tab for browser clients, the default system
+browser through Main's existing HTTP(S) window-open handler in the desktop
+app. Modified clicks retain native link behavior. The link is local-only for
+Remote-pad navigation, so a phone cannot unexpectedly launch the TV's browser.
+
+Links use catalogue page references, never playback URLs. Couch-only season
+selectors open their containing public page (RaiPlay, StreamingCommunity and
+123MoviesFree). Local files, shared inputs, direct streams and items with no
+page omit the action. The existing menu typography, touch targets, focus and
+single responsive tree apply on every screen.
 
 ## Keep discovery context visible
 

@@ -1,3 +1,4 @@
+import { browserActions } from "@/original-page";
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { readCollectionSearch, collectionPagination } from "@/collection-pagination";
@@ -129,7 +130,7 @@ function CollectionHeader({ collection: c, canPlay, shape }: { collection: Searc
     queue={c.queueAll && { label: c.single ? "Queue" : "Queue all", run: c.queueAll, disabled: c.disabled }}
     save={c.save && { saved: !!c.saved, run: c.save, disabled: c.disabled || c.saveDisabled }}
     playOn={c.playOn && { run: c.playOn, disabled }}
-    more={c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []} />;
+    more={[...browserActions(c.url), ...c.playNext ? [{ label: "Play next", disabled: c.disabled, run: c.playNext }] : []]} />;
 }
 
 // Sources without a home page of their own start from the header's field, scoped to them.

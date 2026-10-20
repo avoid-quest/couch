@@ -1,3 +1,4 @@
+import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { radioFavoritesListQuery, radioProgrammesQuery, radioSearchQuery } from "@/api/radio";
@@ -70,6 +71,7 @@ export function useStationMenu() {
       { label: "Details", run: () => details.open(itemLocation("radio", station.id)) },
       { label: "Queue", disabled: !connected, run: () => void enqueueRadio(station, false) },
       { label: favorite.saved ? "Saved" : "Save", pressed: favorite.saved, disabled: favorite.disabled, run: favorite.run },
+      ...browserActions(station.homepage),
       { label: "Play on", disabled: !available, playOn: deviceId => void play(on => enqueueRadio(station, true, on), deviceId) },
     ];
   };

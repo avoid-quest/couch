@@ -77,3 +77,6 @@ each ends ("4:52, ends 21:47").
 
 Shelves are plain overflow rows (`data-nav-row`); a pointer scrolls them by
 their thin scrollbar, which the TV hides. How the TV walks them: [TV](tv.md#every-journey-step-works-with-a-remote).
+
+Shelf menus share [Open in browser](browse.md#open-in-browser) when the item
+has an original page, including Continue, Played recently, For later and Up next.

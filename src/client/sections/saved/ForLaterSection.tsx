@@ -1,3 +1,4 @@
+import { browserActions } from "@/original-page";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
             { label: "Play", disabled: !connected || !canPlay || pending, run: () => act(item, "play", index) },
             { label: "Play on", disabled: !connected || !canPlay || pending, playOn: deviceId => act(item, "play", index, deviceId) },
             { label: "Queue", disabled: !connected || pending, run: () => act(item, "append", index) },
+            ...browserActions(item.url),
             { label: "Move up", disabled: blocked || !order(index, -1), run: () => move(-1) },
             { label: "Move down", disabled: blocked || !order(index, 1), run: () => move(1) },
             { label: "Remove", disabled: !connected || pending, run: () => act(item, "remove", index) },

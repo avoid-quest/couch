@@ -1,3 +1,4 @@
+import { browserActions } from "@/original-page";
 import { usePlaybackClock } from "@/session/playback-clock";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -79,6 +80,7 @@ export function HomePage() {
     resumes ? { label: "Details", run: () => details.open(itemLocation("history", item.mediaId)) } : { label: item.position > 0 ? "Resume" : "Play", disabled: !resumable(item), run: () => resume.mutate({ item, fromStart: item.position === 0 }) },
     ...item.position > 0 ? [{ label: "From start", disabled: !resumable(item), run: () => resume.mutate({ item, fromStart: true }) }] : [],
     { label: "Queue", disabled: !connected, run: () => queueItem(item.title, () => apiSend(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: state?.activeProfile.id })) },
+    ...browserActions(item.url),
     { label: "Play on", disabled: !resumable(item) || !item.playable, playOn: deviceId => resume.mutate({ item, fromStart: item.position === 0, deviceId }) },
   ];
   const savedMenu = (item: ForLaterItem): MenuAction[] => {
@@ -87,6 +89,7 @@ export function HomePage() {
       { label: "Play", disabled: !available, run: () => start() },
       { label: "Queue", disabled: !connected, run: () => queueItem(item.title, () => loadForLater(credentials, item.id, "append")) },
       { label: "Play on", disabled: !available, playOn: start },
+      ...browserActions(item.url),
     ];
   };
 
