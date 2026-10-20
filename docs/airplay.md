@@ -48,10 +48,11 @@ A device that only connects, or hasn't entered the code, doesn't count.
 ## How it works
 
 Couch runs [UxPlay](https://github.com/FDH2/UxPlay) 1.74, pinned to commit
-`d9e293da6d5276315af6820d10542a859bbc3424`, as a separate process
+`d9e293da6d5276315af6820d10542a859bbc3424` with one patch of Couch's
+(`native/airplay/uxplay-sender-address.patch`), as a separate process
 (`src/server/airplay.ts`). UxPlay keeps the AirPlay protocol, discovery (its own
 mDNS responder), the password check and its one-sender-at-a-time rule. Couch
-starts it, unmodified, only while the switch and **Share on network** are on, with
+starts it only while the switch and **Share on network** are on, with
 `-rc <data>/airplay/uxplayrc -n <name> -nh -vs 0 -d 1 -key <data>/airplay/key.pem -m <address>`
 and `-artp "pt=96 ! rtpstreampay ! fdsink fd=3 sync=false"`. The startup file
 `uxplayrc` (mode 0600) holds only `pw <code>`, UxPlay's own `-pw` option, so the
@@ -132,6 +133,15 @@ stream that only the password check sets up. A malformed `Authorization` header
 can make UxPlay crash, which counts towards the three restarts in five minutes,
 after which AirPlay waits for an admin to turn it off and on.
 
+Couch's patch closes one gap in upstream UxPlay: it read a sender's audio (UDP)
+from any address, and AirPlay encrypts only whole 16-byte blocks of each packet,
+so a packet shorter than one block is never decrypted. Another host could send
+such packets, one ALAC sample each, into an authenticated sender's stream without
+the code or the stream's key, and they played. The patch makes UxPlay accept
+audio and control packets only from the address of the sender's own connection.
+A host that can send from that address (the same machine, or one that spoofs it)
+is not stopped by it.
+
 Core's log (`couch.log`) records `airplay sender connected` and `airplay sender
 disconnected` for each sender connection, `airplay <id> receiving` and
 `airplay <id> ended` for each source, and `airplay receiver stopped` with the
@@ -140,7 +150,8 @@ reason. UxPlay's own log stays in Core's memory.
 ## Requirements
 
 Linux packages include UxPlay in `Resources/airplay`, with its license
-(GPL-3.0 or later), `NOTICE.txt` and the exact source it was built from. It
+(GPL-3.0 or later), `NOTICE.txt`, the unmodified source of the pinned commit and
+Couch's patch, which together are the exact source it was built from. It
 uses the computer's GStreamer, libplist and OpenSSL: the deb recommends
 `libplist-2.0-4`, `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`,
 `gstreamer1.0-plugins-bad` and `gstreamer1.0-libav`, and the dedicated TV
@@ -152,7 +163,8 @@ needs `setpriv` and `stdbuf` (util-linux and coreutils), which Debian always has
 
 Packaging builds UxPlay with CMake in the electron-builder `afterPack` hook
 (`scripts/build-airplay.ts`), on Linux only, for the machine's own architecture.
-It fetches the pinned commit with git and checks it. Package installs
+It fetches the pinned commit with git, checks it, applies Couch's patch for the
+build and restores the checkout afterwards. Package installs
 `cmake pkg-config libssl-dev libplist-dev libgstreamer1.0-dev
 libgstreamer-plugins-base1.0-dev` on its Linux runner. To build it for a
 development Core, which looks in `build/airplay`:
@@ -193,13 +205,14 @@ exits, as it would on such a network.
 
 ## Validation
 
-Checked: the pinned UxPlay built on Ubuntu 24.04 (Package's runner) starts on
+Checked: the pinned, patched UxPlay built on Ubuntu 24.04 (Package's runner) starts on
 Debian 13 with Couch's arguments, answers an unpaired sender's request without
 Couch publishing anything, challenges a sender's key SETUP without the code or
 with a wrong one and gives it no stream (the all-zero-key attack that plays
 under `-pin` publishes nothing), and for a sender that answers with the code sets
 up the same stream, whose ALAC sound becomes a source (the test client uses a zero
-key, not FairPlay), refuses a second connection's request while that one
+key, not FairPlay) while another address's short cleartext ALAC packets reach
+nothing (without the patch, each plays one sample), refuses a second connection's request while that one
 is open, logs each sender connection as Couch reads it, and stops on Couch's signal; GStreamer's own framing
 arrives as a continuous tone at the right pitch through Couch's HLS; admission,
 ending, one source per sender (also with an unpaired connection open, a next

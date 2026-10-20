@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Socket as NetSocket } from "node:net";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import WebSocket from "ws";
 import { Identity } from "@sonn-audio/node-sendspin";
@@ -702,12 +702,16 @@ test("the real UxPlay sets up sound only for a sender that answers with the code
     };
     return (object(Number(plist.readBigUInt64BE(plist.length - 16))) as { streams: { dataPort: number; controlPort: number }[] }).streams[0]!;
   };
-  const play = async (stream: { dataPort: number; controlPort: number }) => {
+  const sync = async (stream: { controlPort: number }) => {
     const udp = createSocket("udp4");
     await new Promise<void>(resolve => udp.bind(0, "127.0.0.1", resolve));
     t.after(() => udp.close());
-    const sync = Buffer.alloc(20); sync[0] = 0x90; sync[1] = 0xd4; sync.writeUInt16BE(4, 2); sync.writeBigUInt64BE((BigInt(Math.floor(Date.now() / 1000)) + 2208988800n) << 32n, 8);
-    udp.send(sync, stream.controlPort, "127.0.0.1");
+    const packet = Buffer.alloc(20); packet[0] = 0x90; packet[1] = 0xd4; packet.writeUInt16BE(4, 2); packet.writeBigUInt64BE((BigInt(Math.floor(Date.now() / 1000)) + 2208988800n) << 32n, 8);
+    udp.send(packet, stream.controlPort, "127.0.0.1");
+    return udp;
+  };
+  const play = async (stream: { dataPort: number; controlPort: number }) => {
+    const udp = await sync(stream);
     for (let index = 0; index < 240; index++) {
       const cipher = createCipheriv("aes-128-cbc", Buffer.alloc(16), Buffer.alloc(16)); cipher.setAutoPadding(false);
       const whole = Math.floor(alacFrame.length / 16) * 16;
@@ -741,7 +745,24 @@ test("the real UxPlay sets up sound only for a sender that answers with the code
   assert.equal((await known.setup(setupKeys, digest(challenge.headers, code))).status, 200);
   const audio = await known.setup(setupAudio);
   assert.equal(audio.status, 200);
-  await play(ports(audio.body));
+  // While it is connected, another address that knows neither the code nor the stream's key sends a
+  // frame shorter than one AES block, which UxPlay never decrypts (lib/raop_buffer.c): one stereo sample,
+  // in ALAC's uncompressed form. Couch's patch drops packets that aren't from the sender's address.
+  const stream = ports(audio.body);
+  await sync(stream);
+  const elsewhere = Object.values(networkInterfaces()).flat().find(entry => entry?.family === "IPv4" && !entry.internal)?.address;
+  assert.ok(elsewhere, "the container has an address besides loopback");
+  const intruder = createSocket("udp4");
+  await new Promise<void>(resolve => intruder.bind(0, elsewhere, resolve));
+  t.after(() => intruder.close());
+  for (let index = 0; index < 400; index++) {
+    const header = Buffer.alloc(12); header[0] = 0x80; header[1] = 0x60; header.writeUInt16BE(index, 2); header.writeUInt32BE(index * 352, 4); header.writeUInt32BE(0x1234, 8);
+    intruder.send(Buffer.concat([header, Buffer.from("200012000000025dc05dc1c0", "hex")]), stream.dataPort, elsewhere);
+    await new Promise(resolve => setTimeout(resolve, 8));
+  }
+  await new Promise(resolve => setTimeout(resolve, 1_000));
+  assert.deepEqual(host.state.liveSources ?? [], [], "sound from another address never reaches the sender's stream");
+  await play(stream);
   await until(() => host.state.liveSources?.[0]?.name === "AirPlay · No PIN sender", 5_000);
   assert.equal(await player(), "playing");
   known.socket.destroy();

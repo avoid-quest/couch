@@ -77,8 +77,9 @@ network differences. A skipped test is not relay runtime validation.
 ## Bundled AirPlay receiver
 
 On Linux, the same `afterPack` hook builds the pinned UxPlay with CMake
-(`scripts/build-airplay.ts`) and puts it, its license, `NOTICE.txt` and its exact
-source in `Resources/airplay`. Package installs its build packages on the Linux
+(`scripts/build-airplay.ts`) with Couch's patch
+(`native/airplay/uxplay-sender-address.patch`), and puts it, its license,
+`NOTICE.txt`, the unmodified pinned source and the patch in `Resources/airplay`. Package installs its build packages on the Linux
 runner; a local Linux package needs `cmake pkg-config libssl-dev libplist-dev
 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev` and git, and fetches the
 pinned commit once into `.artifacts/uxplay`. macOS and Windows packages have no
