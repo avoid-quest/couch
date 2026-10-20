@@ -4,13 +4,43 @@
 
 Search is the header's field on every page ([Shell](shell.md#header-and-section-nav)),
 and its results are `/search?q=…`. The query stays in the field; the page's
-"Search results" heading is for screen readers, so the results start directly
-below the header. It asks every source at once and says which it is still
-asking, while the header's Spinner stays busy. Its filters, From, What (Video, Music, Live, Radio and Channels)
-and Length, sit in a rail beside the results on wide screens and behind
-Filters on narrow ones. The phone's Filters button sits just above the first
-divided row; opening it reveals the same groups in place. Music includes Bandcamp albums and tracks and
-SoundCloud tracks. A pasted link opens as a webpage or as direct media, with
+"Search results" heading is for screen readers. It asks every source at once;
+one muted line says how many results there are and which sources it is still
+asking, while the header's Spinner stays busy. Sources answer in bursts, and
+the page takes each burst as one change (a debounced value, TanStack Pacer),
+so rows and tiles don't shuffle in step with every source.
+
+Under that line sit two rows of choices (`ChoiceGroup`, scrolling sideways on
+phones), each named once at its left as a settings row is: From, the sources
+with results and their counts, and Ends by, three clock times ahead on the
+half hour, the first at least twenty minutes out (`?until=HH:MM`). The selected
+time stays visible and keeps its deadline as the clock advances; an expired
+deadline allows no remaining duration. Choices can cross midnight. Each kind's
+heading counts what it holds by name ("2 titles", "28 stations"), as Home's
+shelves do. A hit fits when it would end by then; live media and radio
+always fit, and collections (including albums, series, seasons and programmes) never do. There is no What or Length filter:
+the kinds are headings, and a length is read as the clock time it ends.
+
+A word of the query matches a word of a hit, or the start of one, never its
+middle ("nts" finds NTS Radio, not Quints). The closest match leads: the first
+hit whose title holds every word, from the first kind below that has one, laid
+out like Home's hero at a smaller size (artwork, title, meta, when it ends, its
+verbs) and carrying `data-page-first`; once every source has answered it holds
+still for the query, so nothing moves under the focus. Then each kind in the
+shape it reads best in, each a [Shelf](#mediatile) starting with twelve (More
+reveals the rest in place) or a
+[MediaList](#mediarow--medialist):
+
+- **Films and series**: the catalogues' titles as posters, RaiPlay's programmes
+  as frames;
+- **Radio** and **Music**: squares;
+- **Live now**: frames;
+- **Videos**: divided rows under the time ruler, with their length bars;
+- **Channels and lists**: divided rows.
+
+Hits that mention no word of the query wait behind one line ("Show N results
+that don't mention …"), so "Nothing found" is reachable even when a source
+answers anything. A pasted link opens as a webpage or as direct media, with
 Open page for a source's own link. The first result starts the page, which
 Down from the header's field reaches. An empty query has no results page: it
 is Discover.
