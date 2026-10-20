@@ -180,7 +180,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   if (!current && !queueOpen && !playerTarget) return null;
 
   const buffering = player?.status === "loading" && player.buffering;
-  const bufferingStatus = buffering && <p role="status" className={cn("flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm", !playerTarget && "ml-auto w-fit")}><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>;
+  const bufferingStatus = <p role="status" className={cn("flex min-w-0 items-center gap-2 bg-background px-2 py-1 text-sm", !playerTarget && "ml-auto w-fit", !buffering && "invisible")}><Spinner role="presentation" aria-label={undefined} aria-hidden="true" />Buffering…</p>;
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const radio = isRadio(current);
   const detailHref = current && !current.liveSourceId ? queueItemLocation(current) : undefined;
