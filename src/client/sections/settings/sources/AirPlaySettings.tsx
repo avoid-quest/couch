@@ -33,7 +33,7 @@ function AirPlayControls({ credentials, connected, description }: { credentials:
   const failure = state?.error ?? query.error?.message ?? toggle.error?.message ?? renew.error?.message;
   return <SettingsSection title="AirPlay" description={description}>
     <SettingsRow label="Receive AirPlay" description="Sound only. It plays a few seconds behind the sending device.">
-      <Switch aria-label="Receive AirPlay" checked={toggle.isPending ? toggle.variables : state?.enabled ?? false} disabled={!connected || !usable || toggle.isPending || renew.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />
+      <Switch aria-label="Receive AirPlay" checked={toggle.isPending ? toggle.variables : state?.enabled ?? false} disabled={!connected || !state || !usable && !state.enabled || toggle.isPending || renew.isPending} onCheckedChange={enabled => toggle.mutate(enabled)} />
     </SettingsRow>
     {state?.enabled && usable && <SettingsRow label="Code" description="A device asks for it as its AirPlay password the first time it plays here. A new code makes every device enter it again.">
       <span className="mr-auto text-sm tabular-nums">{state.code}</span>

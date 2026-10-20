@@ -162,7 +162,10 @@ needs `setpriv` and `stdbuf` (util-linux and coreutils), which Debian always has
 ## Develop and test
 
 Packaging builds UxPlay with CMake in the electron-builder `afterPack` hook
-(`scripts/build-airplay.ts`), on Linux only, for the machine's own architecture.
+(`scripts/build-airplay.ts`), on Linux only, for the machine's own architecture,
+with `-DCMAKE_BUILD_TYPE=Release -DNO_X11_DEPS=ON -DNO_MARCH_NATIVE=ON`: without
+the last, UxPlay compiles for the build machine's CPU (`-march=native`) and may not
+run on another.
 It fetches the pinned commit with git, checks it, applies Couch's patch for the
 build and restores the checkout afterwards. Package installs
 `cmake pkg-config libssl-dev libplist-dev libgstreamer1.0-dev

@@ -13,6 +13,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // in native/airplay, accepts a sender's audio only from that sender's address.
 export const uxplay = { repository: "https://github.com/FDH2/UxPlay", commit: "d9e293da6d5276315af6820d10542a859bbc3424", version: "1.74" };
 const patch = join(root, "native", "airplay", "uxplay-sender-address.patch");
+// No X11: Couch renders nothing through UxPlay. No -march=native, which UxPlay's lib/CMakeLists.txt
+// otherwise adds on x86, so the package runs on any x86-64 machine, not only the one that built it.
+const cmakeFlags = ["-DCMAKE_BUILD_TYPE=Release", "-DNO_X11_DEPS=ON", "-DNO_MARCH_NATIVE=ON"];
 // Its build headers. At run time it needs only their libraries and GStreamer's plugins.
 export const uxplayBuildPackages = ["cmake", "pkg-config", "libssl-dev", "libplist-dev", "libgstreamer1.0-dev", "libgstreamer-plugins-base1.0-dev"];
 
@@ -37,11 +40,11 @@ export async function buildAirPlay(platform: string, arch: string, destination: 
   }
   const head = (await run("git", ["rev-parse", "HEAD"], source)).stdout.trim();
   if (head !== uxplay.commit || (await run("git", ["status", "--porcelain"], source)).stdout.trim()) throw new Error(`${source} is not UxPlay ${uxplay.commit} as published. Remove it and package again.`);
-  // No X11: Couch renders nothing through UxPlay. A fresh build never mixes another machine's configuration.
+  // A fresh build never mixes another machine's configuration.
   await rm(build, { recursive: true, force: true });
   await run("git", ["apply", patch], source);
   try {
-    await run("cmake", ["-S", source, "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DNO_X11_DEPS=ON"], work);
+    await run("cmake", ["-S", source, "-B", build, ...cmakeFlags], work);
     await run("cmake", ["--build", build, "--target", "uxplay", "--parallel"], work);
   } finally {
     await run("git", ["checkout", "--quiet", "--", "."], source);
@@ -66,7 +69,7 @@ with that patch applied (git apply uxplay-sender-address.patch).
 It includes llhttp (MIT, lib/llhttp/LICENSE-MIT), playfair (GPL-3.0, lib/playfair/LICENSE.md)
 and files under the LGPL, version 2.1 or later, as each file states.
 
-Built with the patch applied, with CMake: -DCMAKE_BUILD_TYPE=Release -DNO_X11_DEPS=ON.
+Built with the patch applied, with CMake: ${cmakeFlags.join(" ")}.
 It uses these libraries of the system it runs on, which are not part of this package:
 ${libraries.join("\n")}
 
