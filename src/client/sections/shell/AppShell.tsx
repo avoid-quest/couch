@@ -6,6 +6,7 @@ import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/sections/home/HomePage";
 import { DigitalClock } from "@/components/DigitalClock";
+import { CouchMark } from "@/components/CouchMark";
 import { playOnQuery } from "@/components/PlayOn";
 import { LocalSharingPrompt, useLocalSetupPending, usePlaybackDevice, useRememberCouchName } from "@/sections/shell/PlaybackDevice";
 import { CouchSwitch } from "@/sections/shell/CouchSwitch";
@@ -124,6 +125,9 @@ function useShellValue() {
     if (section === "Now") void router.navigate({ href: lastBrowsePath.current }).then(focus);
     else focus();
   };
+  // A source without a home scopes the header's field to itself, so there is one search field, not two.
+  const [searchScope, setSearchScope] = useState<string | null>(null);
+  const scopeSearch = (source: string) => { setSearchScope(source); focusSearch(); };
   const leavePlayer = () => {
     detailNavigation.back(playerTarget ? "/remote" : lastBrowsePath.current);
   };
@@ -191,7 +195,7 @@ function useShellValue() {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
     credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(...lastBrowsePath.current.split("?") as [string, string?]) ?? "Home", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
-    changeSection, openPlayer, leavePlayer, focusSearch, changeSearch, changeSettingsSection,
+    changeSection, openPlayer, leavePlayer, focusSearch, changeSearch, changeSettingsSection, searchScope, setSearchScope, scopeSearch,
     openProvider,
     enqueueProvider, enqueueRadio, playHistory,
     sectionUrl: (name: string) => name === "Search" ? searchLocation(rememberedSearch.current) : pathForSection(name),
@@ -310,22 +314,23 @@ export function ShellChrome({ children }: PropsWithChildren) {
               the tabs centred, then search and the clock at the right. It stays at the top on a solid ground while the page
               scrolls under it; Up from a page's first row reaches it on the TV. Phones keep the switch and search,
               with their tabs in the bottom bar and Settings last. */}
-          <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid">
+          <header ref={header} hidden={onPlayer} className="app-header drag-region window-controls-inset sticky top-0 z-30 grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-background px-(--gutter) py-1.5 touch:flex tv:grid tv:max-lg:grid-cols-[minmax(0,1fr)_auto]">
             <div className="flex min-w-0 items-center">
               {/* The TV has no Couch switch: its Couch choice lives in Settings → Couch connection. */}
-              {tvPresentation ? <span className="min-w-0 truncate text-base text-muted-foreground">{deviceName(tvName)}</span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
+              {tvPresentation ? <span className="flex min-w-0 items-center gap-2 text-base text-muted-foreground"><CouchMark connected={connected} /><span className="truncate">{deviceName(tvName)}</span></span> : <CouchSwitch key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={installationName} />}
             </div>
             {/* Unpaired, every page is the pairing page, so the sections would lead nowhere (#644 ticket 12). Phones keep
                 them in the bottom tab bar, for thumb reach; a narrow TV has no touch, so it keeps them here. */}
-            {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex" />}
-            {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. */}
-            <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1">
+            {paired && <SectionTabs className="flex min-w-0 items-center touch:hidden tv:flex tv:max-lg:col-span-2 tv:max-lg:row-start-2 tv:max-lg:justify-center" />}
+            {/* While sharing, keep a readable query and let this column use the spare room beside the Couch name. On a
+                phone the search gives way instead, so the Couch name stays readable beside Stop sharing. */}
+            <div data-app-status className="group/header-status col-start-3 flex min-w-0 items-center justify-end gap-1 has-[[data-live-sharing]]:min-w-min touch:flex-1 tv:max-lg:col-start-2 tv:max-lg:row-start-1">
               <LiveSharingStatus header />
               <span role="status" className="sr-only">{statusLabel}</span>
-              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64" />}
+              {paired && <HeaderSearch className="min-w-0 max-w-64 flex-1 sm:group-has-[[data-live-sharing]]/header-status:min-w-44 touch:max-w-none tv:max-w-64 tv:max-lg:min-w-44" />}
               {/* Only a keyboard can use its shortcuts. */}
               {paired && !tvPresentation && section !== "Remote" && <Button variant="ghost" size="icon" className="touch:hidden" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={() => setShortcutsOpen(true)}><Keyboard aria-hidden="true" /></Button>}
-              <DigitalClock className="ml-2 touch:hidden tv:inline" />
+              <DigitalClock className="ml-2 text-2xl font-light touch:hidden tv:inline" />
             </div>
           </header>
           {!onPlayer && <div className="grid gap-3 px-(--gutter) pb-3 empty:hidden"><ConnectionStatus />{error && section !== "Remote" && <ErrorAlert error={error} onDismiss={() => setError(null)} />}</div>}
@@ -367,7 +372,7 @@ function SectionTabs({ bar = false, className }: { bar?: boolean; className?: st
   const { tvPresentation, state } = useSessionGate();
   const remote = !tvPresentation && !!state?.devices?.some(device => device.tv);
   return <nav data-app-nav aria-label="Main navigation" className={className}>
-    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-t-0 border-b-2 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 px-1 py-1.5 text-xs" : "min-h-11 min-w-11 px-2.5 text-base")}>
+    {sections.filter(([name]) => name !== "Remote" || remote).map(([name, Icon]) => <Button key={name} asChild variant="ghost" className={cn("rounded-none border-x-0 border-transparent font-normal text-muted-foreground aria-[current=page]:border-foreground aria-[current=page]:text-foreground", bar ? "h-auto min-h-14 min-w-0 flex-1 flex-col gap-1 border-t-2 border-b-0 px-1 py-1.5 text-xs" : "min-h-11 min-w-11 border-t-0 border-b-2 px-2.5 text-base")}>
       <Link to={sectionUrl(name)} aria-current={section === name ? "page" : undefined}>{bar && <Icon aria-hidden="true" className="size-5" />}{name}</Link>
     </Button>)}
   </nav>;

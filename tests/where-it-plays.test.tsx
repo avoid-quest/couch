@@ -94,6 +94,24 @@ test("only a successful Play whose destination is the playing source's publisher
   expect(choosesHere({ ...play, deviceId: "mac" }, before, null)).toBe(false);
 });
 
+test("with shared requests off, a waiting source opens only in the window that pressed Play, including Up next", async () => {
+  const { choosesHere } = await import("../src/client/session/where-it-plays");
+  const state = waiting(0);
+  expect(choosesHere({ type: "playLive", sourceId: "s" }, { ...state, controlling: "mac" }, state)).toBe(true);
+  expect(choosesHere({ type: "play", entryId: "e" }, state, state)).toBe(true);
+  expect(choosesHere({ type: "play", entryId: "different" }, state, state)).toBe(false);
+  const mount = (requestedChooser: string | null, dismissedChooser: string | null = null) => {
+    sheets.length = 0;
+    const gate = { requestedChooser, dismissedChooser, dismissChooser: () => {} } as unknown as SessionGateValue;
+    renderToStaticMarkup(<SessionGateContext.Provider value={gate}><WhereItPlays state={state} run={async () => true} /></SessionGateContext.Provider>);
+    return sheets[0]!.open;
+  };
+  expect(mount(null)).toBe(false);
+  expect(mount("p:here:1")).toBe(true);
+  expect(mount("p:here:1", "p:here:1")).toBe(false);
+  expect(mount("p:here:2", "p:here:1")).toBe(true);
+});
+
 type Props = { children?: ReactNode; id?: string; label?: string; "aria-label"?: string; "aria-checked"?: boolean; "aria-describedby"?: string; "data-device-check"?: boolean; disabled?: boolean; onClick?: () => void };
 const elements = (node: ReactNode): { type: unknown; props: Props }[] => Array.isArray(node) ? node.flatMap(elements) : isValidElement<Props>(node) ? [node, ...elements(node.props.children)] : [];
 const text = (node: ReactNode): string => Array.isArray(node) ? node.map(text).join(" ") : isValidElement<Props>(node) ? text(node.props.children) : typeof node === "string" ? node : "";
@@ -107,7 +125,11 @@ test("the picker shows the playback, its one Volume, then its devices, each with
   const state = { ...waiting(0), devices: [...devices, phone], outputs: [inSync], playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs: [inSync] }, radio], liveSources: [] } as unknown as ClientSessionState;
   const tree = WhereItPlays({ state, connected: true, run: async action => { sent.push(action); return true; } });
   const all = elements(tree), labelled = (label: string) => all.filter(item => item.props.label === label || item.props["aria-label"] === label);
-  expect(all.filter(item => item.type === PlaybackVolume).length).toBe(1);
+  // On one device its fader is the level; on two or more the Playback's Volume sits above them.
+  expect(all.filter(item => item.type === PlaybackVolume).length).toBe(0);
+  const outputs = [inSync, { deviceId: "mac", picture: false, sound: true }];
+  const two = { ...state, outputs, playbacks: [{ id: "p", title: "Mac · Screen", status: "playing", outputs }, radio] } as unknown as ClientSessionState;
+  expect(elements(WhereItPlays({ state: two, connected: true, run: async () => true })).filter(item => item.type === PlaybackVolume).length).toBe(1);
   expect(labelled("All trim")).toEqual([]);
   expect(text(tree)).toContain("Mac · Screen");
   // The devices it plays on, then the others, each saying what it plays now.
@@ -149,5 +171,16 @@ test("a receiver's check describes its status and buffered explanation, includin
       ? `Can't play It couldn't connect directly to this source, and Couch's buffered stream failed: ${output.error}`
       : "Buffered It couldn't connect directly to this source, so it plays a few seconds behind.");
     expect(elements(check.props.children)).toContain(description);
+  }
+});
+
+
+test("a single output retains the effective Playback Volume until a legacy trim is folded", async () => {
+  const { PlaybackVolume } = await import("../src/client/components/PlaybackTransport");
+  const outputs = [{ deviceId: "tv", picture: true, sound: true }];
+  for (const trim of [0, 50, 100]) {
+    const state = { ...waiting(0), liveSources: [], outputs, mixTrim: trim, player: { volume: 50 * trim / 100 }, playbacks: [{ id: "p", status: "playing", outputs }] } as unknown as ClientSessionState;
+    const controls = elements(WhereItPlays({ state, connected: true, run: async () => true }));
+    expect(controls.filter(item => item.type === PlaybackVolume).length).toBe(trim === 100 ? 0 : 1);
   }
 });

@@ -25,12 +25,14 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
   const [videoQuality, setVideoQuality] = useState<LiveVideoQuality>("1080p");
   const [includeAudio, setIncludeAudio] = useState(true);
   const [pending, setPending] = useState(false);
+  const [stopping, setStopping] = useState<string | null>(null);
   const [listing, setListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // What to turn on in the system's settings, once capturing failed without it. A check that
   // ends after the choice changed answers for the previous kind, so it shows only for that one.
   const [blocked, setBlocked] = useState<{ kind: CaptureKind; text: string } | null>(null);
   const mine = state?.liveSources?.find(source => source.id === localLiveSourceId);
+  const sharedName = mine?.name ?? stopping;
   const supported = !!navigator.mediaDevices?.getUserMedia;
   const displaySupported = !!navigator.mediaDevices?.getDisplayMedia;
   const choosesSource = !!couchApp?.captureSources && kind !== "microphone";
@@ -81,19 +83,21 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
     finally { setPending(false); }
   };
   const stop = async () => {
-    if (pending) return;
+    if (pending || !mine) return;
+    // Capture is released before Core acknowledges; keep its row while Stop is pending.
+    setStopping(mine.name);
     setPending(true); setError(null);
     try { await endLive(); }
     catch (reason) { setError(errorText(reason)); }
-    finally { setPending(false); }
+    finally { setStopping(null); setPending(false); }
   };
 
   // Capture runs with this device's authority, so a paired phone's Remote never drives it on a TV.
   return <SettingsSection title={title} description="Add this device's screen or sound as a source for everyone on this Couch." data-tv-local-only>
-    {mine ? <SettingsRow label={mine.name} description="Available in Search while this device is sharing.">
+    {sharedName ? <SettingsRow label={sharedName} description="Shown in Discover and Search while this device is sharing.">
       <Button variant="outline" disabled={pending} onClick={() => void stop()}><Square aria-hidden="true" />{pending ? "Stopping…" : "Stop sharing"}</Button>
     </SettingsRow> : <>
-      <SettingsRow label="Input">
+      <SettingsRow label="What to share">
         <ChoiceGroup label="What to share" value={kind} disabled={!available || !supported} onValueChange={value => { setKind(value); setError(null); setBlocked(null); }} options={Object.entries(labels).map(([value, label]) => ({ value: value as CaptureKind, label, disabled: value !== "microphone" && !displaySupported }))} />
       </SettingsRow>
       {choosesSource && <SettingsRow label="Screen or window" htmlFor={sources?.length ? "live-capture-source" : undefined} description={kind === "system-audio" ? "Only sound is sent. The picture stays private." : "Choose the picture to share."}>
@@ -121,8 +125,8 @@ export function DeviceInputSettings({ onAdded, title }: { onAdded?: () => void; 
           <Switch id="live-include-audio" checked={includeAudio} disabled={!available} onCheckedChange={setIncludeAudio} />
         </SettingsRow>
       </>}
-      <SettingsRow label="Share with Couch" description="Available in Search until you stop sharing.">
-        <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Adding…</> : "Add source"}</Button>
+      <SettingsRow label="Share with Couch" description="Shown in Discover and Search until you stop sharing.">
+        <Button disabled={!available || !supported || kind !== "microphone" && !displaySupported || choosesSource && !sourceId} onClick={() => void share()}>{pending ? <><Spinner />Starting…</> : "Start sharing"}</Button>
         {pending && <Button variant="ghost" onClick={() => void endLive().catch(reason => setError(errorText(reason)))}>Cancel</Button>}
       </SettingsRow>
     </>}

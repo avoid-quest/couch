@@ -10,7 +10,8 @@ import { serve, type Listener } from "./http";
 // Playlists are rewritten, other bytes stream through with their Range. Nothing is transcoded.
 type Target = { origin: string; userAgent: string };
 type Media = { source: string; audioSource?: string; mpegts?: boolean; mpv?: boolean; publicNetwork?: boolean };
-type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean> };
+// refused: the last error status the source answered, which a browser reports as an unsupported format.
+type Relay = { id: string; playbackId: string; credentialOrigin: string; target: Target; headers: Record<string, string>; publicNetwork?: boolean; createdAt: number; segments?: Promise<boolean>; refused?: number };
 type Kind = "playlist" | "bytes";
 
 const playlistType = (type: string | null, url: string) => /mpegurl/i.test(type ?? "") || /\.m3u8$/i.test(new URL(url).pathname);
@@ -132,6 +133,12 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       return `http://127.0.0.1:${listener.port}`;
     },
     async close() { closed = true; relays.clear(); await (await internal)?.stop(); },
+    // The reporting window names its loaded capability, not another Core or screen relay.
+    refused(playbackId: string, source: string) {
+      const relayId = URL.parse(source)?.pathname.split("/")[5]?.split("-", 1)[0];
+      const relay = relayId ? relays.get(relayId) : undefined;
+      return relay?.playbackId === playbackId ? relay.refused : undefined;
+    },
     // Chooses Direct or Pass-through for each stream this Device will fetch, and says whether the source is HLS.
     async prepare<T extends Media>(playbackId: string, media: T, headers: Record<string, string>, target: Target | null, signal: AbortSignal): Promise<T> {
       signal.throwIfAborted();
@@ -175,6 +182,8 @@ export function createPassThrough(current: (playbackId: string) => boolean, publ
       let upstream: Response;
       try {
         upstream = await (relay.publicNetwork ? publicRequest : fetch)(url, { headers: { ...relayHeaders(relay, url), ...(range ? { range } : {}) }, signal: request.signal });
+        // The last answer stands: a refusal is forgotten once the source answers again.
+        relay.refused = upstream.status >= 400 && upstream.status <= 599 && upstream.status !== 416 ? upstream.status : undefined;
         let playlist = kind === "playlist" || playlistType(upstream.headers.get("content-type"), upstream.url || url);
         if (relay.publicNetwork && upstream.ok && !playlist) {
           const sniffed = await sniffPlaylist(upstream);

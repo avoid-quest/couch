@@ -8,7 +8,7 @@ import { MediaTile, tileShape } from "@/components/MediaTile";
 import { usePlayOn } from "@/components/PlayOn";
 import { ItemMenu, useItemMenu, type MenuAction } from "@/components/RowMenu";
 import { Shelf } from "@/components/Shelf";
-import { collectionLocation, detailHref, useDetailNavigation } from "@/detail-navigation";
+import { collectionLocation, detailHref } from "@/detail-navigation";
 import { cn } from "@/lib/utils";
 import { providerNames, SearchOnlineResults, type SearchHit, type SearchResultSummary } from "@/sections/find/SearchOnlineResults";
 import { useLiveSourceHits } from "@/sections/find/useLiveSourceHits";
@@ -136,16 +136,13 @@ function SharedSources({ hits }: { hits: SearchHit[] }) {
   </section>;
 }
 
-/** The sources that start from a search (YouTube, Bandcamp, SoundCloud). */
+/** The sources that start from a search (YouTube, Bandcamp, SoundCloud): each scopes the header's field to itself. */
 function Sources() {
-  const navigation = useDetailNavigation();
+  const { scopeSearch } = useShell();
   return <section aria-labelledby="discover-sources" className="grid min-w-0 gap-3">
     <h2 id="discover-sources" className="flex min-h-8 items-center text-base font-medium">Sources</h2>
     <ul data-nav-row aria-label="Sources" className="-ml-2.5 flex flex-wrap gap-x-4 gap-y-2">
-      {searches.map(({ provider, meta }) => {
-        const href = collectionLocation({ provider, url: "" });
-        return <SourceButton key={provider} title={providerNames[provider]} meta={meta} aria-label={`Search ${providerNames[provider]}`} href={href} onClick={() => navigation.open(href)} />;
-      })}
+      {searches.map(({ provider, meta }) => <SourceButton key={provider} title={providerNames[provider]} meta={meta} aria-label={`Search ${providerNames[provider]}`} onClick={() => scopeSearch(providerNames[provider])} />)}
     </ul>
   </section>;
 }

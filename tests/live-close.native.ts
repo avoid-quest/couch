@@ -91,7 +91,7 @@ async function run(w, url) {
     };
     probe.ended = () => { const state = probe.state(); return !state.sources && !state.local && state.recorder !== 'recording' && state.tracks.every(track => track === 'ended') && state; };
     probe.connectedPage = () => probe.session()?.connected && probe.button('Microphone or audio input') && !probe.button('Microphone or audio input').disabled;
-    probe.microphoneChosen = () => probe.button('Microphone or audio input').dataset.state === 'on' && !probe.button('Add source')?.disabled;
+    probe.microphoneChosen = () => probe.button('Microphone or audio input').dataset.state === 'on' && !probe.button('Start sharing')?.disabled;
     probe.sharing = () => { const state = probe.state(); return state.sources === 1 && state.local && state.recorder === 'recording' && state; };
     const Recorder = MediaRecorder;
     window.MediaRecorder = class extends Recorder { constructor(...args) { super(...args); probe.recorders.push(this); } };
@@ -114,7 +114,7 @@ async function run(w, url) {
     await until('connectedPage', 'the page connecting to Couch', 30000);
     await js("__close.button('Microphone or audio input').click()", true);
     await until('microphoneChosen', 'choosing the microphone');
-    await js("__close.button('Add source').click()", true);
+    await js("__close.button('Start sharing').click()", true);
     await sleep(2000);
     if ((await js('__close.trace.length')) || attempt === 5) break;
   }

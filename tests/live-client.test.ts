@@ -11,6 +11,7 @@ const check = (source: string, couchApp = "undefined") => {
   const result = spawnSync(process.execPath, ["-e", `
     import assert from "node:assert/strict";
     import { mock } from "bun:test";
+    globalThis.window = new EventTarget();
     const windowClosed = new Set(), prepared = [];
     let preparing;
     const closeWindow = () => { for (const listener of [...windowClosed]) listener(); };
@@ -453,6 +454,28 @@ test("choosing an audio input releases its permission probe and captures the sel
   await assert.rejects(session.audioInputs(), /Stop sharing/);
 `));
 
+test("a refused or closed capture prompt says what happened in Couch's words", () => check(`
+  navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException("Permission denied", "NotAllowedError"); };
+  await assert.rejects(session.start({ kind: "screen" }), /Screen capture wasn't allowed\\. Choose a screen or window/);
+  await assert.rejects(session.start({ kind: "system-audio" }), /System audio capture wasn't allowed/);
+  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Requested device not found", "NotFoundError"); };
+  await assert.rejects(session.start({ kind: "microphone" }), /No audio input was found/);
+  navigator.mediaDevices.getUserMedia = async () => { throw new Error("Live capture needs a secure Couch connection."); };
+  await assert.rejects(session.start({ kind: "microphone" }), /secure Couch connection/, "other errors keep their message");
+  assert.equal(commands.length, 0, "a refused capture publishes nothing");
+`));
+
+test("choosing an audio input translates permission errors and releases desktop preparation", () => check(`
+  const originalCapture = navigator.mediaDevices.getUserMedia;
+  navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Permission denied.", "NotAllowedError"); };
+  await assert.rejects(session.audioInputs(), /Microphone access wasn't allowed/);
+  assert.deepEqual(prepared, [{ kind: "microphone" }, null]);
+  assert.equal(commands.length, 0, "a refused probe publishes nothing");
+  navigator.mediaDevices.getUserMedia = originalCapture;
+  assert.equal((await session.audioInputs())[0].deviceId, "interface", "a failed probe allows retry");
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+`, desktop));
+
 test("closing while audio input permission is pending releases the eventual capture", () => check(`
   let finish;
   navigator.mediaDevices.getUserMedia = () => new Promise(resolve => { finish = resolve; });
@@ -465,6 +488,17 @@ test("closing while audio input permission is pending releases the eventual capt
   await assert.rejects(selecting, /canceled/);
   assert.equal(microphone.stopped, true);
   assert.equal(commands.length, 0);
+`));
+
+test("leaving a publishing page ends capture before its control socket closes", () => check(`
+  const source = await session.start({ kind: "screen" });
+  window.dispatchEvent(new Event("pagehide"));
+  await flush();
+  assert.ok(captures[0].getTracks().every(track => track.stopped));
+  assert.deepEqual(commands.filter(action => action.type === "endLive"), [{ type: "endLive", sourceId: source.id }]);
+  window.dispatchEvent(new Event("pagehide"));
+  await flush();
+  assert.equal(commands.filter(action => action.type === "endLive").length, 1);
 `));
 
 test("closing the desktop window ends this device's sharing, while its playback and Couch continue", () => check(`

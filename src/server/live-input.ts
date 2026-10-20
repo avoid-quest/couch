@@ -16,7 +16,7 @@ export function createLiveInputs<Socket>(options: {
   deviceOf: (socket: Socket) => string;
   nameOf: (id: string) => string;
   send: (socket: Socket, message: ServerMessage) => void;
-  ended: (sourceId: string) => void;
+  ended: (source: LiveSource, publisherName?: string) => void;
   changed: () => void;
 }) {
   const sources = new Map<string, Publication<Socket>>();
@@ -29,13 +29,14 @@ export function createLiveInputs<Socket>(options: {
     peers.delete(peer.peerId);
     options.send(peer.receiver, { type: "player", command: { type: "stop" } });
   };
-  const end = (sourceId: string) => {
+  const end = (sourceId: string, publisherName?: string) => {
     const publication = sources.get(sourceId);
     if (!publication) return;
+    sources.delete(sourceId);
+    // Publish the ending notice before any peer's Stop can close its player.
+    options.ended(publication.source, publisherName);
     for (const peer of [...peers.values()]) if (peer.sourceId === sourceId) removePeer(peer);
     if (publication.owner) options.send(publication.owner, { type: "livePeers", sourceId, upload: false, peers: [] });
-    sources.delete(sourceId);
-    options.ended(sourceId);
     options.changed();
   };
   return {
@@ -135,8 +136,8 @@ export function createLiveInputs<Socket>(options: {
       for (const peer of [...peers.values()]) if (peer.playbackId === playbackId && (!deviceId || peer.deviceId === deviceId)) { removePeer(peer); changed.add(peer.sourceId); }
       for (const sourceId of changed) announce(sourceId);
     },
-    disconnect(socket: Socket) {
-      for (const [sourceId, publication] of [...sources]) if (publication.owner === socket) end(sourceId);
+    disconnect(socket: Socket, publisherName?: string) {
+      for (const [sourceId, publication] of [...sources]) if (publication.owner === socket) end(sourceId, publisherName);
       const changed = new Set<string>();
       for (const peer of [...peers.values()]) if (peer.receiver === socket) { peers.delete(peer.peerId); changed.add(peer.sourceId); }
       for (const sourceId of changed) announce(sourceId);

@@ -6,7 +6,95 @@ import type { PlaybackCommand } from "../src/shared/protocol";
 import { WhereItPlays } from "../src/client/sections/shell/Outputs";
 import { chooserRequest, choosesHere, picker, reopens } from "../src/client/session/where-it-plays";
 import { deviceId } from "../src/client/session/device-id";
-import { liveFixture, until } from "./live-input.fixture";
+import { liveFixture as createLiveFixture, until } from "./live-input.fixture";
+
+// The existing routing suite also locks the opt-in, shared chooser behaviour.
+async function liveFixture({ askEveryDevice = true, ...options }: { local?: boolean; askEveryDevice?: boolean } = {}) {
+  const fixture = await createLiveFixture(options);
+  if (askEveryDevice) {
+    const host = await fixture.connect(-1);
+    assert.equal((await host.command({ type: "askEveryDevice", enabled: true })).ok, true);
+    await until(() => fixture.publisher.state.askEveryDevice === true);
+    host.socket.close();
+  }
+  return fixture;
+}
+
+test("the chooser defaults to this window only; admins can opt every viewing device in, across restarts", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ askEveryDevice: false });
+  try {
+    const host = await f.connect(-1);
+    assert.equal(f.publisher.state.askEveryDevice, false);
+    assert.equal((await f.receiver.command({ type: "askEveryDevice", enabled: true })).ok, false, "controllers cannot change a shared admin setting");
+    await f.publish("screen");
+    await f.publisher.command({ type: "sharing", sharing: { audio: true, video: true } });
+    for (const action of [{ type: "playLive", sourceId: "screen", deviceId: f.publisher.id }, { type: "playLive", sourceId: "screen" }] as const) {
+      const before = f.publisher.state;
+      assert.equal((await f.publisher.command(action)).ok, true);
+      await until(() => f.publisher.state.player.status === "paused");
+      assert.equal(chooserRequest(f.publisher.state), null);
+      assert.equal(choosesHere(action, before, f.publisher.state), true, "each Play opens in the requesting window");
+    }
+    const idle = await f.connect(2);
+    await until(() => idle.state.playback === f.publisher.state.playback);
+    assert.equal(chooserRequest(idle.state), null, "an idle viewer is not prompted");
+    assert.ok(idle.state.liveSources?.some(source => source.id === "screen"), "the source remains discoverable");
+    assert.equal((await host.command({ type: "askEveryDevice", enabled: true })).ok, true);
+    await until(() => !!chooserRequest(idle.state));
+    assert.equal(chooserRequest(idle.state), chooserRequest(f.publisher.state));
+    const request = chooserRequest(idle.state);
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "screen", deviceId: f.publisher.id })).ok, true);
+    await until(() => chooserRequest(idle.state) !== request);
+    await f.restart();
+    const restarted = await f.connect(-1);
+    assert.equal(restarted.state.askEveryDevice, true, "the opt-in survives Core restarting");
+    assert.equal((await restarted.command({ type: "askEveryDevice", enabled: false })).ok, true);
+    await f.restart();
+    assert.equal((await f.connect(-1)).state.askEveryDevice, false, "turning it off also survives a restart");
+  } finally { await f.close(); }
+});
+
+test("closing the publishing socket without Stop sharing removes its sources, even across a same-device reconnect", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ askEveryDevice: false });
+  try {
+    await f.publish("screen");
+    await f.receiver.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
+    await until(() => !!f.receiver.load());
+    // A new tab may connect before the old socket closes. It does not own the old capture.
+    const reloaded = await f.connect(0);
+    f.publisher.socket.terminate();
+    await until(() => [f.receiver, reloaded].every(client => !client.state.liveSources?.length && !sharedPlaybacks(client).length));
+    const reconnected = await f.connect(0);
+    assert.deepEqual(reconnected.state.liveSources, []);
+    assert.equal((await reconnected.command({ type: "publishLive", sourceId: "new-screen", uploadToken: f.uploadToken, kind: "screen", audio: true, video: true })).ok, true);
+    await until(() => f.receiver.state.liveSources?.length === 1);
+    assert.deepEqual(f.receiver.state.liveSources?.map(source => source.id), ["new-screen"]);
+    reloaded.socket.close();
+    // Closing an unrelated tab of the same device must preserve the live publishing window.
+    await f.receiver.command({ type: "sharing", sharing: { audio: false, video: false } });
+    assert.deepEqual(f.receiver.state.liveSources?.map(source => source.id), ["new-screen"]);
+    reconnected.socket.terminate();
+    await until(() => !f.receiver.state.liveSources?.length);
+  } finally { await f.close(); }
+});
+
+test("Play from Up next asks this window when private outputs cannot use the source", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ askEveryDevice: false });
+  try {
+    await f.publish("audio", "system-audio");
+    await f.receiver.command({ type: "playLive", sourceId: "audio", deviceId: f.receiver.id });
+    await until(() => !!f.receiver.load());
+    await f.receiver.command({ type: "output", deviceId: f.receiver.id, level: 0 });
+    await f.receiver.command({ type: "playLive", sourceId: "audio", playNow: false });
+    const entryId = f.receiver.state.queue.at(-1)!.id;
+    const before = f.receiver.state, action = { type: "play", entryId } as const;
+    assert.equal((await f.receiver.command(action)).ok, true);
+    assert.equal(f.receiver.state.player.status, "paused");
+    assert.equal(f.receiver.state.outputs?.length, 1, "the private picture stays for later video");
+    assert.equal(chooserRequest(f.receiver.state), null);
+    assert.equal(choosesHere(action, before, f.receiver.state), true);
+  } finally { await f.close(); }
+});
 
 type Fixture = Awaited<ReturnType<typeof liveFixture>>;
 type Client = Fixture["receiver"];
@@ -551,6 +639,26 @@ test("a saved sync adjustment shows on a Direct output after Core restarts, with
   } finally { await f.close(); }
 });
 
+test("ending a source used by independent playbacks announces it once per receiver", { timeout: 15_000 }, async () => {
+  const f = await liveFixture({ askEveryDevice: false });
+  try {
+    await f.publish("screen");
+    await f.receiver.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id });
+    const other = await f.connect(2);
+    await other.command({ type: "enqueue", entry: ordinary(f, "movie"), playNow: true, deviceId: other.id });
+    await other.command({ type: "playLive", sourceId: "screen", playNow: false });
+    await other.command({ type: "play", entryId: other.state.queue.at(-1)!.id });
+    await until(() => sharedPlaybacks(other).length === 2);
+    const before = [f.receiver.messages.length, other.messages.length];
+    await f.publisher.command({ type: "endLive", sourceId: "screen" });
+    await until(() => !sharedPlaybacks(other).length);
+    for (const [index, client] of [f.receiver, other].entries()) {
+      const notices = client.messages.slice(before[index]).flatMap(message => message.type === "state" && message.state.activity?.text === "Publisher stopped sharing" ? [message.state.activity.id] : []);
+      assert.equal(new Set(notices).size, 1, "switching away from an ended playback cannot repeat the notice");
+    }
+  } finally { await f.close(); }
+});
+
 test("Stop ends reception and keeps capture; Stop sharing ends the source everywhere", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {
@@ -563,9 +671,19 @@ test("Stop ends reception and keeps capture; Stop sharing ends the source everyw
     const before = loads(f.receiver).length;
     assert.equal((await f.receiver.command({ type: "playLive", sourceId: "screen", deviceId: f.receiver.id })).ok, true);
     await until(() => loads(f.receiver).length > before && direct(f.receiver.load()));
+    const ending = f.receiver.messages.length;
     assert.equal((await f.publisher.command({ type: "endLive", sourceId: "screen" })).ok, true);
     await until(() => !f.receiver.state.liveSources?.length && !sharedPlaybacks(f.receiver).length);
     assert.equal(lastCommand(f.receiver), "stop");
+    // One activity identity reaches the receiver before its player closes. The actor identifies
+    // the publisher, which the shell uses to suppress its own activity toast.
+    const messages = f.receiver.messages.slice(ending);
+    const notices = messages.flatMap(message => message.type === "state" && message.state.activity?.text === "Publisher stopped sharing" ? [message.state.activity] : []);
+    assert.equal(new Set(notices.map(notice => notice.id)).size, 1);
+    assert.ok(notices.every(notice => notice.actor.deviceId === f.publisher.id));
+    const notice = messages.findIndex(message => message.type === "state" && message.state.activity?.text === "Publisher stopped sharing");
+    const stop = messages.findIndex(message => message.type === "player" && message.command.type === "stop");
+    assert.ok(notice >= 0 && stop > notice, "the notice arrives before Stop closes the receiver");
   } finally { await f.close(); }
 });
 

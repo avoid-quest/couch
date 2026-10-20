@@ -38,7 +38,6 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const shell = useShell();
   const { credentials, available, active, current, programme } = shell;
   const { state, connected, run, seekBy, nativeHost, tvPresentation, videoQualityPreference, playerTarget, localLiveSourceId } = useSessionGate();
-  useCouchHotkeys([{ hotkey: "F", enabled: !tvPresentation && fullscreen.supported && !fullscreen.pending, action: () => void fullscreen.toggle() }]);
   const detailNavigation = useDetailNavigation();
   const location = useLocation();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
@@ -86,6 +85,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   const separate = !!playback?.hostOnly && showsPicture(state);
   const picture = showsPicture(state) && !separate;
   const artworkStage = audioOnly || !picture;
+  const canFullscreen = !tvPresentation && fullscreen.supported && !fullscreen.pending && (!artworkStage || fullscreen.fullscreen);
+  useCouchHotkeys([{ hotkey: "F", enabled: canFullscreen, action: () => void fullscreen.toggle() }]);
   const queueBeside = useSyncExternalStore(subscribeWide, isWide) && artworkStage;
   const sharing = !!localLiveSourceId;
   // While this device shares, the bands stay up, so the top band's Stop sharing stays on screen.
@@ -188,7 +189,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   };
   // A pointer has no Back key, so desktop and phones lead the top band with Back; the TV's remote has its own.
   const backLabel = `Back to ${playerTarget ? "Remote" : shell.playerBackLabel}`;
-  const back = !tvPresentation && <Button variant="ghost" size="icon" className="-ml-2.5 size-11 shrink-0" aria-label={backLabel} title={backLabel} onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /></Button>;
+  const back = !tvPresentation && <Button variant="ghost" size="icon-lg" className="-ml-2.5 size-11 shrink-0" aria-label={backLabel} title={backLabel} onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" /></Button>;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
   const source = current ? sourceLabel(current.source) : "";
@@ -223,7 +224,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         clicked.current = event.detail % 2 ? playing : !clicked.current;
         void run({ type: "pause", playbackId: player.playbackId, paused: clicked.current });
       }}
-      onDoubleClick={() => { if (tap.current === null && fullscreen.supported && !fullscreen.pending) void fullscreen.toggle(); }}>
+      onDoubleClick={() => { if (tap.current === null && canFullscreen) void fullscreen.toggle(); }}>
     </div>
     {/* The top band shows and hides with the band. Over a video it reads as one board line: the title and subtitle at the
         left, the clock and the end time at the right. Without a video desktop and phones show it for Back and a Remote's
@@ -237,8 +238,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>}
       {/* Two rows, each sizing itself, so a narrow screen gives the title all but the clock. */}
       {osd && <div data-player-heading className="drag-region window-controls-inset grid px-(--gutter)">
-        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><div className="flex shrink-0 items-baseline gap-4"><LiveSharingStatus /><DigitalClock className="text-sm text-muted-foreground" /></div></div>
-        {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl">{ends}</p>}</div>}
+        <div className="flex items-baseline justify-between gap-6"><div className="flex min-w-0 items-center gap-1">{back}<h1 title={title} className="min-w-0 line-clamp-2 text-2xl font-semibold tracking-tight break-words">{title}</h1></div><div className="flex shrink-0 items-baseline gap-4"><LiveSharingStatus /><DigitalClock className="text-xl font-light" /></div></div>
+        {(byline || ends) && <div className="flex items-baseline gap-6">{byline && <p className="min-w-0 truncate text-sm text-muted-foreground">{byline}</p>}{ends && <p data-player-ends className="ml-auto shrink-0 text-xl font-light">{ends}</p>}</div>}
       </div>}
     </div>
     <div className={cn("player-workspace", playerTarget && "max-sm:top-22!")}>
@@ -251,9 +252,9 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         <div data-player-art aria-hidden="true" className="player-art grid min-h-0 min-w-0 items-end justify-items-start overflow-hidden">{artwork || <Music2 className="size-12 text-muted-foreground" />}</div>
         {/* Home's hero, in its order: the title at display size, one muted meta line, then the departures board's line. */}
         <div data-player-audio-copy className="grid min-w-0 gap-2">
-          <h1 className="min-w-0 line-clamp-2 text-3xl font-semibold tracking-tight break-words" title={title}>{title}</h1>
+          <h1 className="min-w-0 line-clamp-2 text-4xl font-semibold tracking-tight break-words md:text-5xl" title={title}>{title}</h1>
           <p role="status" className="truncate text-sm text-muted-foreground">{meta}</p>
-          {ends && <p data-player-ends className="text-2xl tabular-nums">{ends}</p>}
+          {ends && <p data-player-ends className="text-3xl font-light tabular-nums md:text-4xl">{ends}</p>}
           {nowPlaying && <p role="status" className="line-clamp-1 text-sm text-muted-foreground">{nowPlaying}</p>}
         </div>
       </div>}
@@ -269,10 +270,14 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
       </div>
     </div>}
       </div>
+      {/* Opened over the player it closes from its heading row; what plays now heads the list only where the player's
+          own title is off screen: a phone's Up next over Now playing. Beside it, or over a video's top band, the
+          title is already there. */}
       {(artworkStage || queueOpen) && <aside data-player-queue aria-label="Up next" className="player-queue bg-background">
-        {queueOpen && current && <div className="flex shrink-0 justify-end pb-2"><Button ref={queueClose} variant="ghost" className="h-11" onClick={closeQueue}><ArrowLeft aria-hidden="true" />Close Up next</Button></div>}
-        <div className="min-h-0 overflow-y-auto overscroll-contain pb-4">
-          <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} />
+        {/* Its controls pull back past the text (Close, Save as list, Played), so the scroller pads for them, with a
+            little to spare: a vertical scroller with a stray pixel of overflow shifts its text when one takes focus. */}
+        <div className="-mx-3 min-h-0 overflow-y-auto overscroll-contain px-3 pb-4">
+          <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} current={artworkStage && !queueBeside} onClose={queueOpen ? closeQueue : undefined} closeRef={queueClose} />
         </div>
       </aside>}
     </div>
@@ -280,28 +285,38 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         picture, unless the click opened something. A keyboard's click (detail 0) keeps focus where the keyboard put it. */}
     <div ref={band} hidden={!current} data-player-band={shown ? "shown" : "hidden"} inert={!shown} onClick={event => {
       if (event.detail) requestAnimationFrame(() => { const at = document.activeElement; if (at && band.current?.contains(at) && !at.matches('[aria-expanded="true"]')) surface()?.focus({ preventScroll: true }); });
-    }} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "bg-background" : "player-video-controls", !shown && "opacity-0")}>
-      {/* Gutter to gutter like the now-playing bar, in its order: transport, timeline, volume, Where it plays, Up next, then settings and fullscreen.
-          A timeline takes its own row above (index.css), without the end time or "Live" the top band or Now playing says. Every tool is an icon. */}
+    }} className={cn("player-band z-20 py-3 transition-opacity duration-200 [view-transition-name:couch-player-band] motion-reduce:transition-none", artworkStage ? "border-t bg-background" : "player-video-controls", !shown && "opacity-0")}>
+      {/* One line in the now-playing bar's order, laid out around the transport (index.css): the timeline above, then
+          Volume and Where it plays at the left, Play/Pause, Stop and Next in the middle, Up next, Playback and
+          fullscreen at the right. Up next shows only where it has something to open, and fullscreen only over a
+          picture. Every tool is an icon. */}
       <div className="grid gap-1">
         {!playerTarget && bufferingStatus}
-        <div className="player-control-row">
+        {/* Every control is a ghost icon (icon-lg) at the band's 44px target, the now-playing bar's too; those at the
+            band's ends pull back (-2.5) so their glyphs line up with the timeline's times, as Back does with the title. */}
+        <div className="grid gap-2">
           {state && <PlaybackTimeline state={state} connected={connected} run={run} pageFirst compact />}
-          {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst prominent />}
-          <div data-player-tools className="flex shrink-0 items-center">
-            {state && <VolumeButton state={state} connected={connected} run={run} className="size-11" />}
-            {state && <WhereItPlays state={state} connected={connected} run={run} className="size-11" />}
-            <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon" className="size-11" aria-label="Up next" title="Up next" aria-expanded={queueOpen} disabled={queueBeside} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>
-            <Button data-panel="settings" variant="ghost" size="icon" className="size-11" aria-label="Playback" title="Playback" aria-pressed={panel === "settings" || panel === "tracks"} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
-            {/* The window can leave fullscreen; the TV's never does. */}
-            {!tvPresentation && <Button variant="ghost" size="icon" className="size-11" disabled={!fullscreen.supported || fullscreen.pending} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+          <div className="player-controls-scroll" onFocusCapture={event => event.target.scrollIntoView({ block: "nearest", inline: "nearest" })}>
+            <div className="player-control-row [&_[data-size=icon-lg]]:size-11">
+              {state && <PlaybackTransport state={state} connected={connected} run={run} pageFirst className="player-transport" />}
+              <div data-player-tools="sound" className="-ml-2.5 flex shrink-0 items-center gap-0.5">
+                {state && <VolumeButton state={state} connected={connected} run={run} />}
+                {state && <WhereItPlays state={state} connected={connected} run={run} />}
+              </div>
+              <div data-player-tools="more" className="-mr-2.5 flex shrink-0 items-center gap-0.5">
+                {!queueBeside && <Button ref={queueTrigger} data-panel="queue" variant="ghost" size="icon-lg" aria-label="Up next" title="Up next" aria-expanded={queueOpen} onClick={() => setQueueOpen(!queueOpen)}><ListMusic aria-hidden="true" /></Button>}
+                <Button data-panel="settings" variant="ghost" size="icon-lg" aria-label="Playback" title="Playback" aria-expanded={panel !== null} onClick={event => openPanel("settings", event.currentTarget)}><Settings aria-hidden="true" /></Button>
+                {/* The window can leave fullscreen; the TV's never does, and artwork has nothing to fill. */}
+                {!tvPresentation && (!artworkStage || fullscreen.fullscreen) && <Button variant="ghost" size="icon-lg" disabled={!canFullscreen} aria-label={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} title={fullscreen.fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void fullscreen.toggle()}>{fullscreen.fullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}</Button>}
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
     <Sheet modal={false} open={panel !== null} onOpenChange={open => { if (!open) setPanelState(null); }}>
       <SheetContent side="right" data-player-sheet aria-describedby={undefined} className="gap-0 overflow-y-auto bg-background data-[side=right]:w-full data-[side=right]:sm:max-w-lg" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); panelClose.current?.focus(); }} onCloseAutoFocus={event => { event.preventDefault(); panelTrigger.current?.focus(); }}>
-        <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-2 border-b bg-background px-6 py-4"><SheetTitle className="text-base font-medium">{panel && panelTitles[panel]}</SheetTitle><SheetClose asChild><Button ref={panelClose} variant="ghost" size="icon" aria-label="Close"><X aria-hidden="true" /></Button></SheetClose></SheetHeader>
+        <SheetHeader className="sticky top-0 z-10 flex-row items-center justify-between gap-2 border-b bg-background px-6 py-4"><SheetTitle className="text-base font-medium">{panel && panelTitles[panel]}</SheetTitle><SheetClose asChild><Button ref={panelClose} variant="ghost" size="icon-lg" className="-mr-2.5 size-11" aria-label="Close" title="Close"><X aria-hidden="true" /></Button></SheetClose></SheetHeader>
         <div className="px-6 pt-4 pb-8">
           {panel === "tracks" && <Button variant="ghost" className="-ml-2.5 mb-4 h-11" onClick={() => { if (player?.playbackId) setPanelState({ playbackId: player.playbackId, panel: "settings" }); }}><ArrowLeft aria-hidden="true" />Playback</Button>}
           {panel === "settings" && <div className="grid divide-y border-b">

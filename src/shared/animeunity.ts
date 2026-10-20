@@ -1,6 +1,8 @@
+// Public references keep their original identity across transport domain moves.
 export const animeUnityOrigin = "https://www.animeunity.so";
 
-export const isAnimeUnityHost = (hostname: string) => /^(?:www\.)?animeunity\.so$/i.test(hostname);
+// Keep saved links from before the domain move usable.
+export const isAnimeUnityHost = (hostname: string) => /^(?:www\.)?animeunity\.[a-z]{2,63}$/i.test(hostname);
 
 // The final ID is the site's episode ID, not its displayed episode number.
 export function animeUnityPageUrl(value: string): URL | undefined {

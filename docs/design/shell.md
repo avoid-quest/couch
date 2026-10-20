@@ -40,17 +40,30 @@ tabs (Home, Discover, Saved, then Remote while the Couch has a TV, then
 Settings); at the right, Stop sharing while this device shares its screen or
 sound (the player's top band keeps it:
 [Player](player.md#stop-sharing-stays-on-screen)), then the search field,
-then the clock. The current tab names the page, so section roots carry no
+then the clock, set light at `text-2xl` ([Scale](../design.md#scale)). The
+current tab names the page, so section roots carry no
 visible title of their own. The current tab is underlined; a focused tab
 inverts, as every control does.
 
 While sharing, the search keeps at least 11rem and the right column can take
 space from the left, moving the tabs only as much as needed. Below `xl`,
 the sharing status gives up "Sharing screen" (or sound) before the search
-gives up that width. Stop sharing keeps its label from 24rem up; below that,
-it is a 44px stop icon with the same accessible name. This smaller breakpoint
-keeps the label on a 390px phone while fitting the search and Couch switch
-at 320px. Without sharing, the columns and search keep their usual widths.
+gives up that width. On a phone (below `sm`) the status is one icon control,
+lucide Radio (a broadcast: one glyph for screen, system audio and microphone,
+where ScreenShare would misname sound; Couch draws no other live glyph, as
+Live is a word), labelled and titled "Sharing screen · Show sharing controls" (or
+"Sharing system audio", "Sharing microphone"), so a pointer's hover and a
+screen reader read the state. Touch has no hover, so pressing it opens a
+Popover with the status and Stop sharing, its one action; on a phone a stray
+tap beside the search then never ends sharing for every receiver. Below `sm`
+the search also keeps no minimum: it gives way to the icon so the Couch name
+at the left stays readable. Without sharing, the columns and search keep their
+usual widths. The sharing control and its popover stay local to the publishing
+device: a TV’s own remote can use them; another device’s Remote cannot.
+
+Below `lg`, a TV keeps the name, search, sharing control and clock on the first
+row and centres its tabs on a second row. Search keeps 11rem so Largest text
+and a narrow TV do not collapse its input or overlap the clock.
 
 The header is sticky: it stays at the top on the page's solid ground while
 the page scrolls under it, and the player hides it. It publishes its height
@@ -65,14 +78,26 @@ It has only a bottom hairline at rest, so the field belongs with the header's
 open type; focus inverts the field to white with black ink and caret, including
 on the TV. This is a Clock adjustment to InputGroup's default bordered box.
 A fine pointer sees shadcn `Kbd`'s `/` hint while it is empty and unfocused
-(off the TV). A Spinner replaces the icon as soon as the draft changes and
+(off the TV). A Spinner replaces the icon while a query is pending and
 stays while the results page's sources answer.
 The clear button stays, with a 44px touch target. The field never changes
 width on focus, so the surrounding header stays still. `/` focuses it from any page
-(from the player, its page comes back first). Typing searches after a second
-without typing, and Enter at once. The delay coalesces edits because one
-search fills every one of Core's provider slots, including two yt-dlp jobs; the
-spinner makes that wait visible. The first search from another page opens
+(from the player, its page comes back first). Typing searches once it pauses
+for half a second (TanStack Pacer's debouncer), and Enter at once. The pause
+coalesces edits because one search fills every one of Core's provider slots,
+including two yt-dlp jobs; the spinner makes that wait visible. Composition
+waits until the IME commits its text. Leaving the location or choosing another
+source cancels a pending query, so it cannot navigate back over that choice.
+
+Empty and focused, the field lists the last eight queries typed into it on
+this Couch (`search-recents.ts`, per installation, like radio recents) as
+divided rows under it, inside the header so a remote reaches them: Down walks
+them, Up returns to the field, a press searches at once. A source without a
+home of its own (Discover's YouTube, Bandcamp and SoundCloud) scopes the field
+to itself (`scopeSearch`): its placeholder reads "Search YouTube" and the
+next query carries that source, so there is one search field, never two. On
+a results page, Enter plays the closest match when its press plays (a station,
+a live stream); otherwise it moves focus to it. The first search from another page opens
 `/search?q=…`, later ones replace it, and focus stays in the field while
 typing (Enter goes on to the results; Down reaches the page's first result).
 Off the TV, Esc clears the field, which is Discover, then leaves it; the TV's
@@ -90,7 +115,8 @@ Input exceptions:
   bottom tab bar for thumb reach (Home, Discover, Saved, Remote while the
   Couch has a TV, then Settings), each a lucide icon (House, Compass, Bookmark,
   Tv, Settings) over its label. Five equal-width tabs fit 390px; without a TV
-  there are four. The top bar is a row: the Couch switch at the left, then
+  there are four. The current tab's rule sits at the bar's top edge, where
+  the bar meets the page. The top bar is a row: the Couch switch at the left, then
   the search field, which takes the room left (it fits 390px with a long
   name, which truncates); phones show no clock. A narrow TV has no touch, so
   `tv:` undoes `touch:` and it keeps its grid, tabs and clock.
@@ -114,7 +140,8 @@ Where it plays after a switch: [Where it plays](where-it-plays.md#switching-serv
 
 `NowPlayingBar` is one row above the page, and above the phone tab bar. Its
 artwork and title ("Open player: …") open the player; the row underneath
-names the radio or collection (a link), the status and, below `lg`, the time.
+names the radio (a link to Discover's every station, as Home's Radio shelf
+heading is) or collection (a link), the status and, below `lg`, the time.
 The bar then carries the band's controls in its order: Play/Pause, Stop and
 Next, the timeline or "Live", Volume, Where it plays and Up next. Phones, for
 their width and reach, keep Play/Pause and Where it plays; the player keeps
