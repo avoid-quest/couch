@@ -167,7 +167,11 @@ shows no top band unless this device shares. It returns to the page that
 opened the player, as Escape and a remote's Back do. A Remote's player keeps
 its TV's status beside it.
 
-The player's transient Buffering status has its own row above the transport.
+The player's transient Buffering status reserves its own row above the transport
+(beside the TV status in a Remote's player). While playing or paused, the label
+is invisible and absent from the accessibility tree, but keeps its natural size
+so the band, artwork, queue and subtitle clearance stay still. It reuses the
+existing status text and shadcn Spinner; no custom component is needed.
 
 ## Stop sharing stays on screen
 
