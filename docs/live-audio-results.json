@@ -3406,5 +3406,645 @@
         ]
       }
     ]
-  }
+  },
+  "rendererCoverageCaveat": "Historical follow-up coverage verdicts before the frozen-boundary correction compare incompatible durations or omit recording tail; raw counters are retained but do not qualify coverage.",
+  "outputEvidenceMeasurements": [
+    {
+      "mode": "calibration",
+      "seed": 20261020,
+      "runId": "0f9912f621ab2d4b2e253794b34ca03c",
+      "fixture": "markers",
+      "recorderDelayFrames": 0,
+      "seconds": 5,
+      "receivers": 3,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 128,
+      "backend": {
+        "jackDriver": "dummy",
+        "jackRealtime": false,
+        "pulseRealtime": false,
+        "pulseHighPriority": false,
+        "pulseDefaultSampleRate": 48000,
+        "separateSourceSink": true,
+        "requestedSourceBufferFrames": null,
+        "requestedReceiverBufferFrames": null
+      },
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "flags": 0,
+        "topologyChanges": 0,
+        "exitCode": 0,
+        "graphDeviationUs": 143,
+        "deviationBasis": "JACK cycle timestamp versus nominal sample time; not an independent wall-clock bound"
+      },
+      "witnessHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "flags": 0,
+        "topologyChanges": 6,
+        "exitCode": 1,
+        "graphDeviationUs": 143,
+        "deviationBasis": "JACK cycle timestamp versus nominal sample time; not an independent wall-clock bound"
+      },
+      "calibration": {
+        "status": "passed",
+        "reasons": [],
+        "scope": "common-graph known-delay calibration",
+        "graph": {
+          "xruns": 0,
+          "overflow": false,
+          "flags": 0,
+          "topologyChanges": 0,
+          "exitCode": 0,
+          "graphDeviationUs": 143,
+          "deviationBasis": "JACK cycle timestamp versus nominal sample time; not an independent wall-clock bound"
+        },
+        "outputs": [
+          {
+            "id": "receiver-0",
+            "expectedMs": 20,
+            "observedMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-1",
+            "expectedMs": 80,
+            "observedMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-2",
+            "expectedMs": 150,
+            "observedMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          }
+        ],
+        "maxAbsoluteErrorMs": 0,
+        "uncertaintyMs": 0.041666666666666664,
+        "untested": [
+          "source-to-capture delay measured separately",
+          "physical output latency",
+          "acoustic speaker timing"
+        ]
+      },
+      "presentationScope": "Known-delay fixture JACK ports; no browser or Pulse output boundary qualification",
+      "completePresentation": false,
+      "presentation": {
+        "status": "inconclusive",
+        "reasons": [
+          "witness: missing capture, unhealthy stream or changed topology",
+          "witness: unhealthy callback"
+        ],
+        "boundary": "PCM at the named JACK output ports; the runner verifies Pulse module-jack-sink/browser ownership separately",
+        "timeBasis": "JACK sample frames at nominal 48000 Hz",
+        "sourceFirstFrame": 16896,
+        "absoluteSourceFirstFrame": 16896,
+        "sourceVerification": {
+          "comparedFrames": 240000,
+          "missingFrames": 0,
+          "mismatchedFrames": 0,
+          "activeFrames": 38400,
+          "firstMismatchFrame": null
+        },
+        "reference": {
+          "comparedFrames": 240000,
+          "missingFrames": 0,
+          "mismatchedFrames": 0,
+          "activeFrames": 38400,
+          "firstMismatchFrame": null
+        },
+        "outputs": [
+          {
+            "port": "couch_lab_delay:delay_960",
+            "expectedDelayFrames": 0,
+            "comparedFrames": 240000,
+            "missingFrames": 0,
+            "mismatchedFrames": 0,
+            "activeFrames": 38400,
+            "firstMismatchFrame": null,
+            "zeroDelay": {
+              "comparedFrames": 240000,
+              "missingFrames": 0,
+              "mismatchedFrames": 0,
+              "activeFrames": 38400,
+              "firstMismatchFrame": null
+            }
+          },
+          {
+            "port": "couch_lab_delay:delay_3840",
+            "expectedDelayFrames": 0,
+            "comparedFrames": 240000,
+            "missingFrames": 0,
+            "mismatchedFrames": 0,
+            "activeFrames": 38400,
+            "firstMismatchFrame": null,
+            "zeroDelay": {
+              "comparedFrames": 240000,
+              "missingFrames": 0,
+              "mismatchedFrames": 0,
+              "activeFrames": 38400,
+              "firstMismatchFrame": null
+            }
+          },
+          {
+            "port": "couch_lab_delay:delay_7200",
+            "expectedDelayFrames": 0,
+            "comparedFrames": 240000,
+            "missingFrames": 0,
+            "mismatchedFrames": 0,
+            "activeFrames": 37632,
+            "firstMismatchFrame": null,
+            "zeroDelay": {
+              "comparedFrames": 240000,
+              "missingFrames": 0,
+              "mismatchedFrames": 0,
+              "activeFrames": 37632,
+              "firstMismatchFrame": null
+            }
+          }
+        ],
+        "expectedReceiverDelayFrames": 0,
+        "outputPresentationOffsetMs": null,
+        "additionalFrameMappingUncertaintyMs": null,
+        "unmeasured": [
+          "physical DAC/acoustic presentation",
+          "separate source capture delay",
+          "whole browser path exact PCM",
+          "wall-clock pacing uncertainty",
+          "mobile and 50-renderer qualification"
+        ]
+      },
+      "id": "couch-live-presentation-calibration-1",
+      "sourceArtifact": "/tmp/couch-live-presentation-calibration-1/result.json",
+      "sha256": "f4a679eef32c44134e42e1409c9681b7390d6622cf21f76dbd2dc25cbc5942f9",
+      "markers": {
+        "measurementValid": true,
+        "measurementIssues": [],
+        "expectedMarkers": 50,
+        "sampleRate": 48000,
+        "seed": 20261020,
+        "durationFrames": 240000,
+        "warmupFrames": 0,
+        "uncertaintyMs": 0.041666666666666664,
+        "reference": {
+          "id": "reference",
+          "expected": 50,
+          "detected": 50,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 20.041666666666668
+          },
+          {
+            "id": "receiver-1",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 80.04166666666667
+          },
+          {
+            "id": "receiver-2",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 150.04166666666666
+          }
+        ],
+        "skewMs": {
+          "count": 50,
+          "min": 130,
+          "p50": 130,
+          "p95": 130,
+          "p99": 130,
+          "max": 130,
+          "mean": 130,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "continuous": null,
+      "ingress": null
+    },
+    {
+      "mode": "calibration",
+      "seed": 20261020,
+      "runId": "a172c861ff065945f3352fcc27467e3a",
+      "fixture": "markers",
+      "recorderDelayFrames": 0,
+      "seconds": 5,
+      "receivers": 3,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 128,
+      "backend": {
+        "jackDriver": "dummy",
+        "jackRealtime": false,
+        "pulseRealtime": false,
+        "pulseHighPriority": false,
+        "pulseDefaultSampleRate": 48000,
+        "separateSourceSink": true,
+        "requestedSourceBufferFrames": null,
+        "requestedReceiverBufferFrames": null
+      },
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "flags": 0,
+        "topologyChanges": 0,
+        "exitCode": 0,
+        "graphDeviationUs": 129.3333333330229,
+        "deviationBasis": "JACK cycle timestamp versus nominal sample time; not an independent wall-clock bound"
+      },
+      "witnessHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "flags": 0,
+        "topologyChanges": 0,
+        "exitCode": 0,
+        "graphDeviationUs": 129.3333333330229,
+        "deviationBasis": "JACK cycle timestamp versus nominal sample time; not an independent wall-clock bound"
+      },
+      "calibration": {
+        "status": "passed",
+        "reasons": [],
+        "scope": "common-graph known-delay calibration",
+        "graph": {
+          "xruns": 0,
+          "overflow": false,
+          "flags": 0,
+          "topologyChanges": 0,
+          "exitCode": 0,
+          "graphDeviationUs": 129.3333333330229,
+          "deviationBasis": "JACK cycle timestamp versus nominal sample time; not an independent wall-clock bound"
+        },
+        "outputs": [
+          {
+            "id": "receiver-0",
+            "expectedMs": 20,
+            "observedMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-1",
+            "expectedMs": 80,
+            "observedMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-2",
+            "expectedMs": 150,
+            "observedMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          }
+        ],
+        "maxAbsoluteErrorMs": 0,
+        "uncertaintyMs": 0.041666666666666664,
+        "untested": [
+          "source-to-capture delay measured separately",
+          "physical output latency",
+          "acoustic speaker timing"
+        ]
+      },
+      "presentationScope": "Known-delay fixture JACK ports; no browser or Pulse output boundary qualification",
+      "completePresentation": true,
+      "presentation": {
+        "status": "passed",
+        "reasons": [],
+        "boundary": "PCM at the named JACK output ports; the runner verifies Pulse module-jack-sink/browser ownership separately",
+        "timeBasis": "JACK sample frames at nominal 48000 Hz",
+        "sourceFirstFrame": 19072,
+        "absoluteSourceFirstFrame": 19072,
+        "sourceVerification": {
+          "comparedFrames": 240000,
+          "missingFrames": 0,
+          "mismatchedFrames": 0,
+          "activeFrames": 38400,
+          "firstMismatchFrame": null
+        },
+        "reference": {
+          "comparedFrames": 240000,
+          "missingFrames": 0,
+          "mismatchedFrames": 0,
+          "activeFrames": 38400,
+          "firstMismatchFrame": null
+        },
+        "outputs": [
+          {
+            "port": "couch_lab_delay:delay_960",
+            "expectedDelayFrames": 0,
+            "comparedFrames": 240000,
+            "missingFrames": 0,
+            "mismatchedFrames": 0,
+            "activeFrames": 38400,
+            "firstMismatchFrame": null,
+            "zeroDelay": {
+              "comparedFrames": 240000,
+              "missingFrames": 0,
+              "mismatchedFrames": 0,
+              "activeFrames": 38400,
+              "firstMismatchFrame": null
+            }
+          },
+          {
+            "port": "couch_lab_delay:delay_3840",
+            "expectedDelayFrames": 0,
+            "comparedFrames": 240000,
+            "missingFrames": 0,
+            "mismatchedFrames": 0,
+            "activeFrames": 38400,
+            "firstMismatchFrame": null,
+            "zeroDelay": {
+              "comparedFrames": 240000,
+              "missingFrames": 0,
+              "mismatchedFrames": 0,
+              "activeFrames": 38400,
+              "firstMismatchFrame": null
+            }
+          },
+          {
+            "port": "couch_lab_delay:delay_7200",
+            "expectedDelayFrames": 0,
+            "comparedFrames": 240000,
+            "missingFrames": 0,
+            "mismatchedFrames": 0,
+            "activeFrames": 37632,
+            "firstMismatchFrame": null,
+            "zeroDelay": {
+              "comparedFrames": 240000,
+              "missingFrames": 0,
+              "mismatchedFrames": 0,
+              "activeFrames": 37632,
+              "firstMismatchFrame": null
+            }
+          }
+        ],
+        "expectedReceiverDelayFrames": 0,
+        "outputPresentationOffsetMs": 0,
+        "additionalFrameMappingUncertaintyMs": 0,
+        "unmeasured": [
+          "physical DAC/acoustic presentation",
+          "separate source capture delay",
+          "whole browser path exact PCM",
+          "wall-clock pacing uncertainty",
+          "mobile and 50-renderer qualification"
+        ]
+      },
+      "id": "couch-live-presentation-calibration-2",
+      "sourceArtifact": "/tmp/couch-live-presentation-calibration-2/result.json",
+      "sha256": "7942fa6b54bd53ca6179712aa7895a820c5b8d1b728f747facd011b105cf961b",
+      "markers": {
+        "measurementValid": true,
+        "measurementIssues": [],
+        "expectedMarkers": 50,
+        "sampleRate": 48000,
+        "seed": 20261020,
+        "durationFrames": 240000,
+        "warmupFrames": 0,
+        "uncertaintyMs": 0.041666666666666664,
+        "reference": {
+          "id": "reference",
+          "expected": 50,
+          "detected": 50,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 20.041666666666668
+          },
+          {
+            "id": "receiver-1",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 80.04166666666667
+          },
+          {
+            "id": "receiver-2",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 150.04166666666666
+          }
+        ],
+        "skewMs": {
+          "count": 50,
+          "min": 130,
+          "p50": 130,
+          "p95": 130,
+          "p99": 130,
+          "max": 130,
+          "mean": 130,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "continuous": null,
+      "ingress": null
+    }
+  ]
 }
