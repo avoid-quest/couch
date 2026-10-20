@@ -257,8 +257,12 @@ because its URL can carry a token.
 
 Main also records timestamped, bounded failures from Main and the updater, plus
 renderer error-level messages Electron attributes to the main frame. URLs retain
-only their host; credentials and filesystem paths are removed before controls
-are flattened and the message is bounded. Routine renderer messages and events
+their host only. Before Electron serializes console arguments, the app's client
+formats a logged DOMException with its name, message and stack when available;
+otherwise Electron passes only `[object DOMException]`. This retains errors
+from dependencies too, without suppressing them. Credentials and filesystem
+paths are removed before controls are flattened and the message is bounded.
+Routine renderer messages and events
 attributed to child frames are excluded. Electron 44 can attribute unsandboxed
 same-origin `srcdoc` errors to the main frame, so those are included; the app
 currently creates no iframes. The existing stdout/stderr tee remains raw for
