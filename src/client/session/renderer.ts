@@ -113,6 +113,8 @@ const fail = (message: string) => {
 };
 // Every window shows the error, so it names this Device.
 const unsupported = () => fail(`${localDeviceName() ?? "This device"} can't play this format. Play it on another device.`);
+// SRC_NOT_SUPPORTED also covers HTTP/DNS failures before any media was read.
+const sourceFailed = () => fail(video.error?.message || "This media couldn't load. The source may be unavailable or unsupported.");
 // Pass-through says whether a source is HLS; without it, the path does.
 const isPlaylist = (command: NonNullable<typeof loading>) => !!command.hls || /\.m3u8$/i.test(new URL(command.source, location.href).pathname);
 for (const event of ["loadedmetadata", "durationchange", "pause", "playing", "waiting", "seeked", "ended", "ratechange", "resize"]) {
@@ -129,7 +131,7 @@ video.addEventListener("timeupdate", () => { follow(false); shiftCues(); if (per
 video.addEventListener("error", () => {
   if (video.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || !loading || hls || mpegts) fail(video.error?.message || "This media couldn't play here.");
   else if (isPlaylist(loading)) void playlist(loading, false);
-  else unsupported();
+  else sourceFailed();
 });
 audio.addEventListener("error", () => fail(audio.error?.message || "This media couldn't play here."));
 video.textTracks.addEventListener("change", send);
@@ -171,7 +173,8 @@ const playlist = async (command: NonNullable<typeof loading>, nativeFallback = t
   const { default: Hls } = await import("hls.js");
   if (command !== loading) return;
   if (!Hls.isSupported()) {
-    if (!nativeFallback || !video.canPlayType("application/vnd.apple.mpegurl")) return unsupported();
+    if (!nativeFallback) return sourceFailed();
+    if (!video.canPlayType("application/vnd.apple.mpegurl")) return unsupported();
     video.src = command.source;
     const at = begin(command);
     if (at !== undefined) video.currentTime = at;
