@@ -113,6 +113,16 @@ isolatedTest("success and failure kill detached children that ignore TERM, prese
   }
 });
 
+isolatedTest("standalone PID 1 reaps adopted helpers while preserving command status", () => {
+  for (const code of [0, 17]) {
+    using files = scratch();
+    const result = run("python3", fixture, "orphans", files.root, String(code));
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(code);
+    expect(json(join(files.root, "reaped.json"))).toHaveLength(24);
+  }
+}, 15_000);
+
 isolatedTest("TERM, INT and KILL tear down the entire private PID namespace", async () => {
   const unrelated = spawn("sleep", ["60"]);
   try {

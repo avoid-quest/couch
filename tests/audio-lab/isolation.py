@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 
 UNSHARE = ["unshare", "--user", "--map-root-user", "--mount", "--ipc",
            "--pid", "--fork", "--mount-proc", "--kill-child", "--propagation", "private"]
@@ -60,6 +61,21 @@ def die_with_parent(parent_pid):
         os.kill(os.getpid(), signal.SIGKILL)
 
 
+def reap_children(owned):
+    # Namespace PID 1 adopts orphaned descendants. Reap those too, while
+    # preserving Popen's exit status if waitpid collects one of our own children.
+    children = {child.pid: child for child in owned}
+    while True:
+        try:
+            pid, status = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid == 0:
+            return
+        if pid in children:
+            children[pid].returncode = os.waitstatus_to_exitcode(status)
+
+
 def main(argv):
     if argv and argv[0] == "_inside":
         mount_private_shm(json.loads(os.environ.pop("COUCH_LAB_IPC_HOST")), "standalone")
@@ -69,7 +85,11 @@ def main(argv):
         subprocess.run(["ip", "link", "set", "lo", "up"], check=True)
         # Keep the application a regular process; PID 1 exits when it does,
         # making the kernel kill every remaining descendant (also setsid ones).
-        result = subprocess.run(argv[1:]).returncode
+        child = subprocess.Popen(argv[1:])
+        while child.poll() is None:
+            reap_children([child])
+            time.sleep(0.05)
+        result = child.returncode
         return result if result >= 0 else 128 - result
     if len(argv) < 2 or argv[0] != "--":
         print("usage: scripts/live-audio-lab.sh -- COMMAND [ARG ...]", file=sys.stderr)

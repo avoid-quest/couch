@@ -121,13 +121,18 @@ ip link add probe0 type veth peer name probe1
 tc qdisc add dev probe0 root netem limit 16 delay 2ms 1ms loss random 0.1% seed 1
 tc qdisc add dev probe1 root handle 1: htb default 1
 tc class add dev probe1 parent 1: classid 1:1 htb rate 20mbit
+tc qdisc add dev probe1 clsact
+tc filter add dev probe1 egress protocol ip pref 1 u32 match ip src 10.231.2.2/32 action pass
 """
-    result = subprocess.run(UNSHARE + ["sh", "-c", script], text=True, capture_output=True, timeout=15)
+    parent_pid = os.getpid()
+    result = subprocess.run(UNSHARE + ["sh", "-c", script], text=True, capture_output=True, timeout=15,
+                            preexec_fn=lambda: isolation.die_with_parent(parent_pid))
     if result.returncode:
-        raise RuntimeError("rootless user/net/mount/IPC/PID namespaces, private shm, veth, HTB or seeded netem unavailable: "
+        raise RuntimeError("rootless user/net/mount/IPC/PID namespaces, private shm, veth, HTB, clsact/u32 accounting or seeded netem unavailable: "
                            + result.stderr.strip())
     return {"status": "available", "backend": "rootless-unshare",
-            "tc": subprocess.check_output(["tc", "-V"], text=True).strip(),
+            "tc": subprocess.check_output(["tc", "-V"], text=True, timeout=5,
+                                          preexec_fn=lambda: isolation.die_with_parent(parent_pid)).strip(),
             "kernel": os.uname().release}
 
 
@@ -223,6 +228,8 @@ class Network:
         else:
             self.netem("router", "trunk0", ["root"], "10:")
             self.netem("router", "source0", ["root"], "20:")
+            # Counter-only source filters; no extra rate/delay scheduling in control.
+            self.call(["tc", "qdisc", "add", "dev", "source0", "clsact"], "router")
         for index, client in enumerate(self.config["clients"], 1):
             subnet = index + 1
             self.link("access", f"down{index}", f"10.231.{subnet}.1",
@@ -240,6 +247,10 @@ class Network:
                 self.call(["tc", "filter", "add", "dev", "source0", "parent", "1:", "protocol", "ip",
                            "prio", "1", "u32", "match", "ip", "src", client["address"] + "/32",
                            "flowid", f"1:{minor}"], "router")
+            else:
+                self.call(["tc", "filter", "add", "dev", "source0", "egress", "protocol", "ip",
+                           "pref", str(index), "u32", "match", "ip", "src", client["address"] + "/32",
+                           "action", "pass"], "router")
 
     def snapshot(self):
         result = {}
@@ -250,6 +261,9 @@ class Network:
                 "qdiscs": json.loads(self.call(["tc", "-j", "-s", "qdisc"], name, True)),
                 "classes": json.loads(self.call(["tc", "-j", "-s", "class", "show"], name, True)),
             }
+        if not self.config["sharedUpKbps"]:
+            result["router"]["uplinkFilters"] = json.loads(self.call(
+                ["tc", "-j", "-s", "filter", "show", "dev", "source0", "egress"], "router", True))
         return result
 
     def counters(self, client_index):
@@ -260,6 +274,12 @@ class Network:
             qdiscs = json.loads(self.call(["tc", "-j", "-s", "qdisc", "show", "dev", device], node, True))
             match = next(q for q in qdiscs if q["handle"] == handle)
             result[f"{node}/{device}/{handle}"] = match["packets"]
+        if not self.config["sharedUpKbps"]:
+            filters = json.loads(self.call(["tc", "-j", "-s", "filter", "show", "dev", "source0",
+                                            "egress", "pref", str(client_index)], "router", True))
+            action = next(action for item in filters for action in item.get("options", {}).get("actions", [])
+                          if action["kind"] == "gact")
+            result[f"router/source0/egress/client-{client_index}"] = action["stats"]["packets"]
         return result
 
     def verify(self):
@@ -358,6 +378,9 @@ def internal(config_path):
             report["commandPid"] = command.pid
             peak_rss, peak_processes = 0, 0
             while command.poll() is None:
+                isolation.reap_children([command, *network.keepers])
+                if command.returncode is not None:
+                    break
                 rss, processes = rss_and_processes()
                 peak_rss, peak_processes = max(rss, peak_rss), max(processes, peak_processes)
                 if rss > config["resources"]["maxSummedRssMiB"] or processes > config["resources"]["maxProcesses"]:
@@ -471,6 +494,7 @@ def probe(protocol, port):
 
 
 def main(argv):
+    caller_pid = os.getppid()
     if argv and argv[0] == "_hold":
         print("ready", flush=True)
         while True:
@@ -488,6 +512,7 @@ def main(argv):
     if args.action == "plan":
         print(json.dumps(config, indent=2))
         return 0
+    isolation.die_with_parent(caller_pid)
     prerequisites = prerequisite_check()
     if args.action == "check":
         print(json.dumps(prerequisites, indent=2))
@@ -504,7 +529,6 @@ def main(argv):
         env = {**os.environ, "COUCH_NETWORK_HOST_NETNS": os.readlink("/proc/self/ns/net")}
         affinity = args.cpu_list
         parent_pid = os.getpid()
-        isolation.die_with_parent(os.getppid())
         def prepare_child():
             isolation.die_with_parent(parent_pid)
             if affinity:

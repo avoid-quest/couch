@@ -148,3 +148,66 @@ networkTest("a process-limit breach reports worker saturation and cleans up", ()
   expect(json(join(files.evidence, "network.json")).status).toBe("inconclusive");
   assertClean(files.evidence);
 }, 25_000);
+
+networkTest("network PID 1 reaps adopted helpers without consuming the process budget or losing command status", () => {
+  for (const mode of ["reap", "reap-fail"]) {
+    using files = scratch();
+    const result = run("run", "--clients", "1", "--max-processes", "16", "--duration", "20",
+      "--evidence", files.evidence, "--", "python3", fixture, mode);
+    expect(result.status).toBe(mode === "reap" ? 0 : 1);
+    const report = json(join(files.evidence, "network.json"));
+    expect(report.commandExitCode).toBe(mode === "reap" ? 0 : 17);
+    expect(report.resourcesObserved.peakProcesses).toBeLessThanOrEqual(16);
+    expect(json(join(files.evidence, "reaped.json"))).toHaveLength(24);
+    assertClean(files.evidence);
+  }
+}, 30_000);
+
+networkTest("control accounts for each client uplink independently", () => {
+  using full = scratch();
+  const passed = run("run", "--profile", "control", "--duration", "20", "--evidence", full.evidence,
+    "--", "python3", fixture);
+  expect(passed.stderr).toBe("");
+  expect(passed.status).toBe(0);
+  assertClean(full.evidence);
+  using oneWay = scratch();
+  const rejected = run("run", "--profile", "control", "--duration", "20", "--evidence", oneWay.evidence,
+    "--", "python3", fixture, "downstream-only");
+  expect(rejected.status).toBe(1);
+  expect(rejected.stderr).toContain("no bidirectional application traffic proved for client-2");
+  const clients = json(join(oneWay.evidence, "network.json")).applicationTraffic;
+  expect(Object.values(clients[0].qdiscPacketDeltas).every(value => Number(value) > 0)).toBe(true);
+  expect(clients[1].qdiscPacketDeltas["access/down2/10:"]).toBeGreaterThan(0);
+  expect(clients[1].qdiscPacketDeltas["router/source0/egress/client-2"]).toBe(0);
+  assertClean(oneWay.evidence);
+}, 30_000);
+
+for (const phase of ["function", "helper"]) test(`caller death during prerequisite ${phase} stops owned processes`, async () => {
+  using files = scratch();
+  const ready = join(files.root, "preflight-pid");
+  const caller = spawn("python3", ["-c", "import subprocess,sys,time; subprocess.Popen(sys.argv[1:]); time.sleep(30)",
+    "python3", fixture, "preflight", ready, phase], { stdio: "ignore" });
+  let pids: number[] = [];
+  const running = (pid: number) => {
+    try { return !/^State:\s+Z/m.test(readFileSync(`/proc/${pid}/status`, "utf8")); }
+    catch (error: any) { if (error.code === "ENOENT") return false; throw error; }
+  };
+  try {
+    const until = Date.now() + 3000;
+    while (!existsSync(ready) && Date.now() < until) await Bun.sleep(10);
+    expect(existsSync(ready)).toBe(true);
+    pids = Object.values(json(ready));
+    const exited = new Promise<void>(resolve => caller.once("exit", () => resolve()));
+    caller.kill("SIGKILL");
+    await exited;
+    const deadline = Date.now() + 1000;
+    while (pids.some(running) && Date.now() < deadline) await Bun.sleep(10);
+    expect(pids.some(running)).toBe(false);
+  } finally {
+    for (const pid of pids) if (running(pid)) {
+      try { process.kill(pid, "SIGKILL"); }
+      catch (error: any) { if (error.code !== "ESRCH") throw error; }
+    }
+    if (caller.exitCode === null && caller.signalCode === null) caller.kill("SIGKILL");
+  }
+}, 5000);

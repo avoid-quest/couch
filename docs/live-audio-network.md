@@ -1,8 +1,8 @@
 # Disposable audio-lab network
 
-`scripts/live-audio-network.sh` supplies the first network fixture for A3 in
-[the event plan](live-audio-event-plan.md). It uses Linux rootless user, network,
-mount and PID namespaces. It changes no host interface, route, firewall or
+`scripts/live-audio-network.sh` supplies a disposable network fixture for
+[live synchronization experiments](live-sync-research.md). It uses Linux rootless
+user, network, mount and PID namespaces. It changes no host interface, route, firewall or
 qdisc, needs no `sudo`, and creates no persistent `ip netns` names. Docker is
 not required.
 
@@ -13,8 +13,9 @@ record its own output evidence and selected WebRTC candidate pairs.
 ## Run it
 
 Required: Linux, Python 3.9+, util-linux (`unshare`, `nsenter`), iproute2 (`ip`,
-`tc`), permitted rootless user/net/mount/PID namespaces, veth, HTB and netem with
-the `seed` option. The runner includes `/usr/sbin` and `/sbin` when finding tools.
+`tc`), permitted rootless user/net/mount/PID namespaces, veth, HTB, clsact/u32
+accounting and netem with the `seed` option. The runner includes `/usr/sbin` and
+`/sbin` when finding tools.
 Prerequisite failures exit nonzero with the actual command error; they are not
 passes or silent skips. It installs nothing.
 
@@ -73,6 +74,13 @@ at router egress before their destination, including TCP ACKs and clock
 exchanges. A 2 ms one-way profile adds approximately 4 ms of RTT, not 8 ms.
 Every netem queue has an explicit packet limit (`--queue-packets`, default 256).
 This fixture bounds its network queues; it does not bound application queues.
+
+The control profile adds source-address filters at the router's server egress
+using `clsact` and `u32` with a counter-only `pass` action. These filters impose
+no rate cap or delay. Alongside the existing qdisc counters, the historical
+`qdiscPacketDeltas` field includes `router/source0/egress/client-N`, the matching
+filter's packet delta. The snapshot retains these filters as `uplinkFilters`.
+One client's uplink cannot supply another client's counters even in control.
 
 Each client has one veth and loopback, and only a route to the server subnet.
 There is no default route, DNS setup, NAT, host link or external relay route.
@@ -162,13 +170,19 @@ as inconclusive; it can prevent the final in-namespace snapshot from completing.
 These network sidecars are fixture diagnostics for the audio harness's
 `couch-evidence/1` report, not an independent audio qualification format.
 
+During execution, both namespace init processes reap adopted descendants and
+preserve the command's actual exit status. Exited helpers do not accumulate
+against the process guard. Parent-death handling is armed before prerequisite
+checks; preflight helpers also die with their supervisor.
+
 On success, failure, timeout or catchable interruption the runner terminates only
 its owned launcher, and PID-namespace exit kills every descendant, including
 daemonized processes. Namespace handles are never persisted, so links/qdiscs
 disappear with their processes. Scratch data is deleted and evidence retained.
-An uncatchable outer `SIGKILL` still leaves the inner wall-time deadline active,
-but can leave the scratch directory identified in `ownership.json` for removal
-after the namespace exits. No broad process-name cleanup is used.
+An uncatchable outer `SIGKILL` triggers the launcher/namespace death chain, but
+can leave the scratch directory identified in `ownership.json` for removal
+after the namespace exits. The inner wall-time deadline provides an additional
+bound. No broad process-name cleanup is used.
 
 ## Verification on this worker
 

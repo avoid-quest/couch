@@ -10,11 +10,44 @@ import time
 sys.dont_write_bytecode = True
 import isolation
 
+
+def preflight_ready(processes):
+    marker = Path(sys.argv[2])
+    temporary = marker.with_suffix(".tmp")
+    temporary.write_text(json.dumps(processes))
+    temporary.replace(marker)
+
+
+if len(sys.argv) > 1 and sys.argv[1] == "preflight-helper":
+    preflight_ready({"supervisor": os.getppid(), "helper": os.getpid()})
+    time.sleep(30)
+    sys.exit(0)
+
+if len(sys.argv) > 1 and sys.argv[1] == "preflight":
+    import network
+    def blocked_preflight():
+        preflight_ready({"supervisor": os.getpid()})
+        time.sleep(10)
+        raise RuntimeError("test preflight must not outlive its caller")
+    if sys.argv[3] == "helper":
+        network.tools_available = lambda: None
+        network.UNSHARE = [sys.executable, __file__, "preflight-helper", sys.argv[2]]
+    else:
+        network.prerequisite_check = blocked_preflight
+    sys.exit(network.main(["check"]))
+
 manifest = json.loads(Path(os.environ["COUCH_NETWORK_MANIFEST"]).read_text())
 port = manifest["port"]
 evidence = Path(os.environ["COUCH_NETWORK_EVIDENCE"])
 
-if len(sys.argv) == 1:
+mode = sys.argv[1] if len(sys.argv) > 1 else "normal"
+if mode in ["reap", "reap-fail"]:
+    result = subprocess.run([sys.executable, str(Path(__file__).with_name("isolation-fixture.py")),
+                             "orphans", str(evidence), "17" if mode == "reap-fail" else "0"])
+    if result.returncode:
+        sys.exit(result.returncode)
+
+if mode in ["normal", "reap", "downstream-only"]:
     metadata = isolation.validate()
     assert metadata["origin"] == "network"
     assert metadata["namespaces"]["pid"] == manifest["pidNamespace"]
@@ -24,30 +57,43 @@ if len(sys.argv) == 1:
     wrapper = str(Path(__file__).resolve().parents[2] / "scripts/live-audio-lab.sh")
     subprocess.run(["bash", wrapper, "--", sys.executable, __file__, "isolation"], check=True)
     launch = manifest["exec"]
-    server = subprocess.Popen(launch + ["server", "--", sys.executable, __file__, "server"])
+    server = subprocess.Popen(launch + ["server", "--", sys.executable, __file__,
+                                       "server-downstream-only" if mode == "downstream-only" else "server"])
     while not (evidence / "fixture-ready").exists():
         if server.poll() is not None:
             raise RuntimeError("fixture server failed")
         time.sleep(0.01)
     for node in manifest["nodes"]:
         if node != "server":
-            subprocess.run(launch + [node, "--", sys.executable, __file__, "client"], check=True)
+            subprocess.run(launch + [node, "--", sys.executable, __file__,
+                                    "downstream-client" if mode == "downstream-only" and node == "client-2" else "client"], check=True)
     assert server.wait(timeout=5) == 0
 elif sys.argv[1] == "isolation":
     assert isolation.validate()["namespaces"]["pid"] == manifest["pidNamespace"]
     for node in manifest["nodes"].values():
         assert os.readlink(f"/proc/{node['pid']}/ns/net") == node["netns"]
-elif sys.argv[1] == "server":
+elif mode in ["server", "server-downstream-only"]:
     isolation.validate()
     assert Path("/dev/shm/jack-shm-registry").read_text() == "private network test registry"
     with socket.socket() as server:
         server.bind(("10.231.0.2", port))
         server.listen()
         (evidence / "fixture-ready").touch()
-        for _ in range(len(manifest["nodes"]) - 1):
+        for _ in range(1 if mode == "server-downstream-only" else len(manifest["nodes"]) - 1):
             conn, _ = server.accept()
             with conn:
                 conn.sendall(conn.recv(256))
+    if mode == "server-downstream-only":
+        while not (evidence / "downstream-ready").exists():
+            time.sleep(0.01)
+        with socket.socket(type=socket.SOCK_DGRAM) as udp:
+            udp.sendto(b"downstream only", (manifest["profile"]["clients"][1]["address"], port))
+elif mode == "downstream-client":
+    with socket.socket(type=socket.SOCK_DGRAM) as udp:
+        udp.settimeout(3)
+        udp.bind((manifest["profile"]["clients"][1]["address"], port))
+        (evidence / "downstream-ready").touch()
+        assert udp.recv(256) == b"downstream only"
 elif sys.argv[1] == "client":
     metadata = isolation.validate()
     assert Path("/dev/shm/jack-shm-registry").read_text() == "private network test registry"

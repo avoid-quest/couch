@@ -15,6 +15,31 @@ import isolation
 mode, directory = sys.argv[1], Path(sys.argv[2])
 wrapper = str(Path(__file__).resolve().parents[2] / "scripts/live-audio-lab.sh")
 
+if mode == "orphans":
+    reaped = []
+    for index in range(24):
+        marker = directory / f"orphan-{index}"
+        parent = os.fork()
+        if parent == 0:
+            if os.fork() == 0:
+                temporary = marker.with_suffix(".tmp")
+                temporary.write_text(str(os.getpid()))
+                temporary.replace(marker)
+                os._exit(0)
+            os._exit(0)
+        os.waitpid(parent, 0)
+        until = time.monotonic() + 2
+        while not marker.exists():
+            assert time.monotonic() < until, "orphan did not start"
+            time.sleep(0.01)
+        orphan = int(marker.read_text())
+        while Path(f"/proc/{orphan}").exists() and time.monotonic() < until:
+            time.sleep(0.01)
+        assert not Path(f"/proc/{orphan}").exists(), "namespace PID 1 did not reap adopted descendant"
+        reaped.append(orphan)
+    (directory / "reaped.json").write_text(json.dumps(reaped))
+    sys.exit(int(sys.argv[3]))
+
 if mode == "network":
     netns = os.readlink("/proc/self/ns/net")
     assert netns != sys.argv[3], "standalone lab still shares the host network namespace"
