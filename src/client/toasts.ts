@@ -13,6 +13,7 @@ export const visibleToasts = 2;
 // keep it hidden. Otherwise the repeat takes the next id, and the old toast goes.
 const shown = new Map<Kind, { id: string; seq: number; leaving: boolean }>();
 let ids = 0;
+let playingOnDevice: string | undefined;
 const showing = (entry: { seq: number }) => [...shown.values()].filter(other => !other.leaving && other.seq > entry.seq).length < visibleToasts;
 function show(kind: Kind, text: string, { action, ...options }: Omit<ExternalToast, "id" | "action"> & { action?: { label: string; onClick: () => void } }, as: typeof toast.error = toast) {
   const last = shown.get(kind), current = last && !last.leaving && showing(last) ? last : { id: `${kind}-${++ids}`, seq: ids, leaving: false };
@@ -27,8 +28,10 @@ export function dismiss(kind: Kind) {
 }
 
 /** Feedback and actions for the previous item or controlled device no longer apply. */
-export function dismissPlaybackFeedback() {
-  dismiss("queued"); dismiss("playing-on"); dismiss("undo");
+export function dismissPlaybackFeedback(controlling?: string) {
+  dismiss("queued"); dismiss("undo");
+  // A command can finish before its snapshot. Its destination confirmation is still current there.
+  if (playingOnDevice !== controlling) dismiss("playing-on");
 }
 export function dismissAll() { for (const kind of shown.keys()) dismiss(kind); }
 
@@ -48,7 +51,10 @@ export const undoable = (text: string, undo: () => void, duration = long) => {
 
 export const queued = (title: string | undefined, upNext: () => void) =>
   show("queued", title ? `Queued ${title}` : "Queued", { duration: brief, action: { label: "Up next", onClick: upNext } });
-export const playingOn = (name: string) => show("playing-on", `Playing on ${name}`, { duration: brief });
+export const playingOn = (name: string, deviceId: string) => {
+  playingOnDevice = deviceId;
+  return show("playing-on", `Playing on ${name}`, { duration: brief });
+};
 export const notice = (text: string) => show("notice", text, { duration: long });
 export const waitingForTap = (hear: () => void) =>
   show("tap-to-hear", "Sound is waiting for a tap", { duration: Infinity, action: { label: "Tap to hear", onClick: hear } });

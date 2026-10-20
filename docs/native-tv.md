@@ -193,7 +193,14 @@ reader, then import `/@fs/<checkout>/tests/toasts.browser.ts` and call
 direct video URL. It checks expiry under a parked pointer, Queue → Play cleanup,
 incoming playback retiring Undo, Queue during playback, and remote Up/Back/OK on
 Stop's Undo. It changes the scratch queue. Use a second paired controller to
-verify that Play, Pause, Resume and Queue stay quiet on the TV.
+verify that Play, Pause, Resume and Queue stay quiet on the TV, while ending a
+shared source notifies its receivers once and keeps its publisher quiet. The same
+module exports `runPlayingOnRegression(gate, mediaUrl, targetDeviceId, true)`
+for a controller with a second online shared output: it delays real snapshots to
+check that Playing on survives its own confirmation and then expires. Call it
+without the last argument for normal delivery. `runTapToHearRecoveryRegression()`
+exercises the real shell boundary's Try again flow while audio is blocked, then
+activates the recovered Tap to hear action.
 
 For Continue, stop two decoded finite videos before completion on every output
 (the first leads Home as its hero, the second sits in Continue's shelf) and keep

@@ -218,7 +218,8 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><DetailFocusRestoration /><MediaSessionBridge /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  // Mount Sonner's listener before the bridge replays a pending audio-unlock notice.
+  return <ShellErrorBoundary><DetailFocusRestoration /><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider><MediaSessionBridge /></ShellErrorBoundary>;
 }
 
 function MediaSessionBridge() { useMediaSession(); useTapToHear(); return null; }

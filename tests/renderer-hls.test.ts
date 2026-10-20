@@ -78,6 +78,21 @@ const check = (source: string) => {
   expect(result.status).toBe(0);
 };
 
+test("blocked audio is replayed when the shell subscribes again after recovery", () => check(`
+  const { onBlocked, waitForTap } = await import("./src/client/session/renderer.ts");
+  waitForTap(() => {});
+  const first = [], recovered = [];
+  const unsubscribe = onBlocked(value => first.push(value));
+  assert.deepEqual(first, [true], "a new shell needs the current blocked state");
+  unsubscribe();
+  const stop = onBlocked(value => recovered.push(value));
+  assert.deepEqual(recovered, [true], "recovery must offer Tap to hear again");
+  waitForTap(null);
+  assert.deepEqual(first, [true], "the old shell unsubscribed");
+  assert.deepEqual(recovered, [true, false], "recovery still hears audio unlocking");
+  stop();
+`));
+
 test("direct streams use the existing player, honest track capabilities, volume and pause controls", () => check(`
   const stream = new MediaStream([{ kind: "video" }]);
   attachStream({ type: "load", playbackId: "direct", source: "", liveOutput: { picture: true, sound: true, volume: 75 }, preferences: { speed: 2, audioDelay: 1 } }, stream);

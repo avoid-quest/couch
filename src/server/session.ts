@@ -597,8 +597,8 @@ export function createSession(store: PlaybackStore, sendPlayer: (command: Playba
     forget(mediaId: string) { progress.discard(mediaId); },
     forgetProfile(id: string) { progress.forgetProfile(id); },
     finish() { finishProgress(false, true); },
-    notice(actor: PlaybackActor, text: string) {
-      const activity = state.activity = { id: crypto.randomUUID(), actor, text };
+    notice(actor: PlaybackActor, text: string, kind?: NonNullable<SessionState["activity"]>["kind"]) {
+      const activity = state.activity = { id: crypto.randomUUID(), actor, text, kind };
       broadcast();
       // The hub sends state on its next turn, so the activity stays until then: cleared at once, it never left.
       setImmediate(() => { if (state.activity === activity) state.activity = undefined; });

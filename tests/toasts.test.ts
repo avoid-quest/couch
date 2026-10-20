@@ -18,8 +18,8 @@ const press = (id: string | number) => {
 
 test("each kind fixes its duration and one action, and a repeat replaces the one showing", () => {
   toast.dismiss();
-  const playing = playingOn("Kitchen");
-  expect(playingOn("Studio")).toBe(playing);
+  const playing = playingOn("Kitchen", "kitchen");
+  expect(playingOn("Studio", "studio")).toBe(playing);
   notice("Skipped 2 channels with a repeated tvg-id.");
   let up = 0;
   const queue = queued("Film", () => up++);
@@ -63,7 +63,7 @@ test("once a kind's toast is leaving, its repeat takes a new id, so that exit ca
 test("a repeat behind two newer toasts takes a new id and shows, and its hidden toast goes", () => {
   toast.dismiss();
   const first = failed("Couldn't play Film.");
-  playingOn("Kitchen");
+  playingOn("Kitchen", "kitchen");
   notice("Skipped 2 channels with a repeated tvg-id.");
   const again = failed("Couldn't play Film again.");
   expect(again).not.toBe(first);
@@ -74,7 +74,7 @@ test("a repeat behind two newer toasts takes a new id and shows, and its hidden 
 test("a playback change retires old actions, preserving errors and audio recovery", () => {
   dismissAll();
   queued("Film", () => {});
-  playingOn("Kitchen");
+  playingOn("Kitchen", "kitchen");
   undoable("Stopped.", () => {});
   failed("Couldn't save Film.");
   waitingForTap(() => {});
@@ -85,6 +85,15 @@ test("a playback change retires old actions, preserving errors and audio recover
   const again = queued("Next film", () => {});
   expect(shown()).toEqual([{ id: again, title: "Queued Next film", type: undefined, duration: 4_000, action: "Up next" }]);
   dismissAll();
+});
+
+test("a delayed snapshot preserves Playing on for its destination and switching away retires it", () => {
+  dismissAll();
+  playingOn("Kitchen", "kitchen");
+  dismissPlaybackFeedback("kitchen");
+  expect(shown().map(each => each.title)).toEqual(["Playing on Kitchen"]);
+  dismissPlaybackFeedback("studio");
+  expect(shown()).toEqual([]);
 });
 
 test("a failure shows Core's own sentence, else the Couch one, and logs what it hid", () => {

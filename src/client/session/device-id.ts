@@ -120,5 +120,5 @@ export const showsPicture = (state: Outputs) => !!state?.outputs?.some(output =>
  */
 export function announcePlay(state: Pick<SessionState, "devices" | "controlling"> | null | undefined, target = state?.controlling) {
   const name = playingOn(state, target, deviceId());
-  if (name) toasts.playingOn(name);
+  if (name && target) toasts.playingOn(name, target);
 }
