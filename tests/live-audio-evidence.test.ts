@@ -136,6 +136,24 @@ function observedFixture(source: Float32Array, outputs: Float32Array[], maxDelay
   return value;
 }
 
+test.each(["duplicated", "outOfOrder"] as const)("alignment cannot pass complete but %s output", failure => {
+  const signal = createMarkerSignal({ sampleRate: 48_000, seed: 42 });
+  const source = signal.render(0, 9_600);
+  const output = new Float32Array(24_000); output.set(source, 960);
+  if (failure === "duplicated") output.set(signal.marker(0).samples, 2_400);
+  else {
+    output.fill(0, 960, 960 + signal.markerFrames);
+    output.set(signal.marker(0).samples, 7_200);
+  }
+  // Identical ambiguous outputs still have zero first-occurrence skew.
+  const value = observedFixture(source, [output, output], 200);
+  expect(value.analysis!.receivers[0]![failure]).toBe(1);
+  expect(value.analysis!.skewMs).toMatchObject({ count: 2, max: 0 });
+  const result = createLiveAudioEvidence(value).measured;
+  expect(result.gates.alignment.status).toBe("failed");
+  expect(result.gates.alignment.reasons.join(" ")).toContain("repeated or out-of-order");
+});
+
 test.each([["opus", "lossy"], [null, "unknown"], ["pcm-f32", undefined]] as const)("unmatched spread is inconclusive for codec %s and path %s", (codec, path) => {
   const signal = createMarkerSignal({ sampleRate: 48_000, seed: 42 });
   const source = signal.render(0, 9_600);

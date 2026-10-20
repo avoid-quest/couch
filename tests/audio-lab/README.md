@@ -27,6 +27,24 @@ cannot qualify as a timely match. Markers are spaced at 100 ms by default;
 this does not establish continuous speech/music integrity between markers.
 Keep renderer dropout/concealment telemetry separate.
 
+The coarse search evaluates 48, then 64, then all 128 chips. Cauchy-Schwarz
+bounds the best possible correlation over the unread suffix: with prefix dot
+product `d`, energy `e` and `k` chips, the squared upper bound is
+`(max(d, 0)^2 / e + (128-k)/16) / 8` (the quotient is zero when `e` is zero).
+Candidates below 0.8 even under that bound can stop early. A conservative
+rounding margin protects the comparison; surviving candidates retain the
+original full score and sample-by-sample refinement. The search window,
+threshold and duplicate/reordering checks are unchanged.
+
+Run the separate, environment-dependent throughput probe with
+`bun tests/audio-lab/pcm-benchmark.ts`: 10 seconds of synthetic 48 kHz PCM,
+50 outputs, a 250 ms search bound and interleaved 1024-frame input batches.
+It reports total time and worst synchronous batch time, verifies every marker
+and exact inserted delay, and exits unsuccessfully if it takes longer than the
+input duration. This is not a qualification test. Larger search windows,
+slower workers and synchronous stalls need their own capacity measurement;
+the 50-browser and sustained-run gates remain unmeasured.
+
 `assessGraphCalibration(analysis, expectedDelaysMs, { xruns, overflow, exitCode })`
 uses the observed minimum and maximum error, not a percentile. Any missing
 marker, invalid measurement, unknown graph health, xrun, overflow, failed exit

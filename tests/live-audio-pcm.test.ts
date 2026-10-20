@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createMarkerSignal, createPcmAnalyzer } from "./audio-lab/pcm.ts";
+import { createMarkerSignal, createPcmAnalyzer, type MarkerObservation } from "./audio-lab/pcm.ts";
 
 // Delays come from literal inserted sample counts, independently of the analyzer.
 // These are synthetic analyzer checks, never audio-device calibration.
@@ -140,4 +140,47 @@ test("delayed warmup markers cover their output activity without entering steady
   // The marker generated at 100 ms appears at 250 ms, after the 200 ms warmup.
   const result = measure([delayed(7_200)], { warmupFrames: 9_600 });
   expect(result.receivers[0]).toMatchObject({ expected: 8, detected: 8, missing: 0, unmatchedActivityFrames: 0 });
+});
+
+test("marker observations serialize every accepted receiver identity as an own key", () => {
+  const ids = ["__proto__", "constructor", "toString"];
+  const observations: MarkerObservation[] = [];
+  const signal = createMarkerSignal({ sampleRate: 8_000, seed: 42 });
+  const analyzer = createPcmAnalyzer({ sampleRate: 8_000, seed: 42, receiverIds: ids,
+    durationFrames: 800, maxDelayMs: 200, clockUncertaintyMs: 0, onMarker: value => observations.push(value) });
+  const source = signal.render(0, 800), output = new Float32Array(2_400); output.set(source, 160);
+  analyzer.push("reference", { startFrame: 0, samples: source });
+  for (const id of ids) analyzer.push(id, { startFrame: 0, samples: output });
+  expect(analyzer.finish().receivers.every(receiver => receiver.detected === 1)).toBe(true);
+  expect(observations).toHaveLength(1);
+  const outputs = JSON.parse(JSON.stringify(observations[0]!.outputs));
+  for (const id of ids) {
+    expect(Object.hasOwn(outputs, id)).toBe(true);
+    expect(outputs[id]).toBe(160);
+  }
+});
+
+test("bounded correlation agrees with exhaustive scoring near the acceptance threshold", () => {
+  const sampleRate = 8_000, signal = createMarkerSignal({ sampleRate, seed: 73 });
+  const marker = signal.marker(0).samples;
+  for (const gain of [0.001, 0.01, 0.5, 2]) for (const inverted of [0, 11, 12, 13, 14, 48, 64, 128]) {
+    const output = new Float32Array(2_400);
+    for (let i = 0; i < marker.length; i++) output[163 + i] = marker[i]! * gain * (i < inverted ? -1 : 1);
+    let best = 0, bestFrame = 0;
+    // Independent slow oracle: every candidate evaluates every chip, with no
+    // partial-score rejection. Prefix inversions straddle the 0.8 threshold.
+    for (let frame = 0; frame <= 1_600; frame++) {
+      let dot = 0, energy = 0;
+      for (let i = 0; i < marker.length; i++) { const value = output[frame + i]!; dot += value * marker[i]!; energy += value * value; }
+      const score = energy > 0.0001 ? dot / Math.sqrt(energy * 128 * 0.0625) : 0;
+      if (score > best) { best = score; bestFrame = frame; }
+    }
+    const analyzer = createPcmAnalyzer({ sampleRate, seed: 73, receiverIds: ["listener"], durationFrames: 800,
+      maxDelayMs: 200, clockUncertaintyMs: 0 });
+    analyzer.push("reference", { startFrame: 0, samples: signal.render(0, 800) });
+    analyzer.push("listener", { startFrame: 0, samples: output });
+    const receiver = analyzer.finish().receivers[0]!;
+    expect(receiver.detected).toBe(best >= 0.8 ? 1 : 0);
+    if (best >= 0.8) expect(receiver.latencyMs.max).toBe(bestFrame * 1000 / sampleRate);
+  }
 });

@@ -98,7 +98,7 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
 
   const join = (index: number, matches: Map<string, number[]>) => {
     const referenceFrame = matches.get("reference")?.[0] ?? null;
-    const outputs: Record<string, number | null> = {};
+    const outputs: Record<string, number | null> = Object.create(null);
     const outputFrames: number[] = [];
     for (const id of receiverIds) {
       const frame = matches.get(id)?.[0] ?? null;
@@ -127,12 +127,23 @@ export function createPcmAnalyzer(options: PcmAnalyzerOptions) {
     const lower = Math.max(track.start, marker.startFrame - delayFrames);
     const upper = Math.min(track.start + track.pcm.length - signal.markerFrames, marker.startFrame + delayFrames);
     const stride = signal.chipFrames;
+    const checkpoints = [48, 64, 128];
     const score = (frame: number) => {
-      let dot = 0, energy = 0;
-      for (let offset = Math.floor(stride / 2); offset < signal.markerFrames; offset += stride) {
-        const value = track.pcm[frame - track.start + offset]!;
-        dot += value * marker.samples[offset]!;
-        energy += value * value;
+      let dot = 0, energy = 0, offset = Math.floor(stride / 2);
+      for (const chips of checkpoints) {
+        for (; offset < chips * stride; offset += stride) {
+          const value = track.pcm[frame - track.start + offset]!;
+          dot += value * marker.samples[offset]!;
+          energy += value * value;
+        }
+        if (chips < 128) {
+          // Cauchy-Schwarz bounds the best possible normalized correlation
+          // over ALL remaining samples. Reject only if even that is below
+          // 0.8; surviving candidates keep the original full score/refinement.
+          const positive = Math.max(0, dot);
+          const possible = (energy ? positive * positive / energy : 0) + (128 - chips) * 0.0625;
+          if (possible < 0.8 ** 2 * 128 * 0.0625 - 1e-12) return 0;
+        }
       }
       return energy > 0.0001 ? dot / Math.sqrt(energy * 128 * 0.0625) : 0;
     };
