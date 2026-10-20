@@ -126,8 +126,9 @@ order and visibility without onboarding. Hidden catalogue sections do not load.
 
 The first enabled, available section's primary control takes TV page entry;
 if an earlier section finishes loading, its primary takes over until the user
-presses a key or pointer. Back keeps the original heading or item even after a
-reorder; if it is hidden, focus falls back to the first available section.
+presses a key or pointer, or leaves the page; slow catalogues have no focus cutoff.
+Back keeps the original heading or item even after a reorder; if it is hidden,
+focus falls back to the first available section.
 With all sections hidden or empty, an Empty explains how to customize or search,
 and Customize Discover remains reachable. This reuses Home's controls and the
 shadcn Button, Switch and Empty from the official catalog; no new primitive or

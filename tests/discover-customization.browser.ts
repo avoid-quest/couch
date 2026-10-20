@@ -1,6 +1,7 @@
 // Run in a paired scratch TV at /settings/device/discover. Build like tv-navigation.browser.ts.
 // Uses the real settings, local storage, routes and Remote's navigation entry point; no playback starts.
 import { applyTvNavigation } from "../src/client/navigation";
+import { readDiscoverRows } from "../src/client/sections/discover/discover-rows";
 
 const wait = (ms = 180) => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (value: unknown, message: string) => { if (!value) throw new Error(message); };
@@ -134,19 +135,24 @@ window.runDiscoverCustomizationRegression = async () => {
   return { passed: true, checks, saved: rows() };
 };
 
-// Run after a reload to clear the catalogue query cache. Source responses are local fixtures;
+// Reload before each run to clear the catalogue query cache. Source responses are local fixtures;
 // the real Discover components still decide visibility, placement and focus.
-declare global { interface Window { runDiscoverAvailabilityRegression: () => Promise<unknown> } }
-window.runDiscoverAvailabilityRegression = async () => {
+type AvailabilityOptions = { delayMs?: number; cancel?: "keyboard" | "pointer" | "navigation" };
+declare global { interface Window { runDiscoverAvailabilityRegression: (options?: AvailabilityOptions) => Promise<unknown> } }
+window.runDiscoverAvailabilityRegression = async ({ delayMs = 16_000, cancel }: AvailabilityOptions = {}) => {
   const originalFetch = window.fetch;
   const saved = localStorage.getItem("couch.discover-rows");
   const checks: string[] = [];
   let release: () => void = () => {};
+  let requestedAt = 0;
+  let requestSignal: AbortSignal | null | undefined;
   const ready = new Promise<void>(resolve => { release = resolve; });
   window.fetch = async (...args) => {
     const path = new URL(String(args[0]), location.href).pathname;
     if (path === "/api/providers/streamingcommunity/items") return Response.json({ items: [] });
     if (path === "/api/providers/twitch/items") {
+      requestedAt = performance.now();
+      requestSignal = args[1]?.signal;
       await ready;
       return Response.json({ items: [{ id: "fixture-channel", provider: "twitch", kind: "channel", title: "Discovery focus fixture", url: "https://www.twitch.tv/fixture", live: true }] });
     }
@@ -155,20 +161,41 @@ window.runDiscoverAvailabilityRegression = async () => {
   const save = (next: ReturnType<typeof rows>) => { localStorage.setItem("couch.discover-rows", JSON.stringify(next)); window.dispatchEvent(new Event("couch.discover-rows")); };
   try {
     await click('[data-app-nav] a[href="/"]');
-    save([{ id: "streamingcommunity", shown: true }, { id: "twitch", shown: true }, ...rows().filter(row => !["streamingcommunity", "twitch"].includes(row.id)).map(row => ({ ...row, shown: row.id === "sources" }))]);
+    save([{ id: "streamingcommunity", shown: true }, { id: "twitch", shown: true }, ...readDiscoverRows(localStorage).filter(row => !["streamingcommunity", "twitch"].includes(row.id)).map(row => ({ ...row, shown: row.id === "sources" }))]);
     await discover(); await wait(350);
     assert(!document.querySelector('#shelf-streamingcommunity'), "Empty catalogue kept its shelf");
     assert(document.activeElement?.getAttribute("aria-label") === "Search YouTube", "Pending first source left no usable page entry");
+    assert(requestedAt > 0, "Reload before running to clear the catalogue cache");
+    if (cancel === "navigation") await customize();
+    // Provider pages may take 30 seconds; arrive after the old 15-second focus cutoff.
+    await wait(delayMs);
+    const elapsedMs = Math.round(performance.now() - requestedAt);
+    if (cancel === "keyboard") control('[aria-label="Search YouTube"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
+    if (cancel === "pointer") control('[aria-label="Search YouTube"]').dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    if (cancel !== "navigation") assert(requestSignal && !requestSignal.aborted, "Delayed provider request was aborted before arrival");
     release(); await wait(700);
-    assert(document.activeElement?.getAttribute("aria-label") === "Open Discovery focus fixture", "Earlier source did not take page entry when it loaded");
+    if (cancel === "navigation") {
+      assert(location.pathname === "/settings/device/discover" && requestSignal?.aborted, "Navigation did not cancel the catalogue request");
+      // Settings retains its 15-second observer cutoff. After that, a DOM change must
+      // not let the old Discover effect focus the new page (no input stopped it).
+      assert(delayMs > 15_000, "Navigation cleanup check needs the other page's timeout to expire");
+      (document.activeElement as HTMLElement).blur();
+      const probe = document.createElement("span");
+      document.body.append(probe); probe.remove();
+      await wait();
+      assert(document.activeElement === document.body, "Discover observer survived navigation or Settings lost its cutoff");
+      return { passed: true, elapsedMs, checks: ["Navigation cancels the request and focus observer; other pages retain their cutoff"] };
+    }
+    assert(document.querySelector('[aria-label="Open Discovery focus fixture"]'), "Delayed provider tile did not render");
+    assert(document.activeElement?.getAttribute("aria-label") === (cancel ? "Search YouTube" : "Open Discovery focus fixture"), cancel ? `${cancel} did not stop delayed focus takeover` : "Earlier source did not take page entry when it loaded");
     assert(rows()[0]?.id === "streamingcommunity", "Empty source lost its saved position");
-    checks.push("Empty source retains order; delayed earlier source becomes page-first");
+    checks.push(cancel ? `${cancel} stops delayed focus takeover` : "Empty source retains order; delayed earlier source becomes page-first");
     // With only an empty source enabled, the page still offers a next step.
     save(rows().map(row => ({ ...row, shown: row.id === "streamingcommunity" })));
     await wait();
     assert(empty() && document.body.innerText.includes("Nothing to discover here yet"), "Empty-only source left a blank page");
     checks.push("Empty-only source explains recovery");
-    return { passed: true, checks };
+    return { passed: true, elapsedMs, checks };
   } finally {
     release(); window.fetch = originalFetch;
     if (saved) localStorage.setItem("couch.discover-rows", saved); else localStorage.removeItem("couch.discover-rows");

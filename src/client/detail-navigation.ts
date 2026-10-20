@@ -86,6 +86,7 @@ export function DetailFocusRestoration() {
     if (location.pathname === "/now" && !target) return;
     if (!target && !tv) return;
     const returning = !!location.state.detailFocus;
+    const discover = tv && !returning && location.pathname === "/discover";
     let fallbackFocus: Element | null = null;
     const restore = () => {
       if (tv && !returning) {
@@ -107,11 +108,12 @@ export function DetailFocusRestoration() {
     };
     // Cached results can briefly restore an opener that a fresh result removes.
     // Keep watching for lost focus until input, navigation or the timeout.
+    // Fresh Discover entry waits until input or navigation, even for slow catalogues.
     restore();
     const observer = new MutationObserver(() => {
       // Discover's reordered shelves can load out of order. Until input, an earlier
       // shelf's first tile takes precedence over a later shelf's provisional entry.
-      const discoverEntry = tv && !returning && location.pathname === "/discover" && document.activeElement?.matches("[data-page-first]");
+      const discoverEntry = discover && document.activeElement?.matches("[data-page-first]");
       if (document.activeElement !== document.body && document.activeElement !== fallbackFocus && !discoverEntry) return;
       // Sharing is intentional, not a delayed catalogue response: its arrival keeps the current tile.
       if (discoverEntry && document.querySelector('[data-page="Discover"] [data-page-first]:not(:disabled)')?.closest('[aria-label="Shared sources"]')) return;
@@ -119,7 +121,7 @@ export function DetailFocusRestoration() {
       restore();
     });
     const stop = () => { observer.disconnect(); clearTimeout(timer); window.removeEventListener("keydown", stop, true); window.removeEventListener("pointerdown", stop, true); };
-    const timer = setTimeout(stop, 15_000);
+    const timer = discover ? undefined : setTimeout(stop, 15_000);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "inert"] });
     window.addEventListener("keydown", stop, true);
     window.addEventListener("pointerdown", stop, true);

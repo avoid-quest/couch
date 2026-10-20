@@ -179,6 +179,12 @@ with Radio available and no shares, it publishes source metadata through Core
 entry and navigation after the source ends. It closes its socket and restores
 Discover preferences. The same bundle's customization and availability checks
 cover hidden/reordered sections, return focus and delayed provider shelves.
+Reload before each `runDiscoverAvailabilityRegression()` run: its fixture arrives
+after 16 seconds, beyond the old focus cutoff but within the provider request's
+30-second deadline. Repeat with `{ cancel: "keyboard" }`, `{ cancel: "pointer" }`
+and `{ cancel: "navigation" }` to check cancellation; `{ delayMs: 350 }` keeps
+the fast-arrival check. Navigation also checks that the old observer cannot focus
+Settings after its own unchanged 15-second cutoff.
 
 For Continue, stop two decoded finite videos before completion on every output
 (the first leads Home as its hero, the second sits in Continue's shelf) and keep
