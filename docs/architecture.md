@@ -323,16 +323,19 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   uses the copy on `PATH`: the newest that has worked, else the newest, never a
   copy of the selected version. A copy a run is using when a check decides what
   to keep stays until the next check; playback records that its copy worked
-  before letting go of it, so that check sees it. Core
+  once Couch has accepted its media, before letting go of it, so that check
+  sees it. Core
   renames a copy to `<version>.removing` before removing it and puts it back if
   it is held or pinned by then, or, after Core stopped in between, at its next
   check. `--helpers previous` pins the copy in `<data>/helpers/pins` before its
   last look at it and until its hold is written, and Core reads pins before the
   hold, so a hold it reports names a copy that is still there; it writes nothing unless the copy passes, so it
   never undoes another command. A pin a stopped command left lapses after ten
-  minutes. Each command checks last that its change is still in force and
-  otherwise fails, saying a later command changed it, so of overlapping
-  commands the last to succeed names the outcome. A website failing,
+  minutes. Commands aren't serialized: Core uses whatever the last write to
+  `hold.json` left. Each command reports its own change as it last saw it,
+  and fails if it already sees another command's; a command overlapping after
+  that look can still replace the reported outcome, and `--helpers status`
+  shows the hold as it is when read. A website failing,
   even with a 403, never changes the selection: an update can break one site
   while others work.
 - When an update breaks a website, recover from the account Couch runs as, with

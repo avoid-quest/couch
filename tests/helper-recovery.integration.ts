@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import fsp from "node:fs/promises";
+import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough, Readable } from "node:stream";
 import { strToU8, zipSync } from "fflate";
 import { checkHelper, helper, helpersCommand, startHelpers } from "../src/server/helpers";
 import { readHelperStatus, updateStatus } from "../src/server/helper-status";
@@ -169,7 +171,7 @@ test("a hold survives restarts and daily checks, and ends with --helpers latest 
   assert.equal(f.state.requests.length, before);
   assert.deepEqual(f.copies(), ["2026.08.01", "2026.09.01"]);
 
-  assert.equal(await helpersCommand(f.helpers, ["latest"]), "Couch returns to the latest yt-dlp from its next run.");
+  assert.match(await helpersCommand(f.helpers, ["latest"]), /^Couch returns to the latest yt-dlp from its next run\. A --helpers command run at the same time can replace this; --helpers status shows the current hold\.$/);
   assert.match(await f.play(), /extractor 2026\.09\.02/);
   assert.equal((await f.status()).hold, null);
   assert.deepEqual(f.copies(), ["2026.09.01", "2026.09.02"], "at most one previous copy is kept");
@@ -535,45 +537,93 @@ test("a managed copy of PATH's version never takes the place of an earlier copy 
   assert.equal(await f.play(), "extractor 2026.08.01");
 });
 
-test("of overlapping --helpers commands, the last to succeed names the outcome", options, async t => {
+test("overlapping --helpers commands: Core uses the last write, and a command that sees a later change says so", options, async t => {
   const f = fixture(t);
   f.cached("2026.08.01", true);
   f.release("2026.09.01", true);
   startHelpers(f.helpers);
   assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
 
-  // One command stops right after its first removal under `prefix` while the other runs to the end.
-  const { rm } = fsp;
-  let prefix = "", reached = false, resume = () => {};
-  const mock = t.mock.method(fsp, "rm", async (...args: Parameters<typeof rm>) => {
-    await rm(...args);
-    if (prefix && String(args[0]).startsWith(prefix)) { prefix = ""; reached = true; await new Promise<void>(resolve => { resume = resolve; }); }
-  });
+  // One command stops right after its first removal under `prefix`, or after its next read of the
+  // hold (its last look at it), while the other runs to the end.
+  const hold = join(f.helpers, "hold.json"), { rm, readFile } = fsp;
+  let prefix = "", afterRead = false, removed = false, reached = false, resume = () => {};
+  const stop = async () => { reached = true; await new Promise<void>(resolve => { resume = resolve; }); };
+  const mocks = [
+    t.mock.method(fsp, "rm", async (...args: Parameters<typeof rm>) => {
+      await rm(...args);
+      if (prefix && String(args[0]).startsWith(prefix)) { prefix = ""; if (afterRead) removed = true; else await stop(); }
+    }),
+    t.mock.method(fsp, "readFile", async (...args: Parameters<typeof readFile>) => {
+      const result = await readFile(...args).then(value => ({ value }), (error: unknown) => ({ error }));
+      if (removed && args[0] === hold) { removed = false; await stop(); }
+      if ("error" in result) throw result.error;
+      return result.value;
+    }),
+  ];
   syncBuiltinESMExports();
-  t.after(() => { mock.mock.restore(); syncBuiltinESMExports(); });
-  const pause = async (at: string, command: string) => {
-    prefix = at;
-    reached = false;
+  t.after(() => { for (const { mock } of mocks) mock.restore(); syncBuiltinESMExports(); });
+  const pause = async (at: string, read: boolean, command: string) => {
+    [prefix, afterRead, reached] = [at, read, false];
     const paused = helpersCommand(f.helpers, [command]);
     paused.catch(() => {});
     await until(() => reached, `${command} is paused`);
     return { paused };
   };
+  const pins = join(f.helpers, "pins");
 
-  // `previous` has written its hold and is removing its pin when `latest` succeeds.
-  let { paused } = await pause(join(f.helpers, "pins"), "previous");
-  assert.equal(await helpersCommand(f.helpers, ["latest"]), "Couch returns to the latest yt-dlp from its next run.");
+  // `previous` has written its hold and is removing its pin when `latest` removes the hold.
+  let { paused } = await pause(pins, false, "previous");
+  assert.match(await helpersCommand(f.helpers, ["latest"]), /^Couch returns to the latest/);
   resume();
-  await assert.rejects(paused, /A later --helpers command changed this hold/);
+  await assert.rejects(paused, /^Error: Couch held yt-dlp 2026\.08\.01, but a --helpers command run at the same time has changed the hold since/);
   assert.equal((await f.status()).hold, null);
   assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
 
-  // `latest` has removed the hold and is flushing that when `previous` succeeds.
-  ({ paused } = await pause(join(f.helpers, "hold.json"), "latest"));
+  // `latest` has removed the hold and is flushing that when `previous` holds a copy.
+  ({ paused } = await pause(hold, false, "latest"));
   assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.08\.01 from its next run/);
   resume();
-  await assert.rejects(paused, /A later --helpers previous held yt-dlp again/);
+  await assert.rejects(paused, /^Error: Couch removed the hold, but a --helpers previous run at the same time has held yt-dlp 2026\.08\.01 since/);
   assert.equal((await f.status()).hold?.active, true);
   assert.equal(await helper("yt-dlp"), f.path("2026.08.01"));
-  assert.deepEqual(readdirSync(join(f.helpers, "pins")), []);
+
+  // A command that overlaps after the other's last look isn't seen: both report their own change,
+  // and Core uses the last write. Neither restores what it saw over that write.
+  ({ paused } = await pause(pins, true, "previous"));
+  assert.match(await helpersCommand(f.helpers, ["latest"]), /^Couch returns to the latest/);
+  resume();
+  assert.match(await paused, /^Couch uses yt-dlp 2026\.08\.01 .* A --helpers command run at the same time can replace this; --helpers status shows the current hold\.$/);
+  assert.equal((await f.status()).hold, null);
+  assert.equal(await helper("yt-dlp"), f.path("2026.09.01"));
+
+  ({ paused } = await pause(hold, true, "latest"));
+  assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.08\.01 from its next run/);
+  resume();
+  assert.match(await paused, /^Couch returns to the latest yt-dlp from its next run\. A --helpers command run at the same time can replace this/);
+  assert.equal((await f.status()).hold?.active, true);
+  assert.equal(await helper("yt-dlp"), f.path("2026.08.01"));
+  assert.deepEqual(readdirSync(pins), []);
+});
+
+test("media rejected after yt-dlp's output was read, such as a live stream's fallback, doesn't count as having worked", options, async t => {
+  const f = fixture(t);
+  f.release("2026.08.01", true);
+  startHelpers(f.helpers);
+  assert.equal(await f.play(), "extractor 2026.08.01");
+  f.release("2026.09.01", true);
+  await checkHelper("yt-dlp");
+
+  // 2026.09.01 offers a live variant playlist that answers 403, and no master playlist to fall back to.
+  writeFileSync(f.path("2026.09.01"), `#!${process.execPath}\nconsole.log(process.argv[2] === "--version" ? "2026.09.01" : ${JSON.stringify(JSON.stringify({ url: "https://media.example/live.m3u8", protocol: "m3u8_native", is_live: true, manifest_url: "", title: "live" }))});\n`, { mode: 0o755 });
+  t.mock.method(https, "request", (_url: unknown, _options: unknown, answer: (response: unknown) => void) => {
+    const request = new PassThrough();
+    request.once("finish", () => answer(Object.assign(Readable.from([]), { statusCode: 403, statusMessage: "Forbidden", rawHeaders: [], headers: {} })));
+    return request;
+  });
+  await assert.rejects(f.play(), /Web media must use/);
+  assert.deepEqual((await f.status()).managed["yt-dlp"]?.["2026.09.01"]?.worked, {});
+  f.release("2026.10.01", true);
+  await checkHelper("yt-dlp");
+  assert.deepEqual(f.copies(), ["2026.08.01", "2026.10.01"], "the copy that played is the previous one");
 });

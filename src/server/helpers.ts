@@ -332,13 +332,18 @@ export async function helperWorked(name: Helper, path: string, provider: string)
 // `core.mjs --helpers status | previous [days] | latest` with Core's COUCH_DATA_DIR. After a yt-dlp
 // update breaks a website, `previous` holds the earlier copy Couch kept for 1–30 days (7 by default),
 // across restarts and daily checks; `latest` ends the hold. Running Core applies either before its next yt-dlp run.
+// Commands aren't serialized: the last write to hold.json is what Core uses. Each reports its own
+// change as it last saw it, failing if it already sees another command's; one that overlaps after
+// that look can still replace it, which only `--helpers status`, read afterwards, shows.
+const overlapping = "A --helpers command run at the same time can replace this; --helpers status shows the current hold.";
+
 export async function helpersCommand(directory: string, [command, days = "7"]: string[]) {
   if (command === "status") return JSON.stringify(await readHelperStatus(directory), null, 2);
   if (command === "latest") {
     await removeHold(directory);
-    // As for `previous` below: a hold written since then is a later command's, which names the outcome.
-    if (await readHold(directory)) throw new Error("A later --helpers previous held yt-dlp again. See --helpers status.");
-    return "Couch returns to the latest yt-dlp from its next run.";
+    const since = await readHold(directory);
+    if (since) throw new Error(`Couch removed the hold, but a --helpers previous run at the same time has held yt-dlp ${since.version} since. --helpers status shows the current hold.`);
+    return `Couch returns to the latest yt-dlp from its next run. ${overlapping}`;
   }
   if (command !== "previous" || !/^([1-9]|[12]\d|30)$/.test(days)) throw new Error("Usage: --helpers status | previous [days: 1-30, default 7] | latest");
   // Checking that the copy runs executes it: never as root on another account's files.
@@ -365,10 +370,8 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
       hold = { schema: 1, helper: "yt-dlp", version: entry, since: since.toISOString(), until: new Date(since.getTime() + Number(days) * 24 * 60 * 60 * 1000).toISOString() };
       await writeJson(join(directory, "hold.json"), hold);
     } finally { await unpin(); }
-    // Reported only if still in force now the pin is gone: otherwise a later command changed it
-    // and that command, finishing after this check, names the outcome.
-    if (JSON.stringify(await readHold(directory)) !== JSON.stringify(hold)) throw new Error("A later --helpers command changed this hold. See --helpers status.");
-    return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${hold.until}, then the latest again. Return sooner with --helpers latest.`;
+    if (JSON.stringify(await readHold(directory)) !== JSON.stringify(hold)) throw new Error(`Couch held yt-dlp ${entry}, but a --helpers command run at the same time has changed the hold since. --helpers status shows the current hold.`);
+    return `Couch uses yt-dlp ${entry}${worked(entry) ? ", which worked before," : ""} from its next run until ${hold.until}, then the latest again. Return sooner with --helpers latest. ${overlapping}`;
   }
   throw new Error(`Couch keeps no earlier yt-dlp than ${current.version} that runs.`);
 }
