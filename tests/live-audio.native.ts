@@ -2,11 +2,11 @@
 // Requires JACK2, PulseAudio + JACK modules, libjack headers, cc, and built Couch.
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { randomBytes, X509Certificate } from "node:crypto";
+import { createHash, randomBytes, X509Certificate } from "node:crypto";
 import { createServer } from "node:net";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism, totalmem, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import electron from "electron";
 import { Identity } from "@sonn-audio/node-sendspin";
@@ -248,12 +248,20 @@ try {
     // At most 1,200 scheduled markers per bounded run; retain the actual sample
     // observations so later investigations need not reconstruct distributions.
     onMarker: observation => appendFileSync(join(directory, "markers.ndjson"), JSON.stringify(observation) + "\n") });
-  const routeId = JSON.stringify({ mode, rate, quantum, packetMs, leadMs, outputCompensation, sourceBufferFrames, receiverBufferFrames,
-    network: network?.profile ?? null, recorderDelayFrames,
-    electron: JSON.parse(readFileSync(join(root, "node_modules/electron/package.json"), "utf8")).version, sendspin: "5.0.0", pulseRate: rate });
-  const continuous = fixture === "continuous" ? createContinuousAnalyzer({ sampleRate: rate, seed, receiverIds: ids, durationFrames,
-    warmupFrames: 2 * rate, maxDelayMs: 1000, runId, routeId,
-    onWindow: window => appendFileSync(join(directory, "continuous.ndjson"), JSON.stringify(window) + "\n") }) : null;
+  // Fingerprint the objects actually loaded by JACK/Pulse, including selected
+  // modules and libjack. File paths are artifact metadata, not route keys:
+  // scratch executable locations must not make identical runs different routes.
+  const fingerprintBackend = () => ["jack", "pulse", "graph"].flatMap(role => {
+    const child = processes.find(child => processNames.get(child) === role);
+    if (!child) return [];
+    const files = [...new Set(readFileSync(`/proc/${child.pid}/maps`, "utf8").split("\n").flatMap(line => {
+      const fields = line.trim().split(/\s+/), path = fields.slice(5).join(" ");
+      return fields[1]?.includes("x") && path.startsWith("/") ? [path] : [];
+    }))].sort();
+    assert(files.length, `${role}: loaded backend implementation is unknown`);
+    return [{ role, objects: files.map(path => ({ name: basename(path), sha256: createHash("sha256").update(readFileSync(path)).digest("hex") })) }];
+  });
+  let audioBackend = mode === "calibration" ? fingerprintBackend() : [];
   const receiverPorts: string[] = [];
   let browserState: unknown = null;
   let ingressBefore: any = null, ingressAfter: any = null, rendererAfterDrain: any = null;
@@ -287,6 +295,8 @@ try {
       const output = outputs[0]!; receiverPorts.push(output);
       command([bin("jack_connect"), output, `couch_lab_record:input_${index + 1}`]);
     }
+    // Finish file hashing before browser clock acquisition/publication.
+    audioBackend = fingerprintBackend();
     let port = network?.port;
     if (!port) {
       const listener = createServer();
@@ -471,7 +481,13 @@ try {
         verified: ownerMatches && sink?.properties?.["jack.client_name"] === port.split(":")[0] };
     });
   })();
-  writeFileSync(join(directory, "presentation-manifest.json"), JSON.stringify({ runId, bindings, pulseRoutes, topologyBefore,
+  const routeId = JSON.stringify({ mode, rate, quantum, packetMs, leadMs, outputCompensation, sourceBufferFrames, receiverBufferFrames,
+    network: network?.profile ?? null, recorderDelayFrames, audioBackend,
+    electron: JSON.parse(readFileSync(join(root, "node_modules/electron/package.json"), "utf8")).version, sendspin: "5.0.0", pulseRate: rate });
+  const continuous = fixture === "continuous" ? createContinuousAnalyzer({ sampleRate: rate, seed, receiverIds: ids, durationFrames,
+    warmupFrames: 2 * rate, maxDelayMs: 1000, runId, routeId,
+    onWindow: window => appendFileSync(join(directory, "continuous.ndjson"), JSON.stringify(window) + "\n") }) : null;
+  writeFileSync(join(directory, "presentation-manifest.json"), JSON.stringify({ runId, bindings, pulseRoutes, topologyBefore, audioBackend,
     recorderDelayFrames, frameEncoding: "CLABPCM1", signal: fixture, sampleRate: rate, quantum }, null, 2));
   assert(pulseRoutes.every(route => route.verified), "Each receiver's Pulse stream must belong to its browser and named JACK sink");
   await Bun.sleep(100); // Finish pending setup graph notifications before arming.
@@ -577,7 +593,7 @@ try {
   const result = { mode, seed, runId, fixture, recorderDelayFrames, receivers, seconds, sampleRate: rate, graphQuantumFrames: quantum, graphExit: graph.exitCode, calibration,
     presentation, presentationScope, completePresentation, continuous: continuousAnalysis,
     jitterBufferPreference: { requestedMs: jitterBufferTargetMs, receivers: jitterPreferences, scope: "Browser preference only; readback does not prove actual occupancy or a maximum delay" },
-    backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true,
+    backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true, implementations: audioBackend,
       requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },
     ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter,
       rendererAfterDrain, rendererDrainError, rendererCoverage, mediaPath, publisherHop: "Publisher and ingress share the server namespace; only receiver links are shaped" } : null,

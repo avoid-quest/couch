@@ -179,6 +179,11 @@ delay. Calibration mode instead taps known-delay fixture ports and cannot
 qualify a browser's Pulse output boundary. See the
 [framing and witness contract](../tests/audio-lab/presentation.md).
 
+Route identity includes SHA-256 fingerprints of the executable objects actually
+loaded by JACK, Pulse and the graph, including the selected modules and libjack.
+Hashing finishes before browser clock acquisition. Backend-prefix or module
+overrides therefore cannot silently reuse calibration for different binaries.
+
 `COUCH_LAB_FIXTURE=continuous` replaces the quiet tone bed with an identifiable
 continuous signal in `ingress` mode. The independent marker analyzer still
 measures latency/skew. The [continuous analyzer](../tests/audio-lab/continuous.md)

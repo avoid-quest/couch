@@ -255,3 +255,15 @@ test("rejects unsupported configuration and finalizes only once", () => {
   expect(() => analyzer.finish()).toThrow();
   expect(() => analyzer.push("reference", { startFrame: 0, samples: source })).toThrow();
 });
+
+test("a throwing observation writer cannot count a source cell twice during finalization", () => {
+  let threw = false;
+  const analyzer = createContinuousAnalyzer({ sampleRate: rate, seed, receiverIds: ["receiver"], durationFrames: duration,
+    warmupFrames: warmup, maxDelayMs: 30, runId: "writer-failure", routeId: "synthetic-test", onWindow: () => {
+      if (!threw) { threw = true; throw new Error("Artifact write failed"); }
+    } });
+  expect(() => analyzer.push("reference", { startFrame: 0, samples: source })).toThrow("Artifact write failed");
+  const result = analyzer.finish(); reconciles(result);
+  expect(result.measurementValid).toBe(false);
+  expect(result.status).toBe("inconclusive");
+});

@@ -271,8 +271,8 @@ export function createContinuousAnalyzer(options: ContinuousAnalyzerOptions) {
       const score = best;
       const matched = track.id === "reference" ? score.peak <= p.referenceError : score.rms <= p.rmsError && score.peak <= p.peakError;
       track.checkedOutputSamples += score.samples;
-      observe(track, start, end, matched ? "matched" : "mismatched", score.rms, score.peak, outputStart, score.outputEnd, score.rate);
       track.source = end;
+      observe(track, start, end, matched ? "matched" : "mismatched", score.rms, score.peak, outputStart, score.outputEnd, score.rate);
       if (!matched) {
         snippet(track, Math.ceil(outputStart));
         if (track.id === "reference") issues.add("reference: recorded fixture mismatch");
