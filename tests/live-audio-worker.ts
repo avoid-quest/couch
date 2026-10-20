@@ -11,6 +11,10 @@ const config = (() => {
 app.setPath("userData", config.profile);
 app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
+if (config.audioBufferFrames !== null && config.audioBufferFrames !== undefined) {
+  if (![128, 256, 512, 1024].includes(config.audioBufferFrames)) throw new Error("Invalid lab audio buffer size");
+  app.commandLine.appendSwitch("audio-buffer-size", String(config.audioBufferFrames));
+}
 // Electron must finish evaluating the main ESM before it emits ready.
 void app.whenReady().then(async () => {
 if (config.certificatePin) session.defaultSession.setCertificateVerifyProc(({ hostname, certificate }, callback) => {

@@ -56,6 +56,21 @@ and 150 ms inserted delays. `COUCH_LAB_QUANTUM` selects 128, 256, 512 or 1024
 frames at 48 kHz. Changing it changes the simulated output environment; record
 it and recalibrate, rather than comparing unlike runs as an application fix.
 
+The private Pulse daemon is explicitly configured for 48 kHz, matching JACK;
+system defaults must not silently introduce a 44.1 kHz conversion. The publisher
+has its own silent output sink so receiver startup does not share its sink.
+`pulse-info.json` and the `pulse-{sinks,sources,sink-inputs,source-outputs}.json`
+snapshots retain the actual private server and stream configuration.
+
+`COUCH_LAB_SOURCE_BUFFER_FRAMES` and `COUCH_LAB_RECEIVER_BUFFER_FRAMES` optionally
+request 128, 256, 512 or 1024 frames through Chromium's `audio-buffer-size`
+switch. Both default to unset. Change source and receiver settings separately,
+retain negotiated buffering and raw output measurements, and requalify the
+source clock after changing its buffer. This is an Electron backend experiment,
+not a setting available to a phone website. The pinned Chromium
+[Pulse backend](https://github.com/chromium/chromium/blob/152.0.7977.130/media/audio/pulse/audio_manager_pulse.cc)
+honors this switch for both input and output buffer requests.
+
 For a bounded WebRTC buffering experiment, `COUCH_LAB_JITTER_MS=0` requests
 `RTCRtpReceiver.jitterBufferTarget=0` in `direct` mode before the fixed startup
 wait. The default leaves it unset. Results preserve the request/readback and

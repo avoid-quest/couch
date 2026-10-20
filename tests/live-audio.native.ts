@@ -51,6 +51,9 @@ assert([128, 256, 512, 1024].includes(quantum));
 const packetMs = Number(process.env.COUCH_LAB_PACKET_MS ?? 10), leadMs = Number(process.env.COUCH_LAB_LEAD_MS ?? 40);
 const outputCompensation = process.env.COUCH_LAB_OUTPUT_COMPENSATION !== "0";
 const jitterBufferTargetMs = process.env.COUCH_LAB_JITTER_MS === undefined ? null : Number(process.env.COUCH_LAB_JITTER_MS);
+const sourceBufferFrames = process.env.COUCH_LAB_SOURCE_BUFFER_FRAMES === undefined ? null : Number(process.env.COUCH_LAB_SOURCE_BUFFER_FRAMES);
+const receiverBufferFrames = process.env.COUCH_LAB_RECEIVER_BUFFER_FRAMES === undefined ? null : Number(process.env.COUCH_LAB_RECEIVER_BUFFER_FRAMES);
+for (const frames of [sourceBufferFrames, receiverBufferFrames]) assert(frames === null || [128, 256, 512, 1024].includes(frames));
 if (jitterBufferTargetMs !== null) assert(mode === "direct" && Number.isInteger(jitterBufferTargetMs) && jitterBufferTargetMs >= 0 && jitterBufferTargetMs <= 4000);
 if (mode === "ingress") { assert.equal(receivers, 2, "PCM experiment has exactly two receivers"); assert([10, 20].includes(packetMs)); assert(leadMs >= packetMs && leadMs <= 1000); }
 const ids = Array.from({ length: receivers }, (_, index) => `receiver-${index}`);
@@ -76,6 +79,7 @@ const env = { ...inherited, JACK_DEFAULT_SERVER: `couch-lab-${process.pid}`, PUL
   DBUS_SYSTEM_BUS_ADDRESS: `unix:path=${directory}/no-system-bus`,
   PULSE_RUNTIME_PATH: join(directory, "pulse"), PULSE_STATE_PATH: join(directory, "pulse-state"),
   PULSE_COOKIE: join(directory, "pulse-cookie"), PULSE_CLIENTCONFIG: join(directory, "pulse-client.conf"),
+  PULSE_CONFIG: join(directory, "pulse-daemon.conf"),
   XDG_CONFIG_HOME: join(directory, "config"), XDG_DATA_HOME: join(directory, "xdg-data"),
   XDG_CACHE_HOME: join(directory, "cache"), XDG_RUNTIME_DIR: join(directory, "runtime"),
   ...(prefix ? { JACK_DRIVER_DIR: join(prefix, "lib/x86_64-linux-gnu/jack"), LD_LIBRARY_PATH: [join(prefix, "lib/x86_64-linux-gnu"), join(prefix, "lib/x86_64-linux-gnu/pulseaudio"), join(prefix, "lib/pulse-17.0+dfsg1/modules"), process.env.LD_LIBRARY_PATH].filter(Boolean).join(":") } : {}),
@@ -203,6 +207,7 @@ try {
   for (const path of [env.XDG_CONFIG_HOME, env.XDG_DATA_HOME, env.XDG_CACHE_HOME, env.XDG_RUNTIME_DIR]) mkdirSync(path, { mode: 0o700 });
   writeFileSync(env.PULSE_COOKIE, randomBytes(256), { mode: 0o600 });
   writeFileSync(env.PULSE_CLIENTCONFIG, `autospawn = no\ndefault-server = ${env.PULSE_SERVER}\ncookie-file = ${env.PULSE_COOKIE}\n`, { mode: 0o600 });
+  writeFileSync(env.PULSE_CONFIG, `default-sample-rate = ${rate}\nalternate-sample-rate = ${rate}\n`, { mode: 0o600 });
   const native = join(directory, "graph");
   command(["cc", "-std=c11", "-D_DEFAULT_SOURCE", "-Wall", "-Wextra", "-Werror", "-O2", ...(prefix ? [`-I${prefix}/include`, `-L${prefix}/lib/x86_64-linux-gnu`] : []), "tests/live-audio-graph.c", "-ljack", "-o", native]);
   writeFileSync(join(directory, "source.f32"), Buffer.from(createMarkerSignal({ sampleRate: rate, seed }).render(0, durationFrames).buffer));
@@ -246,6 +251,7 @@ try {
     const pulseConfig = [
       `load-module module-native-protocol-unix socket=${directory}/pulse/native auth-cookie=${env.PULSE_COOKIE}`,
       "load-module module-jack-source source_name=capture client_name=couch_capture channels=1 connect=no",
+      "load-module module-jack-sink sink_name=source_clock client_name=couch_source_clock channels=1 connect=no",
       ...ids.map((_, index) => `load-module module-jack-sink sink_name=receiver_${index} client_name=couch_receiver_${index} channels=1 connect=no`),
       "set-default-source capture", "set-default-sink receiver_0",
     ].join("\n");
@@ -254,6 +260,7 @@ try {
     const pulse = launch("pulse", [bin("pulseaudio"), "--daemonize=no", "--exit-idle-time=-1", "--use-pid-file=no", "--high-priority=no", "--realtime=no", "--log-target=stderr", "-n", "-F", join(directory, "pulse.pa"), ...(moduleDir ? [`--dl-search-path=${moduleDir}`] : [])]);
     pulse.stdout!.on("data", () => {});
     await until(() => readyCommand([bin("pactl"), "info"]), "private PulseAudio server");
+    writeFileSync(join(directory, "pulse-info.json"), command([bin("pactl"), "--format=json", "info"]));
     const ports = command([bin("jack_lsp")]).trim().split("\n");
     const capture = ports.find(port => port.startsWith("couch_capture:")); assert(capture, ports.join("\n"));
     command([bin("jack_connect"), "couch_lab_source:source", capture]);
@@ -302,9 +309,10 @@ try {
       const origin = index === -1 ? sourceOrigin : receiverOrigin;
       const config = join(directory, `browser-${index}.json`);
       writeFileSync(config, JSON.stringify({ origin, name, key: key.privateB64u, token: paired.token, installationId: paired.installationId,
+        audioBufferFrames: index === -1 ? sourceBufferFrames : receiverBufferFrames,
         certificatePin, profile: join(directory, `profile-${index}`) }), { mode: 0o600 });
       const child = launch(`browser-${index}`, [electron as unknown as string, ...(process.getuid?.() === 0 ? ["--no-sandbox"] : []), join(directory, "live-audio-worker.mjs"), config],
-        { PULSE_SOURCE: "capture", PULSE_SINK: `receiver_${Math.max(0, index)}` }, index === -1 ? "server" : `client-${index + 1}`);
+        { PULSE_SOURCE: "capture", PULSE_SINK: index === -1 ? "source_clock" : `receiver_${index}` }, index === -1 ? "server" : `client-${index + 1}`);
       let ready = false, sequence = 0;
       const requests = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
       const rejectRequests = (reason: string) => {
@@ -384,6 +392,9 @@ try {
     }
     const warmupEnd = Date.now() + (mode === "sync" ? 6000 : 2000);
     await until(() => Date.now() >= warmupEnd, "fixed browser startup wait");
+    for (const kind of ["sinks", "sources", "sink-inputs", "source-outputs"]) {
+      writeFileSync(join(directory, `pulse-${kind}.json`), command([bin("pactl"), "--format=json", "list", kind]));
+    }
     if (snapshotIngress) {
       ingressBefore = await snapshotIngress();
       writeFileSync(join(directory, "ingress-startup.json"), JSON.stringify(ingressBefore, null, 2));
@@ -418,7 +429,8 @@ try {
       .map((media: any) => peer.codecs.find((codec: any) => codec.id === media.codecId)?.mimeType).filter(Boolean))))] as string[];
   const result = { mode, seed, receivers, seconds, sampleRate: rate, graphQuantumFrames: quantum, graphExit: graph.exitCode, calibration,
     jitterBufferPreference: { requestedMs: jitterBufferTargetMs, receivers: jitterPreferences, scope: "Browser preference only; readback does not prove actual occupancy or a maximum delay" },
-    backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false },
+    backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true,
+      requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },
     ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter } : null,
     exploratory: true, graph: logs.get(graph), graphHealth, resources, ipc, network: network?.profile ?? null,
     browserSandboxDisabled: process.getuid?.() === 0,
@@ -454,6 +466,6 @@ try {
 } catch (error) {
   writeFileSync(join(directory, "failure.json"), JSON.stringify({ status: "inconclusive", error: String(error),
     mode, seed, receivers, seconds, sampleRate: rate, graphQuantumFrames: quantum,
-    packetMs, leadMs, outputCompensation, jitterBufferTargetMs, ipc, resources, network: network?.profile ?? null }, null, 2));
+    packetMs, leadMs, outputCompensation, jitterBufferTargetMs, sourceBufferFrames, receiverBufferFrames, ipc, resources, network: network?.profile ?? null }, null, 2));
   throw error;
 } finally { clearTimeout(deadline); await cleanup(); }
