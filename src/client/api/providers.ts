@@ -21,7 +21,7 @@ export const providerPageQuery = (credentials: ApiCredentials, provider: Provide
       return { ...page, warning: error instanceof Error ? error.message : "Couldn't load this season. Open it to try again." };
     }
   },
-  staleTime: 60_000, retry: false,
+  staleTime: provider === "twitch" ? 20_000 : 60_000, retry: false,
 });
 
 async function browse(credentials: ApiCredentials, provider: ProviderId, target: BrowseRequest, signal: AbortSignal): Promise<ProviderSearchPage> {
@@ -48,7 +48,7 @@ export const providerBrowseQuery = (credentials: ApiCredentials, provider: Provi
     initialPageParam: request.cursor as string | undefined,
     queryFn: ({ pageParam, signal }) => browse(credentials, provider, { ...request, cursor: pageParam }, signal),
     getNextPageParam: (page: ProviderSearchPage) => page.nextCursor || undefined,
-    staleTime: 60_000,
+    staleTime: provider === "twitch" ? 20_000 : 60_000,
     retry: false,
   });
 

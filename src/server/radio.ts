@@ -252,6 +252,10 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       const row = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(id)
         ?? db.query<{ station: string }, [string]>("SELECT station FROM radio_favorites WHERE id = ?").get(id);
       if (row) return station(JSON.parse(row.station));
+      for (const { stations, expires } of [...cache.values()].reverse()) {
+        const found = expires > Date.now() && stations.find(station => station.id === id);
+        if (found) return found;
+      }
       const current = (await directoryStations(`byuuid/${id}`)).find(station => station.id === id);
       if (!current) throw new RadioError("Radio station not found. Refresh its playlist or add it again.", 404);
       return current;

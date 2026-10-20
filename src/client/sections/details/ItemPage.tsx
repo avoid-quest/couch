@@ -67,7 +67,7 @@ function LoadedItem({ kind, id }: { kind: Exclude<Kind, "queue">; id: string }) 
   const { credentials } = useShell();
   const { connected } = useSessionGate();
   const query = useQuery({
-    queryKey: [kind === "saved" ? "for-later" : kind === "history" ? "progress" : kind, "item", id],
+    queryKey: [kind === "saved" ? "for-later" : kind === "history" ? "progress" : kind, "details", id],
     queryFn: ({ signal }) => readDetails(credentials, kind, id, signal), enabled: connected, staleTime: 30_000, retry: false,
   });
   if (!query.data || query.error instanceof ApiError && query.error.status === 404) return <>
