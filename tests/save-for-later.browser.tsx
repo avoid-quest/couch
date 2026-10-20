@@ -17,7 +17,7 @@ export async function runSaveForLaterRegression() {
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let items: ForLaterItem[] = [];
-  let denied = false, writes = 0, channelsSaved = 0, stationsSaved = 0;
+  let denied = false, writes = 0, channelsSaved = 0, stationsSaved = 0, commands = 0;
   const media = ["Space film", "Space video"].map((title, index) => ({ id: `space-${index}`, provider: index ? "youtube" : "streamingcommunity", kind: "media", title, url: `https://www.youtube.com/watch?v=space${index}`, duration: 600 }));
   window.fetch = async (input, init) => {
     const url = new URL(String(input), location.href);
@@ -40,7 +40,7 @@ export async function runSaveForLaterRegression() {
       : provider === "bandcamp" ? [{ id: "track", provider, kind: "media", title: "Space track", url: "https://space.bandcamp.com/track/space", duration: 120 }] : [];
     return Response.json({ items: results, favorites: [], stations: [], playlists: [], programmes: {} });
   };
-  const gate = { connected: true, run: async () => true, state: { devices: [], liveSources: [] } } as unknown as SessionGateValue;
+  const gate = { connected: true, run: async () => { commands++; return true; }, state: { devices: [], liveSources: [] } } as unknown as SessionGateValue;
   const props = { origin: location.origin, token: "fixture", connected: true, canPlay: true };
   const render = (saved = false) => root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}>{saved
     ? <ForLaterSection {...props} />
@@ -81,11 +81,28 @@ export async function runSaveForLaterRegression() {
     button("Save")!.click(); await wait();
     assert(button("Save") && items.length === 1, "Rejected Save falsely showed Saved");
     const before = writes;
-    props.connected = false; gate.connected = false; render(); await wait();
+    props.connected = false; gate.connected = false; render(); await wait(20);
+    // The closest match still holds its online summary during the 250 ms debounce.
+    assert(button("Save") && !button("Save")!.disabled, "Missed the cached Save interaction window");
+    assert(button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Missed the cached playback interaction window");
+    button("Play")!.click(); button("Queue")!.click();
+    button("Save")!.click(); await wait();
+    assert(writes === before, "Cached Save sent a mutation immediately after disconnect");
+    assert(commands === 0, "Cached Play or Queue sent a command immediately after disconnect");
+    assert(button("Save")?.disabled, "Offline Save did not become disabled");
     button("Save")?.click(); await wait();
     await menu('[data-hit-id="Radio directory:space-radio"]', "Save");
     assert(writes === before && stationsSaved === 1, "Offline Save sent a mutation");
-    return { passed: true, checks: ["visible closest-match Save", "Save/Saved toggle", "row, collection and tile menus", "Saved lookup separates media from channels", "Remove", "rejected Save", "offline does not mutate"] };
+    denied = false; props.connected = true; gate.connected = true; render(); await wait(900);
+    button("Save")!.click(); await wait();
+    assert(writes === before + 1 && button("Saved")?.getAttribute("aria-pressed") === "true", "Reconnect did not restore Save on cached results");
+    button("Saved")!.click(); await wait();
+    assert(button("Save") && items.length === 1, "Reconnect did not restore Saved removal");
+    button("Play")!.click(); await wait(); button("Queue")!.click(); await wait();
+    assert(commands === 2, "Reconnect did not restore Play and Queue on cached results");
+    await menu('[data-hit-id="youtube:space-1"]', "Save");
+    assert(items.length === 2, "Reconnect did not restore row Save on cached results");
+    return { passed: true, checks: ["visible closest-match Save", "Save/Saved toggle", "row, collection and tile menus", "Saved lookup separates media from channels", "Remove", "rejected Save", "immediate disconnect blocks cached Save, Play and Queue", "offline does not mutate", "reconnect restores cached Save/Saved, row Save, Play and Queue"] };
   } finally {
     root.unmount(); host.remove(); client.clear(); window.fetch = originalFetch;
   }

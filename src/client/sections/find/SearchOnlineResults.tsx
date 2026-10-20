@@ -110,7 +110,8 @@ function OnlineResults(props: Props) {
   // errors and retries, so changing a query or connection retires its reads.
   const music = provider === "bandcamp" || provider === "soundcloud";
   const facet = (item: ProviderItem): SearchFacet => ({ kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Live" : "Video", duration: item.duration });
-  useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
+  // Debounced summaries can still call online actions after a disconnect.
+  useEffect(() => { const controller = new AbortController(); lifetime.current = props.connected ? controller : null; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   async function more() {
     if (!page || loading || !props.connected) return;
     if (visible < page.items.length) { setVisible(value => value + 6); return; }
@@ -120,7 +121,7 @@ function OnlineResults(props: Props) {
     if (!signal?.aborted && !result.isError) setVisible(value => value + 6);
   }
   async function action(failure: string, work: (signal: AbortSignal) => Promise<boolean | void>) {
-    if (busy || !props.connected || !lifetime.current) return;
+    if (busy || !props.connected || !lifetime.current || lifetime.current.signal.aborted) return;
     const signal = lifetime.current.signal;
     setBusy(true);
     try { await work(signal); }
