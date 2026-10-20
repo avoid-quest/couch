@@ -36,6 +36,9 @@ the sending device. With several devices, **In sync** in **Where it plays**
 plays them together, as for other live sources. When the sender stops AirPlay
 or disconnects, the source ends: playback of it stops and the rest of the queue
 stays. One sender plays at a time; another is refused until the first leaves.
+After a sender that played leaves, AirPlay restarts, so for a second or two
+the Couch may briefly disappear from devices' AirPlay lists; a device that
+played here before doesn't need the code again.
 
 While a device is connected and has played sound, the Couch counts as playing,
 even paused, so a TV's [unattended update](native-tv.md#tv-maintenance) waits.
@@ -79,11 +82,22 @@ or play it as its publisher; a device that stops sharing its speakers leaves it
 waiting in **Where it plays**, as for any shared source. A sender is UxPlay's one
 RTSP (RAOP) connection, which it refuses to anyone else while it is open. Couch
 runs UxPlay with `-d 1` (its debug log, without packet data), whose lines name
-when that connection is identified and removed. The source ends as soon as it is
-removed, or after 30 minutes without sound; other connections, such as one UxPlay
-refused or one that only asked for its `/info`, neither keep it nor end it. A
+when that connection is identified, when it sets up audio (`RAOP initialized
+success`, which needs the keys UxPlay gives only an admitted sender) and when it
+is removed. Sound counts only on a connection that set up audio. The source ends
+as soon as that connection is removed, or after 30 minutes without sound; other
+connections, such as one UxPlay refused or one that only asked for its `/info`,
+neither keep it nor end it.
+
+The log and the sound come on separate pipes, which Core reads in no particular
+order, and UxPlay logs a removal before it stops that sender's decoding, so its
+last sound can arrive after the next connection's log lines. So one UxPlay process
+serves one sender's sound: once a connection that set up audio is removed, Core
+ignores everything that process still sends, stops it and starts another
+(`airplay receiver restarting for the next sender`, not counted as a crash). A
 sender that connects next always gets a new source, which nothing plays until
-someone chooses it. The
+someone chooses it. A device connecting during the restart reaches no receiver and
+tries again; pairings and the receiver's identity are kept in `<data>/airplay`. The
 sender's name comes from UxPlay's log, stripped of control characters and cut
 to 60 characters.
 
@@ -159,13 +173,14 @@ Debian 13 with Couch's arguments, answers an unpaired sender's request without
 Couch publishing anything, refuses a second connection's request while that one
 is open, logs each sender connection as Couch reads it, and stops on Couch's signal; GStreamer's own framing
 arrives as a continuous tone at the right pitch through Couch's HLS; admission,
-ending, one source per sender (also with an unpaired connection open and a next
-sender straight after), Where it plays when a device stops sharing its speakers,
+ending, one source per sender (also with an unpaired connection open, a next
+sender straight after, and a last packet read after the next connection's log), Where it plays when a device stops sharing its speakers,
 restarts and update busy-ness against UxPlay's interface.
 
 Not yet checked with real devices: pairing with the code and its memory,
 AirPlay audio and Screen Mirroring sound from iOS and macOS, a second sender's
-refusal, the sender's volume, reconnecting, long sessions (a sender clock that
+refusal, the sender's volume, reconnecting, including how quickly a device finds
+the Couch again after AirPlay restarts between senders, long sessions (a sender clock that
 drifts from Core's is corrected by starting again, an audible skip),
 end-to-end delay, and In sync between devices. Test those on a scratch Couch
 with its own `COUCH_DATA_DIR` and `COUCH_PORT` before relying on them.

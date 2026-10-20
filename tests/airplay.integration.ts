@@ -62,6 +62,17 @@ const run = command => {
   if (command.quiet) clearInterval(timer);
   if (command.raw) fs.writeSync(3, Buffer.from(command.raw, 'base64'));
   if (command.exit !== undefined) process.exit(command.exit);
+  // What pinned UxPlay may do as its sender leaves (lib/httpd.c): log the removal before it stops
+  // decoding, so a last packet follows, then accept the next RTSP connection at once.
+  if (command.leave) {
+    clearInterval(timer);
+    console.log('removing connection type RAOP socket ' + command.leave.socket + ' conn 0x1');
+    const packet = Buffer.alloc(14 + 441 * 4);
+    packet.writeUInt16BE(packet.length - 2, 0); packet[2] = 0x80; packet[3] = 96;
+    packet.writeUInt32BE(0x5eed, 10);
+    fs.writeSync(3, packet);
+    console.log('New connection 0x2 identified as Connection type RAOP');
+  }
 };
 control.on('data', chunk => {
   pending += chunk;
@@ -149,13 +160,15 @@ async function fixture(t: TestContext, { executable = true, uxplay: replacement 
 }
 
 const ready = async (fake: Fake, airplay: () => Promise<AirPlayState>) => { fake.send({ log: "Initialized server socket(s)" }); await until(async () => (await airplay()).status === "ready"); };
-// What UxPlay 1.74 logs with -d 1 (lib/httpd.c, lib/raop.c): any TCP connection, then the one it takes as
-// its RTSP sender, which it refuses to a second while one is open, and each connection's removal.
+// What UxPlay 1.74 logs with -d 1 (lib/httpd.c, lib/raop.c, lib/raop_handlers.h): any TCP connection,
+// then the one it takes as its RTSP sender, which it refuses to a second while one is open, that sender
+// setting up audio once admitted, and each connection's removal.
 const accepted = (fake: Fake, socket: number) => fake.send({ log: `Accepted IPv4 client on socket ${socket}, port 7000` });
-const sender = (fake: Fake, socket: number, name?: string) => {
+const sender = (fake: Fake, socket: number, name?: string, admitted = true) => {
   accepted(fake, socket);
   fake.send({ log: `New connection 0x${socket} identified as Connection type RAOP` });
   if (name) fake.send({ log: `connection request from ${name} (iPhone15,3) with deviceID = 11:22:33:44:55:${socket}` });
+  if (admitted) fake.send({ log: "RAOP initialized success" });
 };
 const closed = (fake: Fake, socket: number, type = "RAOP") => {
   fake.send({ log: `removing connection type ${type} socket ${socket} conn 0x${socket}` });
@@ -219,9 +232,12 @@ test("a connection is not admission: only a sender's decoded sound publishes a s
   const host = await connect(Identity.generate().peerId, hostToken);
 
   // Connecting, naming itself, even being asked for the code: none of it is a session.
-  sender(fake, 31, "Mallory");
+  sender(fake, 31, "Mallory", false);
   fake.send({ log: "*** CLIENT MUST NOW ENTER PIN = \"1234\" AS AIRPLAY PASSWORD" });
+  // Sound while it is connected isn't its: it never set up audio.
+  fake.send({ tone: { frequency: 440 } });
   await new Promise(resolve => setTimeout(resolve, 300));
+  fake.send({ quiet: true });
   assert.equal((await airplay()).status, "ready");
   assert.equal(await player(), "idle", "an unadmitted connection never holds off updates");
   assert.deepEqual(host.state.liveSources ?? [], []);
@@ -296,8 +312,9 @@ test("playing AirPlay delivers the sender's sound through Couch's buffered strea
   await until(() => !device.state.liveSources?.length);
   await until(() => device.messages.some(message => message.type === "player" && message.command.type === "stop"));
   await until(async () => await player() === "idle");
-  assert.equal((await airplay()).status, "ready");
   assert.equal((await airplay()).sender, null);
+  // A fresh UxPlay serves the next sender, so nothing the last one left behind reaches it.
+  await ready(await next(2), airplay);
   void host;
 });
 
@@ -322,12 +339,16 @@ test("a sender's source ends with its own connection whatever else is connected,
   closed(fake, 31);
   await until(() => !device.state.liveSources?.length, 900);
   await until(() => device.messages.some(message => message.type === "player" && message.command.type === "stop"));
-  await until(async () => await player() === "idle");
-  assert.equal((await airplay()).status, "ready", "an unpaired connection holds no session and no update off");
+  await until(async () => await player() === "idle", 900);
+  // UxPlay restarts for the next sender, taking the unpaired connection with it.
+  const second = await next(2);
+  await ready(second, airplay);
+  assert.deepEqual(device.state.liveSources ?? [], []);
+  assert.equal(await player(), "idle", "an unpaired connection holds no session and no update off");
 
   // Bob plays at once: a new source, under his name, that nothing plays until someone chooses it.
-  sender(fake, 41, "Bob");
-  fake.send({ tone: { frequency: 880, ssrc: 0xb0b } });
+  sender(second, 41, "Bob");
+  second.send({ tone: { frequency: 880, ssrc: 0xb0b } });
   await until(() => !!device.state.liveSources?.length);
   const bob = device.state.liveSources![0]!;
   assert.notEqual(bob.id, alice.id);
@@ -336,19 +357,43 @@ test("a sender's source ends with its own connection whatever else is connected,
   await new Promise(resolve => setTimeout(resolve, 1_500));
   assert.equal(loads(), loaded, "Bob's sound never reaches the playback Alice's source had");
   assert.ok(!device.state.queue.some(entry => entry.liveSourceId === bob.id || entry.source.includes(bob.id)), "nor its queue");
-  // The unpaired connection closing changes nothing for Bob.
-  closed(fake, 40, "Unknown");
+  // Another connection opening and closing meanwhile changes nothing for Bob.
+  accepted(second, 50);
+  closed(second, 50, "Unknown");
   await new Promise(resolve => setTimeout(resolve, 300));
   assert.equal(device.state.liveSources?.[0]?.id, bob.id);
 
-  // Even straight after the last packet and with no pause between them, a handoff is two sessions.
-  fake.send({ quiet: true });
-  closed(fake, 41);
-  sender(fake, 42, "Carol");
-  fake.send({ tone: { frequency: 440, ssrc: 0xca } });
+  // Straight after his last packet, the next sender is another session on another UxPlay.
+  second.send({ quiet: true });
+  closed(second, 41);
+  const third = await next(3);
+  await ready(third, airplay);
+  sender(third, 42, "Carol");
+  third.send({ tone: { frequency: 440, ssrc: 0xca } });
   await until(() => device.state.liveSources?.[0]?.name === "AirPlay · Carol");
   assert.equal(device.state.liveSources!.length, 1);
   assert.notEqual(device.state.liveSources![0]!.id, bob.id);
+});
+
+test("sound the last sender's decoding still sends after it left never admits the connection that follows, however Core reads the pipes", { skip: !linux }, async t => {
+  const { airplay, player, next, request, connect, hostToken } = await fixture(t);
+  await request("/api/settings/airplay", { body: { enabled: true } });
+  const fake = await next(1);
+  await ready(fake, airplay);
+  const host = await connect(Identity.generate().peerId, hostToken);
+  sender(fake, 31, "Alice");
+  fake.send({ tone: { frequency: 440 } });
+  await until(() => host.state.liveSources?.[0]?.name === "AirPlay · Alice");
+  // Core stalls while UxPlay logs Alice's removal, writes her last packet and logs an unpaired
+  // connection, so it reads both log lines before that packet.
+  fake.send({ leave: { socket: 31 } });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+  await new Promise(resolve => setTimeout(resolve, 1_500));
+  assert.deepEqual(host.state.liveSources, [], "only Alice sent sound, and she has left");
+  assert.equal(await player(), "idle", "the unpaired connection holds no update off");
+  await ready(await next(2), airplay);
+  assert.deepEqual(host.state.liveSources, []);
 });
 
 test("a device that stops sharing its speakers leaves AirPlay waiting, and AirPlay stays published", { skip: !linux || !hasFfmpeg, timeout: 60_000 }, async t => {
@@ -484,6 +529,7 @@ test("sound framed by GStreamer's rtpL16pay and rtpstreampay plays as sent", { s
 echo 'Initialized server socket(s)'
 echo 'Accepted IPv4 client on socket 30, port 7000'
 echo 'New connection 0x30 identified as Connection type RAOP'
+echo 'RAOP initialized success'
 echo 'connection request from GStreamer (gst-launch) with deviceID = 02:00:00:00:00:02'
 exec ${gstLaunch} -q ${pipeline}
 `;
