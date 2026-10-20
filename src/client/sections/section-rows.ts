@@ -40,4 +40,3 @@ export function useSectionRows<Id extends string>(storageKey: string, defaults: 
     reset: () => save(defaults),
   }), [rows, save]);
 }
-
