@@ -3,7 +3,9 @@
 ## Search
 
 Search is the header's field on every page ([Shell](shell.md#header-and-section-nav)),
-and its results are `/search?q=…`. The query stays in the field; the page's
+and its results are `/search?q=…`. Enter or the Search button submits the
+field; edits leave the current results and route in place until then.
+The submitted query stays in the field; the page's
 "Search results" heading is for screen readers. It asks every source at once;
 one muted line says how many results there are and which sources it is still
 asking, while the header's Spinner stays busy. Sources answer in bursts, and
