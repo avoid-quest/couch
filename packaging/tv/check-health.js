@@ -30,10 +30,22 @@ if (!files.some(file => file?.dev === database.dev && file.ino === database.ino)
 const sockets = new Set(await Promise.all(descriptors.map(async fd => {
   try { return (await readlink(fd)).match(/^socket:\[(\d+)\]$/)?.[1]; } catch { return null; }
 })));
-const listener = (await readFile(`/proc/${child}/net/tcp`, "utf8")).trim().split("\n").slice(1).map(line => line.trim().split(/\s+/)).find(fields => fields[3] === "0A" && fields[1].startsWith("0100007F:") && sockets.has(fields[9]));
-if (!listener) throw new Error("Couch Core has no loopback listener.");
-const origin = `http://127.0.0.1:${parseInt(listener[1].split(":")[1], 16)}`;
+const listeners = (await readFile(`/proc/${child}/net/tcp`, "utf8")).trim().split("\n").slice(1).map(line => line.trim().split(/\s+/)).filter(fields => fields[3] === "0A" && fields[1].startsWith("0100007F:") && sockets.has(fields[9]));
+if (!listeners.length) throw new Error("Couch Core has no loopback listener.");
 // Health is read-only and needs no host token; the socket belongs to this Core.
-const response = await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(3000) });
-if (!response.ok || !(await response.json()).ok) throw new Error("Couch Core is unhealthy.");
+// Core also owns media-only sockets. Probe all candidates within one deadline,
+// so their order (or a stalled media response) cannot hide the API listener.
+const finished = new AbortController();
+const signal = AbortSignal.any([finished.signal, AbortSignal.timeout(3000)]);
+try {
+  await Promise.any(listeners.map(async listener => {
+    const origin = `http://127.0.0.1:${parseInt(listener[1].split(":")[1], 16)}`;
+    const response = await fetch(`${origin}/api/health`, { signal, redirect: "error" });
+    if (!response.ok || (await response.json()).ok !== true) throw new Error("Not a healthy Core API.");
+  }));
+} catch {
+  throw new Error("Couch Core is unhealthy.");
+} finally {
+  finished.abort();
+}
 console.log(JSON.stringify({ mode: mode ?? "local", appPid: Number(pid), corePid: Number(child) }));
