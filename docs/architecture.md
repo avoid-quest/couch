@@ -255,7 +255,11 @@ are flattened and the message is bounded. Routine renderer messages and events
 attributed to child frames are excluded. Electron 44 can attribute unsandboxed
 same-origin `srcdoc` errors to the main frame, so those are included; the app
 currently creates no iframes. The existing stdout/stderr tee remains raw for
-other output, with current/previous-run rotation and its 10 MB write gate.
+other output. Each run starts `couch.log` afresh and keeps the previous run's as
+`couch.1.log`. A run that fills 5 MB moves it to `couch.log.1` and continues, so
+the newest 5–10 MB of each run survive, late failures included (the previous
+run's earlier file is `couch.1.log.1`). Every file begins with a header naming
+the Couch version, run ID and process ID.
 
 IPTV MPEG-TS channels with MPEG-2 video or AC-3/E-AC-3/MP2 audio, which Chromium
 can't decode, play in an mpv process on the Device that runs Core

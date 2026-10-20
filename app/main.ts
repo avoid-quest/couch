@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { createWriteStream, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { connect as connectTls } from "node:tls";
@@ -15,6 +15,8 @@ import { readDeviceName, saveDeviceName } from "./device-name";
 import { defaultDeviceSharing, isDeviceSharing } from "../src/shared/device-sharing";
 import { diagnosticHost, logAppError } from "./diagnostics";
 import { createCapture } from "./capture";
+import { startLog } from "./log-file";
+import { rendererStatus } from "./renderer-status";
 
 // Couch keeps the Tauri app's data directory: <platform data dir>/<identifier>.
 // Development runs use .data unless COUCH_DATA_DIR says otherwise.
@@ -25,14 +27,18 @@ const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(bas
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 // Chromium's profile, and with it the single-instance lock, lives beside Core's data.
 app.setPath("userData", join(dataDir, "app"));
-// What Main and Core print, for this run and the one before, capped at 10 MB.
+// One Couch per data directory. A second launch only shows the first's window and
+// quits, so it leaves the first's log and window status alone.
+const primary = app.requestSingleInstanceLock();
+// What Main and Core print, for this run and the one before: the newest 5–10 MB of each.
+// The run ID also names this run in renderer-status.json.
+const run = randomUUID();
 const logPath = join(dataDir, "logs/couch.log");
 mkdirSync(dirname(logPath), { recursive: true });
-try { renameSync(logPath, join(dataDir, "logs/couch.1.log")); } catch {}
-const log = createWriteStream(logPath);
+const log = !primary ? () => {} : startLog(logPath, 5_000_000, file => `${new Date().toISOString()} main info: Couch ${app.getVersion()} run ${run} pid ${process.pid} log ${file}\n`);
 for (const stream of [process.stdout, process.stderr]) {
   const write = stream.write.bind(stream) as (chunk: unknown, ...rest: unknown[]) => boolean;
-  stream.write = ((chunk: unknown, ...rest: unknown[]) => { if (log.bytesWritten < 10_000_000) log.write(chunk); return write(chunk, ...rest); }) as typeof stream.write;
+  stream.write = ((chunk: unknown, ...rest: unknown[]) => { log(chunk); return write(chunk, ...rest); }) as typeof stream.write;
 }
 const appliance = process.env.COUCH_TV_PRESENTATION === "1";
 const port = Number(process.env.COUCH_PORT ?? 4100);
@@ -50,6 +56,7 @@ type Choice = AppMode & { pins?: Record<string, string>; tvPresentation?: boolea
 const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
 const tv = appliance || choice.tvPresentation === true;
+const renderer = !primary ? null : rendererStatus(join(dataDir, "renderer-status.json"), { run, version: app.getVersion() }, () => choice.mode === "remote" ? "remote" : "local");
 // The Mac window hides its title bar; its controls sit in the page's header (index.css).
 const macChrome = process.platform === "darwin" && !tv;
 const save = (next: Choice) => {
@@ -196,6 +203,7 @@ async function load() {
   for (;;) {
     try { return void await window.loadURL(address = await trust(address, false)); } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
+      renderer?.unreachable();
       logAppError("main", `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`);
       // Keep trying in the background; a successful probe closes the prompt and loads the page.
       const reachable = new AbortController();
@@ -322,6 +330,7 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
+  renderer?.watch(contents);
   contents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => { if (mainFrame) capture.clear(); });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
@@ -339,7 +348,7 @@ function createWindow() {
     gone = [...gone.filter(at => Date.now() - at < 60_000), Date.now()];
     if (["crashed", "oom", "abnormal-exit"].includes(reason) && gone.length <= 3) void load();
   });
-  contents.on("will-navigate", (event, url) => { if (new URL(url).origin !== new URL(contents.getURL()).origin) event.preventDefault(); });
+  contents.on("will-navigate", (event, url) => { if (new URL(url).origin !== new URL(contents.getURL()).origin) { event.preventDefault(); renderer?.cancelled(); } });
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: "deny" };
@@ -423,6 +432,8 @@ handle("set-update-channel", (_event, channel) => updates.action({ op: "channel"
 // this turn; newer renderers always send their selected version through action.
 handle("install-update", (_event, version) => updates.action({ op: "install", version: version === undefined ? updates.state().available : version }, 250));
 handle("show-logs", () => shell.showItemInFolder(logPath));
+// The page's app shell mounted (renderer-status.json); handle() admits only the main frame.
+handle("shell-ready", () => renderer?.acknowledge() ?? false);
 handle("quit", () => { setImmediate(() => app.quit()); });
 handle("update-playback", (_event, status) => {
   if (typeof status !== "string" || !["unavailable", "idle", "loading", "playing", "paused", "ended", "error"].includes(status)) throw new Error("Invalid playback status.");
@@ -447,7 +458,7 @@ async function quit() {
   app.quit();
 }
 
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!primary) app.quit();
 else {
   app.on("second-instance", show);
   app.on("activate", show);

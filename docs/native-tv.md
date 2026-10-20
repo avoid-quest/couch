@@ -33,6 +33,17 @@ sudo couch-setup --tv
 sudo reboot
 ```
 
+Before committing a machine, `sudo couch-setup --inspect` reports what `--tv`
+would do there, with the same checks: the supported target, an earlier setup,
+the `couch-tv` account, the data directory, the display manager and boot
+target, missing packages, the files it would add or keep, the update timer and
+any running session. It lists every refusal `--tv` would stop at (exit status 1),
+including another installation or recovery holding setup's lock, which it finds
+in the kernel's lock table rather than by taking the lock. It writes nothing: no
+file, lock, account, package or service. Without `sudo` it marks what only root
+can read as unavailable, as it does a lock it can't match to that table. It can't foresee APT or
+service failures during setup.
+
 Setup installs Debian's Xorg, Openbox, LightDM, PipeWire and Bluetooth support. It
 creates the locked, unprivileged `couch-tv` account and enables its graphical
 session. Couch runs from the root-owned `/usr/bin/couch` (`/opt/Couch/couch`) in TV presentation, fullscreen on the TV. The mouse pointer hides after a second without movement anywhere on the TV, outside Couch's window and over the recovery notice too, and returns when it moves. No source checkout or
@@ -44,7 +55,8 @@ during playback. Inspect `sudo couch-session logs`; restarting the graphical
 session or rebooting retries cursor hiding.
 
 Keep your administrator account, password and SSH access. Setup does not alter
-them. From SSH or Ctrl+Alt+F3, use `sudo couch-session logs`, `status` or `restart`.
+them. From SSH or Ctrl+Alt+F3, use `sudo couch-session logs`, `status`, `restart` or
+[`diagnose`](#diagnose-and-measure).
 The initial session offers **This computer** or **Another Couch**. Setup checks
 the running app with `check-health.js`, run by the app's own Node
 (`ELECTRON_RUN_AS_NODE=1`): in This computer mode Core must be a child of the app
@@ -222,3 +234,70 @@ ahead.
 couch-update.timer` turn unattended updates off for good.
 TVs set up before this rerun `sudo couch-setup --tv` once to get the units; until
 then **Automatic updates** says so.
+
+## Diagnose and measure
+
+`sudo couch-session diagnose` prints a passive report to attach to a problem;
+`--json` prints the same as a `couch-evidence/1` record. It reads, as `couch-tv`
+and with no other environment: the installed package, the app's Electron and
+Node, OS, kernel, CPU, memory and graphics devices, setup state, the service and
+its restarts, the [health check](#dedicated-tv) setup and updates use, the
+window's lifecycle, the mode, the helpers Core selected, display connectors and
+the X screen's current mode, the sound server's sinks, the last update outcome,
+the update timer, and from the log only the run header, the last delivery route,
+player error hosts and Main's redacted errors, including those in `couch.log.1`
+when that is the same run's rotated file. Each observation has its own time
+limit and is reported unavailable or timed out on its own, and it reads at
+most a bounded start (and, for the log, end) of each record. It never opens
+`couch.sqlite`, runs or updates a helper, plays, captures or tests media, or
+changes anything, and it leaves out keys, tokens, pairing, settings, the
+environment, executable paths, device names and source URLs. What it quotes
+from errors follows Main's own log redaction ([redact.js](../packaging/tv/redact.js)).
+
+The window's lifecycle comes from Main's `<data>/renderer-status.json`, named by
+the same run ID and process as the header of `couch.log`. It counts only when
+the service's running process wrote it: the same PID, boot and kernel start
+time, so a report an earlier process left behind never passes for a reused PID's:
+
+- `page-loaded`: the page and its scripts loaded, but its app shell hasn't said
+  it mounted. The app is still loading its mode, showed a startup error or failed
+  to render, or another Couch's page predates the report.
+- `ready`: a usable screen mounted, the mode chooser or the app shell once this
+  computer's Core answered (not `Starting…` or `Couldn't start Couch`), and
+  acknowledged it from the window's main frame, for the navigation now shown.
+  Core's health and another Couch's reachability are reported apart.
+- `failed`, with `page: remote` (summary `remote-failed`): another Couch that
+  can't be reached. The local app is running; this is not a broken package.
+- `stale`: written by an earlier or stopped process, even one whose PID the
+  running app reuses, so it says nothing about the running app.
+- `unknown`: no report, the service couldn't say which process runs, or the
+  report or process lacks that identity (an older Couch), so a saved report
+  can't be tied to the running app.
+
+Core's health stays separate: it is the check setup and updates use, and
+neither the window's state nor this report changes what rolls an update back.
+
+### A repeatable hardware run
+
+Compare hardware or builds with the same journey, recording each step's evidence
+together. Run tests on an isolated Couch (its own `COUCH_DATA_DIR` and
+`COUCH_PORT`, stopped by its PIDs), never the TV's installed data.
+
+1. `sudo couch-session diagnose --json > diagnose.json` on the TV, before and
+   after the change, for the installed package, runtime, helpers, display and
+   sound route.
+2. From a checkout on the same machine, with `COUCH_EVIDENCE=<directory>`, run
+   the [HTTP latency](../tests/http-latency.integration.ts) and, with
+   `COUCH_TEST_FFMPEG` set, the [live latency](../tests/live-latency.integration.ts)
+   integrations as [Checks](ci.md) describes, using the installed app's Node to
+   measure its runtime. Each writes a `couch-evidence/1` record with the
+   revision, runtime, machine, input route, measurements and what it didn't test.
+3. Run the [TV navigation regression](#browser-regression) and record its input
+   route: DOM key events, T3 keyboard input or a physical remote.
+
+Every record keeps measured and untested conditions apart. Loopback and
+synthetic-input results don't measure the network between devices, browser
+players, a physical remote, the decoded picture, audible output, HDMI hotplug,
+standby resume or speaker and screen alignment; mark those untested unless that
+run exercised them. Benchmarks published for Android TV builds are not Couch
+results.

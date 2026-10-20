@@ -46,4 +46,6 @@ export type CouchApp = {
   quit?(): Promise<void>;
   // The TV's own renderer also plays in Client mode, without a local Core.
   reportPlayback?(status: import("./protocol").PlayerState["status"]): Promise<void>;
+  /** Tells the app that this page's shell mounted; false when it was not this window's current page. Older apps lack it. */
+  shellReady?(): Promise<boolean>;
 };

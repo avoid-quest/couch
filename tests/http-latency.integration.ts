@@ -7,6 +7,7 @@ import * as http from "node:http";
 import * as https from "node:https";
 import { certificate } from "../src/server/certificate";
 import { serve } from "../src/server/http";
+import { percentile, writeEvidence } from "./evidence";
 
 // A shared HTTP/HTTPS listener must not add a delayed-ACK round trip to every
 // small response. Linux exposed this as a repeatable ~44ms cost on the TV.
@@ -14,7 +15,7 @@ test("shared HTTP and HTTPS keep-alive responses retain plain HTTP latency", { s
   const directory = await mkdtemp(join(tmpdir(), "couch-http-latency-"));
   try {
     const tls = await certificate(directory, ["localhost", "127.0.0.1"]);
-    const medians: number[] = [];
+    const medians: number[] = [], measured: Record<string, object> = {};
     for (const mode of ["plain", "shared-http", "shared-https"]) {
       const server = await serve({
         hostname: "127.0.0.1", port: 0, ...(mode === "plain" ? {} : { tls }), maxRequestBodySize: 4096,
@@ -46,9 +47,14 @@ test("shared HTTP and HTTPS keep-alive responses retain plain HTTP latency", { s
         }
         samples.sort((a, b) => a - b);
         medians.push(samples[Math.floor(samples.length / 2)]!);
+        measured[mode] = { n: samples.length, medianMs: medians.at(-1), p95Ms: percentile(samples, 0.95), maxMs: samples.at(-1) };
         t.diagnostic(`${mode}: n=${samples.length}, median=${medians.at(-1)!.toFixed(3)}ms`);
       } finally { agent.destroy(); await server.stop(); }
     }
+    await writeEvidence("http-latency", {
+      input: "Node keep-alive requests to an in-process listener over loopback; 5 warm-up requests excluded",
+      measured, untested: ["network between devices", "browser and app clients", "Core's real routes"],
+    });
     for (const [index, name] of ["HTTP", "HTTPS"].entries()) {
       assert.ok(medians[index + 1]! < medians[0]! + 20, `${name} median ${medians[index + 1]}ms exceeds plain ${medians[0]}ms by a delayed-ACK interval`);
     }

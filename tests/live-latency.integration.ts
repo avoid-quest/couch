@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { WebSocketServer } from "ws";
 import { AudioCodec, Identity, Roles, SendspinClient, serverNowUs, type SessionUpdateMetadata } from "@sonn-audio/node-sendspin";
 import { createSendspin } from "../src/server/sendspin";
+import { physical } from "../packaging/tv/evidence.js";
+import { writeEvidence } from "./evidence";
 
 const ffmpeg = process.env.COUCH_TEST_FFMPEG ?? "ffmpeg";
 const available = spawnSync(ffmpeg, ["-version"], { stdio: "ignore" }).status === 0;
@@ -77,6 +79,11 @@ for (const silent of [false, true]) test(`live HLS ${silent ? "silence" : "sound
   const sourcePosition = point.progress!.track_progress / 1000 + (frame.timestamp - point.timestamp) / 1e6;
   const age = frame.capturePosition + (frame.timestamp - frame.received) / 1e6 - sourcePosition;
   t.diagnostic(`Capture age at scheduled playback: ${age.toFixed(3)}s; ${common.length} matching shared packets.`);
+  await writeEvidence(`live-latency-${silent ? "silence" : "sound"}`, {
+    input: `FFmpeg ${execFileSync(ffmpeg, ["-version"], { encoding: "utf8" }).split("\n")[0]!.split(" ")[2]} live HLS over loopback to two Node Sendspin receivers; first packet at startup`,
+    measured: { captureAgeS: age, sharedPackets: common.length },
+    untested: ["steady-state age after startup", "browser players", "network between devices", ...physical],
+  });
   assert.ok(age < 3, `Live audio is ${age.toFixed(2)}s old when scheduled; expected less than 3s.`);
 });
 
