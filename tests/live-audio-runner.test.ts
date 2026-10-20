@@ -17,7 +17,8 @@ function fragment(start: string, end: string) {
 }
 
 test("graph completion includes stdout emitted after the direct process exits", async () => {
-  const predicate = source.match(/await until\(\(\) => ([^,\n]+), "(?:audio measurement|recorder stdout drain)"/)?.[1];
+  // The witness layer first freezes capture, then separately drains the graph.
+  const predicate = [...source.matchAll(/await until\(\(\) => ([^,\n]+), "(?:audio measurement|recorder stdout drain)"/g)].at(-1)?.[1];
   assert(predicate, "Test must use the runner's actual graph completion condition");
   const scope: any = { spawn, join, Buffer, performance, waitUntil,
     root: process.cwd(), env: process.env, directory: "/unused", writeFileSync() {}, readFileSync() { return ""; } };
