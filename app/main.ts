@@ -27,12 +27,15 @@ const dataDir = resolve(process.env.COUCH_DATA_DIR ?? (app.isPackaged ? join(bas
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 // Chromium's profile, and with it the single-instance lock, lives beside Core's data.
 app.setPath("userData", join(dataDir, "app"));
+// One Couch per data directory. A second launch only shows the first's window and
+// quits, so it leaves the first's log and window status alone.
+const primary = app.requestSingleInstanceLock();
 // What Main and Core print, for this run and the one before: the newest 5–10 MB of each.
 // The run ID also names this run in renderer-status.json.
 const run = randomUUID();
 const logPath = join(dataDir, "logs/couch.log");
 mkdirSync(dirname(logPath), { recursive: true });
-const log = startLog(logPath, 5_000_000, file => `${new Date().toISOString()} main info: Couch ${app.getVersion()} run ${run} pid ${process.pid} log ${file}\n`);
+const log = !primary ? () => {} : startLog(logPath, 5_000_000, file => `${new Date().toISOString()} main info: Couch ${app.getVersion()} run ${run} pid ${process.pid} log ${file}\n`);
 for (const stream of [process.stdout, process.stderr]) {
   const write = stream.write.bind(stream) as (chunk: unknown, ...rest: unknown[]) => boolean;
   stream.write = ((chunk: unknown, ...rest: unknown[]) => { log(chunk); return write(chunk, ...rest); }) as typeof stream.write;
@@ -53,7 +56,7 @@ type Choice = AppMode & { pins?: Record<string, string>; tvPresentation?: boolea
 const modePath = join(dataDir, "operating-mode.json");
 let choice: Choice = { mode: null, address: null, targets: [], localSetupComplete: false, ...readJson(modePath) };
 const tv = appliance || choice.tvPresentation === true;
-const renderer = rendererStatus(join(dataDir, "renderer-status.json"), { run, version: app.getVersion() }, () => choice.mode === "remote" ? "remote" : "local");
+const renderer = !primary ? null : rendererStatus(join(dataDir, "renderer-status.json"), { run, version: app.getVersion() }, () => choice.mode === "remote" ? "remote" : "local");
 // The Mac window hides its title bar; its controls sit in the page's header (index.css).
 const macChrome = process.platform === "darwin" && !tv;
 const save = (next: Choice) => {
@@ -200,7 +203,7 @@ async function load() {
   for (;;) {
     try { return void await window.loadURL(address = await trust(address, false)); } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
-      renderer.unreachable();
+      renderer?.unreachable();
       logAppError("main", `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`);
       // Keep trying in the background; a successful probe closes the prompt and loads the page.
       const reachable = new AbortController();
@@ -327,7 +330,7 @@ function createWindow() {
   });
   window.on("closed", () => { window = null; });
   const contents = window.webContents;
-  renderer.watch(contents);
+  renderer?.watch(contents);
   contents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => { if (mainFrame) capture.clear(); });
   // Electron-attributed main-frame errors only; Electron 44 can attribute
   // unsandboxed same-origin srcdoc output to mainFrame too.
@@ -430,7 +433,7 @@ handle("set-update-channel", (_event, channel) => updates.action({ op: "channel"
 handle("install-update", (_event, version) => updates.action({ op: "install", version: version === undefined ? updates.state().available : version }, 250));
 handle("show-logs", () => shell.showItemInFolder(logPath));
 // The page's app shell mounted (renderer-status.json); handle() admits only the main frame.
-handle("shell-ready", () => renderer.acknowledge());
+handle("shell-ready", () => renderer?.acknowledge() ?? false);
 handle("quit", () => { setImmediate(() => app.quit()); });
 handle("update-playback", (_event, status) => {
   if (typeof status !== "string" || !["unavailable", "idle", "loading", "playing", "paused", "ended", "error"].includes(status)) throw new Error("Invalid playback status.");
@@ -455,7 +458,7 @@ async function quit() {
   app.quit();
 }
 
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!primary) app.quit();
 else {
   app.on("second-instance", show);
   app.on("activate", show);

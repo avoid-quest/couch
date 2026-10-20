@@ -28,13 +28,15 @@ const statusPath = join(data, "renderer-status.json");
 writeFileSync(join(scratch, "probe.mjs"), `
 import { app, ipcMain } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { createServer } from 'node:http';
 const read = () => JSON.parse(readFileSync(${JSON.stringify(statusPath)}, 'utf8'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // The kernel's identity of this process, which Main must record as its own.
 const stat = readFileSync('/proc/self/stat', 'utf8');
 const kernel = { bootId: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(), processStart: Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]) };
-const evidence = { mainPid: process.pid, kernel, starting: null, ready: null, gates: {}, unmounted: null, failed: null, iframeTried: false };
+const evidence = { mainPid: process.pid, kernel, starting: null, ready: null, second: null, gates: {}, unmounted: null, failed: null, iframeTried: false };
 const record = () => writeFileSync(${JSON.stringify(join(directory, "native-events.json"))}, JSON.stringify(evidence, null, 2));
 // HTML whose script throws before any app mounts, with a cross-origin frame that tries to acknowledge.
 createServer((request, response) => {
@@ -56,8 +58,18 @@ app.on('browser-window-created', async (_event, window) => {
     if (read().state !== 'ready') await sleep(2_000);
     evidence.gates[name] = { ...read(), text: await window.webContents.executeJavaScript('document.getElementById("root").innerText') };
   };
+  let shown = false;
+  app.on('second-instance', () => { shown = true; });
   try {
     evidence.ready = await until('ready');
+    // Couch launched again on this data directory: it shows this window and quits, and
+    // leaves this run's window status and log alone.
+    const log = () => readFileSync(${JSON.stringify(join(data, "logs/couch.log"))}, 'utf8').split('\\n')[0];
+    const header = log();
+    const second = spawn(process.execPath, process.argv.slice(1), { stdio: 'ignore' });
+    const [code] = await once(second, 'exit');
+    await sleep(500);
+    evidence.second = { pid: second.pid, code, shown, status: read(), header: log() === header, focused: window.isVisible() };
     // The startup gate before the shell: its loading, error and a render failure are not ready.
     await gate('held', { mode: () => new Promise(() => {}) });
     await gate('rejected', { mode: () => ({ error: "Couch couldn't read its mode." }) });
@@ -103,6 +115,11 @@ for (const state of [events.starting, events.ready, events.unmounted, events.fai
   assert.equal(state.page, "local");
 }
 assert.equal(events.ready.state, "ready", "Couch's mounted shell must acknowledge through the real preload");
+assert.equal(events.second.code, 0, "A second launch quits normally");
+assert.equal(events.second.shown, true, "It shows the running Couch's window");
+assert.deepEqual(events.second.status, events.ready, "It leaves the running window's status as it was");
+assert.equal(events.second.header, true, "It leaves the running log as it was");
+assert.equal(events.second.focused, true, "The running window stays shown");
 let navigation = events.ready.navigation;
 for (const [name, state, text] of [["held", "page-loaded", /Loading/], ["rejected", "page-loaded", /couldn't read its mode[\s\S]*Try again/], ["malformed", "page-loaded", /^$/], ["chooser", "ready", /Where is your Couch\?/], ["shell", "ready", /./], ["connection-held", "page-loaded", /Starting…/], ["connection-rejected", "page-loaded", /Couldn't start Couch[\s\S]*Try again/]] as const) {
   const gate = events.gates[name];
