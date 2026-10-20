@@ -266,6 +266,7 @@ export async function createHub(options: HubOptions) {
   // couch.log gets one timestamped line per event. A source appears only as its host: its URL can carry a token.
   const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
   const failures = new WeakMap<Socket<SocketData>, Set<string>>();
+  const browserLoads = new WeakMap<Socket<SocketData>, Extract<PlaybackCommand, { type: "load" }>>();
   const stateOf = (playback: Playback) => playback.state ??= playback.session.state;
   const sourceOf = (playback: Playback) => { const state = stateOf(playback); return state.queue.find(entry => entry.id === state.currentEntryId)?.liveSourceId; };
   const servedBy = (deviceId: string) => all().find(playback => playback.outputs.some(output => output.deviceId === deviceId));
@@ -398,7 +399,7 @@ export async function createHub(options: HubOptions) {
     // each keeps its own level (see level).
     else if (sourceOf(playback) && command.type !== "load") { for (const socket of new Set([...live.receivers(playback.id), ...playback.renderer ? [playback.renderer] : []])) send(socket, playerCommand(command)); }
     else if (playback.renderer) {
-      if (command.type === "load") failures.delete(playback.renderer);
+      if (command.type === "load") { failures.delete(playback.renderer); browserLoads.set(playback.renderer, command); }
       send(playback.renderer, playerCommand(command));
     }
   };
@@ -568,6 +569,7 @@ export async function createHub(options: HubOptions) {
         if (playback.screens.get(tab) !== loaded.playbackId || !sockets.has(tab)) return;
         if (command.type === "load" && command.mpv) { playback.session.reload(); return; }
         failures.delete(tab);
+        browserLoads.set(tab, command);
         send(tab, playerCommand(command));
         send(tab, playerCommand({ type: "volume", volume: 0 }));
       }, () => { if (playback.screens.get(tab) === loaded.playbackId) playback.screens.delete(tab); });
@@ -577,7 +579,7 @@ export async function createHub(options: HubOptions) {
     for (const tab of playback.screens.keys()) if (sockets.has(tab)) send(tab, playerCommand({ type: "stop" }));
     playback.screens.clear();
   };
-  const screenLoad = async (playback: Playback, entry: QueueEntry, loaded: NonNullable<Playback["loaded"]>, tab: Socket<SocketData>): Promise<PlaybackCommand> => {
+  const screenLoad = async (playback: Playback, entry: QueueEntry, loaded: NonNullable<Playback["loaded"]>, tab: Socket<SocketData>): Promise<Extract<PlaybackCommand, { type: "load" }>> => {
     const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(30_000)]);
     // A live link can expire within minutes, so a live screen resolves its own.
     const reuse = playback.resolved?.playbackId === loaded.playbackId && playback.resolved.vp9 === tab.data.vp9 && !playback.media?.live ? playback.resolved.media : undefined;
@@ -1654,6 +1656,10 @@ export async function createHub(options: HubOptions) {
         }
         const player = parsePlayer(message);
         if (player) {
+          // A browser can't tell a relayed source's refusal from a format it can't play.
+          const loaded = browserLoads.get(socket);
+          const refused = player.status === "error" && player.playbackId && loaded?.playbackId === player.playbackId ? passThrough.refused(player.playbackId, loaded.source) ?? (loaded.audioSource ? passThrough.refused(player.playbackId, loaded.audioSource) : undefined) : undefined;
+          if (refused) player.error = `The website refused this stream (HTTP ${refused}). Play it again.`;
           const playback = all().find(item => item.renderer === socket || item.screens.has(socket));
           // Once per error a tab reports for this load. Core already logged a group's
           // own failure; an echoed state adds no second account of the same error.
