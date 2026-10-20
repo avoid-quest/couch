@@ -20,7 +20,7 @@ void app.whenReady().then(async () => {
 if (config.certificatePin) session.defaultSession.setCertificateVerifyProc(({ hostname, certificate }, callback) => {
   const matches = hostname === config.certificatePin.hostname
     && new X509Certificate(certificate.data).fingerprint256 === config.certificatePin.fingerprint256;
-  callback(matches ? 0 : -3);
+  callback(hostname === config.certificatePin.hostname ? (matches ? 0 : -2) : -3);
 });
 session.defaultSession.setPermissionRequestHandler((_contents, permission, allow) => allow(permission === "media"));
 session.defaultSession.setPermissionCheckHandler((_contents, permission) => permission === "media");

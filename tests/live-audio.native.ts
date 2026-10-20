@@ -13,6 +13,7 @@ import { Identity } from "@sonn-audio/node-sendspin";
 import { createMarkerSignal, createPcmAnalyzer } from "./audio-lab/pcm";
 import { writeEvidence, writeLiveAudioEvidence } from "./evidence";
 import { assessGraphCalibration } from "./audio-lab/calibration";
+import { assessPlaybackCoverage } from "./audio-lab/playback-telemetry";
 
 const root = resolve(import.meta.dirname, "..");
 assert.equal(process.platform, "linux", "The common-graph audio lab currently requires Linux");
@@ -68,7 +69,6 @@ assert(mode !== "direct" || network, "Direct WebRTC needs the network wrapper (p
 if (network) {
   assert.equal(network.schema, "couch-network-lab/1");
   assert.notEqual(mode, "calibration", "Graph calibration has no network traffic; run it without netem");
-  assert.notEqual(mode, "ingress", "The PCM prototype has no TLS listener; first measure it on secure localhost, without a mixed-content bypass");
   assert.equal(network.profile.clients.length, receivers, "Namespace and browser receiver counts must match");
 }
 const inNode = (node: string, args: string[]) => network ? [...network.exec, node, "--", ...args] : args;
@@ -240,7 +240,7 @@ try {
     frame += frames;
   }
   let browserState: unknown = null;
-  let ingressBefore: unknown = null, ingressAfter: unknown = null;
+  let ingressBefore: any = null, ingressAfter: any = null, rendererAfterDrain: any = null;
   const jitterPreferences: unknown[] = [];
   let snapshotIngress: (() => Promise<unknown>) | undefined;
   const browserDiagnostics: unknown[] = [];
@@ -277,16 +277,18 @@ try {
       await new Promise<void>(resolve => listener.close(() => resolve()));
     }
     const sourceOrigin = `http://127.0.0.1:${port}`;
+    const coreData = network?.nodes.server!.dataDirectory ?? join(directory, "data");
     // Core's production LAN listener requires TLS. Trust exactly this scratch
     // Core's certificate in the fixture; do not disable certificate checks.
     const receiverOrigin = network ? network.serverUrl.replace(/^http:/, "https:") : sourceOrigin;
-    const core = launch("core", ["node", "build/core.mjs"], { COUCH_DATA_DIR: join(directory, "data"), COUCH_PORT: String(port), COUCH_HOST: network ? "0.0.0.0" : "127.0.0.1",
+    const core = launch("core", ["node", "build/core.mjs"], { COUCH_DATA_DIR: coreData, COUCH_PORT: String(port), COUCH_HOST: network ? "0.0.0.0" : "127.0.0.1",
       ...(process.env.COUCH_LAB_FFMPEG ? { PATH: `${dirname(process.env.COUCH_LAB_FFMPEG)}:${process.env.PATH}` } : {}) }, "server");
     core.stdout!.on("data", () => {});
     await until(() => /Pairing code: (\d+)/.test(logs.get(core)!), "scratch Couch Core", 60000);
     const pairingCode = /Pairing code: (\d+)/.exec(logs.get(core)!)![1];
     const certificatePin = network ? { hostname: new URL(receiverOrigin).hostname,
-      fingerprint256: new X509Certificate(readFileSync(join(network.nodes.server!.dataDirectory, "tls/cert.pem"))).fingerprint256 } : null;
+      fingerprint256: new X509Certificate(readFileSync(join(coreData, "tls/cert.pem"))).fingerprint256 } : null;
+    if (network) assert(new X509Certificate(readFileSync(join(coreData, "tls/cert.pem"))).checkIP(certificatePin!.hostname), "Scratch Core certificate must cover the shaped server address");
     const built = await Bun.build({ entrypoints: ["tests/live-audio-worker.ts"], target: "node", external: ["electron"], outdir: directory, naming: "live-audio-worker.mjs" });
     assert(built.success, String(built.logs));
     for (let index = -1; index < receivers; index++) {
@@ -349,13 +351,14 @@ try {
     const publisher = workers[0]!;
     if (mode === "ingress") {
       const config = join(directory, "ingress.json");
-      writeFileSync(config, JSON.stringify({ databasePath: join(directory, "data/couch.sqlite"), publisherId: publisher.id,
-        receiverIds: workers.slice(1).map(worker => worker.id), allowedOrigins: [sourceOrigin], packetMs, leadMs }), { mode: 0o600 });
+      writeFileSync(config, JSON.stringify({ databasePath: join(coreData, "couch.sqlite"), publisherId: publisher.id,
+        receiverIds: workers.slice(1).map(worker => worker.id), allowedOrigins: [...new Set([sourceOrigin, receiverOrigin])], packetMs, leadMs,
+        ...(network ? { host: new URL(network.serverUrl).hostname, tls: { certFile: join(coreData, "tls/cert.pem"), keyFile: join(coreData, "tls/key.pem") } } : {}) }), { mode: 0o600 });
       const serverBundle = await Bun.build({ entrypoints: ["tests/audio-lab/ingress-cli.ts"], target: "node", outdir: directory, naming: "ingress-cli.mjs" });
       assert(serverBundle.success, String(serverBundle.logs));
       const browserBundle = await Bun.build({ entrypoints: ["tests/audio-lab/ingress-browser.ts"], target: "browser", format: "iife" });
       assert(browserBundle.success, String(browserBundle.logs));
-      const ingress = launch("ingress", ["node", join(directory, "ingress-cli.mjs"), config]);
+      const ingress = launch("ingress", ["node", join(directory, "ingress-cli.mjs"), config], {}, "server");
       let ingressOrigin: string | undefined, snapshotId = 0, response: { id: number; value: unknown } | undefined;
       createInterface({ input: ingress.stdout! }).on("line", line => {
         if (!line.startsWith("COUCH_INGRESS ")) return;
@@ -409,6 +412,18 @@ try {
   if (pending.length) { assert.equal(pending.length % stride, 0); consume(pending); }
   if (workers.length) rtcAfter = await Promise.all(workers.map(worker => worker.js("__labRTCStats()")));
   if (snapshotIngress) ingressAfter = await snapshotIngress();
+  // Chromium can transfer playback counters late. Preserve the original end
+  // snapshot; a bounded drain only supplies renderer coverage, never new PCM.
+  if (snapshotIngress && ingressBefore.browsers.slice(1).some((browser: any) => browser.renderer?.playback.status === "available")) {
+    const end = performance.now() + 1500;
+    rendererAfterDrain = ingressAfter;
+    while (performance.now() < end && ingressBefore.browsers.slice(1).some((browser: any, index: number) =>
+      assessPlaybackCoverage(browser.renderer.playback, rendererAfterDrain.browsers[index + 1].renderer.playback, seconds * 1000).status !== "measured")) {
+      await Bun.sleep(100); rendererAfterDrain = await snapshotIngress();
+    }
+  }
+  const rendererCoverage = ingressBefore?.browsers.slice(1).map((browser: any, index: number) => ({ id: ids[index],
+    ...assessPlaybackCoverage(browser.renderer.playback, (rendererAfterDrain ?? ingressAfter).browsers[index + 1].renderer.playback, seconds * 1000) })) ?? [];
   sampleResources();
   const analysis = analyzer.finish();
   const health = /RESULT frames=(\d+) overflow=(\d+) xruns=(\d+) graphDeviationUs=([\d.]+)/.exec(logs.get(graph)!);
@@ -422,6 +437,15 @@ try {
     const serverAddress = network ? new URL(network.serverUrl).hostname : null;
     const routedPair = selectedPairs.some((pair: any) => pair.remote?.address === serverAddress && pair.local?.address !== "127.0.0.1");
     return { id, receivedAudioBytes, selectedPairs, shapedRouteObserved: network ? routedPair && receivedAudioBytes > 0 : null };
+  }) : mode === "ingress" ? ids.map((id, index) => {
+    const peerId = workers[index + 1]!.id;
+    const before = ingressBefore.server.metrics, after = ingressAfter.server.metrics;
+    const transport = ingressAfter.server.receivers.find((receiver: any) => receiver.id === peerId)?.transport ?? null;
+    const sentPcmBytes = (after.sentPcmBytes[peerId] ?? 0) - (before.sentPcmBytes[peerId] ?? 0);
+    const sentFrames = (after.sentFrames[peerId] ?? 0) - (before.sentFrames[peerId] ?? 0);
+    const expectedClient = network?.profile.clients[index]?.address;
+    return { id, transport, sentPcmBytes, sentFrames, counterScope: "PCM payload handed to the SDK, excluding TLS/Noise/WebSocket overhead; not a playback counter",
+      shapedRouteObserved: network ? transport?.localAddress === new URL(network.serverUrl).hostname && transport?.remoteAddress === expectedClient && sentPcmBytes > 0 : null };
   }) : [];
   const calibration = mode === "calibration" ? assessGraphCalibration(analysis, { "receiver-0": 20, "receiver-1": 80, "receiver-2": 150 }, graphHealth) : null;
   const observedCodecs = [...new Set(rtcAfter.slice(1).flatMap(peers => peers.flatMap((peer: any) =>
@@ -431,7 +455,8 @@ try {
     jitterBufferPreference: { requestedMs: jitterBufferTargetMs, receivers: jitterPreferences, scope: "Browser preference only; readback does not prove actual occupancy or a maximum delay" },
     backend: { jackDriver: "dummy", jackRealtime: false, pulseRealtime: false, pulseHighPriority: false, pulseDefaultSampleRate: rate, separateSourceSink: true,
       requestedSourceBufferFrames: sourceBufferFrames, requestedReceiverBufferFrames: receiverBufferFrames },
-    ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter } : null,
+    ingress: mode === "ingress" ? { packetMs, leadMs, outputCompensation, before: ingressBefore, after: ingressAfter,
+      rendererAfterDrain, rendererCoverage, mediaPath, publisherHop: "Publisher and ingress share the server namespace; only receiver links are shaped" } : null,
     exploratory: true, graph: logs.get(graph), graphHealth, resources, ipc, network: network?.profile ?? null,
     browserSandboxDisabled: process.getuid?.() === 0,
     browserSandboxReason: process.getuid?.() === 0 ? "Electron native fixture running as root in the disposable user namespace" : null,
@@ -455,13 +480,15 @@ try {
     calibration: { method: "audio-graph", status: "unmeasured", sourceToCaptureMs: null, outputPresentationOffsetMs: null, uncertaintyMs: null, artifact: null },
     workers: [{ id: "local", cpuCount: resources.cpuCount, memoryBytes: totalmem(), cpuPercentMax: resources.cpuPercentMax,
       rssBytesMax: resources.rssBytesMax, overloaded: graphHealth.xruns ? true : null }],
-    telemetry: ids.map(id => ({ id, rendererUnderruns: null, unexpectedMutes: null, disconnects: null, missingSourceMs: null, concealedSourceMs: null, longestInterruptionMs: null, queueAgeMsMax: null, queueBytesMax: null })),
+    telemetry: ids.map(id => ({ id, rendererUnderruns: rendererCoverage.find((receiver: any) => receiver.id === id)?.underrunEvents ?? null,
+      unexpectedMutes: null, disconnects: null, missingSourceMs: null, concealedSourceMs: null, longestInterruptionMs: null, queueAgeMsMax: null, queueBytesMax: null })),
     analysis, fixedWarmupMs: 2000, untested: [...result.untested, "browser-thread headroom; aggregate sampled CPU/RSS does not prove it", "source-to-capture calibration measured separately", "continuous codec/renderer dropout telemetry"],
   });
   console.log(`Audio lab ${mode}: ${join(directory, "result.json")}`);
   assert.equal(graph.exitCode, 0, "Invalid graph measurement: xrun, stalled recorder or overflow; inspect graph.log");
-  if (mode === "direct") assert(mediaPath.every(receiver => receiver.receivedAudioBytes > 0), "Every WebRTC receiver must receive actual audio bytes during recording");
+  if (mode === "direct") assert(mediaPath.every(receiver => "receivedAudioBytes" in receiver && receiver.receivedAudioBytes > 0), "Every WebRTC receiver must receive actual audio bytes during recording");
   if (network && mode === "direct") assert(mediaPath.every(receiver => receiver.shapedRouteObserved), "Real receiver RTP must increase on a selected candidate pair to the shaped server address; inspect result.json");
+  if (network && mode === "ingress") assert(mediaPath.every(receiver => receiver.shapedRouteObserved), "PCM sender counters must increase on the correct shaped receiver sockets; inspect result.json");
   if (calibration) assert.equal(calibration.status, "passed", JSON.stringify(calibration.reasons));
 } catch (error) {
   writeFileSync(join(directory, "failure.json"), JSON.stringify({ status: "inconclusive", error: String(error),

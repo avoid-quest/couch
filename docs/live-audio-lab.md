@@ -103,9 +103,20 @@ limited to two receivers. `COUCH_LAB_PACKET_MS=10|20` selects packet size;
 `COUCH_LAB_OUTPUT_COMPENSATION=0` selects the explicit compensation alternative.
 Defaults are 10 ms packets, 40 ms lead and official output compensation enabled.
 These are configured timings, not measured end-to-end latency. See the
-[prototype contract](../tests/audio-lab/ingress.md). This endpoint has no TLS
-listener, so this initial experiment accepts secure localhost only and refuses
-the network wrapper; it never disables mixed-content checks to make LAN work.
+[prototype contract](../tests/audio-lab/ingress.md). Under the network wrapper,
+ingress uses HTTPS/WSS with the scratch Core's certificate and database from the
+manifest's server directory. Receivers connect to the shaped server address;
+the publisher-to-ingress hop stays local in the server namespace. The fixture
+requires the certificate to cover that address and rejects a different
+certificate for the pinned hostname. It preserves exact page-origin admission.
+
+The same `ingress` command works inside the network wrapper. `result.json`
+retains receiver socket endpoints, per-receiver PCM bytes handed to the SDK,
+and recorded output. Sender counters alone do not prove playback. Chromium
+`AudioContext.playbackStats` observations come from the actual SDK context;
+unsupported, frozen or incomplete counters remain inconclusive. A final drain
+of at most 1.5 seconds may extend renderer counter coverage, retaining the
+original end snapshot; it does not add PCM to the measured window.
 
 Before publishing, ingress measures a fixed one-second render-clock envelope
 every 5 ms, requiring at least 100 observations. Acquisition audio is discarded;
