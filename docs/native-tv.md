@@ -169,6 +169,17 @@ Store the returned promise's result on `window` and read it separately if the
 preview's evaluation timeout is shorter than the check. Use native preview key
 input as well to verify local keyboard entry and the focus highlight.
 
+For Discover, `runDiscoverNavigationRegression()` checks entry in the saved
+section order, the first section's heading, Customize Discover, the tab bar
+and Back. Run with Radio and Sources enabled, then Sources first, and with an
+existing shared source. Build `tests/discover-customization.browser.ts` the
+same way for `runDiscoverSharingFocusRegression()`: on a paired scratch Couch
+with Radio available and no shares, it publishes source metadata through Core
+(no capture or playback), checks that Radio keeps focus, then checks fresh
+entry and navigation after the source ends. It closes its socket and restores
+Discover preferences. The same bundle's customization and availability checks
+cover hidden/reordered sections, return focus and delayed provider shelves.
+
 For Continue, stop two decoded finite videos before completion on every output
 (the first leads Home as its hero, the second sits in Continue's shelf) and keep
 the second shared output online. Build `tests/tv-continue.browser.ts` with the same browser

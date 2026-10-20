@@ -113,6 +113,8 @@ export function DetailFocusRestoration() {
       // shelf's first tile takes precedence over a later shelf's provisional entry.
       const discoverEntry = tv && !returning && location.pathname === "/discover" && document.activeElement?.matches("[data-page-first]");
       if (document.activeElement !== document.body && document.activeElement !== fallbackFocus && !discoverEntry) return;
+      // Sharing is intentional, not a delayed catalogue response: its arrival keeps the current tile.
+      if (discoverEntry && document.querySelector('[data-page="Discover"] [data-page-first]:not(:disabled)')?.closest('[aria-label="Shared sources"]')) return;
       // Loading can replace the first control; settle again if it lost focus.
       restore();
     });

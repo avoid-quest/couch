@@ -20,6 +20,65 @@ const customize = async () => click('#customize-discover');
 const first = () => document.querySelector('[data-page="Discover"] [data-page-first]:not(:disabled)');
 const empty = () => control('[data-page="Discover"] [data-slot="empty"]').getClientRects().length > 0;
 
+// Publish metadata through Core's real socket, without capturing or playing media.
+// Run with Radio available and no other shared sources in the scratch Couch.
+declare global { interface Window { runDiscoverSharingFocusRegression: () => Promise<unknown> } }
+window.runDiscoverSharingFocusRegression = async () => {
+  const saved = localStorage.getItem("couch.discover-rows");
+  const token = localStorage.getItem("couch.remote-token")!;
+  const { device } = await fetch("/api/devices/me", { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
+  const socket = new WebSocket(`${location.origin.replace(/^http/, "ws")}/api/ws?${new URLSearchParams({ token, device: device.id })}`);
+  const until = async (condition: () => boolean) => {
+    for (let attempt = 0; attempt < 40; attempt++) { if (condition()) return; await wait(100); }
+    throw new Error("Sharing fixture did not settle");
+  };
+  const sourceId = crypto.randomUUID();
+  const command = (action: object) => new Promise<void>((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => { socket.removeEventListener("message", received); reject(new Error("Sharing command timed out")); }, 4_000);
+    const received = (event: MessageEvent) => {
+      const message = JSON.parse(event.data);
+      if (message.type !== "result" || message.requestId !== requestId) return;
+      socket.removeEventListener("message", received);
+      clearTimeout(timer);
+      if (message.ok) resolve(); else reject(new Error(message.error));
+    };
+    socket.addEventListener("message", received);
+    socket.send(JSON.stringify({ type: "command", requestId, action }));
+  });
+  try {
+    await until(() => socket.readyState === WebSocket.OPEN);
+    await click('[data-app-nav] a[href="/"]');
+    localStorage.setItem("couch.discover-rows", JSON.stringify([
+      { id: "shared", shown: true }, { id: "radio", shown: true },
+      ...rows().filter(row => !["shared", "radio"].includes(row.id)).map(row => ({ ...row, shown: row.id === "sources" })),
+    ]));
+    window.dispatchEvent(new Event("couch.discover-rows"));
+    await discover();
+    await until(() => !!document.activeElement?.matches('[aria-label="Radio stations"] [data-page-first]'));
+    const radio = document.activeElement;
+    assert(!document.querySelector('[aria-label="Shared sources"]'), "Stop existing shares before running");
+    await command({ type: "publishLive", sourceId, uploadToken: "1".repeat(64), kind: "screen", audio: true, video: true });
+    await until(() => !!document.querySelector('[aria-label="Shared sources"] [data-page-first]'));
+    await wait(350);
+    assert(document.activeElement === radio, `New sharing stole Radio focus: ${document.activeElement?.getAttribute("aria-label")}`);
+    // A subsequent page entry still starts on the already available shared source.
+    await click('[data-app-nav] a[href="/"]'); await discover();
+    assert(document.activeElement?.matches('[aria-label="Shared sources"] [data-page-first]'), "Existing sharing lost initial page focus");
+    await remote("down"); await remote("up");
+    assert(document.activeElement?.matches('[aria-label="Shared sources"] [data-page-first]'), "Arrows lost the shared source");
+    await command({ type: "endLive", sourceId });
+    await until(() => !document.querySelector('[aria-label="Shared sources"]'));
+    await remote("down");
+    assert(document.activeElement?.matches('[aria-label="Radio stations"] [data-page-first]'), "Ending the focused share lost the next section");
+    return { passed: true, checks: ["New sharing retains Radio focus", "Existing sharing takes page entry", "Ending sharing restores navigation"] };
+  } finally {
+    socket.close();
+    if (saved) localStorage.setItem("couch.discover-rows", saved); else localStorage.removeItem("couch.discover-rows");
+    window.dispatchEvent(new Event("couch.discover-rows"));
+  }
+};
+
 declare global { interface Window { runDiscoverCustomizationRegression: () => Promise<unknown> } }
 window.runDiscoverCustomizationRegression = async () => {
   const home = localStorage.getItem("couch.home-rows");
