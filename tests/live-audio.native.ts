@@ -86,6 +86,7 @@ const env = { ...inherited, JACK_DEFAULT_SERVER: `couch-lab-${process.pid}`, PUL
   ...(prefix ? { JACK_DRIVER_DIR: join(prefix, "lib/x86_64-linux-gnu/jack"), LD_LIBRARY_PATH: [join(prefix, "lib/x86_64-linux-gnu"), join(prefix, "lib/x86_64-linux-gnu/pulseaudio"), join(prefix, "lib/pulse-17.0+dfsg1/modules"), process.env.LD_LIBRARY_PATH].filter(Boolean).join(":") } : {}),
 };
 const processes: ChildProcess[] = [], logs = new Map<ChildProcess, string>();
+const closedProcesses = new Set<ChildProcess>();
 const processNames = new Map<ChildProcess, string>();
 let fatal: Error | null = null, ending = false;
 const appendLog = (name: string, value: string) => {
@@ -109,6 +110,7 @@ const launch = (name: string, args: string[], extra: NodeJS.ProcessEnv = {}, nod
   child.on("exit", (code, signal) => {
     if (!ending && name !== "graph") fatal ??= new Error(`${name} exited unexpectedly (${code ?? signal}); ${logs.get(child)!.slice(-2000)}`);
   });
+  child.once("close", () => closedProcesses.add(child));
   child.stdin!.on("error", error => { if (!ending) fatal ??= new Error(`${name} stdin: ${error}`); });
   if (name !== "graph" && !name.startsWith("browser-")) child.stdout!.on("data", log);
   return child;
@@ -132,7 +134,7 @@ const clockTicks = Number(command(["getconf", "CLK_TCK"], 2000));
 const pageSize = Number(command(["getconf", "PAGESIZE"], 2000));
 const resources = { sampleCount: 0, cpuCount: availableParallelism(), cpuPercentMax: 0, rssBytesMax: 0,
   perProcessGroup: {} as Record<string, { cpuPercentMax: number; rssBytesMax: number }>,
-  convention: "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; 1-second samples" };
+  convention: "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; CPU windows at least 1 second" };
 let previousSample = performance.now(), previousOwnCpu = process.cpuUsage();
 const previousTicks = new Map<string, number>();
 const observedDescendants = new Map<number, string>();
@@ -155,6 +157,9 @@ const sampleResources = () => {
     const child = processes.find(child => child.pid === item.group);
     if (!child && !owned.has(item.pid) && observedDescendants.get(item.pid) !== item.start) continue;
     observedDescendants.set(item.pid, item.start);
+    // A final short window still discovers descendants for cleanup, but must
+    // not divide quantized CPU ticks by milliseconds or advance its baseline.
+    if (elapsed < 1000) continue;
     const name = child ? processNames.get(child)! : "other-owned-descendants";
     const value = totals.get(name) ?? { ticks: 0, rss: 0 };
     const key = `${item.pid}:${item.start}`;
@@ -162,6 +167,7 @@ const sampleResources = () => {
     previousTicks.set(key, item.ticks);
     value.rss += item.rss; totals.set(name, value);
   }
+  if (elapsed < 1000) return;
   const ownCpu = process.cpuUsage(), ownRss = process.memoryUsage().rss;
   let cpu = (ownCpu.user + ownCpu.system - previousOwnCpu.user - previousOwnCpu.system) / (elapsed * 10), rss = ownRss;
   for (const [name, value] of totals) {
@@ -409,7 +415,8 @@ try {
     }
   }
   graph.kill("SIGUSR1");
-  await until(() => graph.exitCode !== null, "audio measurement", (seconds + tailFrames / rate + 15) * 1000);
+  // Process exit can precede the final PCM and health output on its pipes.
+  await until(() => closedProcesses.has(graph), "audio measurement", (seconds + tailFrames / rate + 15) * 1000);
   if (pending.length) { assert.equal(pending.length % stride, 0); consume(pending); }
   if (workers.length) rtcAfter = await Promise.all(workers.map(worker => worker.js("__labRTCStats()")));
   if (snapshotIngress) ingressAfter = await snapshotIngress();

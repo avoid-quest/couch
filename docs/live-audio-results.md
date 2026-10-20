@@ -39,7 +39,7 @@ corrections remain null. The results do not measure sound leaving a phone.
 | --- | --- | --- | --- | --- |
 | Known-delay graph calibration | Three outputs, 5 s, 512-frame quantum | Exactly 20 / 80 / 150 ms | Deliberately different delays | 50/50 markers each; zero xruns/overflow; sample error bound 0.0417 ms |
 | Production WebRTC | Two browsers, N0, 15 s, 512-frame quantum | 148.94 / 165.96 ms | 17.04 ms | 130/130 markers each; zero xruns/overflow |
-| Production In sync, live input | Two browsers, loopback, 8 s, 512-frame quantum | 2587.00 / 2595.02 ms | 10.08 ms | 56/60 and 59/60 markers; zero xruns/overflow |
+| Production In sync, live input | Two browsers, loopback, 8 s, 512-frame quantum | 2587.00 / 2595.02 ms | 10.08 ms | 56/60 and 59/60 markers; graph health unknown |
 | WebRTC control, isolated backend | Two browsers, routed control, 8 s, 1024-frame quantum | 144.23 / 157.60 ms | 13.38 ms | 60/60 markers each; zero xruns/overflow |
 | WebRTC zero-buffer preference | Same control settings; requested/read back `jitterBufferTarget=0` | Unmeasured / 157.60 ms | Unmeasured | 0/60 and 60/60 markers; zero xruns/overflow |
 
@@ -55,6 +55,9 @@ browser-thread headroom and complete dropout telemetry are still missing, so
 formal timing qualification remains inconclusive even where raw metrics exist.
 The [compact raw results](live-audio-results.json) preserve distributions, counts,
 settings, resource observations and hashes of the original local artifacts.
+Historical CPU maxima may include a final sampling window shorter than one
+second; they remain exploratory and cannot establish worker headroom. The
+runner now excludes such windows without advancing its CPU baselines.
 
 The narrow WebRTC alternative did not qualify. Actual average receive-buffer
 residence from interval RTP counters was 53.67/66.53 ms in the control and
@@ -134,8 +137,9 @@ restricted audience controls remain separate product work.
    scheduling, output compensation and clock uncertainty. Add speech/music,
    stereo/clipping and continuous dropout measurements.
 3. Complete known-ahead music and 10-client baseline measurements, then run
-   N0/N1 on the candidate path. The current PCM prototype is localhost-only;
-   namespace receivers need authenticated TLS/WSS integration first.
+   N0/N1 on the candidate path after resolving the capture-clock gate. TLS/WSS
+   network integration is implemented with the scratch certificate and pinned
+   receiver trust; successful integration alone does not qualify delivery.
 4. Address bulk routing/state fanout and measure real browser negotiation.
    Increase rendering workers through 2 → 10 → 25 → 50 with output evidence for
    every listener and measured worker headroom. Qualify 100 separately.
