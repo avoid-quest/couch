@@ -19,3 +19,15 @@ export async function writeEvidence(kind: string, fields: { input: string; measu
 }
 
 export const percentile = (sorted: number[], fraction: number) => sorted[Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1)]!;
+
+// Keep live-audio reports in the existing Couch evidence envelope, including
+// checkout/runtime/OS metadata collected above. Synthetic analyzer checks do not
+// qualify an audio graph, phones, or venue Wi-Fi.
+export { createLiveAudioEvidence, liveAudioAcceptance } from "./audio-lab/evidence.ts";
+export type { LiveAudioRun } from "./audio-lab/evidence.ts";
+export async function writeLiveAudioEvidence(run: import("./audio-lab/evidence.ts").LiveAudioRun) {
+  const { createLiveAudioEvidence } = await import("./audio-lab/evidence.ts");
+  const evidence = createLiveAudioEvidence(run);
+  await writeEvidence("live-audio", { input: evidence.input, measured: evidence.measured, untested: evidence.untested });
+  return evidence;
+}
