@@ -183,7 +183,9 @@ for override in /etc/systemd/system/couch-tv.service /etc/systemd/user/couch-tv.
     if exists "$override"; then refuse "Inspect the existing service override before migration: $override"
     elif [[ $? = 2 ]]; then unknown+=("Whether $override exists"); fi
 done
-! exists "$unit" || native_selected || refuse 'Inspect the existing TV user unit before migration.'
+unit_found=0; exists "$unit" || unit_found=$?
+if [[ $unit_found = 0 ]]; then native_selected || refuse 'Inspect the existing TV user unit before migration.'
+elif [[ $unit_found = 2 ]]; then unknown+=("Whether $unit exists"); fi
 if [[ -e $root/etc/X11/default-display-manager ]]; then
     if [[ $(cat "$root/etc/X11/default-display-manager") != /usr/sbin/lightdm ]]; then refuse 'Another display manager is configured. Keep the desktop or select LightDM deliberately.'
     elif [[ $previous = none ]]; then refuse 'LightDM already has a desktop policy. Use ordinary installation.'; fi
@@ -226,7 +228,7 @@ if $inspect; then
             link) actions+=("Link $destination") ;;
         esac
     done < <(plan_files)
-    if native_selected; then kept+=("$unit"); else actions+=("Link $unit"); fi
+    if native_selected; then kept+=("$unit"); elif [[ $unit_found = 1 ]]; then actions+=("Link $unit"); fi
     if timer_masked; then kept+=('Masked couch-update.timer'); else actions+=('Enable and start couch-update.timer'); fi
     case $previous in
         complete) kept+=('Sign-in, boot target and power policy') ;;

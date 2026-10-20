@@ -271,6 +271,22 @@ test("without root, files only root can see are unknown, not added, and --tv kee
   assert.equal(readFileSync(unreadable, "utf8"), customised);
 });
 
+test("inspection leaves an inaccessible TV user unit unknown until it can check the administrator's file", unprivilegedOptions, () => {
+  using environment = fixture({ installed: packages, account: null, files: { "etc/systemd/user/couch-tv.service": "[Service]\n" } });
+  const directory = join(environment.root, "etc/systemd/user");
+  chmodSync(directory, 0);
+  try {
+    const plan = inspect(environment, false);
+    assert.equal(plan.status, 0, plan.stdout + plan.stderr);
+    assert.ok(plan.unavailable.includes("Whether /etc/systemd/user/couch-tv.service exists"), plan.stdout);
+    assert.ok(!plan.would.includes("Link /etc/systemd/user/couch-tv.service"), plan.stdout);
+    assert.ok(!plan.keep.includes("/etc/systemd/user/couch-tv.service"), plan.stdout);
+  } finally { chmodSync(directory, 0o755); }
+  const readable = inspect(environment, false);
+  assert.equal(readable.status, 1, readable.stdout);
+  assert.ok(readable.refuse.includes("Inspect the existing TV user unit before migration."), readable.stdout);
+});
+
 test("--tv and --refresh still require root, and --refresh leaves an incomplete setup alone", mixedOptions, () => {
   using environment = fixture({ installed: packages });
   for (const argument of ["--tv", "--refresh"]) assert.match(environment.run(argument, false).stderr, /couch-setup: sudo couch-setup --tv/);
