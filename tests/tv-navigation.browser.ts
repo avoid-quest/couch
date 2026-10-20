@@ -124,18 +124,23 @@ const discoverNavigation = async () => {
   await click('[data-app-nav] a[href="/discover"]');
   await until(() => !!document.activeElement?.matches('[data-page="Discover"] [data-page-first]'));
   assert(getComputedStyle(control(".app-header")).position === "sticky", "The header is not sticky");
-  const first = document.activeElement as HTMLElement;
+  const entries = [...document.querySelectorAll<HTMLElement>('[data-page="Discover"] [data-page-first]')]
+    .filter(element => !element.matches(':disabled, [aria-disabled="true"]') && !element.closest('[inert], [aria-hidden="true"]') && element.getClientRects().length > 0);
+  const first = entries[0]!;
+  assert(document.activeElement === first, "Discover entry ignored the first available section in the saved order");
+  assert(new Set(entries.map(element => element.closest('section:not([data-page]), [role="alert"]'))).size === entries.length, "A Discover section has more than one first control");
   const shared = document.querySelector('[data-page="Discover"] [aria-label="Shared sources"]');
-  const radio = control('[data-page="Discover"] [aria-label="Radio stations"]');
-  assert(document.querySelectorAll('[data-page="Discover"] [data-page-first]').length === 1, "Discover has more than one first control");
-  if (shared) {
-    assert(shared.contains(first) && first.getAttribute("aria-label")?.startsWith("Play "), "Shared sources did not lead Discover focus");
-    assert(shared.compareDocumentPosition(radio) & Node.DOCUMENT_POSITION_FOLLOWING, "Shared sources did not appear before Radio");
-    assert(!control('[aria-label="Sources"]').querySelector('button[aria-label^="Play "]'), "Shared sources still appear in Sources");
-    await key("ArrowDown");
-    assert(document.activeElement?.matches('a[href="/discover/radio"]'), "Down from Shared sources skipped Radio's heading");
-    await key("ArrowUp");
-    assert(document.activeElement === first, "Up from Radio did not return to the shared source");
+  if (shared?.contains(first)) {
+    assert(first.getAttribute("aria-label")?.startsWith("Play "), "Shared sources did not start on Play");
+    assert(!document.querySelector('[aria-label="Sources"] button[aria-label^="Play "]'), "Shared sources still appear in Sources");
+    const next = shared.closest("section")?.nextElementSibling;
+    const nextControl = next?.querySelector('header a, [data-page-first]:not(:disabled)');
+    if (nextControl) {
+      await key("ArrowDown");
+      assert(document.activeElement === nextControl, "Down from Shared sources skipped the next section");
+      await key("ArrowUp");
+      assert(document.activeElement === first, "Up from the next section did not return to the shared source");
+    }
     first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
     await wait(700);
     assert(document.querySelector('[role="menu"]') && document.activeElement?.closest('[role="menu"]'), "Held OK did not open the shared source's menu");
@@ -146,11 +151,13 @@ const discoverNavigation = async () => {
     assert(document.activeElement === first, "The shared source's menu lost its opener");
   }
   await key("ArrowUp");
-  if (!shared) {
-    assert(radio.querySelector('button[aria-label^="Play "]') === first, "Without shares Discover did not start on Radio's first tile");
-    assert(document.activeElement?.matches('[data-page="Discover"] section header a[href="/discover/radio"]'), "Up from the first row did not reach its heading");
+  const heading = first.closest("section")?.querySelector("header a");
+  if (heading) {
+    assert(document.activeElement === heading, "Up from the first row did not reach its heading");
     await key("ArrowUp");
   }
+  assert(document.activeElement?.id === "customize-discover", "Up from the first section skipped Customize Discover");
+  await key("ArrowUp");
   assert(document.activeElement?.matches('.app-header a[aria-current="page"][href="/discover"]'), "Up did not reach the current tab");
   await key("ArrowDown");
   assert(document.activeElement === first, "Down from the header did not return to the page's first control");
@@ -161,8 +168,8 @@ const discoverNavigation = async () => {
 };
 
 window.runDiscoverNavigationRegression = async () => {
-  try { await discoverNavigation(); return [{ name: "Discover starts on shared sources, else Radio, and keeps its navigation", passed: true }]; }
-  catch (error) { return [{ name: "Discover starts on shared sources, else Radio, and keeps its navigation", passed: false, error: String(error) }]; }
+  try { await discoverNavigation(); return [{ name: "Discover follows the saved section order and keeps its navigation", passed: true }]; }
+  catch (error) { return [{ name: "Discover follows the saved section order and keeps its navigation", passed: false, error: String(error) }]; }
 };
 
 window.runTvNavigationRegression = async () => {
@@ -254,7 +261,7 @@ window.runTvNavigationRegression = async () => {
     await leave(tiles(lower).at(-1)!, tiles(lower).at(-1)!, "ArrowUp", upper!);
     await leave(tiles(upper).at(-1)!, tiles(upper).at(-2)!, "ArrowDown", lower!);
   });
-  await check("Discover starts on shared sources, else Radio, and keeps its navigation", discoverNavigation);
+  await check("Discover follows the saved section order and keeps its navigation", discoverNavigation);
   await check("Settings OK enters content; Back restores rail then Home", async () => {
     await click('[data-app-nav] a[href="/settings"]');
     const rail = control('[data-settings-page="devices"]');

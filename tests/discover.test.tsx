@@ -22,6 +22,9 @@ mock.module("../src/client/sections/discover/on-air", () => ({
   useOnAir: () => ({ stations: [{ id: "radio", name: "Station" }], favorites: {}, builtIn: {}, pending: false, show: () => undefined, meta: () => "" }),
   useStationMenu: () => () => [],
 }));
+const { defaultDiscoverRows } = await import("../src/client/sections/discover/discover-rows");
+let preferences = defaultDiscoverRows;
+mock.module("../src/client/sections/discover/discover-rows", () => ({ useDiscoverRows: () => ({ rows: preferences }) }));
 const { DiscoverPage } = await import("../src/client/sections/discover/DiscoverPage");
 const source = (id: string, name: string, kind: LiveSource["kind"] = "screen"): LiveSource => ({ id, deviceId: id, name, kind, audio: true, video: kind === "screen" });
 const view = () => renderToStaticMarkup(<DiscoverPage />);
@@ -31,25 +34,52 @@ test("without shared inputs Discover starts on Radio and keeps the search-only S
   liveSources = [];
   const html = view();
   expect(html).not.toContain('aria-label="Shared sources"');
-  expect(first(html)).toHaveLength(1);
+  expect(first(html).length).toBeGreaterThan(0);
   expect(first(html)[0]![0]).toContain('aria-label="Play Station"');
   for (const provider of ["YouTube", "Bandcamp", "SoundCloud"]) expect(html).toContain(`aria-label="Search ${provider}"`);
 });
 
-test("one shared input leads Discover with the only page-first Play control and its menu", () => {
+test("one shared input leads Discover with the first page-entry Play control and its menu", () => {
   liveSources = [source("studio", "Studio · Screen")];
   const html = view();
   expect(html.indexOf('aria-label="Shared sources"')).toBeLessThan(html.indexOf('aria-label="Radio"'));
-  expect(first(html)).toHaveLength(1);
+  expect(first(html).length).toBeGreaterThan(0);
   expect(first(html)[0]![0]).toContain('aria-label="Play Studio · Screen"');
   expect(html).toContain('aria-label="Options for Studio · Screen"');
   expect(html.split('aria-label="Sources"')[1]).not.toContain("Studio");
 });
 
-test("screen and sound share the leading row, with only the first taking page entry", () => {
+test("screen and sound share the leading row, with the first taking page entry", () => {
   liveSources = [source("studio", "Studio · Screen"), source("laptop", "Laptop · System audio", "system-audio")];
   const html = view();
-  expect(first(html)).toHaveLength(1);
+  expect(first(html).length).toBeGreaterThan(0);
   expect(html.indexOf('aria-label="Play Studio · Screen"')).toBeLessThan(html.indexOf('aria-label="Play Laptop · System audio"'));
   expect(html).toContain('aria-label="Options for Laptop · System audio"');
+});
+
+
+test("saved order and visibility choose Discover's first available section without dropping unavailable sources", () => {
+  preferences = [{ id: "sources", shown: true }, ...defaultDiscoverRows.filter(row => row.id !== "sources").map(row => ({ ...row, shown: row.id !== "radio" }))];
+  liveSources = [];
+  let html = view();
+  expect(first(html)[0]![0]).toContain('aria-label="Search YouTube"');
+  expect(html).not.toContain('aria-label="Radio"');
+  expect(html).not.toContain('aria-label="Shared sources"');
+  liveSources = [source("studio", "Studio")];
+  html = view();
+  expect(html.indexOf('aria-label="Sources"')).toBeLessThan(html.indexOf('aria-label="Shared sources"'));
+  expect(first(html)[0]![0]).toContain('aria-label="Search YouTube"');
+  preferences = defaultDiscoverRows;
+});
+
+test("all hidden leaves customization reachable and does not render source queries", () => {
+  preferences = defaultDiscoverRows.map(row => ({ ...row, shown: false }));
+  const html = view();
+  expect(html).toContain("All sections are hidden");
+  expect(html).toContain('href="/settings/device/discover"');
+  expect(html).not.toContain('aria-label="Shared sources"');
+  expect(html).not.toContain('aria-label="Radio"');
+  expect(html).not.toContain('aria-label="Sources"');
+  expect(first(html)).toHaveLength(0);
+  preferences = defaultDiscoverRows;
 });

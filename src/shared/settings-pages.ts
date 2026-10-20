@@ -5,6 +5,7 @@ export const settingsPages = {
   connection: { scope: "device", label: "Couch connection", path: "/settings/device/connection" },
   viewing: { scope: "device", label: "Viewing", path: "/settings/device/viewing" },
   home: { scope: "device", label: "Home", path: "/settings/device/home" },
+  discover: { scope: "device", label: "Discover", path: "/settings/device/discover" },
   sharing: { scope: "device", label: "Sharing", path: "/settings/device/sharing" },
   "device-updates": { scope: "device", label: "Updates", path: "/settings/device/updates" },
   couch: { scope: "couch", label: "General", path: "/settings/couch/general" },
