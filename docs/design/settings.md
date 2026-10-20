@@ -2,11 +2,16 @@
 
 ## Two owners
 
-Settings has two owners, each titled with its real name. **This device** (its name) holds what changes only on the device in hand and what it consents to: General, Couch connection, Viewing, Home, Sharing and, in an app connected to another Couch, Updates. **The Couch** (its name, "Shared") holds what changes it for everyone: General, Access (Devices, Network), Watching (Playback for the active watching profile, Sources), the Couch's hardware (Sound, Bluetooth, Display, where it has them) and Updates when available. Each page's eyebrow repeats its owner; shared pages say "· This device" on the host, except hardware pages, which say "· Shared hardware".
+Settings has two owners, each titled with its real name. **This device** (its name) holds what changes only on the device in hand and what it consents to: General, Couch connection, Viewing, Home, Discover, Sharing and, in an app connected to another Couch, Updates. **The Couch** (its name, "Shared") holds what changes it for everyone: General, Access (Devices, Network), Watching (Playback for the active watching profile, Sources), the Couch's hardware (Sound, Bluetooth, Display, where it has them) and Updates when available. Each page's eyebrow repeats its owner; shared pages say "· This device" on the host, except hardware pages, which say "· Shared hardware".
 
 Settings opens on This device → General; within a page, frequent settings come first and rare or destructive ones (admin handover, Forget) last. On the TV, entering Devices focuses Pair a device when it is available.
 
 This device → Home lists Home's shelves, Continue, For later, Radio, Played recently and Up next, each with a Switch and Move up and down: [Home](home.md#shelves).
+This device → Discover uses those same divided rows and Reset to default for
+[Discover's sections](browse.md#discover). Pointer, keyboard and TV remote use
+the same Switch and Move controls; no drag gesture is required. A move to the
+first or last position returns focus to that row's Switch if the pressed Move
+button becomes disabled.
 
 Settings is the last tab in the TV and wide desktop header, and in the bottom bar on phones and narrow desktop windows; every page renders inside the shell on all three. On phones, choose Sharing or Network from the Settings page menu. The player's gear opens Playback, a separate surface for the current media.
 

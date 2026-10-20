@@ -74,20 +74,20 @@ is Discover.
 Discover (`/discover`) is Home's sibling: shelves of `MediaTile`s under their
 headings, with no hero, since Couch picks nothing for it. Each shelf's heading names
 what it samples and is a link that opens the rest ([MediaTile](#mediatile)).
-In order, so what's live leads and wide frames break up the catalogues'
+The default order puts live sources first and wide frames between catalogues'
 posters:
 
 - **Shared sources**, while devices share screen or sound: a compact row of
   names over their input kind, wrapping like Sources.
   Pressing a source plays it; its menu holds Play on, Play next and Queue.
-  The first source carries `data-page-first`, so TV focus starts there.
+  The first source carries `data-page-first`.
   Sharing's Start sharing opens Discover directly.
 - **Radio**, "On air now": the saved stations, then the built-in ones (Home's
   Radio shelf without its recents, `useOnAir`). A tile reads the station and
   its current show, else where it's from; the heading already says they're on
   air, so a tile doesn't repeat "Live". A show's `expiresAt` is when its data
   refreshes, not when it ends, so there is no "until" time. A tile plays its
-  station, and its first carries `data-page-first` when no shared source leads.
+  station, and its first carries `data-page-first`.
   The shelf waits for the shows, so no tile grows a line under the focus, then
   keeps its order while Discover stays open. Its heading opens every station (`/discover/radio`):
   its source choice (`radioSource`), count, Filter (`filter`) and pager
@@ -116,9 +116,27 @@ ones below don't move under the focus. One that fails says "Couldn't load
 own pages carry a breadcrumb to it, and Back returns to the heading that
 opened them. As a section root, Discover carries no breadcrumb.
 
+**Customize Discover** at the top opens This device → Discover in Settings.
+Like Home, its Switch and Move up/down rows save immediately on this device,
+independently of the Couch or watching profile. Every existing section is on
+by default. Source IDs stay stable across loading, empty responses and source
+availability; hidden or unavailable sections retain their saved position, and
+new sections append in default order. Reset to default restores the original
+order and visibility without onboarding. Hidden catalogue sections do not load.
+
+The first enabled, available section's primary control takes TV page entry;
+if an earlier section finishes loading, its primary takes over until the user
+presses a key or pointer. Back keeps the original heading or item even after a
+reorder; if it is hidden, focus falls back to the first available section.
+With all sections hidden or empty, an Empty explains how to customize or search,
+and Customize Discover remains reachable. This reuses Home's controls and the
+shadcn Button, Switch and Empty from the official catalog; no new primitive or
+input-specific layout is needed.
+
 Shared sources is the exception: its row comes and goes with intentional
 sharing. TV navigation keeps the same Radio tile focused when sharing starts;
-after its focused last source ends, the next arrow reaches Radio's first tile.
+after its focused last source ends, the next arrow reaches the first available
+section in the saved order.
 
 Not yet: a programme grid for Live TV, and any Core endpoint it would need;
 it waits for a source that needs one.

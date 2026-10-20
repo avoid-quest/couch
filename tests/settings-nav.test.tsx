@@ -33,7 +33,7 @@ test("Settings names its two owners and still offers a controller every shared p
   expect(view.nav).toContain('aria-label="This device · Phone"');
   expect(view.nav).toContain('aria-label="Living room · Shared · Only admins change most"');
   expect(view.nav).toContain("Living room&#x27;s hardware");
-  expect(view.device).toEqual(["general", "connection", "viewing", "home", "sharing"]);
+  expect(view.device).toEqual(["general", "connection", "viewing", "home", "discover", "sharing"]);
   expect(view.couch).toEqual(["couch", "devices", "network", "playback", "sources", "sound", "bluetooth", "display", "updates"]);
 });
 

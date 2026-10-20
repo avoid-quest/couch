@@ -109,7 +109,10 @@ export function DetailFocusRestoration() {
     // Keep watching for lost focus until input, navigation or the timeout.
     restore();
     const observer = new MutationObserver(() => {
-      if (document.activeElement !== document.body && document.activeElement !== fallbackFocus) return;
+      // Discover's reordered shelves can load out of order. Until input, an earlier
+      // shelf's first tile takes precedence over a later shelf's provisional entry.
+      const discoverEntry = tv && !returning && location.pathname === "/discover" && document.activeElement?.matches("[data-page-first]");
+      if (document.activeElement !== document.body && document.activeElement !== fallbackFocus && !discoverEntry) return;
       // Loading can replace the first control; settle again if it lost focus.
       restore();
     });

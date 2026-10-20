@@ -37,6 +37,7 @@ import { Route as SettingsCouchSoundRouteImport } from './routes/settings/couch/
 import { Route as SettingsCouchSourcesRouteImport } from './routes/settings/couch/sources'
 import { Route as SettingsCouchUpdatesRouteImport } from './routes/settings/couch/updates'
 import { Route as SettingsDeviceConnectionRouteImport } from './routes/settings/device/connection'
+import { Route as SettingsDeviceDiscoverRouteImport } from './routes/settings/device/discover'
 import { Route as SettingsDeviceGeneralRouteImport } from './routes/settings/device/general'
 import { Route as SettingsDeviceHomeRouteImport } from './routes/settings/device/home'
 import { Route as SettingsDeviceSharingRouteImport } from './routes/settings/device/sharing'
@@ -188,6 +189,11 @@ const SettingsDeviceConnectionRoute =
     path: '/device/connection',
     getParentRoute: () => SettingsRoute,
   } as any)
+const SettingsDeviceDiscoverRoute = SettingsDeviceDiscoverRouteImport.update({
+  id: '/device/discover',
+  path: '/device/discover',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsDeviceGeneralRoute = SettingsDeviceGeneralRouteImport.update({
   id: '/device/general',
   path: '/device/general',
@@ -267,6 +273,7 @@ export interface FileRoutesByFullPath {
   '/settings/couch/sources': typeof SettingsCouchSourcesRouteWithChildren
   '/settings/couch/updates': typeof SettingsCouchUpdatesRoute
   '/settings/device/connection': typeof SettingsDeviceConnectionRoute
+  '/settings/device/discover': typeof SettingsDeviceDiscoverRoute
   '/settings/device/general': typeof SettingsDeviceGeneralRoute
   '/settings/device/home': typeof SettingsDeviceHomeRoute
   '/settings/device/sharing': typeof SettingsDeviceSharingRoute
@@ -304,6 +311,7 @@ export interface FileRoutesByTo {
   '/settings/couch/sound': typeof SettingsCouchSoundRoute
   '/settings/couch/updates': typeof SettingsCouchUpdatesRoute
   '/settings/device/connection': typeof SettingsDeviceConnectionRoute
+  '/settings/device/discover': typeof SettingsDeviceDiscoverRoute
   '/settings/device/general': typeof SettingsDeviceGeneralRoute
   '/settings/device/home': typeof SettingsDeviceHomeRoute
   '/settings/device/sharing': typeof SettingsDeviceSharingRoute
@@ -344,6 +352,7 @@ export interface FileRoutesById {
   '/settings/couch/sources': typeof SettingsCouchSourcesRouteWithChildren
   '/settings/couch/updates': typeof SettingsCouchUpdatesRoute
   '/settings/device/connection': typeof SettingsDeviceConnectionRoute
+  '/settings/device/discover': typeof SettingsDeviceDiscoverRoute
   '/settings/device/general': typeof SettingsDeviceGeneralRoute
   '/settings/device/home': typeof SettingsDeviceHomeRoute
   '/settings/device/sharing': typeof SettingsDeviceSharingRoute
@@ -385,6 +394,7 @@ export interface FileRouteTypes {
     | '/settings/couch/sources'
     | '/settings/couch/updates'
     | '/settings/device/connection'
+    | '/settings/device/discover'
     | '/settings/device/general'
     | '/settings/device/home'
     | '/settings/device/sharing'
@@ -422,6 +432,7 @@ export interface FileRouteTypes {
     | '/settings/couch/sound'
     | '/settings/couch/updates'
     | '/settings/device/connection'
+    | '/settings/device/discover'
     | '/settings/device/general'
     | '/settings/device/home'
     | '/settings/device/sharing'
@@ -461,6 +472,7 @@ export interface FileRouteTypes {
     | '/settings/couch/sources'
     | '/settings/couch/updates'
     | '/settings/device/connection'
+    | '/settings/device/discover'
     | '/settings/device/general'
     | '/settings/device/home'
     | '/settings/device/sharing'
@@ -689,6 +701,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsDeviceConnectionRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/device/discover': {
+      id: '/settings/device/discover'
+      path: '/device/discover'
+      fullPath: '/settings/device/discover'
+      preLoaderRoute: typeof SettingsDeviceDiscoverRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/device/general': {
       id: '/settings/device/general'
       path: '/device/general'
@@ -786,6 +805,7 @@ interface SettingsRouteChildren {
   SettingsCouchSourcesRoute: typeof SettingsCouchSourcesRouteWithChildren
   SettingsCouchUpdatesRoute: typeof SettingsCouchUpdatesRoute
   SettingsDeviceConnectionRoute: typeof SettingsDeviceConnectionRoute
+  SettingsDeviceDiscoverRoute: typeof SettingsDeviceDiscoverRoute
   SettingsDeviceGeneralRoute: typeof SettingsDeviceGeneralRoute
   SettingsDeviceHomeRoute: typeof SettingsDeviceHomeRoute
   SettingsDeviceSharingRoute: typeof SettingsDeviceSharingRoute
@@ -806,6 +826,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsCouchSourcesRoute: SettingsCouchSourcesRouteWithChildren,
   SettingsCouchUpdatesRoute: SettingsCouchUpdatesRoute,
   SettingsDeviceConnectionRoute: SettingsDeviceConnectionRoute,
+  SettingsDeviceDiscoverRoute: SettingsDeviceDiscoverRoute,
   SettingsDeviceGeneralRoute: SettingsDeviceGeneralRoute,
   SettingsDeviceHomeRoute: SettingsDeviceHomeRoute,
   SettingsDeviceSharingRoute: SettingsDeviceSharingRoute,

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState } from "react";
+import { readSectionRows, useSectionRows } from "../section-rows";
 
 // Home's shelves, in the order a fresh device shows them. Each device keeps its own choice. What plays
 // is not one: it leads Home as its hero, and a saved "now" row is dropped as unknown.
@@ -9,46 +10,8 @@ export const defaultHomeRows: HomeRow[] = [
   { id: "continue", shown: true }, { id: "later", shown: true },
   { id: "radio", shown: true }, { id: "recent", shown: true }, { id: "upNext", shown: false },
 ];
-const storageKey = "couch.home-rows";
-let sessionRows: HomeRow[] | null = null;
-
-export function readHomeRows(storage?: Pick<Storage, "getItem">): HomeRow[] {
-  if (!storage && sessionRows) return sessionRows;
-  try {
-    const saved = JSON.parse((storage ?? localStorage).getItem(storageKey) ?? "[]") as HomeRow[];
-    const known = saved.filter((row, index) => Object.hasOwn(homeRowLabels, row?.id) && saved.findIndex(other => other.id === row.id) === index).map(row => ({ id: row.id, shown: row.shown !== false }));
-    // Rows added after the choice was saved join at their default place at the end.
-    return [...known, ...defaultHomeRows.filter(row => !known.some(other => other.id === row.id))];
-  } catch { return defaultHomeRows; }
-}
-
-export function useHomeRows() {
-  const [rows, setRows] = useState(() => readHomeRows());
-  useEffect(() => {
-    const update = (event: StorageEvent) => { if (event.key === storageKey || event.key === null) { sessionRows = null; setRows(readHomeRows()); } };
-    const refresh = () => setRows(readHomeRows());
-    window.addEventListener("storage", update);
-    window.addEventListener(storageKey, refresh);
-    return () => { window.removeEventListener("storage", update); window.removeEventListener(storageKey, refresh); };
-  }, []);
-  const save = useCallback((next: HomeRow[]) => {
-    setRows(next);
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); sessionRows = null; } catch { sessionRows = next; }
-    window.dispatchEvent(new Event(storageKey));
-  }, []);
-  return useMemo(() => ({
-    rows,
-    toggle: (id: HomeRowId, shown: boolean) => save(rows.map(row => row.id === id ? { ...row, shown } : row)),
-    move: (id: HomeRowId, by: -1 | 1) => {
-      const from = rows.findIndex(row => row.id === id), to = from + by;
-      if (from < 0 || to < 0 || to >= rows.length) return;
-      const next = [...rows];
-      [next[from], next[to]] = [next[to]!, next[from]!];
-      save(next);
-    },
-    reset: () => save(defaultHomeRows),
-  }), [rows, save]);
-}
+export const readHomeRows = (storage?: Pick<Storage, "getItem">) => readSectionRows("couch.home-rows", defaultHomeRows, storage);
+export const useHomeRows = () => useSectionRows("couch.home-rows", defaultHomeRows);
 
 /** Items in the order Home first showed them: known ones keep their place, new ones follow in their own order. */
 export function keptOrder<T>(order: readonly string[], items: readonly T[], key: (item: T) => string): T[] {
