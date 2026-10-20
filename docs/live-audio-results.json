@@ -1,0 +1,1586 @@
+{
+  "schema": "couch-live-audio-summary/1",
+  "date": "2026-10-20",
+  "revision": "1dcfb69",
+  "dirty": true,
+  "scope": "Compact selected raw observations; no physical, Wi-Fi or sustained capacity qualification. Full private artifacts are outside the repository.",
+  "contract": {
+    "softwareMaxMs": 60,
+    "virtualOutputSkewMaxMs": 5,
+    "physicalTargetMs": 100
+  },
+  "audio": [
+    {
+      "id": "graph-calibration",
+      "sourceArtifact": "/tmp/couch-live-calibration-ipc-512-1/result.json",
+      "sha256": "19c55b0479a942b1d4c62b158096dfffc40b7d84908f2d8a89b0beb6beff7f44",
+      "mode": "calibration",
+      "seed": 20261020,
+      "receivers": 3,
+      "seconds": 5,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 512,
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "graphDeviationUs": 9397,
+        "exitCode": 0
+      },
+      "calibration": {
+        "status": "passed",
+        "reasons": [],
+        "scope": "common-graph known-delay calibration",
+        "graph": {
+          "xruns": 0,
+          "overflow": false,
+          "graphDeviationUs": 9397,
+          "exitCode": 0
+        },
+        "outputs": [
+          {
+            "id": "receiver-0",
+            "expectedMs": 20,
+            "observedMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-1",
+            "expectedMs": 80,
+            "observedMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-2",
+            "expectedMs": 150,
+            "observedMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          }
+        ],
+        "maxAbsoluteErrorMs": 0,
+        "uncertaintyMs": 0.041666666666666664,
+        "untested": [
+          "source-to-capture delay measured separately",
+          "physical output latency",
+          "acoustic speaker timing"
+        ]
+      },
+      "network": null,
+      "formalSoftwareQualification": "graph-only calibration passed",
+      "sampleUncertaintyMs": 0.041666666666666664,
+      "sourceToCaptureCorrectionMs": null,
+      "outputPresentationOffsetMs": null,
+      "analysis": {
+        "durationFrames": 240000,
+        "warmupFrames": 0,
+        "expectedMarkers": 50,
+        "measurementValid": true,
+        "measurementIssues": [],
+        "reference": {
+          "id": "reference",
+          "expected": 50,
+          "detected": 50,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 20.041666666666668
+          },
+          {
+            "id": "receiver-1",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 80.04166666666667
+          },
+          {
+            "id": "receiver-2",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 150.04166666666666
+          }
+        ],
+        "skewMs": {
+          "count": 50,
+          "min": 130,
+          "p50": 130,
+          "p95": 130,
+          "p99": 130,
+          "max": 130,
+          "mean": 130,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "resources": {
+        "sampleCount": 7,
+        "cpuCount": 24,
+        "cpuPercentMax": 35.59494789932313,
+        "rssBytesMax": 163729408,
+        "perProcessGroup": {
+          "jack": {
+            "cpuPercentMax": 3.1535760903227588,
+            "rssBytesMax": 75059200
+          },
+          "graph": {
+            "cpuPercentMax": 2.00081846880858,
+            "rssBytesMax": 10805248
+          }
+        },
+        "convention": "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; 1-second samples"
+      },
+      "browserVersions": null
+    },
+    {
+      "id": "production-webrtc-n0",
+      "sourceArtifact": "/tmp/couch-audio-direct-n0-20261020-b/result.json",
+      "sha256": "725ee3ab3da387648a77f18dfdc5ed662445d0aabe5046a84b13a96e8afb5ba0",
+      "mode": "direct",
+      "seed": 20261020,
+      "receivers": 2,
+      "seconds": 15,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 512,
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "graphDeviationUs": 2881.667,
+        "exitCode": 0
+      },
+      "calibration": null,
+      "network": {
+        "profile": "N0",
+        "seed": 20261020,
+        "clients": [
+          {
+            "name": "client-1",
+            "address": "10.231.2.2",
+            "delayMsEachDirection": 2,
+            "jitterMsEachDirection": 1,
+            "lossPercentEachDirection": 0,
+            "downSeed": 20261022,
+            "upSeed": 20261023,
+            "capKbpsEachDirection": null
+          },
+          {
+            "name": "client-2",
+            "address": "10.231.3.2",
+            "delayMsEachDirection": 2,
+            "jitterMsEachDirection": 1,
+            "lossPercentEachDirection": 0,
+            "downSeed": 20261024,
+            "upSeed": 20261025,
+            "capKbpsEachDirection": null
+          }
+        ],
+        "sharedDownKbps": 20000,
+        "sharedUpKbps": 20000,
+        "queuePacketsPerNetem": 256,
+        "jitterDistribution": "uniform",
+        "resources": {
+          "wallSeconds": 120,
+          "cpuAffinity": null,
+          "maxProcesses": 512,
+          "maxSummedRssMiB": 8192
+        },
+        "unsupported": [
+          "N3 timed outages",
+          "N4 TURN/UDP blocking",
+          "N5 lifecycle",
+          "N6 clock drift/CPU quotas",
+          "N7 dynamic/asymmetric/burst profiles"
+        ],
+        "untested": [
+          "phone acoustic latency",
+          "Wi-Fi radios/contention",
+          "browser audio output"
+        ]
+      },
+      "formalSoftwareQualification": "inconclusive",
+      "sampleUncertaintyMs": 0.041666666666666664,
+      "sourceToCaptureCorrectionMs": null,
+      "outputPresentationOffsetMs": null,
+      "analysis": {
+        "durationFrames": 720000,
+        "warmupFrames": 96000,
+        "expectedMarkers": 130,
+        "measurementValid": true,
+        "measurementIssues": [],
+        "reference": {
+          "id": "reference",
+          "expected": 130,
+          "detected": 130,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 130,
+            "detected": 130,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 5971,
+            "unmatchedActivityBursts": 1930,
+            "unmatchedActivityFirstFrame": 98334,
+            "latencyMs": {
+              "count": 130,
+              "min": 148.91666666666666,
+              "p50": 148.9,
+              "p95": 148.9,
+              "p99": 148.9,
+              "max": 148.9375,
+              "mean": 148.9198717948718,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 148.97916666666666
+          },
+          {
+            "id": "receiver-1",
+            "expected": 130,
+            "detected": 130,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 6572,
+            "unmatchedActivityBursts": 1469,
+            "unmatchedActivityFirstFrame": 99934,
+            "latencyMs": {
+              "count": 130,
+              "min": 165.95833333333334,
+              "p50": 166,
+              "p95": 166,
+              "p99": 166,
+              "max": 165.95833333333334,
+              "mean": 165.9583333333332,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 166
+          }
+        ],
+        "skewMs": {
+          "count": 130,
+          "min": 17.020833333333332,
+          "p50": 17,
+          "p95": 17,
+          "p99": 17,
+          "max": 17.041666666666668,
+          "mean": 17.03846153846155,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "resources": {
+        "sampleCount": 26,
+        "cpuCount": 24,
+        "cpuPercentMax": 162.24464811304114,
+        "rssBytesMax": 2600423424,
+        "perProcessGroup": {
+          "jack": {
+            "cpuPercentMax": 2.5849736513054093,
+            "rssBytesMax": 75501568
+          },
+          "graph": {
+            "cpuPercentMax": 2.9998009302104665,
+            "rssBytesMax": 17330176
+          },
+          "pulse": {
+            "cpuPercentMax": 6.999513344835676,
+            "rssBytesMax": 21741568
+          },
+          "core": {
+            "cpuPercentMax": 29.761278937608488,
+            "rssBytesMax": 112484352
+          },
+          "browser--1": {
+            "cpuPercentMax": 24.011299093059417,
+            "rssBytesMax": 768950272
+          },
+          "browser-0": {
+            "cpuPercentMax": 54.93794654555582,
+            "rssBytesMax": 761679872
+          },
+          "browser-1": {
+            "cpuPercentMax": 94.04425478114938,
+            "rssBytesMax": 761372672
+          }
+        },
+        "convention": "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; 1-second samples"
+      },
+      "browserVersions": {
+        "node": "24.21.0",
+        "acorn": "8.18.0",
+        "ada": "4.0.0",
+        "amaro": "1.1.11",
+        "ares": "1.34.8",
+        "brotli": "1.2.0",
+        "cldr": "48.0",
+        "icu": "78.2",
+        "llhttp": "9.4.3",
+        "merve": "1.2.2",
+        "modules": "149",
+        "napi": "10",
+        "nbytes": "0.1.4",
+        "ncrypto": "0.0.1",
+        "nghttp2": "1.70.0",
+        "nghttp3": "",
+        "ngtcp2": "",
+        "openssl": "0.0.0",
+        "simdjson": "4.6.7",
+        "simdutf": "7.7.0",
+        "sqlite": "3.53.4",
+        "tz": "2025c",
+        "undici": "7.29.1",
+        "unicode": "17.0",
+        "uv": "1.52.1",
+        "uvwasi": "0.0.23",
+        "v8": "15.2.124.28-electron.0",
+        "zlib": "1.3.2.1-motley",
+        "zstd": "1.6.0",
+        "electron": "44.4.5",
+        "chrome": "152.0.7977.130"
+      }
+    },
+    {
+      "id": "production-buffered-live",
+      "sourceArtifact": "/tmp/couch-live-sync-512/result.json",
+      "sha256": "77b39a84e17c00e04cb64214ba9a2d751a24c830790f4f095b0d089e767e76e6",
+      "mode": "sync",
+      "seed": 20261020,
+      "receivers": 2,
+      "seconds": 8,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 512,
+      "graphHealth": null,
+      "calibration": null,
+      "network": null,
+      "formalSoftwareQualification": "inconclusive",
+      "sampleUncertaintyMs": 0.041666666666666664,
+      "sourceToCaptureCorrectionMs": 0,
+      "outputPresentationOffsetMs": null,
+      "analysis": {
+        "durationFrames": 384000,
+        "warmupFrames": 96000,
+        "expectedMarkers": 60,
+        "measurementValid": true,
+        "measurementIssues": [],
+        "reference": {
+          "id": "reference",
+          "expected": 60,
+          "detected": 60,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 60,
+            "detected": 56,
+            "missing": 4,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "latencyMs": {
+              "count": 56,
+              "min": 2584.9375,
+              "p50": 2586,
+              "p95": 2586.9,
+              "p99": 2587,
+              "max": 2587,
+              "mean": 2585.9851190476193,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 2587.0416666666665
+          },
+          {
+            "id": "receiver-1",
+            "expected": 60,
+            "detected": 59,
+            "missing": 1,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "latencyMs": {
+              "count": 59,
+              "min": 2594.3958333333335,
+              "p50": 2594.7,
+              "p95": 2594.9,
+              "p99": 2595,
+              "max": 2595.0208333333335,
+              "mean": 2594.649364406779,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 2595.0625
+          }
+        ],
+        "skewMs": {
+          "count": 55,
+          "min": 7.75,
+          "p50": 8.7,
+          "p95": 9.9,
+          "p99": 10.1,
+          "max": 10.083333333333334,
+          "mean": 8.664393939393937,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "resources": null,
+      "browserVersions": null
+    },
+    {
+      "id": "graph-calibration-1024",
+      "sourceArtifact": "/tmp/couch-live-calibration-ipc-1024-1/result.json",
+      "sha256": "806a139799c60e3dbfea0a9a011370321190cb9dce42bd1163c74ed8e0af7f7c",
+      "mode": "calibration",
+      "seed": 20261020,
+      "receivers": 3,
+      "seconds": 5,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 1024,
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "graphDeviationUs": 503,
+        "exitCode": 0
+      },
+      "calibration": {
+        "status": "passed",
+        "reasons": [],
+        "scope": "common-graph known-delay calibration",
+        "graph": {
+          "xruns": 0,
+          "overflow": false,
+          "graphDeviationUs": 503,
+          "exitCode": 0
+        },
+        "outputs": [
+          {
+            "id": "receiver-0",
+            "expectedMs": 20,
+            "observedMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-1",
+            "expectedMs": 80,
+            "observedMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          },
+          {
+            "id": "receiver-2",
+            "expectedMs": 150,
+            "observedMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "maxAbsoluteErrorMs": 0,
+            "errorUpperBoundMs": 0.041666666666666664
+          }
+        ],
+        "maxAbsoluteErrorMs": 0,
+        "uncertaintyMs": 0.041666666666666664,
+        "untested": [
+          "source-to-capture delay measured separately",
+          "physical output latency",
+          "acoustic speaker timing"
+        ]
+      },
+      "network": null,
+      "backend": {
+        "jackDriver": "dummy",
+        "jackRealtime": false,
+        "pulseRealtime": false,
+        "pulseHighPriority": false
+      },
+      "jitterBufferPreference": {
+        "requestedMs": null,
+        "receivers": [],
+        "scope": "Browser preference only; readback does not prove actual occupancy or a maximum delay"
+      },
+      "formalSoftwareQualification": "graph-only calibration passed",
+      "sampleUncertaintyMs": 0.041666666666666664,
+      "sourceToCaptureCorrectionMs": null,
+      "outputPresentationOffsetMs": null,
+      "analysis": {
+        "durationFrames": 240000,
+        "warmupFrames": 0,
+        "expectedMarkers": 50,
+        "measurementValid": true,
+        "measurementIssues": [],
+        "reference": {
+          "id": "reference",
+          "expected": 50,
+          "detected": 50,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 20,
+              "p50": 20,
+              "p95": 20,
+              "p99": 20,
+              "max": 20,
+              "mean": 20,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 20.041666666666668
+          },
+          {
+            "id": "receiver-1",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 80,
+              "p50": 80,
+              "p95": 80,
+              "p99": 80,
+              "max": 80,
+              "mean": 80,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 80.04166666666667
+          },
+          {
+            "id": "receiver-2",
+            "expected": 50,
+            "detected": 50,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 0,
+            "unmatchedActivityBursts": 0,
+            "unmatchedActivityFirstFrame": null,
+            "latencyMs": {
+              "count": 50,
+              "min": 150,
+              "p50": 150,
+              "p95": 150,
+              "p99": 150,
+              "max": 150,
+              "mean": 150,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 150.04166666666666
+          }
+        ],
+        "skewMs": {
+          "count": 50,
+          "min": 130,
+          "p50": 130,
+          "p95": 130,
+          "p99": 130,
+          "max": 130,
+          "mean": 130,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "resources": {
+        "sampleCount": 7,
+        "cpuCount": 24,
+        "cpuPercentMax": 53.66231855137561,
+        "rssBytesMax": 161529856,
+        "perProcessGroup": {
+          "jack": {
+            "cpuPercentMax": 3.4346646767959808,
+            "rssBytesMax": 75358208
+          },
+          "graph": {
+            "cpuPercentMax": 1.9998613616109675,
+            "rssBytesMax": 11608064
+          }
+        },
+        "convention": "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; 1-second samples"
+      },
+      "mediaPath": []
+    },
+    {
+      "id": "webrtc-control-1024",
+      "sourceArtifact": "/tmp/couch-live-direct-control-ipc-1024-1/result.json",
+      "sha256": "6868c2444eaa571327f2e730a49aefc4d9c549954b9c0c4c3f40357dff076ec1",
+      "mode": "direct",
+      "seed": 20261020,
+      "receivers": 2,
+      "seconds": 8,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 1024,
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "graphDeviationUs": 2837.667,
+        "exitCode": 0
+      },
+      "calibration": null,
+      "network": {
+        "profile": "control",
+        "seed": 1,
+        "clients": [
+          {
+            "name": "client-1",
+            "address": "10.231.2.2",
+            "delayMsEachDirection": 0,
+            "jitterMsEachDirection": 0,
+            "lossPercentEachDirection": 0,
+            "downSeed": 3,
+            "upSeed": 4,
+            "capKbpsEachDirection": null
+          },
+          {
+            "name": "client-2",
+            "address": "10.231.3.2",
+            "delayMsEachDirection": 0,
+            "jitterMsEachDirection": 0,
+            "lossPercentEachDirection": 0,
+            "downSeed": 5,
+            "upSeed": 6,
+            "capKbpsEachDirection": null
+          }
+        ],
+        "sharedDownKbps": null,
+        "sharedUpKbps": null,
+        "queuePacketsPerNetem": 256,
+        "jitterDistribution": "uniform",
+        "resources": {
+          "wallSeconds": 120,
+          "cpuAffinity": null,
+          "maxProcesses": 512,
+          "maxSummedRssMiB": 8192
+        },
+        "unsupported": [
+          "N3 timed outages",
+          "N4 TURN/UDP blocking",
+          "N5 lifecycle",
+          "N6 clock drift/CPU quotas",
+          "N7 dynamic/asymmetric/burst profiles"
+        ],
+        "untested": [
+          "phone acoustic latency",
+          "Wi-Fi radios/contention",
+          "browser audio output"
+        ]
+      },
+      "backend": {
+        "jackDriver": "dummy",
+        "jackRealtime": false,
+        "pulseRealtime": false,
+        "pulseHighPriority": false
+      },
+      "jitterBufferPreference": {
+        "requestedMs": null,
+        "receivers": [],
+        "scope": "Browser preference only; readback does not prove actual occupancy or a maximum delay"
+      },
+      "formalSoftwareQualification": "inconclusive",
+      "sampleUncertaintyMs": 0.041666666666666664,
+      "sourceToCaptureCorrectionMs": null,
+      "outputPresentationOffsetMs": null,
+      "analysis": {
+        "durationFrames": 384000,
+        "warmupFrames": 96000,
+        "expectedMarkers": 60,
+        "measurementValid": true,
+        "measurementIssues": [],
+        "reference": {
+          "id": "reference",
+          "expected": 60,
+          "detected": 60,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 60,
+            "detected": 60,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 2738,
+            "unmatchedActivityBursts": 835,
+            "unmatchedActivityFirstFrame": 98116,
+            "latencyMs": {
+              "count": 60,
+              "min": 144.22916666666666,
+              "p50": 144.2,
+              "p95": 144.2,
+              "p99": 144.2,
+              "max": 144.22916666666666,
+              "mean": 144.22916666666677,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 144.27083333333331
+          },
+          {
+            "id": "receiver-1",
+            "expected": 60,
+            "detected": 60,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 2881,
+            "unmatchedActivityBursts": 824,
+            "unmatchedActivityFirstFrame": 98764,
+            "latencyMs": {
+              "count": 60,
+              "min": 157.60416666666666,
+              "p50": 157.6,
+              "p95": 157.6,
+              "p99": 157.6,
+              "max": 157.60416666666666,
+              "mean": 157.60416666666669,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 157.64583333333331
+          }
+        ],
+        "skewMs": {
+          "count": 60,
+          "min": 13.375,
+          "p50": 13.4,
+          "p95": 13.4,
+          "p99": 13.4,
+          "max": 13.375,
+          "mean": 13.375,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "resources": {
+        "sampleCount": 16,
+        "cpuCount": 24,
+        "cpuPercentMax": 110.53709703507312,
+        "rssBytesMax": 2593030144,
+        "perProcessGroup": {
+          "jack": {
+            "cpuPercentMax": 6.695538767206299,
+            "rssBytesMax": 75472896
+          },
+          "graph": {
+            "cpuPercentMax": 1.9998626554324124,
+            "rssBytesMax": 12267520
+          },
+          "pulse": {
+            "cpuPercentMax": 6.695538767206299,
+            "rssBytesMax": 21872640
+          },
+          "core": {
+            "cpuPercentMax": 47.01480538534909,
+            "rssBytesMax": 110792704
+          },
+          "browser--1": {
+            "cpuPercentMax": 71.99524341825786,
+            "rssBytesMax": 774586368
+          },
+          "browser-0": {
+            "cpuPercentMax": 44.99690974722928,
+            "rssBytesMax": 765247488
+          },
+          "browser-1": {
+            "cpuPercentMax": 29.997296343680542,
+            "rssBytesMax": 758710272
+          }
+        },
+        "convention": "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; 1-second samples"
+      },
+      "mediaPath": [
+        {
+          "id": "receiver-0",
+          "receivedAudioBytes": 32635,
+          "selectedPairs": [
+            {
+              "id": "CPVkWlJHNR_YW4BDEtS",
+              "state": "succeeded",
+              "nominated": true,
+              "bytesSent": 9339,
+              "bytesReceived": 59497,
+              "currentRoundTripTime": 0.001,
+              "selectedBy": "transport.selectedCandidatePairId",
+              "local": {
+                "id": "IVkWlJHNR",
+                "address": "10.231.2.2",
+                "port": 34525,
+                "protocol": "udp",
+                "candidateType": "host",
+                "networkType": "ethernet"
+              },
+              "remote": {
+                "id": "IYW4BDEtS",
+                "address": "10.231.0.2",
+                "port": 40358,
+                "protocol": "udp",
+                "candidateType": "host"
+              }
+            }
+          ],
+          "shapedRouteObserved": true
+        },
+        {
+          "id": "receiver-1",
+          "receivedAudioBytes": 32539,
+          "selectedPairs": [
+            {
+              "id": "CPHQehr+qX_RUCRVvWw",
+              "state": "succeeded",
+              "nominated": true,
+              "bytesSent": 9267,
+              "bytesReceived": 59114,
+              "currentRoundTripTime": 0.001,
+              "selectedBy": "transport.selectedCandidatePairId",
+              "local": {
+                "id": "IHQehr+qX",
+                "address": "10.231.3.2",
+                "port": 52653,
+                "protocol": "udp",
+                "candidateType": "host",
+                "networkType": "ethernet"
+              },
+              "remote": {
+                "id": "IRUCRVvWw",
+                "address": "10.231.0.2",
+                "port": 42590,
+                "protocol": "udp",
+                "candidateType": "host"
+              }
+            }
+          ],
+          "shapedRouteObserved": true
+        }
+      ],
+      "observedMeanJitterBufferResidenceMs": [
+        53.67032967032967,
+        66.52747252747253
+      ]
+    },
+    {
+      "id": "webrtc-jitter0-1024",
+      "sourceArtifact": "/tmp/couch-live-direct-jitter0-ipc-1024-1/result.json",
+      "sha256": "67c4751961d15d4b7e902c9fac535b24ce0bf1f9f37698e3c40217f84bad2893",
+      "mode": "direct",
+      "seed": 20261020,
+      "receivers": 2,
+      "seconds": 8,
+      "sampleRate": 48000,
+      "graphQuantumFrames": 1024,
+      "graphHealth": {
+        "xruns": 0,
+        "overflow": false,
+        "graphDeviationUs": 18461,
+        "exitCode": 0
+      },
+      "calibration": null,
+      "network": {
+        "profile": "control",
+        "seed": 1,
+        "clients": [
+          {
+            "name": "client-1",
+            "address": "10.231.2.2",
+            "delayMsEachDirection": 0,
+            "jitterMsEachDirection": 0,
+            "lossPercentEachDirection": 0,
+            "downSeed": 3,
+            "upSeed": 4,
+            "capKbpsEachDirection": null
+          },
+          {
+            "name": "client-2",
+            "address": "10.231.3.2",
+            "delayMsEachDirection": 0,
+            "jitterMsEachDirection": 0,
+            "lossPercentEachDirection": 0,
+            "downSeed": 5,
+            "upSeed": 6,
+            "capKbpsEachDirection": null
+          }
+        ],
+        "sharedDownKbps": null,
+        "sharedUpKbps": null,
+        "queuePacketsPerNetem": 256,
+        "jitterDistribution": "uniform",
+        "resources": {
+          "wallSeconds": 120,
+          "cpuAffinity": null,
+          "maxProcesses": 512,
+          "maxSummedRssMiB": 8192
+        },
+        "unsupported": [
+          "N3 timed outages",
+          "N4 TURN/UDP blocking",
+          "N5 lifecycle",
+          "N6 clock drift/CPU quotas",
+          "N7 dynamic/asymmetric/burst profiles"
+        ],
+        "untested": [
+          "phone acoustic latency",
+          "Wi-Fi radios/contention",
+          "browser audio output"
+        ]
+      },
+      "backend": {
+        "jackDriver": "dummy",
+        "jackRealtime": false,
+        "pulseRealtime": false,
+        "pulseHighPriority": false
+      },
+      "jitterBufferPreference": {
+        "requestedMs": 0,
+        "receivers": [
+          [
+            {
+              "previous": null,
+              "requested": 0,
+              "readback": 0
+            }
+          ],
+          [
+            {
+              "previous": null,
+              "requested": 0,
+              "readback": 0
+            }
+          ]
+        ],
+        "scope": "Browser preference only; readback does not prove actual occupancy or a maximum delay"
+      },
+      "formalSoftwareQualification": "inconclusive",
+      "sampleUncertaintyMs": 0.041666666666666664,
+      "sourceToCaptureCorrectionMs": null,
+      "outputPresentationOffsetMs": null,
+      "analysis": {
+        "durationFrames": 384000,
+        "warmupFrames": 96000,
+        "expectedMarkers": 60,
+        "measurementValid": true,
+        "measurementIssues": [],
+        "reference": {
+          "id": "reference",
+          "expected": 60,
+          "detected": 60,
+          "missing": 0,
+          "duplicated": 0,
+          "outOfOrder": 0,
+          "gaps": 0,
+          "clippedSamples": 0,
+          "unmatchedActivityFrames": 0,
+          "unmatchedActivityBursts": 0,
+          "unmatchedActivityFirstFrame": null,
+          "latencyMs": {
+            "count": 0,
+            "min": null,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null,
+            "mean": null,
+            "quantileResolutionMs": 0.1
+          },
+          "latencyUpperBoundMs": null
+        },
+        "receivers": [
+          {
+            "id": "receiver-0",
+            "expected": 60,
+            "detected": 0,
+            "missing": 60,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 45820,
+            "unmatchedActivityBursts": 3111,
+            "unmatchedActivityFirstFrame": 98257,
+            "latencyMs": {
+              "count": 0,
+              "min": null,
+              "p50": null,
+              "p95": null,
+              "p99": null,
+              "max": null,
+              "mean": null,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": null
+          },
+          {
+            "id": "receiver-1",
+            "expected": 60,
+            "detected": 60,
+            "missing": 0,
+            "duplicated": 0,
+            "outOfOrder": 0,
+            "gaps": 0,
+            "clippedSamples": 0,
+            "unmatchedActivityFrames": 3051,
+            "unmatchedActivityBursts": 694,
+            "unmatchedActivityFirstFrame": 98730,
+            "latencyMs": {
+              "count": 60,
+              "min": 157.60416666666666,
+              "p50": 157.6,
+              "p95": 157.6,
+              "p99": 157.6,
+              "max": 157.60416666666666,
+              "mean": 157.60416666666669,
+              "quantileResolutionMs": 0.1
+            },
+            "latencyUpperBoundMs": 157.64583333333331
+          }
+        ],
+        "skewMs": {
+          "count": 0,
+          "min": null,
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "max": null,
+          "mean": null,
+          "quantileResolutionMs": 0.1
+        }
+      },
+      "resources": {
+        "sampleCount": 16,
+        "cpuCount": 24,
+        "cpuPercentMax": 122.20425006492499,
+        "rssBytesMax": 2604781568,
+        "perProcessGroup": {
+          "jack": {
+            "cpuPercentMax": 4.402495520246189,
+            "rssBytesMax": 75603968
+          },
+          "graph": {
+            "cpuPercentMax": 1.9998638632672352,
+            "rssBytesMax": 10756096
+          },
+          "pulse": {
+            "cpuPercentMax": 4.999632142065888,
+            "rssBytesMax": 22233088
+          },
+          "core": {
+            "cpuPercentMax": 42.02255283174396,
+            "rssBytesMax": 110047232
+          },
+          "browser--1": {
+            "cpuPercentMax": 54.9960441345454,
+            "rssBytesMax": 769478656
+          },
+          "browser-0": {
+            "cpuPercentMax": 57.99600685893576,
+            "rssBytesMax": 767008768
+          },
+          "browser-1": {
+            "cpuPercentMax": 66.99536753831619,
+            "rssBytesMax": 766976000
+          }
+        },
+        "convention": "CPU percent of one logical CPU; RSS sums processes and can double-count shared pages; 1-second samples"
+      },
+      "mediaPath": [
+        {
+          "id": "receiver-0",
+          "receivedAudioBytes": 32647,
+          "selectedPairs": [
+            {
+              "id": "CPFeE9axtH_mP5f27Ip",
+              "state": "succeeded",
+              "nominated": true,
+              "bytesSent": 9441,
+              "bytesReceived": 59791,
+              "currentRoundTripTime": 0,
+              "selectedBy": "transport.selectedCandidatePairId",
+              "local": {
+                "id": "IFeE9axtH",
+                "address": "10.231.2.2",
+                "port": 47010,
+                "protocol": "udp",
+                "candidateType": "host",
+                "networkType": "ethernet"
+              },
+              "remote": {
+                "id": "ImP5f27Ip",
+                "address": "10.231.0.2",
+                "port": 42796,
+                "protocol": "udp",
+                "candidateType": "host"
+              }
+            }
+          ],
+          "shapedRouteObserved": true
+        },
+        {
+          "id": "receiver-1",
+          "receivedAudioBytes": 32653,
+          "selectedPairs": [
+            {
+              "id": "CPcl5bAH0a_1yhuem86",
+              "state": "succeeded",
+              "nominated": true,
+              "bytesSent": 9456,
+              "bytesReceived": 59750,
+              "currentRoundTripTime": 0,
+              "selectedBy": "transport.selectedCandidatePairId",
+              "local": {
+                "id": "Icl5bAH0a",
+                "address": "10.231.3.2",
+                "port": 58388,
+                "protocol": "udp",
+                "candidateType": "host",
+                "networkType": "ethernet"
+              },
+              "remote": {
+                "id": "I1yhuem86",
+                "address": "10.231.0.2",
+                "port": 45930,
+                "protocol": "udp",
+                "candidateType": "host"
+              }
+            }
+          ],
+          "shapedRouteObserved": true
+        }
+      ],
+      "observedMeanJitterBufferResidenceMs": [
+        57.675438596491226,
+        66.64473684210526
+      ]
+    }
+  ],
+  "protocol": [
+    {
+      "id": "live-admission-50",
+      "sourceArtifact": "/tmp/couch-admission-evidence-20261020/live-admission-50-1792511898341.json",
+      "sha256": "ded4c55a25b4faef09a7d478445ea461268f64adf6b8f3b812226769b159aca6",
+      "runtime": {
+        "electron": null,
+        "node": "24.21.0"
+      },
+      "measured": {
+        "participants": 50,
+        "admitted": 50,
+        "durationMs": 330.648874,
+        "invalid": 8,
+        "replayLimited": 4
+      },
+      "untested": [
+        "Real WebRTC negotiation",
+        "Browser decode/render and audio unlock",
+        "Acoustic latency",
+        "Phone compatibility",
+        "Venue Wi-Fi"
+      ]
+    },
+    {
+      "id": "live-admission-100",
+      "sourceArtifact": "/tmp/couch-admission-evidence-20261020/live-admission-100-1792511898759.json",
+      "sha256": "6646018bbc0b1480700e0820a5378c43cc36eafe1b3efe2590c962f3d0bec48a",
+      "runtime": {
+        "electron": null,
+        "node": "24.21.0"
+      },
+      "measured": {
+        "participants": 100,
+        "admitted": 100,
+        "durationMs": 320.075822,
+        "invalid": 8,
+        "replayLimited": 4
+      },
+      "untested": [
+        "Real WebRTC negotiation",
+        "Browser decode/render and audio unlock",
+        "Acoustic latency",
+        "Phone compatibility",
+        "Venue Wi-Fi"
+      ]
+    },
+    {
+      "id": "live-signaling-50",
+      "sourceArtifact": "/tmp/couch-admission-evidence-20261020/live-signaling-50-1792511907766.json",
+      "sha256": "ef3f5db75a984ef78b62193c2134bcca46e4daeafd58e69e97236458eaa206c9",
+      "runtime": {
+        "electron": null,
+        "node": "24.21.0"
+      },
+      "measured": {
+        "participants": 50,
+        "setupMs": 2472.291607,
+        "reconnectMs": 5406.9576400000005,
+        "signalsPerPeer": 9,
+        "publisherDisconnected": false
+      },
+      "untested": [
+        "Real WebRTC negotiation",
+        "Ten-second audio startup gate",
+        "Browser decode/render",
+        "Acoustic latency",
+        "Venue Wi-Fi"
+      ]
+    }
+  ],
+  "unqualified": [
+    "100-peer simultaneous reconnect did not deliver all states within 45s",
+    "50 real decoding/rendering browsers",
+    "physical phone output",
+    "venue Wi-Fi",
+    "known-ahead music",
+    "N1 audio and N2-N7 fault matrix",
+    "30-minute qualification runs and two-hour soak"
+  ],
+  "invalidOrSetupRuns": [
+    {
+      "sourceArtifact": "/tmp/couch-live-ingress-10-40-ipc-1/result.json",
+      "reason": "Source sample discontinuity spliced packets off-grid;30xruns;not timing evidence"
+    },
+    {
+      "sourceArtifact": "/tmp/couch-live-ingress-10-40-ipc-2/ingress-startup.json",
+      "reason": "Sample grid fixed;capture clock mapping exceeded advertised error and source stopped as future;setup failure"
+    },
+    {
+      "sourceArtifact": "/tmp/couch-live-direct-control-ipc-1/result.json",
+      "reason": "Loopback-only network;no usable ICE route or received audio"
+    },
+    {
+      "sourceArtifact": "/tmp/couch-live-direct-jitter0-ipc-1/result.json",
+      "reason": "Loopback-only network;no usable ICE route or received audio"
+    },
+    {
+      "sourceArtifact": "/tmp/couch-live-direct-control-network-ipc-1/result.json",
+      "reason": "2graphxruns;invalid timing"
+    }
+  ],
+  "pcmClockAcquisition": [
+    {
+      "sourceArtifact": "/tmp/couch-live-ingress-10-40-acquired-1/ingress-startup.json",
+      "sha256": "c594da0eed8624e59d8cfc8e710ab431a7271564740db8d1431e540bfd7c578b",
+      "packetMs": 10,
+      "graphQuantumFrames": 1024,
+      "leadMs": 40,
+      "outputCompensation": true,
+      "status": "unsupported setup; no output latency measurement",
+      "clock": {
+        "status": "unsupported",
+        "durationMs": 1000,
+        "intervalMs": 5,
+        "minimumSamples": 100,
+        "samples": 201,
+        "measuredDurationMs": 1000.3000000007451,
+        "observedRangeUs": 41666.666666666744,
+        "requiredUncertaintyUs": 23687.50000000004
+      },
+      "publishedFrames": 0,
+      "sourceDiscontinuities": 1,
+      "missingInputSamples": 640,
+      "discardedAtDiscontinuitySamples": 320,
+      "sampleStarts": [
+        960,
+        1440,
+        1920,
+        2400,
+        2880,
+        3360,
+        3840,
+        4320,
+        4800,
+        5280,
+        5760,
+        6240,
+        6720,
+        7200,
+        7680,
+        8160
+      ],
+      "publishedSampleStarts": [],
+      "error": "Source render clock cannot support 10 ms mapping: observed range 41667 us, required uncertainty 23688 us",
+      "inputPipelineUncertaintyUs": null,
+      "reportedTrackSettings": {
+        "autoGainControl": false,
+        "channelCount": 2,
+        "echoCancellation": false,
+        "latency": 0.023219,
+        "noiseSuppression": false,
+        "sampleRate": 44100,
+        "sampleSize": 16,
+        "voiceIsolation": false
+      }
+    },
+    {
+      "sourceArtifact": "/tmp/couch-live-ingress-20-40-acquired-1/ingress-startup.json",
+      "sha256": "12e8cc51e7ab9f815bc71c231058f6fccb864dff2f3778e0cc24e567a84df7c1",
+      "packetMs": 20,
+      "graphQuantumFrames": 1024,
+      "leadMs": 40,
+      "outputCompensation": true,
+      "status": "unsupported setup; no output latency measurement",
+      "clock": {
+        "status": "unsupported",
+        "durationMs": 1000,
+        "intervalMs": 5,
+        "minimumSamples": 100,
+        "samples": 201,
+        "measuredDurationMs": 1000.3999999985099,
+        "observedRangeUs": 38766.666668156744,
+        "requiredUncertaintyUs": 22139.50000111757
+      },
+      "publishedFrames": 0,
+      "sourceDiscontinuities": 1,
+      "missingInputSamples": 640,
+      "discardedAtDiscontinuitySamples": 320,
+      "sampleStarts": [
+        960,
+        1920,
+        2880,
+        3840,
+        4800,
+        5760,
+        6720,
+        7680,
+        8640,
+        9600,
+        10560,
+        11520,
+        12480,
+        13440,
+        14400,
+        15360
+      ],
+      "publishedSampleStarts": [],
+      "error": "Source render clock cannot support 10 ms mapping: observed range 38767 us, required uncertainty 22140 us",
+      "inputPipelineUncertaintyUs": null,
+      "reportedTrackSettings": {
+        "autoGainControl": false,
+        "channelCount": 2,
+        "echoCancellation": false,
+        "latency": 0.023219,
+        "noiseSuppression": false,
+        "sampleRate": 44100,
+        "sampleSize": 16,
+        "voiceIsolation": false
+      }
+    }
+  ],
+  "decision": "Blocked capability: no two-browser path qualified; production integration and 50-browser qualification remain gated."
+}
