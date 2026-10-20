@@ -70,7 +70,7 @@ export function createAudioIngress(options: { now?: () => number } = {}) {
     next ??= at - prebuffer;
     // A pause or seek moves the sender's clock past what may be buffered, and a sender
     // whose clock runs slower than Core's eventually arrives late in order: start again from it.
-    if (end > next + capacity || end <= next && at >= newest) resync(at);
+    if (end > next + capacity || end <= next && at > newest) resync(at);
     newest = Math.max(newest, at);
     if (end <= next) { stats.late++; return; } // A straggler, after what already played
     let index = packets.length;

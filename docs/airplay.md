@@ -138,7 +138,8 @@ from any address, and AirPlay encrypts only whole 16-byte blocks of each packet,
 so a packet shorter than one block is never decrypted. Another host could send
 such packets, one ALAC sample each, into an authenticated sender's stream without
 the code or the stream's key, and they played. The patch makes UxPlay accept
-audio and control packets only from the address of the sender's own connection.
+audio and control packets only from the address of the sender's own connection,
+and for an IPv6 link-local address only on the same interface (its scope).
 A host that can send from that address (the same machine, or one that spoofs it)
 is not stopped by it.
 

@@ -106,6 +106,27 @@ test("drops repeats and stragglers, and starts again from a sender whose clock j
   expect(ingress.buffered()).toBeLessThanOrEqual(sampleRate / 4 + packet);
 });
 
+test("a repeat of the newest packet that already played is dropped, never played again", () => {
+  const time = clock(), ingress = createAudioIngress({ now: time.now });
+  ingress.tick();
+  ingress.push(framed(rtp(0, 0, packet, 1)));
+  ingress.push(framed(rtp(1, packet, packet, 2)));
+  // Both play: a quarter second of lead-in, then the two packets.
+  time.advance(300);
+  expect(values(ingress.tick()).filter(value => value === 2).length).toBe(packet);
+  // The newest packet arrives again, as a network may repeat it.
+  ingress.push(framed(rtp(1, packet, packet, 2)));
+  expect(ingress.stats.resyncs).toBe(0);
+  expect(ingress.stats.late).toBe(1);
+  time.advance(300);
+  expect(values(ingress.tick()).includes(2)).toBe(false);
+  // The next new packet that is behind Core's clock still starts again from it.
+  ingress.push(framed(rtp(2, packet * 2, packet, 3)));
+  expect(ingress.stats.resyncs).toBe(1);
+  time.advance(260);
+  expect(values(ingress.tick()).includes(3)).toBe(true);
+});
+
 test("follows 32-bit timestamp wrap and a new stream from another pipeline", () => {
   const time = clock(), ingress = createAudioIngress({ now: time.now });
   ingress.tick();
