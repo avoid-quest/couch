@@ -28,7 +28,7 @@ if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presenta
     // A horizontal scroller owns the whole gesture, including its edges. Leave
     // text entry, sliders and native media controls to Chromium as well.
     ignored ||= event.composedPath().some(target => target instanceof Element && (
-      target.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"], video[controls], audio[controls]')
+      target.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [data-slot="slider"], [role="slider"], video[controls], audio[controls]')
       || (target.scrollWidth > target.clientWidth + 1 && /^(auto|scroll|overlay)$/.test(getComputedStyle(target).overflowX))
     ));
   }, { passive: true });

@@ -13,7 +13,8 @@ function fixture(platform = "darwin", tv = false) {
     clientWidth = 100;
     overflowX = "visible";
     protectedControl = false;
-    matches() { return this.protectedControl; }
+    selector = "";
+    matches(selectors: string) { return this.protectedControl || !!this.selector && selectors.split(", ").includes(this.selector); }
   }
   runInNewContext(preload, {
     require: () => ({ contextBridge: { exposeInMainWorld() {} }, ipcRenderer: { on: (name: string, fn: (...args: any[]) => void) => ipc.set(name, fn) } }),
@@ -68,6 +69,16 @@ test("form and media controls keep the whole gesture", () => {
   f.target.protectedControl = false;
   f.wheel(120); f.end();
   expect(f.visits).toEqual([]);
+});
+
+test("slider tracks, ranges and thumbs keep horizontal gestures", () => {
+  for (const part of ["track", "range", "thumb"]) {
+    const f = fixture();
+    f.target.selector = part === "thumb" ? '[role="slider"]' : '[data-slot="slider"]';
+    // A track/range's composed path includes its slider root; the thumb has its own role.
+    f.wheel(-150); f.end();
+    expect(f.visits).toEqual([]);
+  }
 });
 
 test("a cancelled gesture stays cancelled through its remaining momentum", () => {
