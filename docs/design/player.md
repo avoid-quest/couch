@@ -188,7 +188,8 @@ OK shows them again.
 
 Keep Playing separate and Played collapsed.
 Compact artwork rows are one target that plays the entry, with one menu for
-Details, Play next, ordering, Save for later and Remove, behind a "…" at the
+Details, Play next, ordering, Save for later, Open in browser when the entry
+has an original webpage, and Remove, behind a "…" at the
 row's end, since an entry's page holds only Play and Save
 ([Menus](../design.md#menus)). Removal leaves focus on the adjacent row, so a
 keyboard keeps editing: on its "…" when the "…" opened the menu, else on the
@@ -202,8 +203,9 @@ beside what it saves; Save as list shows while there is something to save,
 asks for a name and preserves errors there for retry. The panel's sections,
 Up next, Autoplay and Played, are headed alike (section titles). Opened over
 the player, the panel closes from an X at the end of its "Up next" heading
-row, as every Sheet does; in Home's Sheet that row is the Sheet's header. Its
-own Playing row heads the list only where the player's title is off screen,
+row, as every Sheet does; in Home's Sheet that row is the Sheet's header.
+The Playing row also offers Open in browser when its entry has a webpage. It
+heads the list only where the player's title is off screen,
 a phone's Up next over Now playing: beside the artwork and title, or under a
 video's top band, it would repeat them. shadcn/Radix menus supply keyboard
 navigation and typeahead.

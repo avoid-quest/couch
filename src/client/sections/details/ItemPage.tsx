@@ -1,3 +1,4 @@
+import { browserActions, queuePageUrl } from "@/original-page";
 import type { ComponentProps } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -106,7 +107,7 @@ function QueueDetails({ id }: { id: string }) {
   if (!item) return <><ContentBreadcrumb title="Details" /><PageHeader title={state ? "Item not found" : "Details"} /><p className="text-sm text-muted-foreground">{state ? "This item is no longer in Up next." : "Connect to Couch to load this item."}</p></>;
   const radio = isRadio(item);
   return <><DetailLayout title={item.title} collection={item.collection} radio={radio} thumbnail={item.thumbnail} shape={radio ? "square" : tileShape(sourceLabel(item.source), !!item.collection)} duration={item.live ? undefined : item.duration} meta={[item.subtitle, sourceLabel(item.source)].filter(Boolean).join(" · ")} description={item.description}
-    play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} />
+    play={{ label: "Play", disabled: !shell.available || action.isPending, run: () => action.mutate(() => run({ type: "play", entryId: item.id })) }} save={save} more={browserActions(queuePageUrl(item))} />
     {radio ? <RelatedRadio stationId={item.source.startsWith("radio:") ? item.source.slice(6) : undefined} /> : <RelatedCollection collection={item.collection} provider={providerForUrl(item.source.replace(/^web:/, ""))} currentUrl={item.source.replace(/^web:/, "")} />}
   </>;
 }
@@ -146,7 +147,7 @@ function HistoryDetails({ item, refresh }: { item: HistoryItem; refresh: () => v
     queue={{ label: "Queue", disabled: blocked, run: () => action.mutate(() => session.queue(item.title, () => apiSend(shell.credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { profileId: session.state?.activeProfile.id }))) }}
     save={item.url ? save : undefined}
     playOn={{ disabled: blocked || !playable || !item.playable, run: deviceId => action.mutate(() => play(start, deviceId)) }}
-    more={item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
+    more={[...browserActions(item.url), ...item.position && !item.watched ? [{ label: "Remove from Continue", disabled: blocked, run: () => action.mutate(remove) }] : []]} /><RelatedCollection collection={item.collection} currentTitle={item.title} /></>;
 }
 
 function SavedDetails({ item }: { item: ForLaterItem }) {
@@ -187,6 +188,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => load("append")) }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => load("play", on), deviceId)) }}
     more={[
+      ...browserActions(item.url),
       { label: "Move up", disabled: !connected || action.isPending || index <= 0, run: () => action.mutate(() => move(-1)) },
       { label: "Move down", disabled: !connected || action.isPending || index < 0 || index >= items.length - 1, run: () => action.mutate(() => move(1)) },
       { label: "Remove", disabled: !connected || action.isPending, run: () => action.mutate(remove) },
@@ -195,7 +197,7 @@ function SavedDetails({ item }: { item: ForLaterItem }) {
 
 function RadioDetails({ item }: { item: RadioStation }) {
   const shell = useShell();
-  const { connected, nativeHost } = useSessionGate();
+  const { connected } = useSessionGate();
   const action = useDetailAction();
   const { play } = usePlayOn();
   const programmes = useQuery({ ...radioProgrammesQuery(shell.credentials), enabled: connected && item.sourceId === avoidRadioPlaylistId, refetchInterval: 60_000 });
@@ -206,5 +208,5 @@ function RadioDetails({ item }: { item: RadioStation }) {
     queue={{ label: "Queue", disabled: !connected || action.isPending, run: () => action.mutate(() => shell.enqueueRadio(item, false)) }}
     save={{ ...save, disabled: save.disabled || action.isPending }}
     playOn={{ disabled: !connected || !shell.available || action.isPending, run: deviceId => action.mutate(() => play(on => shell.enqueueRadio(item, true, on), deviceId)) }}
-    more={!nativeHost && programme?.programmeUrl ? [{ label: "Open show page", node: <a href={programme.programmeUrl} target="_blank" rel="noopener noreferrer">Open show page</a> }] : []} /><RelatedRadio station={item} /></>;
+    more={browserActions(programme?.programmeUrl ?? item.homepage)} /><RelatedRadio station={item} /></>;
 }

@@ -1,3 +1,4 @@
+import { browserActions } from "@/original-page";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { itemLocation, useDetailNavigation } from "@/detail-navigation";
@@ -66,6 +67,7 @@ function RadioResults(props: Props) {
           { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
           { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(station, true, deviceId) },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
+          ...browserActions(station.homepage),
           { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || favorites === null, run: () => save(station, saved) },
         ],
       };

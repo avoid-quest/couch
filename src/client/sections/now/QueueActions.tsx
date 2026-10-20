@@ -1,3 +1,4 @@
+import { browserActions, queuePageUrl } from "@/original-page";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import type { Credentials } from "../../session/session";
@@ -36,6 +37,7 @@ export function useQueueActions(props?: QueueActionsProps): MenuAction[] {
     ] : []),
     ...(upcoming && index < lastUpcomingIndex ? [{ label: "Later", disabled: !connected, run: () => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index + 2]?.id ?? null }) }] : []),
     ...(!entry.liveSourceId ? [{ label: "Save for later", disabled: !connected || save.isPending, run: () => save.mutate() }] : []),
+    ...browserActions(queuePageUrl(entry)),
     { label: "Remove", disabled: !connected, run: () => void run({ type: "remove", entryId: entry.id }) },
   ];
 }
