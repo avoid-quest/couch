@@ -61,7 +61,9 @@ Other devices
 ```
 
 - **Its header** is the Playback's artwork, title and status ("Choose where
-  it plays" while a shared source waits for receivers).
+  it plays" while a shared source waits for receivers), then its Close at the
+  row's end, above the rows' "…", as every Sheet closes from the end of its
+  heading row ([icon controls](../design.md#scale)).
 - **Its levels:** the [Volume](#volume), then [In sync](#in-sync) where it
   applies. On the TV the fader hint, "Press OK to adjust a level, then OK or
   Back to finish.", follows them, where the faders start; it is the Sheet's
@@ -98,7 +100,12 @@ without a DOM.
 
 The first row is the band's Volume (`PlaybackVolume`, Mute and its fader):
 one level for the whole Playback, with each device's fader below it, its
-number in the same column and read the same way, without "%". It acts on the
+number in the same column and read the same way, without "%". The picker
+shows it while the Playback plays on two or more devices; with one, that
+device's fader is the level, and a Volume above it would say the same number
+twice (the band's Volume popover still opens it). A saved Playback with a legacy
+trim keeps the master Volume until moving it folds that trim into device levels; a shared source still
+waiting for its first receiver shows none, since there is no sound to set. It acts on the
 Playback's sound that you may control: it shows the loudest level that sound
 plays at and moves it so the loudest reaches the new level, keeping their
 proportion. Another device's private sound neither moves nor counts, so it

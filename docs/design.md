@@ -86,7 +86,12 @@ can't invert.
 **Hover** uses a white tint on actions, brighter field borders and quiet rings on
 small controls. Reuse shadcn variants; artwork-only buttons dim the image because
 it covers their background. Keep hover on enabled controls and preserve focus
-inversion.
+inversion. A ghost button whose panel is open (`aria-expanded`: Volume, Where it
+plays, Up next, Playback) keeps the same white tint, never an opaque fill, so it
+reads alike on black and over a picture's scrim.
+
+**Disabled** controls keep their slot and size at half ink (shadcn's
+`disabled:opacity-50`); nothing shrinks, hides or moves while it can't act.
 
 ## Scale
 
@@ -106,7 +111,8 @@ so the board's two voices come from one family without colour.
 | Clock (the header's) | `text-2xl font-light tabular-nums` (`text-xl` in the player's top band) |
 | Page title | `text-2xl font-semibold tracking-tight` (use `PageHeader`) |
 | Section title | `text-base font-medium` |
-| Row title, settings label | `text-base` |
+| Row title, settings label | `text-base` (a media row's or Up next's title adds `font-medium` and wraps to two lines) |
+| Departures in a row (Up next's start times) | `text-base font-light tabular-nums`, the row title's size |
 | Body, controls, metadata | `text-sm` (metadata adds `text-muted-foreground`) |
 | Caption | `text-xs text-muted-foreground` |
 
@@ -117,6 +123,15 @@ The shell's content wrapper sets the one top offset below the header (`pt-6`); p
 Controls are Mira-sized at `h-8 text-sm`. The `touch:` variant (phones and
 windows narrower than 960px) raises every control to a 44px target; player-band controls are 44–48px on every screen, scaled in rem. Sonner toast
 actions take `h-8 text-sm` and the touch target through its `actionButton` classes, as its default is 24px.
+
+**Icon controls** for playback are one control wherever they appear: a ghost
+`icon-lg` button with a 1.25rem glyph. That is the transport, Volume, Where
+it plays, Up next, Playback, fullscreen, the player's Back and every Sheet's
+Close. The band, the now-playing bar and every Sheet's heading row give each
+a 44px target (`size-11`, in rem); beside Home's hero verbs they keep
+`icon-lg`'s 40px, the `lg` verbs' height (44px on touch). An icon control at the end of a row pulls back
+(`-ml-2.5`, `-mr-2.5`) so its glyph lines up with the text above it. A row's
+own "…" stays at its row's size.
 
 ## Motion
 
@@ -165,7 +180,10 @@ Prefer shadcn components from `src/client/components/ui`, and check the
 custom; record the gap that justifies a custom component in its surface doc.
 Their files are owned by Couch; the Mira defaults were changed only where Clock needs it:
 `text-sm` controls at `h-8`, flat left-rule `Alert`, left-aligned borderless
-`Empty`, no shadows.
+`Empty`, no shadows, a 1.25rem glyph in `icon-lg` (the default 1.15em read
+small on the player's icon-only band, and per-use `[&_svg]` overrides lose to
+the variant's own selector) and a ghost button's open state in the hover tint
+([Hover](#tokens)).
 
 Shared building blocks in `src/client/components`:
 

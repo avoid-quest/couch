@@ -138,9 +138,9 @@ export function SearchPanel(props: Props) {
         {/* Each row is named once at its left, as a settings row is, so the choices stay short: "From: YouTube", "Ends by: 17:30". */}
         {(relevant.length > 0 || filtered) && <div className="grid gap-x-4 gap-y-1 md:grid-cols-[5rem_minmax(0,1fr)] md:items-center">
           <p className="text-sm text-muted-foreground">From</p>
-          <ChoiceGroup label="From" value={filter} onValueChange={setFilter} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "All", label: "All sources", count: sourceCount("All") }, ...fromSources.map(source => ({ value: source, label: source, count: summaries[source]?.loading ? "…" : sourceCount(source) }))]} />
+          <ChoiceGroup label="From" value={filter} onValueChange={setFilter} className="-ml-2.5 max-w-[calc(100%+0.625rem)] touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "All", label: "All sources", count: sourceCount("All") }, ...fromSources.map(source => ({ value: source, label: source, count: summaries[source]?.loading ? "…" : sourceCount(source) }))]} />
           <p className="text-sm text-muted-foreground">Ends by</p>
-          <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.value === until ? fits : searchSecondsLeft(bound.deadline, now))).length }))]} />
+          <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 max-w-[calc(100%+0.625rem)] touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.value === until ? fits : searchSecondsLeft(bound.deadline, now))).length }))]} />
         </div>}
       </div>}
       {top && <TopResult key={top.id} hit={top} now={now} />}

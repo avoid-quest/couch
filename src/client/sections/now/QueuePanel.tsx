@@ -1,6 +1,6 @@
 import { usePlaybackClock } from "@/session/playback-clock";
 import type { ClientSessionState } from "@/session/session";
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,12 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useOptionalShell } from "@/sections/shell/shell-context";
 import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { offline } from "@/copy";
+import { deviceId } from "@/session/device-id";
 import { formatEndTime } from "@/time-format";
 import { useQueueActions, type QueueActionsProps } from "./QueueActions";
 import { ItemMenu, useItemMenu } from "@/components/RowMenu";
@@ -30,8 +31,13 @@ type Props = {
   nativeHost: boolean;
   defaultQuality: VideoQuality;
   run: (action: Action) => Promise<boolean>;
-  /** Show the "Up next" heading; a sheet already titles it. */
+  /** Show the "Up next" heading row; a sheet's header already titles it and closes it. */
   titled?: boolean;
+  /** Show what plays now above the list; beside Now playing's artwork and title it would repeat them. */
+  current?: boolean;
+  /** Opened over the player, the heading row ends with its Close, as a sheet's does. */
+  onClose?: () => void;
+  closeRef?: Ref<HTMLButtonElement>;
 };
 
 function duration(seconds: number) {
@@ -45,7 +51,7 @@ function knownLength(entry: QueueEntry): number | null {
   return entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 }
 
-export function QueuePanel({ state, credentials, connected, available, run, titled = true }: Props) {
+export function QueuePanel({ state, credentials, connected, available, run, titled = true, current: showCurrent = true, onClose, closeRef }: Props) {
   const playbackClock = usePlaybackClock();
   const autoplayId = useId();
   const shell = useOptionalShell();
@@ -104,9 +110,10 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     const row = element.closest<HTMLElement>("[data-queue-entry-id]");
     focusedEntry.current = row ? { element, id: row.dataset.queueEntryId!, index: [...panelRef.current.querySelectorAll("[data-queue-entry-id]")].indexOf(row), label: element.getAttribute("aria-label") } : null;
   }}>
-    <div className="flex items-center justify-between gap-4">
-      <h2 id="queue-title" tabIndex={-1} className={cn("text-base font-medium", !titled && "sr-only")}>Up next</h2>
-      <DialogTrigger asChild><Button variant="ghost" className="ml-auto" disabled={!connected || !upNext.length} onClick={() => { keep.reset(); setListName(""); }}>Save as list</Button></DialogTrigger>
+    {/* The heading row is a sheet's header: the title, then its Close. */}
+    <div className={cn("sticky top-0 z-10 flex min-h-11 items-center justify-between gap-4 bg-background", !titled && "sr-only")}>
+      <h2 id="queue-title" tabIndex={-1} className="text-base font-medium">Up next</h2>
+      {onClose && <Button ref={closeRef} variant="ghost" size="icon-lg" className="-mr-2.5 size-11" aria-label="Close Up next" title="Close Up next" onClick={onClose}><X aria-hidden="true" /></Button>}
     </div>
       <DialogContent aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Save as list</DialogTitle></DialogHeader>
@@ -116,15 +123,18 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
           <DialogFooter><DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose><Button type="submit" disabled={!connected || keeping || !upNext.length || !listName.trim()}>{keeping ? "Saving…" : "Save list"}</Button></DialogFooter>
         </form>
       </DialogContent>
-    {current && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
+    {current && showCurrent && <section aria-label={currentLabel} className="grid gap-2"><h3 className="text-sm text-muted-foreground">{currentLabel}</h3><ul className="m-0 list-none p-0"><QueueRow entry={current} meta={current.live ? "Live" : currentLength ? duration(currentLength) : undefined} /></ul></section>}
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
-    {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
+    {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title">
+      {/* The list's status line, with the verb that saves it. */}
+      <div className="flex items-center justify-between gap-4"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · until ${formatEndTime(doneIn)}`}</h3>
+        <DialogTrigger asChild><Button variant="ghost" className="-mr-2.5" disabled={!connected} onClick={() => { keep.reset(); setListName(""); }}>Save as list</Button></DialogTrigger></div>
       <ul aria-label="Up next" className="m-0 list-none divide-y border-y p-0">{upNext.map((entry, index) => {
         const starts = startsIn;
         const length = knownLength(entry);
         startsIn = startsIn == null || length == null ? null : startsIn + length;
-        const meta = [entry.live ? "Live" : length == null ? null : duration(length), starts == null ? null : `starts ${formatEndTime(starts)}`, entry.addedBy && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
-        return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
+        const meta = [entry.live ? "Live" : length == null ? null : duration(length), entry.addedBy && entry.addedBy.deviceId !== deviceId() && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
+        return <QueueRow key={entry.id} entry={entry} meta={meta || undefined} time={starts == null ? undefined : formatEndTime(starts)} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })}
           verbs={{ credentials, entry, index: cursorIndex + 1 + index, queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />;
       })}</ul>
     </section> : state?.autoplay?.enabled && (state.autoplay.next || state.autoplay.pending) ? <p className="text-sm text-muted-foreground">Up next is empty.</p> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Up next is empty.</EmptyTitle><EmptyDescription>Use Queue on anything in Search.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Search")}>Search</Button></EmptyContent>}</Empty>}
@@ -135,7 +145,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
         <ul aria-label="Autoplay next" className="m-0 list-none border-y p-0"><QueueRow entry={state.autoplay.next} meta={state.autoplay.next.duration ? duration(state.autoplay.next.duration) : undefined} /></ul>
       </> : <p className="text-sm text-muted-foreground">{state.autoplay.enabled ? state.autoplay.pending ? "Finding the next item…" : "Continues when this series, album or playlist has another item." : "Playback stops after Up next."}</p>}
     </section>}
-    {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="justify-between px-0 text-muted-foreground">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
+    {previous.length > 0 && <Collapsible className="grid gap-2"><CollapsibleTrigger asChild><Button variant="ghost" className="-mx-2.5 justify-between text-base">Played<ChevronDown aria-hidden="true" /></Button></CollapsibleTrigger><CollapsibleContent>
       <ul aria-label="Played" className="m-0 list-none divide-y border-y p-0">{[...previous].reverse().map(entry => <QueueRow key={entry.id} entry={entry} disabled={!available} onPlay={() => void run({ type: "play", entryId: entry.id })} verbs={{ credentials, entry, index: queue.indexOf(entry), queue, connected, run, firstUpcomingIndex: cursorIndex + 1, lastUpcomingIndex: queue.length - 1 }} />)}</ul>
     </CollapsibleContent></Collapsible>}
   </section></Dialog>;
@@ -143,13 +153,13 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
 
 
 // One target that plays the entry, with its other verbs in its menu. An entry's page holds only Play and Save, so the
-// row keeps its "…".
-function QueueRow({ entry, meta, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
+// row keeps its "…". Its start time ends the row as a board line does: the name heavy, the time light (docs/design.md).
+function QueueRow({ entry, meta, time, onPlay, disabled, verbs }: { entry: QueueEntry; meta?: string; time?: string; onPlay?: () => void; disabled?: boolean; verbs?: QueueActionsProps }) {
   const options = useItemMenu(useQueueActions(verbs));
   meta = [entry.subtitle, meta].filter(Boolean).join(" · ");
-  const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 gap-1"><span className="truncate text-sm font-medium">{entry.title}</span>{meta && <span className="truncate text-xs text-muted-foreground">{meta}</span>}</span></>;
+  const content = <><span aria-hidden="true" className="size-12 shrink-0 overflow-hidden bg-muted [&_img]:size-full [&_img]:object-cover [&>*]:size-full"><MediaArtwork thumbnail={entry.thumbnail} title={entry.title} /></span><span className="grid min-w-0 flex-1 gap-0.5"><span className="line-clamp-2 text-base font-medium break-words">{entry.title}</span>{meta && <span className="truncate text-sm text-muted-foreground">{meta}</span>}</span>{time && <span data-queue-time className="shrink-0 pl-2 text-base font-light tabular-nums">{time}</span>}</>;
   return <li data-nav-row data-queue-entry-id={onPlay ? entry.id : undefined} {...options.item} className={cn("flex min-w-0 items-center gap-2 py-2", options.item.className)}>
-    {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
+    {onPlay ? <Button data-play variant="ghost" {...options.target} aria-label={`Play ${entry.title}${time ? ` at ${time}` : ""}`} disabled={disabled} onClick={onPlay} className="h-auto min-w-0 flex-1 justify-start gap-3 p-0 text-left font-normal whitespace-normal">{content}</Button> : <div className="flex min-w-0 flex-1 items-center gap-3">{content}</div>}
     <ItemMenu menu={options} title={entry.title} />
   </li>;
 }

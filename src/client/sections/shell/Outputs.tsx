@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Circle, CircleCheck, Ellipsis, SlidersVertical } from "lucide-react";
+import { Circle, CircleCheck, Ellipsis, SlidersVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { DeviceIcon, signalOf } from "@/components/DeviceIcon";
@@ -53,13 +53,16 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
     <SheetTrigger asChild><Button variant="ghost" size="icon-lg" className={className} disabled={!state.playback} aria-label="Where it plays" title="Where it plays"><SlidersVertical aria-hidden="true" /></Button></SheetTrigger>
     {/* It opens on the first device you can choose; Up reaches the Volume. */}
     <SheetContent side="bottom" onOpenAutoFocus={event => { const check = (event.currentTarget as HTMLElement).querySelector<HTMLElement>("[data-device-check]:not(:disabled)"); if (check) { event.preventDefault(); check.focus(); } }}
-      className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11 [&>[data-slot=sheet-close]]:min-h-11 [&>[data-slot=sheet-close]]:min-w-11">
+      showCloseButton={false} className="max-h-[85dvh] scroll-py-6 gap-0 overflow-y-auto px-(--gutter) pt-6 pb-8 [&_[data-slot=slider]]:min-h-11">
       <SyncScope><div className="grid w-full max-w-4xl">
-        <SheetHeader className="flex-row items-center gap-4 p-0 pr-12">
+        <SheetHeader className="flex-row items-center gap-4 p-0">
           <div className="size-14 shrink-0 overflow-hidden bg-muted [&>*]:size-full [&_img]:object-contain">{entry && <MediaArtwork thumbnail={entry.thumbnail} title={entry.title} />}</div>
           <div className="grid min-w-0 gap-0.5"><SheetTitle className="text-base font-medium [overflow-wrap:anywhere]">{title ?? "Nothing is playing"}</SheetTitle><SheetDescription>{status}</SheetDescription></div>
+          {/* Every Sheet closes from the end of its heading row; here it is the "…" column's size and place. */}
+          <SheetClose asChild><Button variant="ghost" size="icon-lg" className="ml-auto size-11" aria-label="Close" title="Close"><X aria-hidden="true" /></Button></SheetClose>
         </SheetHeader>
-        {levels({ state, connected, run, inSync })}
+        {/* One Volume over two or more faders; with one its fader is the level, unless a legacy trim still attenuates it. */}
+        {levels({ state, connected, run, inSync, volume: playing.length > 1 || playing.length === 1 && (state.mixTrim ?? 100) !== 100 })}
         {/* The TV's fader hint, where its faders start rather than below a long list. */}
         {hint && <p className="pb-4 text-sm text-muted-foreground">{hint}</p>}
         {list("Playing", playing)}
@@ -72,9 +75,9 @@ export function WhereItPlays({ state, connected, run, className }: Props & { cla
 
 // The band's Volume: one level for the whole Playback, above each device's own. Then In sync, where it applies:
 // a live input plays directly on each device unless it is chosen (docs/adr/0001).
-function levels({ state, connected, run, inSync }: Props & { inSync?: boolean }) {
+function levels({ state, connected, run, inSync, volume }: Props & { inSync?: boolean; volume: boolean }) {
   return <>
-    <div data-nav-row className={cn(columns, "py-4")}><PlaybackVolume state={state} connected={connected} run={run} className="col-span-2 -ml-2.5" /></div>
+    {volume && <div data-nav-row className={cn(columns, "py-4")}><PlaybackVolume state={state} connected={connected} run={run} className="col-span-2 -ml-2.5" /></div>}
     {inSync !== undefined && <div data-nav-row className="flex min-h-11 items-center justify-between gap-4 pb-4"><Label htmlFor="where-it-plays-in-sync" className="text-base font-normal">In sync</Label><Switch id="where-it-plays-in-sync" checked={inSync} onCheckedChange={on => void run({ type: "inSync", inSync: on })} /></div>}
   </>;
 }
