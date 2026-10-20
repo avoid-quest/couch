@@ -352,11 +352,12 @@ export async function helpersCommand(directory: string, [command, days = "7"]: s
   const current = selected["yt-dlp"];
   if (!current) throw new Error("Couch hasn't selected a yt-dlp yet.");
   const worked = (version: string) => Object.keys(managed["yt-dlp"]?.[version]?.worked ?? {}).length > 0;
-  // A hold in force is renewed with its copy while that runs, whether or not Core has applied it yet.
-  // The other candidates follow: those that have worked first, then the newest.
+  // A hold in force is renewed with its copy while that runs, whether or not Core has applied it yet,
+  // even if overlapping commands left it newer than what Core last selected. The other candidates
+  // follow: those that have worked first, then the newest.
   const held = activeHold(await readHold(directory))?.version;
   const earlier = (await readdir(join(directory, "yt-dlp")).catch(() => []))
-    .filter(entry => !unfinished(entry) && (newestFirst(entry, current.version) > 0 || current.held && entry === current.version))
+    .filter(entry => !unfinished(entry) && (entry === held || newestFirst(entry, current.version) > 0 || current.held && entry === current.version))
     .sort((a, b) => Number(b === held) - Number(a === held) || Number(worked(b)) - Number(worked(a)) || newestFirst(a, b));
   for (const entry of earlier) {
     const path = await executable(join(directory, "yt-dlp", entry));

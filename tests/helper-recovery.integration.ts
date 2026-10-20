@@ -665,3 +665,43 @@ test("renewing a hold keeps the held copy while it runs, even when an older copy
   writeFileSync(f.path("2026.08.01"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
   assert.match(await helpersCommand(f.helpers, ["previous"]), /^Couch uses yt-dlp 2026\.07\.01, which worked before,/);
 });
+
+test("renewing keeps the hold in force when overlapping commands left it newer than Core's held selection", options, async t => {
+  const f = fixture(t);
+  f.cached("2026.07.01", true);
+  f.release("2026.08.01", true);
+  startHelpers(f.helpers);
+  await helper("yt-dlp");
+  await helpersCommand(f.helpers, ["previous"]);
+  assert.equal(await helper("yt-dlp"), f.path("2026.07.01"));
+  f.block(true);
+  const older = f.play();
+  await until(() => f.runs().length === 1, "the playback started on 2026.07.01");
+  await helpersCommand(f.helpers, ["latest"]);
+  f.release("2026.09.01", true);
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.09.01"));
+
+  // One command chooses August, before July has worked, and is still checking it when July's
+  // playback ends and a second command holds July, which Core applies.
+  writeFileSync(join(f.directory, "probe-gate"), "2026.08.01");
+  const august = helpersCommand(f.helpers, ["previous", "2"]);
+  await until(() => existsSync(join(f.directory, "probe-gate-held")), "the first command is checking 2026.08.01");
+  f.block(false);
+  assert.equal(await older, "extractor 2026.07.01");
+  assert.match(await helpersCommand(f.helpers, ["previous", "3"]), /^Couch uses yt-dlp 2026\.07\.01, which worked before,/);
+  assert.equal(await helper("yt-dlp"), f.path("2026.07.01"));
+
+  // The first command writes last, so August is held while Core's record still names July.
+  rmSync(join(f.directory, "probe-gate-held"));
+  assert.match(await august, /^Couch uses yt-dlp 2026\.08\.01 from/);
+  let status = await f.status();
+  assert.equal(status.hold?.version, "2026.08.01");
+  assert.deepEqual([status.selected["yt-dlp"]?.version, status.selected["yt-dlp"]?.held], ["2026.07.01", true]);
+
+  assert.match(await helpersCommand(f.helpers, ["previous", "4"]), /^Couch uses yt-dlp 2026\.08\.01 from/);
+  status = await f.status();
+  assert.equal(status.hold?.version, "2026.08.01");
+  assert.equal((Date.parse(status.hold!.until) - Date.parse(status.hold!.since)) / 86_400_000, 4);
+  assert.equal(await checkHelper("yt-dlp"), f.path("2026.08.01"));
+  assert.deepEqual(f.copies(), ["2026.07.01", "2026.08.01"], "the held copy, and July as the previous copy that worked");
+});
