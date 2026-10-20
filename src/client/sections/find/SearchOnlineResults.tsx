@@ -80,8 +80,9 @@ function OnlineResults(props: Props) {
   const request = props.url ? { url: props.url } : { query: props.query };
   // Hidden sources still report search counts. Active controls presentation,
   // not whether a source participates in the cross-source search.
-  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, request), enabled: props.connected && !props.paged, refetchOnMount: !!props.retry ? "always" : true });
-  const single = useQuery({ ...providerPageQuery(props, provider, { ...request, cursor: props.cursor }), enabled: props.connected && !!props.paged });
+  const refetchInterval = provider === "twitch" && props.connected && props.active ? 20_000 : false;
+  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, request), enabled: props.connected && !props.paged, refetchInterval, refetchIntervalInBackground: false, refetchOnMount: !!props.retry ? "always" : true });
+  const single = useQuery({ ...providerPageQuery(props, provider, { ...request, cursor: props.cursor }), enabled: props.connected && !!props.paged, refetchInterval, refetchIntervalInBackground: false });
   const page = useMemo<ProviderSearchPage | null>(() => {
     if (props.paged) return single.data ?? null;
     if (!browse.data?.pages.length) return null;

@@ -10,6 +10,11 @@ asking, while the header's Spinner stays busy. Sources answer in bursts, and
 the page takes each burst as one change (a debounced value, TanStack Pacer),
 so rows and tiles don't shuffle in step with every source.
 
+Twitch results and opened channels refresh every 20 seconds while their view
+is active, connected and in the foreground. Hidden source results still
+contribute counts but do not poll. Refreshing a paginated search rereads its
+retained pages in cursor order so changes do not duplicate or skip results.
+
 Under that line sit two rows of choices (`ChoiceGroup`, scrolling sideways on
 phones), each named once at its left as a settings row is: From, the sources
 with results and their counts, and Ends by, three clock times ahead on the

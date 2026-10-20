@@ -96,6 +96,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
     })();
   }
   const cache = new Map<string, { page: ProviderPage; expires: number }>();
+  const pending = new Map<string, { promise: Promise<ProviderPage>; controller: AbortController; waiters: number }>();
   const shutdown = new AbortController();
   let active = 0;
   let closed = false;
@@ -167,16 +168,43 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
         // Opening Details mustn't resolve audio streams that playback will resolve afresh.
         const track = provider === "soundcloud" && url && !query && !cursor ? cachedItem(url) : undefined;
         if (track) return Response.json({ title: track.title, item: track, items: [track] });
-        // Search asks every provider, plus RaiPlay's separate live-channel request.
-        if (active >= providerIds.size + 1) throw new ProviderError("The catalog is busy. Try again shortly.", 503);
-        active++;
+        const callerSignal = AbortSignal.any([request.signal, shutdown.signal]);
+        callerSignal.throwIfAborted();
+        let work = pending.get(key);
+        if (!work) {
+          // Count distinct upstream work, including canceled work still settling.
+          if (active >= providerIds.size + 1) throw new ProviderError("The catalog is busy. Try again shortly.", 503);
+          const controller = new AbortController();
+          const signal = AbortSignal.any([controller.signal, shutdown.signal]);
+          active++;
+          const promise = (async () => {
+            signal.throwIfAborted();
+            const page = await browse[provider]({ ...(query ? { query } : {}), ...(url ? { url } : {}), ...(cursor ? { cursor } : {}) }, signal);
+            signal.throwIfAborted();
+            if (cache.size >= 100) cache.delete(cache.keys().next().value!);
+            cache.set(key, { page, expires: Date.now() + (provider === "twitch" ? 20_000 : 60_000) });
+            return page;
+          })().finally(() => {
+            active--;
+            if (pending.get(key)?.controller === controller) pending.delete(key);
+          });
+          work = { promise, controller, waiters: 0 };
+          pending.set(key, work);
+        }
+        work.waiters++;
+        const canceled = Promise.withResolvers<never>();
+        const cancel = () => canceled.reject(callerSignal.reason);
+        callerSignal.addEventListener("abort", cancel, { once: true });
+        if (callerSignal.aborted) cancel();
         try {
-          const page = await browse[provider]({ ...(query ? { query } : {}), ...(url ? { url } : {}), ...(cursor ? { cursor } : {}) }, AbortSignal.any([request.signal, shutdown.signal]));
-          if (closed) throw new ProviderError("The provider catalog is closing.", 503);
-          if (cache.size >= 100) cache.delete(cache.keys().next().value!);
-          cache.set(key, { page, expires: Date.now() + (provider === "twitch" ? 20_000 : 60_000) });
-          return Response.json(page);
-        } finally { active--; }
+          return Response.json(await Promise.race([work.promise, canceled.promise]));
+        } finally {
+          callerSignal.removeEventListener("abort", cancel);
+          if (--work.waiters === 0) {
+            if (pending.get(key) === work) pending.delete(key);
+            work.controller.abort();
+          }
+        }
       } catch (error) {
         if (error instanceof ProviderError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
         if (error instanceof ExtractionError) return Response.json({ error: error.message }, { status: 502 });
