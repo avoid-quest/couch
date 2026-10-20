@@ -265,7 +265,15 @@ export async function createHub(options: HubOptions) {
   const airplay = createAirPlay({ executable: options.airplayExecutable, directory: join(dirname(options.databasePath), "airplay"), enabled: store.airplayEnabled(), network: () => store.remoteControlEnabled(),
     name: () => store.installationName(), identity: () => store.airplayIdentity(), log: line => log(line), changed: () => broadcast(),
     sessions: {
-      started: (id, sender) => live.host({ id, deviceId: AIRPLAY_PUBLISHER, name: `AirPlay · ${sender}`, kind: "airplay", audio: true, video: false }),
+      started: (id, sender) => {
+        const source = { id, deviceId: AIRPLAY_PUBLISHER, name: `AirPlay · ${sender}`, kind: "airplay" as const, audio: true, video: false };
+        live.host(source);
+        // The sender chose this Couch, regardless of the host controller's selected device.
+        const playback = createPlayback();
+        assign(playback, [{ deviceId: hostId(), picture: false, sound: true }], source);
+        playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${id}`, live: true, liveSourceId: id }, playNow: true });
+        reconcile(playback);
+      },
       audio: (id, pcm) => { liveStreams.write(id, pcm); },
       ended: id => live.unhost(id),
     } });

@@ -28,9 +28,11 @@ status line says whether AirPlay is ready, who is playing, or why it can't run.
 
 While a device plays to the Couch, **AirPlay · {its name}** leads **Discover**'s
 **Shared sources** and appears in **Search**, like a shared screen or sound.
-Nothing plays until someone chooses it: **Play**, **Play on**, **Play next** and
-**Queue** work as for any shared source, and the sender's volume still applies.
-Connecting a device never takes over what the Couch plays.
+Once an admitted sender sends sound, playback starts automatically on the
+computer running Couch, without a separate **Play**. It takes that computer's
+speakers from its previous playback; other devices keep what they were playing
+and the previous queue stays. **Play**, **Play on**, **Play next** and **Queue**
+still work as for any shared source, and the sender's volume still applies.
 
 Every device that plays it gets Couch's buffered stream, a few seconds behind
 the sending device. With several devices, **In sync** in **Where it plays**
@@ -111,8 +113,9 @@ last sound can arrive after the next connection's log lines. So one UxPlay proce
 serves one sender's sound: once an authenticated connection is removed, Core
 ignores everything that process still sends, stops it and starts another
 (`airplay receiver restarting for the next sender`, not counted as a crash). A
-sender that connects next always gets a new source, which nothing plays until
-someone chooses it. A device connecting during the restart reaches no receiver and
+sender that connects next always gets a new source and starts a fresh playback
+on the hosting computer. Other devices that joined the previous sender do not
+join the new one automatically. A device connecting during the restart reaches no receiver and
 tries again; the receiver's identity is kept in `<data>/airplay`. Core reads the
 sound pipe's framing from its first byte, whoever the sound turns out to belong
 to, and drops only whole packets that belong to nobody. The
