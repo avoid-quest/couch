@@ -25,9 +25,32 @@ export function parseRtp(packet: Buffer): RtpPacket | null {
   return { sequence: packet.readUInt16BE(2), timestamp: packet.readUInt32BE(4), ssrc: packet.readUInt32BE(8), payload: packet.subarray(start, end) };
 }
 
+// The pipe's RFC 4571 framing, in any chunking: each 16-bit length, then that many bytes of RTP.
+// It holds at most one partial frame. null: the framing is broken.
+export function createFramer() {
+  let pending: Buffer = Buffer.alloc(0);
+  return (chunk: Buffer): { packets: RtpPacket[]; invalid: number } | null => {
+    pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
+    const packets: RtpPacket[] = [];
+    let invalid = 0;
+    while (pending.length >= 2) {
+      const length = pending.readUInt16BE(0);
+      if (!length || length > maxPacket) { pending = Buffer.alloc(0); return null; }
+      if (pending.length < 2 + length) break;
+      const packet = parseRtp(pending.subarray(2, 2 + length));
+      pending = pending.subarray(2 + length);
+      if (packet) packets.push(packet);
+      else invalid++;
+    }
+    // Keep only the partial frame, not the chunk it arrived in.
+    if (pending.length) pending = Buffer.from(pending);
+    return { packets, invalid };
+  };
+}
+
 export function createAudioIngress(options: { now?: () => number } = {}) {
   const now = options.now ?? (() => performance.now());
-  let pending: Buffer = Buffer.alloc(0);
+  const frame = createFramer();
   // Packets by their unwrapped timestamp, in order; `next` is the first sample not yet played.
   let packets: { at: number; payload: Buffer }[] = [];
   let ssrc: number | undefined, last = 0, unwrapped = 0, newest = -Infinity, next: number | undefined;
@@ -74,18 +97,14 @@ export function createAudioIngress(options: { now?: () => number } = {}) {
     stats,
     /** Bytes from the pipe, in any chunking. False when the framing is broken. */
     push(chunk: Buffer) {
-      pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
-      while (pending.length >= 2) {
-        const length = pending.readUInt16BE(0);
-        if (!length || length > maxPacket) { pending = Buffer.alloc(0); return false; }
-        if (pending.length < 2 + length) break;
-        const packet = parseRtp(pending.subarray(2, 2 + length));
-        pending = pending.subarray(2 + length);
-        if (packet) place(packet);
-        else stats.invalid++;
-      }
+      const framed = frame(chunk);
+      if (!framed) return false;
+      stats.invalid += framed.invalid;
+      for (const packet of framed.packets) place(packet);
       return true;
     },
+    /** A packet already taken from the pipe's framing. */
+    place,
     /** The PCM due since the last call, silence where nothing arrived in time. */
     tick() {
       const time = now();

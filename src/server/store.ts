@@ -159,12 +159,18 @@ export function openStore(path: string, remoteControlEnabled = false) {
     return profile;
   };
 
-  const airPlayCode = () => String(randomInt(1, 10_000)).padStart(4, "0");
+  // AirPlay's password, entered once on each device: about 59 random bits, in three groups of letters
+  // and digits that can't be mistaken for one another (no i, l, o, 0 or 1). UxPlay checks it with MD5
+  // Digest, so it must be too long to guess over the network and slow to recover from a captured exchange.
+  const airPlayAlphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  const airPlayCode = () => Array.from({ length: 3 }, () => Array.from({ length: 4 }, () => airPlayAlphabet[randomInt(airPlayAlphabet.length)]).join("")).join("-");
   const airplayIdentity = () => {
     // A random, locally administered unicast MAC address, as UxPlay's -m takes it.
     const address = randomBytes(6);
     address[0] = address[0]! & 0xfc | 0x02;
     db.query("INSERT OR IGNORE INTO installation_airplay VALUES (1, 0, ?, ?)").run(airPlayCode(), [...address].map(byte => byte.toString(16).padStart(2, "0")).join(":"));
+    // A four-digit code from before AirPlay used a password is too short to be one.
+    db.query("UPDATE installation_airplay SET code = ? WHERE id = 1 AND length(code) < 14").run(airPlayCode());
     return db.query<{ code: string; deviceId: string }, []>("SELECT code, deviceId FROM installation_airplay WHERE id = 1").get()!;
   };
   return {

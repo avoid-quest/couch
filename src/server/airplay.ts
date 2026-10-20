@@ -1,10 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import type { Readable } from "node:stream";
 import type { AirPlayState } from "../shared/airplay";
-import { createAudioIngress, payloadType } from "./airplay-audio";
+import { createAudioIngress, createFramer, payloadType, type RtpPacket } from "./airplay-audio";
 
 export type AirPlaySessions = {
   /** An admitted sender's sound has started: publish it as a source. */
@@ -34,17 +34,20 @@ function lines(stream: Readable, line: (text: string) => void) {
   });
 }
 
-// UxPlay keeps the AirPlay protocol, its PIN pairing and one sender at a time. Couch runs it
-// only while an admin has turned it on, and a sender counts as playing here only once its
-// decoded sound arrives, which UxPlay produces only for a sender it admitted.
+// UxPlay keeps the AirPlay protocol, its password check and one sender at a time. Couch runs it
+// only while an admin has turned it on, with the code as UxPlay's password (-pw): UxPlay sets up a
+// sender's audio or mirroring only after its Digest authentication with it (lib/raop_handlers.h),
+// which UxPlay's -pin pairing alone doesn't require. A sender counts as playing here only once
+// its decoded sound arrives on a connection UxPlay authenticated.
 // A sender is UxPlay's one RTSP (RAOP) connection, which it refuses to a second while one is open.
-// Its debug log (-d 1, without packet data) names when that connection is made, when it sets up
-// an audio stream (which needs the keys UxPlay gives only an admitted sender) and when it is removed;
-// other connections, such as one refused or one that only asks for /info, never hold a session.
+// Its debug log (-d 1, without packet data) names when that connection is made, when UxPlay
+// authenticates it and when it is removed; other connections, such as one refused or one that only
+// asks for /info, never hold a session.
 // The log and the sound arrive on separate pipes, in no order between them, and UxPlay logs a removal
-// before it stops that sender's decoding. So one UxPlay process serves one sender's sound: once a
-// connection that set up audio is removed, Couch ignores that process and starts another, and no
-// sound it still sends can belong to whoever connects next.
+// before it stops that sender's decoding. So one UxPlay process serves one sender's sound: once an
+// authenticated connection is removed, Couch ignores that process and starts another, and no
+// sound it still sends can belong to whoever connects next. The pipe's framing is read from its
+// first byte whoever the sound turns out to belong to.
 export function createAirPlay(options: {
   executable?: string;
   directory: string;
@@ -66,9 +69,9 @@ export function createAirPlay(options: {
   let child: ChildProcess | undefined, exited: Promise<void> | undefined, ready = false, name = "";
   let restarts: number[] = [], restartTimer: ReturnType<typeof setTimeout> | undefined;
   const stopping = new WeakSet<ChildProcess>();
-  // Whether UxPlay has a sender connection now, and whether it set up audio; the sender that
-  // introduced itself on it names its session. spent: this UxPlay's sender left after setting up audio.
-  let connected = false, streaming = false, spent = false, sender = "";
+  // Whether UxPlay has a sender connection now, and whether it authenticated it; the sender that
+  // introduced itself on it names its session. spent: this UxPlay's authenticated sender left.
+  let connected = false, authenticated = false, spent = false, sender = "", code = "";
   let session: { id: string; sender: string; ingress: ReturnType<typeof createAudioIngress>; timer: ReturnType<typeof setInterval>; media: number } | undefined;
   let pending = Promise.resolve();
 
@@ -111,23 +114,23 @@ export function createAirPlay(options: {
     options.sessions.started(id, current.sender);
     options.changed();
   };
-  const media = (chunk: Buffer) => {
-    // Sound is a sender's only on its audio connection, and only from the process that serves it.
-    if (!session && !streaming) return;
+  const media = (packets: RtpPacket[]) => {
+    // Sound is a sender's only on its authenticated connection, and only from the process that serves it.
+    if (!packets.length || !session && !(connected && authenticated)) return;
     if (!session) begin();
     session!.media = Date.now();
-    if (!session!.ingress.push(chunk)) { log("airplay audio framing failed; restarting the receiver"); child?.kill("SIGTERM"); }
+    for (const packet of packets) session!.ingress.place(packet);
   };
   const line = (text: string) => {
     let match: RegExpExecArray | null;
     if (!ready && /^Initialized server socket/.test(text)) { ready = true; options.changed(); }
     // Each sender connection is its own session: one that follows another never continues it.
-    else if (/^New connection \S+ identified as Connection type RAOP$/.test(text)) { end(); connected = true; streaming = false; sender = ""; log("airplay sender connected"); }
-    else if (connected && text === "RAOP initialized success") streaming = true;
+    else if (/^New connection \S+ identified as Connection type RAOP$/.test(text)) { end(); connected = true; authenticated = false; sender = ""; log("airplay sender connected"); }
+    else if (connected && text === "Client authentication success") authenticated = true;
     else if (/^removing connection type RAOP socket \d+ /.test(text)) {
       end(); connected = false;
       log("airplay sender disconnected");
-      if (streaming) { streaming = false; spent = true; recycle(); }
+      if (authenticated) { authenticated = false; spent = true; recycle(); }
     }
     else if (match = /^connection request from (.*) \(.*\) with deviceID = /.exec(text)) { if (connected && !session) sender = label(match[1]!); }
     else if (match = /error while loading shared libraries: ([^:\s]+)/.exec(text)) error = `AirPlay needs ${label(match[1]!)}. Install ${airPlayPackages}.`;
@@ -148,28 +151,37 @@ export function createAirPlay(options: {
   const start = async () => {
     const directory = options.directory;
     await mkdir(join(directory, "cache"), { recursive: true, mode: 0o700 });
-    const { code, deviceId } = options.identity();
-    name = options.name();
-    ready = false; connected = false; streaming = false; spent = false; sender = "";
+    const identity = options.identity(), startup = join(directory, "uxplayrc");
+    name = options.name(); code = identity.code;
+    ready = false; connected = false; authenticated = false; spent = false; sender = "";
+    // The password is in UxPlay's own startup file (-rc), readable only by Couch, not on its command line.
+    await writeFile(startup, `pw ${code}\n`, { mode: 0o600 });
+    await chmod(startup, 0o600);
     // setpriv ends UxPlay with Core however Core ends; stdbuf lets Couch read its log as it happens.
-    // Its home is Couch's data, so no ~/.uxplayrc, registration or key outside it applies.
-    const args = ["--pdeathsig", "KILL", "--", tools.stdbuf!, "-oL", "-eL", options.executable!,
+    // Its home is Couch's data, so no ~/.uxplayrc or key outside it applies.
+    const args = ["--pdeathsig", "KILL", "--", tools.stdbuf!, "-oL", "-eL", options.executable!, "-rc", startup,
       "-n", name, "-nh", "-vs", "0", "-d", "1", "-artp", `pt=${payloadType} ! rtpstreampay ! fdsink fd=3 sync=false`,
-      "-pin", code, "-reg", join(directory, "register"), "-key", join(directory, "key.pem"), "-m", deviceId];
+      "-key", join(directory, "key.pem"), "-m", identity.deviceId];
     const { UXPLAYRC: _rc, XDG_CONFIG_HOMEDIR: _config, ...environment } = process.env;
     const spawned = child = spawn(tools.setpriv!, args, { stdio: ["ignore", "pipe", "pipe", "pipe"], env: { ...environment, HOME: directory, XDG_CACHE_HOME: join(directory, "cache") } });
     exited = new Promise(resolve => { spawned.once("close", () => resolve()); spawned.once("error", () => resolve()); });
     const current = (text: string) => { if (child === spawned && !spent) line(text); };
     lines(spawned.stdout!, current);
     lines(spawned.stderr!, current);
-    (spawned.stdio[3] as Readable).on("data", (chunk: Buffer) => { if (child === spawned && !spent) media(chunk); });
+    const frame = createFramer();
+    (spawned.stdio[3] as Readable).on("data", (chunk: Buffer) => {
+      if (child !== spawned || spent) return;
+      const framed = frame(chunk);
+      if (framed) media(framed.packets);
+      else { log("airplay audio framing failed; restarting the receiver"); spawned.kill("SIGTERM"); }
+    });
     spawned.once("error", () => { error = "Couch couldn't start the AirPlay receiver."; });
     const timeout = setTimeout(() => { if (child === spawned && !ready) { error = "The AirPlay receiver didn't start."; spawned.kill("SIGKILL"); } }, startTimeout);
     void exited.then(() => {
       clearTimeout(timeout);
       if (child !== spawned) return;
       child = undefined; exited = undefined;
-      end(); connected = false; streaming = false; ready = false;
+      end(); connected = false; authenticated = false; ready = false;
       if (stopping.has(spawned) || closed || !enabled) { options.changed(); return; }
       const now = Date.now();
       restarts = [...restarts.filter(time => now - time < restartWindow), now];
@@ -182,7 +194,7 @@ export function createAirPlay(options: {
   // One child at a time follows the switch, the name and the code; a failure waits for the admin.
   const reconcile = () => pending = pending.catch(() => {}).then(async () => {
     const want = enabled && !closed && options.network() && !unavailable();
-    if (child && (!want || name !== options.name())) await stop();
+    if (child && (!want || name !== options.name() || code !== options.identity().code)) await stop();
     if (!want || child || error) { options.changed(); return; }
     try { await start(); } catch { error = "Couch couldn't start the AirPlay receiver."; }
     options.changed();
@@ -201,17 +213,10 @@ export function createAirPlay(options: {
     /** An admitted sender is connected, playing or paused. */
     active: () => !!session,
     async setEnabled(value: boolean) { enabled = value; error = null; restarts = []; await reconcile(); },
-    /** Follow the installation's name and Share on network. */
+    /** Follow the installation's name, the code and Share on network. */
     async refresh() { await reconcile(); },
-    /** After a new code: forget every sender paired with the old one. */
-    async forget() {
-      pending = pending.catch(() => {}).then(async () => {
-        await stop();
-        await rm(join(options.directory, "register"), { force: true });
-        error = null; restarts = [];
-      });
-      await reconcile();
-    },
+    /** After a new code: a device that knew the old one has to enter the new one. */
+    async renew() { error = null; restarts = []; await reconcile(); },
     async close() { closed = true; end(); await reconcile(); },
   };
 }

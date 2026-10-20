@@ -1422,7 +1422,7 @@ export async function createHub(options: HubOptions) {
         if (url.pathname.endsWith("/code")) {
           stillAdministrator();
           store.newAirPlayCode();
-          await airplay.forget();
+          await airplay.renew();
           return cors(request, json(airplay.state()));
         }
         const enabled = await settingField(request, "enabled");

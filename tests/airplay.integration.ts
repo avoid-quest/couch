@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
-import { access, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Socket as NetSocket } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -168,7 +168,8 @@ const sender = (fake: Fake, socket: number, name?: string, admitted = true) => {
   accepted(fake, socket);
   fake.send({ log: `New connection 0x${socket} identified as Connection type RAOP` });
   if (name) fake.send({ log: `connection request from ${name} (iPhone15,3) with deviceID = 11:22:33:44:55:${socket}` });
-  if (admitted) fake.send({ log: "RAOP initialized success" });
+  // An admitted sender passes UxPlay's password check, then sets up its audio stream.
+  if (admitted) { fake.send({ log: "Client authentication success" }); fake.send({ log: "RAOP initialized success" }); }
 };
 const closed = (fake: Fake, socket: number, type = "RAOP") => {
   fake.send({ log: `removing connection type ${type} socket ${socket} conn 0x${socket}` });
@@ -179,7 +180,7 @@ test("AirPlay stays off until an admin turns it on, and runs UxPlay only in Couc
   const { request, airplay, fakes, next, directory, controller } = await fixture(t);
   const initial = await airplay();
   assert.equal(initial.status, "off");
-  assert.match(initial.code, /^\d{4}$/);
+  assert.match(initial.code, /^[a-hj-km-np-z2-9]{4}(?:-[a-hj-km-np-z2-9]{4}){2}$/, "a password that can't be guessed by trying");
   assert.equal((await request("/api/settings/airplay", { token: controller.token })).status, 403);
   assert.equal((await request("/api/settings/airplay", { token: controller.token, body: { enabled: true } })).status, 403);
   await new Promise(resolve => setTimeout(resolve, 200));
@@ -194,8 +195,13 @@ test("AirPlay stays off until an admin turns it on, and runs UxPlay only in Couc
   assert.equal(option("-d"), "1", "UxPlay's debug log names its sender connection, without packet data");
   assert.equal(option("-vs"), "0", "sound only: UxPlay renders no picture");
   assert.equal(option("-artp"), "pt=96 ! rtpstreampay ! fdsink fd=3 sync=false", "decoded sound goes only to Core's private pipe");
-  assert.equal(option("-pin"), initial.code);
-  assert.equal(option("-reg"), join(own, "register"));
+  // The code is UxPlay's password, which it requires before it sets up any sound. It is in a file
+  // only Couch can read, not on a command line everyone on the computer can see.
+  assert.ok(!fake.argv.includes("-pin") && !fake.argv.includes("-reg"), "-pin pairing doesn't stop a sender that skips it");
+  assert.ok(!fake.argv.includes(initial.code));
+  assert.equal(option("-rc"), join(own, "uxplayrc"));
+  assert.equal(await readFile(join(own, "uxplayrc"), "utf8"), `pw ${initial.code}\n`);
+  assert.equal((await stat(join(own, "uxplayrc"))).mode & 0o777, 0o600);
   assert.equal(option("-key"), join(own, "key.pem"));
   assert.match(option("-m")!, /^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/);
   assert.equal(parseInt(option("-m")!.slice(0, 2), 16) & 3, 2, "a locally administered unicast address");
@@ -213,7 +219,7 @@ test("AirPlay stays off until an admin turns it on, and runs UxPlay only in Couc
   await request("/api/settings/airplay", { body: { enabled: true } });
   const again = await next(2);
   assert.equal(again.argv[again.argv.indexOf("-m") + 1], identity);
-  assert.equal(again.argv[again.argv.indexOf("-pin") + 1], initial.code);
+  assert.equal(await readFile(join(own, "uxplayrc"), "utf8"), `pw ${initial.code}\n`);
 
   // UxPlay listens on every interface: it runs only while the Couch is shared on the network.
   await ready(again, airplay);
@@ -396,6 +402,29 @@ test("sound the last sender's decoding still sends after it left never admits th
   assert.deepEqual(host.state.liveSources, []);
 });
 
+test("the pipe's framing holds from its first byte, while UxPlay hasn't yet said whose the sound is", { skip: !linux }, async t => {
+  const { airplay, next, request, connect, hostToken } = await fixture(t);
+  await request("/api/settings/airplay", { body: { enabled: true } });
+  const fake = await next(1);
+  await ready(fake, airplay);
+  const host = await connect(Identity.generate().peerId, hostToken);
+  sender(fake, 31, "Alice", false);
+  // Part of Alice's first frame arrives before Core reads that UxPlay authenticated her, the rest after.
+  const packet = Buffer.alloc(14 + 441 * 4);
+  packet.writeUInt16BE(packet.length - 2, 0); packet[2] = 0x80; packet[3] = 96; packet.writeUInt32BE(0x5eed, 10);
+  fake.send({ raw: packet.subarray(0, 15).toString("base64") });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  fake.send({ log: "Client authentication success" });
+  fake.send({ log: "RAOP initialized success" });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  fake.send({ raw: packet.subarray(15).toString("base64") });
+  fake.send({ tone: { frequency: 440, ssrc: 0x5eed } });
+  await until(() => host.state.liveSources?.[0]?.name === "AirPlay · Alice");
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.ok(alive(fake.pid), "the receiver keeps running");
+  assert.equal((await airplay()).status, "receiving");
+});
+
 test("a device that stops sharing its speakers leaves AirPlay waiting, and AirPlay stays published", { skip: !linux || !hasFfmpeg, timeout: 60_000 }, async t => {
   const { airplay, next, request, connect, receiver, controller } = await fixture(t);
   await request("/api/settings/airplay", { body: { enabled: true } });
@@ -457,7 +486,7 @@ test("turning AirPlay off ends the receiver and its source; a crashing receiver 
   await next(6);
 });
 
-test("a missing runtime says what to install instead of restarting, and a new code forgets paired senders", { skip: !linux }, async t => {
+test("a missing runtime says what to install instead of restarting, and a new code restarts AirPlay with it", { skip: !linux }, async t => {
   const { airplay, next, request, fakes, directory } = await fixture(t);
   await request("/api/settings/airplay", { body: { enabled: true } });
   let fake = await next(1);
@@ -484,16 +513,14 @@ test("a missing runtime says what to install instead of restarting, and a new co
   fake = await next(3);
   await ready(fake, airplay);
   const before = (await airplay()).code;
-  await writeFile(join(directory, "data", "airplay", "register"), "key,AA:BB:CC:DD:EE:FF,Old iPhone\n");
   const response = await request("/api/settings/airplay/code", { body: {} });
   assert.equal(response.status, 200);
   const after = (await response.json() as AirPlayState).code;
+  assert.notEqual(after, before);
   await until(() => !alive(fake.pid));
   fake = await next(4);
-  assert.equal(fake.argv[fake.argv.indexOf("-pin") + 1], after);
-  await assert.rejects(access(join(directory, "data", "airplay", "register")), "senders paired with the old code are forgotten");
-  // 1 in 10,000 that a fresh code repeats.
-  if (after === before) t.diagnostic("the new code matched the old one by chance");
+  // Devices that stored the old password fail UxPlay's check and ask for the new one.
+  assert.equal(await readFile(join(directory, "data", "airplay", "uxplayrc"), "utf8"), `pw ${after}\n`);
 });
 
 test("AirPlay explains where it can't run", async t => {
@@ -529,6 +556,7 @@ test("sound framed by GStreamer's rtpL16pay and rtpstreampay plays as sent", { s
 echo 'Initialized server socket(s)'
 echo 'Accepted IPv4 client on socket 30, port 7000'
 echo 'New connection 0x30 identified as Connection type RAOP'
+echo 'Client authentication success'
 echo 'RAOP initialized success'
 echo 'connection request from GStreamer (gst-launch) with deviceID = 02:00:00:00:00:02'
 exec ${gstLaunch} -q ${pipeline}
@@ -606,4 +634,116 @@ test("the real UxPlay starts with Couch's arguments, and a connection that never
   await request("/api/settings/airplay", { body: { enabled: false } });
   await until(() => !alive(pid));
   assert.ok(Date.now() - stopped < 3_000, "UxPlay exits on SIGTERM without being killed");
+});
+
+// A sender that never learns the code, against the real UxPlay with Couch's arguments: the attack on
+// UxPlay's own -pin mode, which sets up audio for a sender that skips pairing. Its first SETUP carries
+// all-zero keys, which UxPlay's FairPlay can't decrypt and so leaves as a zero AES key (lib/raop_handlers.h),
+// then an ALAC stream encrypted with it. A sender that knows the code answers UxPlay's Digest challenge
+// the same way and plays, which shows the same path admits the sender that does; FairPlay, pairing and
+// an Apple device's own behaviour are not exercised.
+const setupKeys = Buffer.from("YnBsaXN0MDDXAQIDBAUGBwgJCgsMDQ5YZGV2aWNlSURTZWl2VGVrZXlVbW9kZWxUbmFtZVp0aW1pbmdQb3J0XnRpbWluZ1Byb3RvY29sXxARMDI6MDA6MDA6MDA6MDA6MDlPEBAAAAAAAAAAAAAAAAAAAAAATxBIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVFRlc3RdTm8gUElOIHNlbmRlchGyblNOVFAIFyAkKS80P05idcDF09YAAAAAAAABAQAAAAAAAAAPAAAAAAAAAAAAAAAAAAAA2g==", "base64"); // deviceID, zero eiv/ekey, name "No PIN sender", NTP timing
+const setupAudio = Buffer.from("YnBsaXN0MDDRAQJXc3RyZWFtc6ED1gQFBgcICQoLDA0OD1thdWRpb0Zvcm1hdFtjb250cm9sUG9ydFJjdFdpc01lZGlhU3NwZlR0eXBlEgAEAAAQABACCREBYBBgCAsTFSIuOj1FSU5TVVdYWwAAAAAAAAEBAAAAAAAAABAAAAAAAAAAAAAAAAAAAABd", "base64"); // one ALAC stream, type 96, ct 2, spf 352
+const alacFrame = Buffer.from("IAAQAAACwAACDQoBYf6SAN//jAAkDwgBAAAAAAAAAA/4Baf+AWj/gFo+o+iBhAAAAAgccOgKMAAgpgAMAII4ygQtxYFmFqpK/D7PVMTpFotGcYZ5vWkKCdA7h0SVzrKqzMIZKmXn291aWSkZKTTVaGnHHXC6tzLXvXiAz9S0EtlE+U92lpK7wFSKIaSrJHMmIirhxopVdRl0jPTJV7+byer3eCtlRgpUCoQmdrAripmRhDPixuxkaDPj5Pc0WrsSsoU5x9DI0Gl1zc5qwpxTQU2po+kqms7RSKIDiVaRTQrvCGhk97bUhTR/wFf4", "base64"); // one 352-sample ALAC frame of a tone
+test("the real UxPlay sets up sound only for a sender that answers with the code", { skip: !linux || !realUxPlay, timeout: 60_000 }, async t => {
+  const { airplay, player, request, connect, hostToken } = await fixture(t, { uxplay: `#!/bin/sh\nexec ${realUxPlay} "$@"\n` });
+  await request("/api/settings/airplay", { body: { enabled: true } });
+  await until(async () => ["ready", "error"].includes((await airplay()).status), 20_000);
+  assert.equal((await airplay()).status, "ready", (await airplay()).error ?? "");
+  const host = await connect(Identity.generate().peerId, hostToken);
+  const commands = await Promise.all((await readdir("/proc")).filter(entry => /^\d+$/.test(entry)).map(async entry => [Number(entry), await readFile(`/proc/${entry}/cmdline`, "utf8").catch(() => "")] as const));
+  const pid = commands.find(([, command]) => command.startsWith(`${realUxPlay}\0`))?.[0] ?? 0;
+  const [port] = await listening(pid);
+  const { createConnection } = await import("node:net");
+  const { createSocket } = await import("node:dgram");
+  const { createCipheriv, createHash } = await import("node:crypto");
+  const md5 = (text: string) => createHash("md5").update(text).digest("hex");
+  const open = async () => {
+    const socket = createConnection({ host: "127.0.0.1", port: port! });
+    t.after(() => socket.destroy());
+    await once(socket, "connect");
+    let sequence = 0;
+    const setup = (body: Buffer, authorization?: string) => new Promise<{ status: number; headers: string; body: Buffer }>((resolve, reject) => {
+      let data = Buffer.alloc(0);
+      const got = (chunk: Buffer) => {
+        data = Buffer.concat([data, chunk]);
+        const end = data.indexOf("\r\n\r\n");
+        if (end < 0) return;
+        const headers = data.subarray(0, end).toString(), length = Number(/Content-Length: (\d+)/i.exec(headers)?.[1] ?? 0);
+        if (data.length < end + 4 + length) return;
+        socket.off("data", got); socket.off("close", closed);
+        resolve({ status: Number(headers.split(" ")[1]), headers, body: data.subarray(end + 4, end + 4 + length) });
+      };
+      const closed = () => reject(new Error("UxPlay closed the connection"));
+      socket.on("data", got); socket.once("close", closed);
+      socket.write(`SETUP rtsp://127.0.0.1/1 RTSP/1.0\r\nCSeq: ${++sequence}\r\nContent-Type: application/x-apple-binary-plist\r\nContent-Length: ${body.length}\r\n${authorization ? `Authorization: ${authorization}\r\n` : ""}\r\n`);
+      socket.write(body);
+    });
+    return { socket, setup };
+  };
+  const digest = (challenge: string, password: string) => {
+    const nonce = /nonce="([^"]+)"/.exec(challenge)![1]!, uri = "rtsp://127.0.0.1/1";
+    return `Digest username="AirPlay", realm="raop", nonce="${nonce}", uri="${uri}", response="${md5(`${md5(`AirPlay:raop:${password}`)}:${nonce}:${md5(`SETUP:${uri}`)}`)}"`;
+  };
+  // The data and control ports from UxPlay's binary plist answer to the audio SETUP.
+  const ports = (plist: Buffer) => {
+    const size = plist.at(-26)!, ref = plist.at(-25)!, table = Number(plist.readBigUInt64BE(plist.length - 8));
+    const int = (at: number, bytes: number) => plist.readUIntBE(at, bytes);
+    const object = (id: number): unknown => {
+      let at = int(table + id * size, size);
+      const marker = plist[at++]!, kind = marker >> 4;
+      let count = marker & 15;
+      if (count === 15 && kind !== 1) { const bytes = 1 << (plist[at++]! & 15); count = int(at, bytes); at += bytes; }
+      if (kind === 1) return int(at, 1 << count);
+      if (kind === 5) return plist.subarray(at, at + count).toString();
+      if (kind === 10) return Array.from({ length: count }, (_, index) => object(int(at + index * ref, ref)));
+      if (kind === 13) return Object.fromEntries(Array.from({ length: count }, (_, index) => [object(int(at + index * ref, ref)), object(int(at + (count + index) * ref, ref))]));
+      throw new Error(`unexpected binary plist object ${kind}`);
+    };
+    return (object(Number(plist.readBigUInt64BE(plist.length - 16))) as { streams: { dataPort: number; controlPort: number }[] }).streams[0]!;
+  };
+  const play = async (stream: { dataPort: number; controlPort: number }) => {
+    const udp = createSocket("udp4");
+    await new Promise<void>(resolve => udp.bind(0, "127.0.0.1", resolve));
+    t.after(() => udp.close());
+    const sync = Buffer.alloc(20); sync[0] = 0x90; sync[1] = 0xd4; sync.writeUInt16BE(4, 2); sync.writeBigUInt64BE((BigInt(Math.floor(Date.now() / 1000)) + 2208988800n) << 32n, 8);
+    udp.send(sync, stream.controlPort, "127.0.0.1");
+    for (let index = 0; index < 240; index++) {
+      const cipher = createCipheriv("aes-128-cbc", Buffer.alloc(16), Buffer.alloc(16)); cipher.setAutoPadding(false);
+      const whole = Math.floor(alacFrame.length / 16) * 16;
+      const header = Buffer.alloc(12); header[0] = 0x80; header[1] = 0x60; header.writeUInt16BE(index, 2); header.writeUInt32BE(index * 352, 4); header.writeUInt32BE(0x1234, 8);
+      udp.send(Buffer.concat([header, cipher.update(alacFrame.subarray(0, whole)), cipher.final(), alacFrame.subarray(whole)]), stream.dataPort, "127.0.0.1");
+      await new Promise(resolve => setTimeout(resolve, 8));
+    }
+  };
+
+  // Without the code: UxPlay challenges the key SETUP and sets up no stream to play.
+  const stranger = await open();
+  const challenged = await stranger.setup(setupKeys);
+  assert.equal(challenged.status, 401);
+  assert.match(challenged.headers, /WWW-Authenticate: Digest realm="raop", nonce="/);
+  // A wrong code is challenged again.
+  assert.equal((await stranger.setup(setupKeys, digest(challenged.headers, "wrong-code-here"))).status, 401);
+  // Skipping to the audio SETUP gets no stream: UxPlay drops the connection.
+  const closed = once(stranger.socket, "close");
+  void stranger.setup(setupAudio).catch(() => {});
+  await closed;
+  await new Promise(resolve => setTimeout(resolve, 1_000));
+  assert.deepEqual(host.state.liveSources ?? [], []);
+  assert.equal(await player(), "idle", "a sender without the code holds no update off");
+  assert.equal((await airplay()).status, "ready");
+
+  // With the code, the same requests set up a stream, and its sound becomes a source.
+  const { code } = await airplay();
+  const known = await open();
+  const challenge = await known.setup(setupKeys);
+  assert.equal(challenge.status, 401);
+  assert.equal((await known.setup(setupKeys, digest(challenge.headers, code))).status, 200);
+  const audio = await known.setup(setupAudio);
+  assert.equal(audio.status, 200);
+  await play(ports(audio.body));
+  await until(() => host.state.liveSources?.[0]?.name === "AirPlay · No PIN sender", 5_000);
+  assert.equal(await player(), "playing");
+  known.socket.destroy();
+  await until(() => !host.state.liveSources?.length, 10_000);
 });
