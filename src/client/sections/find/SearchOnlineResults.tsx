@@ -110,7 +110,8 @@ function OnlineResults(props: Props) {
   // errors and retries, so changing a query or connection retires its reads.
   const music = provider === "bandcamp" || provider === "soundcloud";
   const facet = (item: ProviderItem): SearchFacet => ({ kind: music ? "Music" : item.kind !== "media" ? "Channels" : item.live ? "Live" : "Video", duration: item.duration });
-  useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
+  // Debounced summaries can still call online actions after a disconnect.
+  useEffect(() => { const controller = new AbortController(); lifetime.current = props.connected ? controller : null; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   async function more() {
     if (!page || loading || !props.connected) return;
     if (visible < page.items.length) { setVisible(value => value + 6); return; }
@@ -120,7 +121,7 @@ function OnlineResults(props: Props) {
     if (!signal?.aborted && !result.isError) setVisible(value => value + 6);
   }
   async function action(failure: string, work: (signal: AbortSignal) => Promise<boolean | void>) {
-    if (busy || !props.connected || !lifetime.current) return;
+    if (busy || !props.connected || !lifetime.current || lifetime.current.signal.aborted) return;
     const signal = lifetime.current.signal;
     setBusy(true);
     try { await work(signal); }
@@ -160,7 +161,7 @@ function OnlineResults(props: Props) {
     const hits: SearchHit[] = (page?.items ?? []).slice(0, props.paged ? undefined : visible).map(item => {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
-      const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
+      const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: !props.connected || busy || saveUnavailable, run: () => save(item, saved) };
       return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: collectionLabel(item), thumbnail: item.thumbnail,
         primary: { label: "Open", href: collectionLocation(item), run: () => props.onOpenCollection?.(item) },
         actions: [...(item.kind === "media" ? [
@@ -206,6 +207,6 @@ function OnlineResults(props: Props) {
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
+  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }

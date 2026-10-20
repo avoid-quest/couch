@@ -191,7 +191,8 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
   const label = hit.primary.label === "Play" || hit.primary.label === "Resume" ? on(hit.primary.label) : hit.primary.label;
   const play = hit.primary.label !== "Play" ? hit.actions.find(action => action.label === "Play") : undefined;
   const queue = hit.actions.find(action => action.label === "Queue");
-  const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action.label !== hit.primary.label));
+  const save = hit.actions.find(action => action.label === "Save" || action.label === "Saved");
+  const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action !== save && action.label !== hit.primary.label));
   const time = hit.live ? "Live" : !hit.collection && hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
   return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid gap-x-8 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
     <div aria-hidden="true" className="h-40 min-w-0 md:h-48 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shapeOf(hit)])} /></div>
@@ -209,6 +210,7 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
         }}>{hit.primary.href && !hit.primary.disabled ? <a href={detailHref(hit.primary.href)}>{label}</a> : label}</Button>
         {play && <Button variant="ghost" size="lg" disabled={play.disabled} onClick={play.run}>{on("Play")}</Button>}
         {queue && <Button variant="ghost" size="lg" disabled={queue.disabled} onClick={queue.run}>Queue</Button>}
+        {save && <Button variant="ghost" size="lg" aria-pressed={save.pressed} disabled={save.disabled} onClick={save.run}>{save.label}</Button>}
         <ItemMenu menu={rest} size="icon-lg" title={hit.title} className="opacity-100" />
       </div>
     </div>
@@ -239,9 +241,7 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       // A press that plays keeps the hit's own destination (a station's page) in the menu as Open.
-      menu={play || hit.primary.label === "Play" ? [...play && hit.primary.label !== "Play" ? [{ label: hit.primary.label, disabled: hit.primary.disabled, run: hit.primary.run }] : [], ...hit.actions.filter(action => action.label !== "Play")] : hit.actions}
-      // A press that opens a page holding every verb needs no "…": a collection's, whose menu is Save. Stations, live hits and videos with Play next keep theirs.
-      menuOnPage={!play && !!hit.primary.href && hit.kind !== "Radio" && !hit.actions.some(action => action.label === "Play next")}>
+      menu={play || hit.primary.label === "Play" ? [...play && hit.primary.label !== "Play" ? [{ label: hit.primary.label, disabled: hit.primary.disabled, run: hit.primary.run }] : [], ...hit.actions.filter(action => action.label !== "Play")] : hit.actions}>
       {hit.id === currentId && <span className="text-sm font-medium">Playing</span>}
       {timeline && <HitSource hit={hit} />}
       {timeline && !hit.collection && <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />}

@@ -236,7 +236,7 @@ place with the same verbs whatever opened it:
 
 | Input | Opens the menu |
 | --- | --- |
-| Pointer | The "…", shown while the item is hovered or holds focus; right-click |
+| Pointer | The "…", always shown; right-click |
 | Touch | The "…", always shown; a long press held still (500 ms), with no text selection or link preview |
 | Keyboard | The "…" (a Tab stop on rows and tiles); the menu key or Shift+F10 on the item |
 | TV remote | OK held for 500 ms on the item, which acts on release when pressed shortly; Right to a row's "…" (a tile's is no stop, so Up and Down still go shelf to shelf, but it shows in the focused tile's caption; it is the tile's one stop while the press is disabled) |

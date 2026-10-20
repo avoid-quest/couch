@@ -55,6 +55,9 @@ albums retain their Album label. In narrow rows, the end time wraps below its
 length bar so the bar cannot crowd out the clock time. Music and Channels and
 lists count "results" because each contains more than one content type. The closest match wraps its
 full title and context and shows up to three lines of the available synopsis.
+Its action row exposes Save/Saved beside Queue, using the same toggle as its
+item menu and Details. Save stays disabled while disconnected, pending, or
+waiting for saved state; a failed save leaves the item unsaved and reports the error.
 These reuse MediaTile, the shadcn Item-based MediaRow, Alert and Empty; the
 catalog needs no additional component for this hierarchy. Artwork, menu
 behavior and the single responsive tree stay shared with other browse pages.
@@ -233,7 +236,10 @@ their length bar ("Resume at …" once partly watched). Each row's one verb open
 its History Details, which holds the others and Remove from Continue with Undo;
 the rows have no menu.
 Removing from For later or Channels & stations says "Removed … from Saved."
-An empty tab says what goes there and offers Discover.
+An empty tab says what goes there and offers Discover. For later points to
+Save in an item's "…" menu or Details and explains that stations and
+collections live in Channels & stations. Playable media keeps the existing
+For later persistence; stations and collections keep their existing favourites.
 Saved channels and collections keep their contained artwork and the same
 Channel, List, Album, Series or Season label as Search.
 
@@ -244,14 +250,15 @@ the row (its artwork too, for a pointer) does its main verb, Play for stations,
 channels and live hits, else Open or Details. Search, Saved, Discover's pages, and Up
 next's compact rows. Its other verbs (Play, Play on, Play next, Queue, Save,
 Move up, Move down, Remove, and Open where a live hit's press plays) are one list, `MediaRow`'s `menu`: the
-row's one menu ([Menus](../design.md#menus)), behind a "…" at the end of the
+row's one menu ([Menus](../design.md#menus)), behind an always-visible "…" at the end of the
 main verb's line on every screen, centred on the row's text.
 
 A row whose page holds every verb in its menu shows no "…" (`menuOnPage`),
 though right-click, a long press and a held OK still open the menu from the
 row: For later's rows (Details keeps Remove with Undo and Move up/down), Lists'
-rows (a list's page holds Play, Play on and Queue) and search hits that open a
-collection (whose page holds Save). Every other row keeps its "…": saved
+rows (a list's page holds Play, Play on and Queue). Search hits keep their
+"…", including collections, so Save is discoverable without opening Details.
+Every other row keeps its "…": saved
 channels and stations (a station's page holds no ordering or Remove), Live TV
 (a channel has no page), stations, live hits and videos with Play next among
 search hits, shared inputs, and Up next's entries, whose page holds only Play
@@ -275,7 +282,7 @@ stop whose press does the item's main verb. The catalog has no media tile
 and Card breaks Flat, so a tile is the smallest Button composition. `--tile-art`
 sets its artwork's height (11rem), so the "…" finds the title's line.
 
-Its other verbs are its one menu ([Menus](../design.md#menus)), behind a "…"
+Its other verbs are its one menu ([Menus](../design.md#menus)), behind an always-visible "…"
 over the end of the title's first line, which leaves it room, with its dots
 flush with the text. The "…" can't sit inside the tile's button, so it is a
 sibling laid over the caption, the line's height so the tile grows no taller,

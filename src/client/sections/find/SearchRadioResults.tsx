@@ -30,14 +30,15 @@ function RadioResults(props: Props) {
   const loading = props.connected && search.isFetching;
   const error = search.error ? searchError(search.error) : search.data?.error ?? "";
   const saveError = kept.error ? searchError(kept.error) : "";
-  useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
+  // Debounced summaries can still call online actions after a disconnect.
+  useEffect(() => { const controller = new AbortController(); lifetime.current = props.connected ? controller : null; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
 
   async function retry() {
     await client.invalidateQueries({ queryKey: options.queryKey, exact: true, refetchType: "none" });
     await client.fetchQuery({ ...radioSearchQuery(props, title, props.query, avoid), staleTime: 0 }).catch(() => {});
   }
   async function action(failure: string, work: (signal: AbortSignal) => Promise<boolean | void>) {
-    if (busy || !props.connected || !lifetime.current) return;
+    if (busy || !props.connected || !lifetime.current || lifetime.current.signal.aborted) return;
     const signal = lifetime.current.signal; setBusy(true);
     try { await work(signal); }
     catch (reason) { if (!signal.aborted) failed(failure, reason); }
@@ -68,11 +69,11 @@ function RadioResults(props: Props) {
           { label: "Play on", disabled: !props.canPlay || busy || !props.onCommand, playOn: (deviceId: string) => play(station, true, deviceId) },
           { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
           ...browserActions(station.homepage),
-          { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || favorites === null, run: () => save(station, saved) },
+          { label: saved ? "Saved" : "Save", pressed: saved, disabled: !props.connected || busy || favorites === null, run: () => save(station, saved) },
         ],
       };
     });
     props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), warning: saveError || undefined, facets: results.map(() => ({ kind: "Radio" })), hits });
-  }, [title, stations, favorites, programmes.data, now, results.length, loading, error, saveError, busy, props.onResults, props.canPlay, props.onCommand, props.browse]);
+  }, [title, stations, favorites, programmes.data, now, results.length, loading, error, saveError, busy, props.connected, props.onResults, props.canPlay, props.onCommand, props.browse]);
   return null;
 }

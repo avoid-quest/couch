@@ -76,7 +76,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, onFind, sho
     <SavedStatus connected={connected} loading={loading} />
     {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
     {connected && failure && <SavedError message={failure} />}
-    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Nothing saved yet. Use Save on anything in Discover or Search.</SavedEmpty>}
+    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Discover</Button>}>Save something to play later. In Discover or Search, open an item's … menu or its details and choose Save. Stations and collections appear in Channels &amp; stations.</SavedEmpty>}
     {!!items.length && <MediaList ref={list} aria-label="For later">
       {items.map((item, index) => {
         const inspect = () => details.open(itemLocation("saved", item.id));
