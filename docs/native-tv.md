@@ -245,9 +245,10 @@ its restarts, the [health check](#dedicated-tv) setup and updates use, the
 window's lifecycle, the mode, the helpers Core selected, display connectors and
 the X screen's current mode, the sound server's sinks, the last update outcome,
 the update timer, and from the log only the run header, the last delivery route,
-player error hosts and Main's redacted errors. Each observation has its own time
+player error hosts and Main's redacted errors, including those in `couch.log.1`
+when that is the same run's rotated file. Each observation has its own time
 limit and is reported unavailable or timed out on its own, and it reads at
-most a bounded start (or, for the log, end) of each record. It never opens
+most a bounded start (and, for the log, end) of each record. It never opens
 `couch.sqlite`, runs or updates a helper, plays, captures or tests media, or
 changes anything, and it leaves out keys, tokens, pairing, settings, the
 environment, executable paths, device names and source URLs. What it quotes

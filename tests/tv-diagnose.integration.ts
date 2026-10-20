@@ -27,6 +27,8 @@ const peak = `--import=data:text/javascript,${encodeURIComponent('import { write
 
 type Scenario = {
   renderer?: object | null; mainPid?: number; hang?: boolean; log?: boolean; leaks?: boolean; bus?: boolean; huge?: boolean;
+  // Files in <data>/logs in place of the usual couch.log; a reader that waits a second before reading.
+  logs?: Record<string, string>; slowReader?: boolean;
   // false: none recorded; a function records them in <data>/helpers.
   helpers?: boolean | ((directory: string) => Promise<void>);
 };
@@ -64,6 +66,7 @@ async function report(scenario: Scenario = {}, json = true) {
     }
     mkdirSync(join(data, "logs"));
     if (scenario.hang) execFileSync("mkfifo", [join(data, "logs/couch.log")]);
+    else if (scenario.logs) for (const [name, text] of Object.entries(scenario.logs)) file(join(data, "logs", name), text);
     else if (scenario.log !== false) file(join(data, "logs/couch.log"), [
       "2026-10-19T20:00:00.000Z main info: Couch 0.3.1 run run-1 pid 4242 log 2",
       "2026-10-19T20:00:01.000Z device online Living Room",
@@ -86,14 +89,17 @@ async function report(scenario: Scenario = {}, json = true) {
     // Records far larger than the report reads, sparse so they cost no disk.
     if (scenario.huge) for (const record of [join(data, "renderer-status.json"), join(data, "operating-mode.json"), join(root, "var/lib/couch-update/status")]) truncateSync(record, 256 * 2 ** 20);
     const started = Date.now();
-    const child = spawn(process.execPath, [peak, diagnose, ...json ? ["--json"] : [], data, "complete"], {
+    const argv = [process.execPath, peak, diagnose, ...json ? ["--json"] : [], data, "complete"];
+    // A slow reader on a shell pipe, as `diagnose --json | gzip > report` is: Node's own spawn
+    // gives the child a socket with a far larger buffer than a pipe's 64 KiB.
+    const child = spawn(scenario.slowReader ? "bash" : argv[0]!, scenario.slowReader ? ["-c", 'set -o pipefail; "$@" | { sleep 1; cat; }', "bash", ...argv] : argv.slice(1), {
       env: { ...process.env, PATH: `${bin}:${path}`, COUCH_DIAGNOSE_ROOT: root, COUCH_HOST_TOKEN: "SECRET-ENV-TOKEN", COUCH_ADMIN_RECOVERY_CODE: "SECRET-RECOVERY" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; });
     child.stderr.on("data", chunk => { stderr += chunk; });
-    const [code] = await once(child, "exit");
+    const [code] = await once(child, "close");
     assert.equal(code, 0, stderr);
     for (const secret of secrets) assert.ok(!stdout.includes(secret) && !stderr.includes(secret), `The report must not contain ${secret}:\n${stdout}\n${stderr}`);
     const maxRSS = Number(/^maxRSS=(\d+)$/m.exec(stderr)?.[1]) * 1024;
@@ -120,9 +126,9 @@ test("a report names the installed tuple and observations, and leaves every secr
   assert.deepEqual(observed("mode"), { mode: "remote", tvPresentation: true });
   assert.deepEqual(observed("window"), { state: "ready", page: "local", navigation: 1, reason: null, run: "run-1", version: "0.3.1", startedAt: new Date(now - 60_000).toISOString(), at: new Date(now).toISOString(), current: true });
   const helpers = observed("helpers");
-  assert.deepEqual(helpers.selected["yt-dlp"], { origin: "managed", version: "2026.10.01", sha256: "a".repeat(64), verifiedAt: "2026-10-19T03:00:00Z", latest: "2026.10.10", held: true });
+  assert.deepEqual(helpers.selected["yt-dlp"], { origin: "managed", version: "2026.10.01", sha256: "a".repeat(64), verifiedAt: "2026-10-19T03:00:00.000Z", latest: "2026.10.10", held: true });
   assert.equal(helpers.selected.ffmpeg.origin, "system");
-  assert.deepEqual(helpers.managed["yt-dlp"][0], { version: "2026.10.01", installedAt: "2026-10-01T00:00:00Z", worked: { youtube: "2026-10-18T20:00:00Z" } });
+  assert.deepEqual(helpers.managed["yt-dlp"][0], { version: "2026.10.01", installedAt: "2026-10-01T00:00:00.000Z", worked: { youtube: "2026-10-18T20:00:00.000Z" } });
   assert.equal(helpers.hold.active, true);
   const update = observed("update");
   assert.equal(update.outcome, "rolled-back");
@@ -267,4 +273,51 @@ test("the helpers Core's own selection recorded are reported, without their path
   assert.ok(Date.parse(selected["yt-dlp"].verifiedAt) >= now);
   assert.deepEqual(managed, { "yt-dlp": [], qjs: [], ffmpeg: [] }, "System copies leave no managed ones");
   assert.equal(hold, null);
+});
+
+// Main's log as app/log-file.ts writes it: each file begins with its run's header.
+const head = (run: string, file: number) => `2026-10-19T20:00:00.000Z main info: Couch 0.3.1 run ${run} pid 4242 log ${file}\n`;
+const filler = (bytes: number) => "2026-10-19T20:00:02.000Z core info: filler\n".repeat(Math.ceil(bytes / 42));
+
+test("the run header and this run's rotated log are read however long the log, and another run's isn't", options, async () => {
+  const rotated = head("run-1", 1) + "2026-10-19T20:01:00.000Z main error: Early in the earlier file\n" + filler(300 * 1024)
+    + "2026-10-19T20:02:00.000Z playback abcd1234 Direct on Living Room\n" + "2026-10-19T20:03:00.000Z main error: Late in the earlier file\n";
+  const current = head("run-1", 2) + filler(300 * 1024) + "2026-10-19T20:04:00.000Z main error: In the current file\n";
+  const { report: result } = await report({ logs: { "couch.log": current, "couch.log.1": rotated } });
+  const log = result.observations.log.value;
+  assert.deepEqual(log.run, { at: "2026-10-19T20:00:00.000Z", version: "0.3.1", run: "run-1", file: 2 }, "The header beyond the newest 256 KB");
+  assert.equal(log.rotated, true);
+  assert.deepEqual(log.delivery, { at: "2026-10-19T20:02:00.000Z", route: "Direct", buffered: false, unavailable: false }, "Only the rotated file's newest 256 KB has a delivery");
+  assert.deepEqual(log.errors.map((error: { message: string }) => error.message), ["Late in the earlier file", "In the current file"], "Oldest first, within each file's newest 256 KB");
+  // couch.log.1 left by an earlier run (its file isn't this run's previous one), or none at all.
+  for (const logs of [{ "couch.log": current, "couch.log.1": rotated.replace("run run-1", "run run-0") }, { "couch.log": current, "couch.log.1": head("run-1", 5) + "2026-10-19T20:03:00.000Z main error: Not this file\n" }, { "couch.log": current }]) {
+    const { report: other } = await report({ logs });
+    assert.equal(other.observations.log.status, "observed");
+    assert.equal(other.observations.log.value.rotated, false);
+    assert.equal(other.observations.log.value.delivery, null);
+    assert.deepEqual(other.observations.log.value.errors.map((error: { message: string }) => error.message), ["In the current file"]);
+  }
+});
+
+test("control bytes in a recorded time never reach the readable report", options, async () => {
+  const at = "Thu, 01 Jan 2026 00:00:00 GMT (\u001b[2J\u0007)";
+  const { report: result } = await report({ renderer: { state: "failed", page: "remote", reason: "unreachable", at, startedAt: "not a time \u001b[2J" } });
+  assert.equal(result.observations.window.value.at, "2026-01-01T00:00:00.000Z");
+  assert.equal(result.observations.window.value.startedAt, null);
+  const { stdout } = await report({ renderer: { pid: 1, at } }, false);
+  assert.match(stdout, /^Window: no report from a running Couch \(last: ready at 2026-01-01T00:00:00\.000Z\)$/m);
+  assert.doesNotMatch(stdout, /[\u0000-\u0009\u000b-\u001f\u007f]/);
+});
+
+test("a report larger than a pipe holds reaches a slow reader whole", options, async () => {
+  // The largest helper record the report keeps: 4 helpers, 8 copies each, 16 providers per copy.
+  const helpers = async (directory: string) => {
+    const copies = Object.fromEntries(Array.from({ length: 8 }, (_, copy) => [`2026.10.0${copy}`, { sha256: null, installedAt: "2026-10-01T00:00:00Z",
+      worked: Object.fromEntries(Array.from({ length: 16 }, (_, provider) => [`${provider}`.padStart(80, "p"), "2026-10-18T20:00:00Z"])) }]));
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "status.json"), JSON.stringify({ schema: 1, selected: {}, managed: Object.fromEntries(["yt-dlp", "qjs", "ffmpeg", "mpv"].map(name => [name, copies])) }));
+  };
+  const { stdout, report: result } = await report({ helpers, slowReader: true });
+  assert.ok(stdout.length > 64 * 1024, `The report is ${stdout.length} bytes`);
+  assert.equal(result.observations.helpers.value.managed.mpv[7].version, "2026.10.07");
 });

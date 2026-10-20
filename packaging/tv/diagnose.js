@@ -36,13 +36,16 @@ async function text(path, bytes = 64 * 1024, end = false) {
     if (!stats.isFile()) throw new Error("Not a regular file.");
     const length = Math.min(size, bytes), buffer = Buffer.alloc(length);
     const { bytesRead } = await file.read(buffer, 0, length, end ? size - length : 0);
-    return buffer.subarray(0, bytesRead).toString("utf8");
+    const value = buffer.subarray(0, bytesRead).toString("utf8");
+    // An end that starts mid-line drops that partial line.
+    return end && size > length ? value.slice(value.indexOf("\n") + 1) : value;
   } finally { await file.close(); }
 }
 // A parse error quotes the text it failed on, which may be a pairing pin or a token.
 const jsonFile = async path => { const value = await text(path); try { return JSON.parse(value); } catch { throw new Error("The record is not valid JSON."); } };
 const word = (value, pattern = /^[\w.+~:@-]{1,80}$/) => typeof value === "string" && pattern.test(value) ? value : null;
-const time = value => typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value.slice(0, 40) : null;
+// A recorded time, as canonical ISO: what parses is rewritten, so nothing else of the text is shown.
+const time = value => { const at = typeof value === "string" ? Date.parse(value) : NaN; return Number.isNaN(at) ? null : new Date(at).toISOString(); };
 const properties = output => Object.fromEntries(output.trim().split("\n").map(line => line.split(/=(.*)/s).slice(0, 2)));
 
 const service = observe(limit, async () => {
@@ -138,17 +141,24 @@ async function display() {
   return { connectors, screens: screens ?? { unavailable: "No graphical session" } };
 }
 
-// Only structured lines from the newest 256 KB: the run header, the last delivery
-// route (without device names), player error hosts and Main's redacted errors.
+// Only structured lines, from the run header that begins couch.log and the newest
+// 256 KB of it, and of couch.log.1 when that holds this run's earlier output (Main
+// rotates a long run's log there, app/log-file.ts): the last delivery route (without
+// device names), player error hosts and Main's redacted errors.
 async function log(path) {
-  const tail = (await text(path, 256 * 1024, true)).split("\n");
   const iso = "(\\d{4}-\\d\\d-\\d\\dT[\\d:.]+Z)";
-  const header = tail.map(line => new RegExp(`^${iso} main info: Couch (\\S+) run (\\S+) pid \\d+ log (\\d+)$`).exec(line)).filter(Boolean).at(-1);
+  const heading = async file => new RegExp(`^${iso} main info: Couch (\\S+) run (\\S+) pid \\d+ log (\\d+)$`).exec((await text(file, 4096)).split("\n")[0]);
+  const header = await heading(path);
+  const earlier = header && Number(header[4]) > 1 && await heading(`${path}.1`).catch(() => null);
+  const current = !!earlier && earlier[3] === header[3] && Number(earlier[4]) === Number(header[4]) - 1;
+  const tail = [...current ? (await text(`${path}.1`, 256 * 1024, true)).split("\n") : [], ...(await text(path, 256 * 1024, true)).split("\n")];
   const delivery = tail.map(line => new RegExp(`^${iso} playback [\\da-f]+ (Direct|Synced) on (.*)$`).exec(line)).filter(Boolean).at(-1);
   const playerErrors = tail.map(line => new RegExp(`^${iso} player error \\S+ .*?host=([\\w.-]+):`).exec(line)).filter(Boolean);
   const errors = tail.map(line => new RegExp(`^${iso} (main|renderer|update) error: (.*)$`).exec(line)).filter(Boolean).slice(-5);
   return {
     run: header ? { at: header[1], version: word(header[2]), run: word(header[3]), file: Number(header[4]) } : null,
+    // Whether couch.log.1, the same run's previous file, was read too.
+    rotated: current,
     delivery: delivery ? { at: delivery[1], route: delivery[2], buffered: delivery[3].includes(" (buffered)"), unavailable: delivery[3].includes(" (unavailable)") } : null,
     playerErrors: { count: playerErrors.length, hosts: [...new Set(playerErrors.map(match => match[2]))].slice(-5), last: playerErrors.at(-1)?.[1] ?? null },
     errors: errors.map(([, at, component, message]) => ({ at, component, message: redact(message, 300) })),
@@ -172,16 +182,18 @@ const report = record("diagnose", {
   untested: physical,
 });
 
-if (json) console.log(JSON.stringify(report, null, 2));
+// The whole report goes out in one write, which the exit below waits for.
+const lines = [], print = text => lines.push(text);
+if (json) print(JSON.stringify(report, null, 2));
 else {
   const line = (label, name, describe) => {
     const result = results[name];
-    console.log(`${label}: ${result.status === "observed" ? describe(result.value) : result.status === "timeout" ? `timed out after ${result.ms} ms` : `unavailable (${result.reason})`}`);
+    print(`${label}: ${result.status === "observed" ? describe(result.value) : result.status === "timeout" ? `timed out after ${result.ms} ms` : `unavailable (${result.reason})`}`);
   };
-  console.log("Couch TV diagnosis. Passive: nothing was played, captured, installed or changed.");
+  print("Couch TV diagnosis. Passive: nothing was played, captured, installed or changed.");
   line("Package", "package", value => `couch ${value.version ?? "unknown"}; Electron ${report.runtime.electron ?? "unknown"}, Node ${report.runtime.node}`);
   line("System", "environment", value => `${value.os.name ?? "unknown OS"}, kernel ${value.kernel}, ${value.arch}, ${value.cpu.model ?? "CPU"} × ${value.cpu.count}, ${value.memoryMiB} MiB, GPU ${value.gpus.map(gpu => `${gpu.vendor}:${gpu.device} ${gpu.driver ?? ""}`.trim()).join(", ") || "none found"}`);
-  console.log(`Setup: ${report.setup}`);
+  print(`Setup: ${report.setup}`);
   line("Service", "service", value => `${value.active} (${value.sub}), ${value.restarts} restarts${value.since ? `, since ${value.since}` : ""}`);
   line("Core", "health", value => value.ok ? value.core ? "healthy" : "not run here (Another Couch mode)" : `failed: ${value.error}`);
   line("Window", "window", value => value.current === null ? `unknown: can't tell whether the running Couch wrote it (last report: ${value.state} at ${value.at})`
@@ -199,9 +211,11 @@ else {
     value.delivery ? `last delivery ${value.delivery.route}${value.delivery.buffered ? " (buffered)" : ""}${value.delivery.unavailable ? " (unavailable)" : ""} at ${value.delivery.at}` : "no delivery",
     `${value.playerErrors.count} player errors${value.playerErrors.hosts.length ? ` (${value.playerErrors.hosts.join(", ")})` : ""}`,
     ...value.errors.map(error => `${error.at} ${error.component}: ${error.message}`)].join("; "));
-  console.log(`Not tested: ${physical.join(", ")}.`);
+  print(`Not tested: ${physical.join(", ")}.`);
 }
-// Commands still running timed out; they go with the report. The report is out
-// even if a read stuck on a hung mount delays the exit.
+// Commands still running timed out; they go with the report. A pipe takes the report
+// asynchronously, so the exit waits until it has all of it (or the reader went away),
+// then doesn't wait for a read stuck on a hung mount.
 for (const child of children) child.kill("SIGKILL");
-process.exit(0);
+process.stdout.on("error", () => process.exit(0));
+process.stdout.write(`${lines.join("\n")}\n`, () => process.exit(0));
