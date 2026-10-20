@@ -77,6 +77,8 @@ test("a direct source is not exposed even when it resembles a provider page", as
 test("known public URL variations expose canonical provider identity", async () => {
   assert.equal((await history("web:https://youtu.be/abcdefghijk")).url, "https://www.youtube.com/watch?v=abcdefghijk");
   assert.equal((await history("web:https://raiplay.it/video/2026/09/episode.json")).url, "https://www.raiplay.it/video/2026/09/episode.html");
+  assert.equal((await history("web:https://www.animeunity.so/anime/12-one-piece/5987")).url, "https://www.animeunity.so/anime/12-one-piece/5987");
+  assert.equal((await history("web:https://www.animeunity.to/anime/12-one-piece/5987")).url, "https://www.animeunity.so/anime/12-one-piece/5987");
 });
 
 test("live and radio history cannot expose a finite provider identity", async () => {
