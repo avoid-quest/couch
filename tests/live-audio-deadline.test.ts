@@ -39,6 +39,14 @@ test("a stalled server does not start another poll after the sleep budget expire
   expect(polls.every(time => time < deadline)).toBe(true);
 });
 
+test("a queued poll rechecks its deadline before invoking the predicate", async () => {
+  let starts = 0;
+  const deadline = performance.now() + 10;
+  queueMicrotask(() => { while (performance.now() <= deadline) { /* Occupy this turn past the deadline. */ } });
+  await expect(waitUntil(() => { starts++; return true; }, "queued reply", deadline)).rejects.toThrow("Timed out:");
+  expect(starts).toBe(0);
+});
+
 test("successful and failed requests dispose their pending registration", async () => {
   let pending = 0;
   const deadline = performance.now() + 1000;

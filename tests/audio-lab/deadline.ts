@@ -22,7 +22,7 @@ export async function requestBeforeDeadline<T>(deadline: number, label: string,
 export async function waitUntil(test: (deadline: number) => boolean | Promise<boolean>, label: string, deadline: number) {
   while (true) {
     const ready = await requestBeforeDeadline<boolean>(deadline, label, (resolve, reject) => {
-      Promise.resolve().then(() => test(deadline)).then(resolve, reject);
+      Promise.resolve().then(() => { remainingTime(deadline, label); return test(deadline); }).then(resolve, reject);
       return () => {};
     });
     if (ready) return;
