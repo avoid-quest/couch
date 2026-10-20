@@ -50,9 +50,9 @@ const groups: Group[] = [
   { id: "films", title: "Films and series", shape: "poster", noun: ["title", "titles"] },
   { id: "radio", title: "Radio", shape: "square", noun: ["station", "stations"] },
   { id: "live", title: "Live now", shape: "video", noun: ["stream", "streams"] },
-  { id: "music", title: "Music", shape: "square", noun: ["track", "tracks"] },
+  { id: "music", title: "Music", shape: "square", noun: ["result", "results"] },
   { id: "videos", title: "Videos", shape: "rows", noun: ["video", "videos"] },
-  { id: "channels", title: "Channels and lists", shape: "rows", noun: ["channel", "channels"] },
+  { id: "channels", title: "Channels and lists", shape: "rows", noun: ["result", "results"] },
 ];
 const count = (group: Group, n: number) => `${n} ${group.noun[n === 1 ? 0 : 1]}`;
 const catalogues = ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"];
@@ -134,7 +134,13 @@ export function SearchPanel(props: Props) {
   return <section ref={panel} className="min-w-0 space-y-8" aria-label="Search results" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }}>
     {!url && <>
       {(total > 0 || asking.length > 0) && <div className="grid gap-2">
-        <p role="status" className="flex min-h-8 items-center gap-2 text-sm text-muted-foreground tabular-nums">{asking.length > 0 && <Spinner aria-hidden="true" className="size-3.5" />}{relevant.length} {relevant.length === 1 ? "result" : "results"}{asking.length > 0 && `, still asking ${asking.join(", ")}`}</p>
+        <p role="status" className="flex min-h-8 items-start gap-2 text-sm text-muted-foreground">
+          {asking.length > 0 && <Spinner aria-hidden="true" className="mt-1 size-3.5 shrink-0" />}
+          <span className="min-w-0 break-words">
+            <span className="block text-foreground">{!relevant.length && asking.length ? `Searching for “${query}”…` : `${relevant.length} ${relevant.length === 1 ? "result" : "results"} for “${query}”`}</span>
+            {asking.length > 0 && <span className="block">Still asking {asking.join(", ")}.</span>}
+          </span>
+        </p>
         {/* Each row is named once at its left, as a settings row is, so the choices stay short: "From: YouTube", "Ends by: 17:30". */}
         {(relevant.length > 0 || filtered) && <div className="grid gap-x-4 gap-y-1 md:grid-cols-[5rem_minmax(0,1fr)] md:items-center">
           <p className="text-sm text-muted-foreground">From</p>
@@ -143,6 +149,7 @@ export function SearchPanel(props: Props) {
           <ChoiceGroup label="Ends by" value={until ?? "any"} onValueChange={setUntil} className="-ml-2.5 max-w-[calc(100%+0.625rem)] touch:flex-nowrap touch:overflow-x-auto touch:[scrollbar-width:none] touch:*:shrink-0" options={[{ value: "any", label: "Any time" }, ...bounds.map(bound => ({ value: bound.value, label: bound.value, count: merged.filter(hit => inScope(hit.source) && close(hit) && fitsBy(hit, bound.value === until ? fits : searchSecondsLeft(bound.deadline, now))).length }))]} />
         </div>}
       </div>}
+      <SourceProblems summaries={shown} />
       {top && <TopResult key={top.id} hit={top} now={now} />}
       {grouped.map((group, index) => group.shape === "rows"
         ? <section key={group.id} aria-label={group.title} className="grid min-w-0 gap-3">
@@ -150,16 +157,15 @@ export function SearchPanel(props: Props) {
           <HitList pageFirst={!top && index === 0} hits={group.hits} label={group.title} />
         </section>
         : <Shelf key={group.id} title={group.title} time={count(group, group.hits.length)}>
-          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
+          {group.hits.slice(0, expandedGroups.includes(group.id) ? undefined : 12).map((hit, position) => <li key={hit.id} className="shrink-0"><HitTile hit={hit} now={now} shape={shapeOf(hit)} pageFirst={!top && index === 0 && position === 0} /></li>)}
           {!expandedGroups.includes(group.id) && group.hits.length > 12 && <li className="shrink-0 self-center"><Button variant="ghost" onClick={() => setExpanded({ key: resultsKey, groups: [...expandedGroups, group.id] })}>{group.hits.length - 12} more</Button></li>}
         </Shelf>)}
       <MoreResults summaries={shown} />
-      <SourceProblems summaries={shown} />
       {total > 0 && !asking.length && !relevant.length && filtered && <Empty><EmptyHeader><EmptyTitle>Nothing matches these filters</EmptyTitle></EmptyHeader><EmptyContent><Button variant="outline" onClick={clearFilters}>Clear filters</Button></EmptyContent></Empty>}
       {props.connected && !asking.length && !relevant.length && !filtered && !shown.some(([, summary]) => summary.error) && <Empty role="status"><EmptyHeader><EmptyTitle><h2>Nothing found for “{query}”</h2></EmptyTitle><EmptyDescription>Try fewer words or paste a link.</EmptyDescription></EmptyHeader>{props.onManageSources && <EmptyContent><Button variant="outline" onClick={() => props.onManageSources?.()}>Add a source</Button></EmptyContent>}</Empty>}
       {/* What came back without a word of the query waits behind one line, so a stray hit never leads. */}
       {loose.length > 0 && <Collapsible open={looseOpen} onOpenChange={setLooseOpen} className="grid gap-3">
-        <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 justify-self-start text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} {loose.length === 1 ? "result that doesn't" : "results that don't"} mention “{query}”</Button></CollapsibleTrigger>
+        <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 h-auto min-h-8 max-w-full justify-self-start text-left whitespace-normal text-muted-foreground">{looseOpen ? "Hide" : "Show"} {loose.length} {loose.length === 1 ? "result that doesn't" : "results that don't"} mention “{query}”</Button></CollapsibleTrigger>
         <CollapsibleContent><HitList hits={loose} label="Other results" timeline={false} /></CollapsibleContent>
       </Collapsible>}
     </>}
@@ -169,6 +175,16 @@ export function SearchPanel(props: Props) {
   </section>;
 }
 
+const hitContext = (hit: SearchHit) => hit.meta.split(" · ").filter(part => part !== hit.source).join(" · ");
+
+/** Sources stay readable even when a long artist or programme name fills the context line. */
+function HitSource({ hit }: { hit: SearchHit }) {
+  return <span className="flex min-w-0 flex-wrap gap-x-2 text-sm text-muted-foreground">
+    <span className="min-w-0 break-words">{hit.source}</span>
+    {hit.collection && <span>{hit.collection}</span>}
+  </span>;
+}
+
 /** The closest match, laid out like Home's hero at a smaller size: artwork, title, meta, when it ends, then its verbs. */
 function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
   const { on } = usePlayOn();
@@ -176,13 +192,15 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
   const play = hit.primary.label !== "Play" ? hit.actions.find(action => action.label === "Play") : undefined;
   const queue = hit.actions.find(action => action.label === "Queue");
   const rest = useItemMenu(hit.actions.filter(action => action !== play && action !== queue && action.label !== hit.primary.label));
-  const time = hit.live ? "Live" : hit.collection ? hit.collection : hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
+  const time = hit.live ? "Live" : !hit.collection && hit.duration != null ? `${formatDuration(hit.duration)}, ends ${formatEndTime(hit.duration - (hit.position ?? 0), now)}` : undefined;
   return <section data-search-top data-hit-id={hit.id} aria-label={hit.title} className="grid gap-x-8 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-end">
     <div aria-hidden="true" className="h-40 min-w-0 md:h-48 [&_img]:aspect-auto [&_img]:bg-transparent"><MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection && hit.collection !== "Album"} className={cn("h-full w-auto max-w-full object-contain", tileAspect[shapeOf(hit)])} /></div>
     <div className="grid min-w-0 gap-1">
-      <h2 className="line-clamp-2 text-2xl font-semibold tracking-tight">{hit.title}</h2>
-      <p className="truncate text-sm text-muted-foreground">{hit.meta}</p>
+      <h2 className="break-words text-2xl font-semibold tracking-tight">{hit.title}</h2>
+      {hitContext(hit) && <p className="text-sm text-muted-foreground break-words">{hitContext(hit)}</p>}
+      <HitSource hit={hit} />
       {time && <p className="text-xl font-light tabular-nums">{time}</p>}
+      {hit.description && <p className="mt-2 line-clamp-3 max-w-prose break-words text-sm text-muted-foreground">{hit.description}</p>}
       <div data-nav-row className="mt-3 flex flex-wrap items-center gap-1">
         <Button data-page-first data-play size="lg" asChild={!!hit.primary.href && !hit.primary.disabled} disabled={hit.primary.disabled} onClick={event => {
           if (hit.primary.href && (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) return;
@@ -198,23 +216,26 @@ function TopResult({ hit, now }: { hit: SearchHit; now: number }) {
 }
 
 /** A hit as a tile: its press does its main verb (Play for a station or a live stream, else Open), the rest in its menu. */
-function HitTile({ hit, shape, pageFirst }: { hit: SearchHit; shape: TileShape; pageFirst: boolean }) {
+function HitTile({ hit, now, shape, pageFirst }: { hit: SearchHit; now: number; shape: TileShape; pageFirst: boolean }) {
   const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
   const primary = play ? { label: play.label, run: play.run!, disabled: play.disabled } : hit.primary;
-  return <MediaTile data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} title={hit.title} meta={hit.meta} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
-    href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]} />;
+  return <MediaTile data-hit-id={hit.id} data-page-first={pageFirst || undefined} shape={shape} title={hit.title} meta={hitContext(hit)} thumbnail={hit.thumbnail} aria-label={`${primary.label} ${hit.title}`} disabled={primary.disabled}
+    href={!play ? hit.primary.href : undefined} onClick={() => primary.run()} menu={[...play && hit.primary.label !== "Play" ? [hit.primary] : [], ...hit.actions.filter(action => action.label !== primary.label)]}>
+    <HitSource hit={hit} />
+    {!hit.live && !hit.collection && hit.duration != null && <span className="text-sm font-light tabular-nums">{formatDuration(hit.duration)}, ends {formatEndTime(hit.duration - (hit.position ?? 0), now)}</span>}
+  </MediaTile>;
 }
 
 /** Search hits as media rows under one time ruler. */
 export const HitList = memo(function HitList({ hits, label, timeline = true, currentId, pageFirst = false }: { hits: SearchHit[]; label: string; timeline?: boolean; currentId?: string; pageFirst?: boolean }) {
   if (!hits.length) return null;
-  return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]">
+  return <div className="[--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem] [&_span:has(>[data-slot=progress])]:flex-wrap [&_span:has(>[data-slot=progress])]:gap-y-1 [&_[data-slot=progress]+span]:whitespace-normal">
     {/* Mirrors MediaRow's thumbnail column, gap and button padding so bars start at "Now". */}
     {timeline && hits.some(hit => !hit.collection && !hit.live && hit.duration != null) && <div className="hidden grid-cols-[7rem_minmax(0,1fr)] gap-x-4 sm:grid"><DurationRuler className="col-start-2 ml-2" /></div>}
     <MediaList aria-label={label}>{hits.map((hit, index) => {
       // A live hit's press plays it while Play is enabled; otherwise it keeps its Open destination.
       const play = hit.live && hit.actions.find(action => action.label === "Play" && !action.disabled && action.run);
-      return <MediaRow key={hit.id} compact={!timeline} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={timeline ? hit.meta : [hit.meta.split(" · ").filter(part => part !== hit.source).join(" · "), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"].includes(hit.source) ? "contain" : "cover"}
+      return <MediaRow key={hit.id} compact={!timeline} pageFirst={pageFirst && index === 0} data-hit-id={hit.id} title={hit.title} meta={timeline ? hitContext(hit) : [hitContext(hit), !hit.live && hit.duration != null ? formatDuration(hit.duration) : undefined].filter(Boolean).join(" · ")} description={timeline ? hit.description : undefined} artFit={hit.kind === "Music" || ["StreamingCommunity", "123MoviesFree", "AnimeSaturn", "AnimeUnity"].includes(hit.source) ? "contain" : "cover"}
       art={<MediaArtwork thumbnail={hit.thumbnail} title={hit.title} collection={!!hit.collection} />}
       primary={play ? { label: play.label, onClick: play.run!, disabled: play.disabled } : { label: hit.primary.label, onClick: hit.primary.run, disabled: hit.primary.disabled, href: hit.primary.href }}
       // A press that plays keeps the hit's own destination (a station's page) in the menu as Open.
@@ -222,7 +243,8 @@ export const HitList = memo(function HitList({ hits, label, timeline = true, cur
       // A press that opens a page holding every verb needs no "…": a collection's, whose menu is Save. Stations, live hits and videos with Play next keep theirs.
       menuOnPage={!play && !!hit.primary.href && hit.kind !== "Radio" && !hit.actions.some(action => action.label === "Play next")}>
       {hit.id === currentId && <span className="text-sm font-medium">Playing</span>}
-      {timeline && (hit.collection ? <span className="text-sm">{hit.collection}</span> : <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />)}
+      {timeline && <HitSource hit={hit} />}
+      {timeline && !hit.collection && <DurationBar duration={hit.duration} position={hit.position} live={hit.live} />}
     </MediaRow>;
     })}</MediaList>
   </div>;

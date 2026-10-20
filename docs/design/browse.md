@@ -7,9 +7,11 @@ and its results are `/search?q=…`. Enter or the Search button submits the
 field; edits leave the current results and route in place until then.
 The submitted query stays in the field; the page's
 "Search results" heading is for screen readers. It asks every source at once;
-one muted line says how many results there are and which sources it is still
-asking, while the header's Spinner stays busy. Sources answer in bursts, and
-the page takes each burst as one change (a debounced value, TanStack Pacer),
+the result count names the submitted query, with the sources still being asked
+on a separate muted line. Before any hit arrives it says "Searching for …",
+while the header's Spinner stays busy. Source failures and their Try again
+action sit above the results, so partial failures remain visible. Sources answer
+in bursts, and the page takes each burst as one change (a debounced value, TanStack Pacer),
 so rows and tiles don't shuffle in step with every source.
 
 Twitch results and opened channels refresh every 20 seconds while their view
@@ -45,9 +47,21 @@ reveals the rest in place) or a
 - **Videos**: divided rows under the time ruler, with their length bars;
 - **Channels and lists**: divided rows.
 
+Across the closest match, tiles and rows, source names have their own wrapping
+line beside the collection type (Album, Series, Channel and so on); artist,
+programme, year and quality keep the context line above. Long context must not
+hide which source will open. Music tiles show a known track length and end time;
+albums retain their Album label. In narrow rows, the end time wraps below its
+length bar so the bar cannot crowd out the clock time. Music and Channels and
+lists count "results" because each contains more than one content type. The closest match wraps its
+full title and context and shows up to three lines of the available synopsis.
+These reuse MediaTile, the shadcn Item-based MediaRow, Alert and Empty; the
+catalog needs no additional component for this hierarchy. Artwork, menu
+behavior and the single responsive tree stay shared with other browse pages.
+
 Hits that mention no word of the query wait behind one line ("Show N results
-that don't mention …"), so "Nothing found" is reachable even when a source
-answers anything. A pasted link opens as a webpage or as direct media, with
+that don't mention …", wrapping on narrow screens), so "Nothing found" is
+reachable even when a source answers anything. A pasted link opens as a webpage or as direct media, with
 Open page for a source's own link. The first result starts the page, which
 Down from the header's field reaches. An empty query has no results page: it
 is Discover.
