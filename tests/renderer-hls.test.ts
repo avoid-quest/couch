@@ -216,12 +216,24 @@ test("native HLS failure reports an error instead of retrying the same native so
   mse = false;
   load();
   await flush();
-  video.error = { code: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED };
+  video.error = { code: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED, message: "MEDIA_ELEMENT_ERROR: Format error" };
   video.dispatchEvent(new Event("error"));
   await flush();
   assert.equal(decoders.length, 0);
   assert.equal(reports.at(-1).status, "error");
-  assert.match(reports.at(-1).error, /can't play this format/);
+  assert.equal(reports.at(-1).error, video.error.message);
+`));
+
+test("source-open failures keep the browser's reason without diagnosing a codec failure", () => check(`
+  load({ source: "https://couch.example/movie.mp4" });
+  video.error = { code: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED, message: "MEDIA_ELEMENT_ERROR: Format error" };
+  video.dispatchEvent(new Event("error"));
+  assert.equal(reports.at(-1).status, "error");
+  assert.equal(reports.at(-1).error, video.error.message);
+  video.error = { code: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED, message: "" };
+  video.dispatchEvent(new Event("error"));
+  assert.match(reports.at(-1).error, /couldn't load/);
+  assert.doesNotMatch(reports.at(-1).error, /can't play this format/);
 `));
 
 test("HLS keeps event starts, explicit positions and split audio without changing ordinary files", () => check(`
