@@ -47,7 +47,7 @@ export type PlayerState = {
 // error: that buffered stream failed, so the live input doesn't reach it this item.
 export type Output = { deviceId: string; picture: boolean; sound: boolean; delay?: number; delayActive?: boolean; local?: boolean; buffered?: boolean; error?: string };
 // hostOnly: it plays in mpv, so only on the Device that runs Core. audioOnly: its item has no picture.
-// choosing: its shared source waits for Where it plays; it counts up with each request to choose.
+// choosing: a shared request to open Where it plays, sent only with askEveryDevice enabled; counts up per request.
 // held: its publisher's output, left out while its own capture plays and returning after it.
 // inSync: its live inputs play buffered in sync on its devices rather than directly on each (docs/adr/0001).
 export type PlaybackSummary = { id: string; title: string | null; status: PlayerState["status"]; outputs: Output[]; hostOnly?: boolean; audioOnly?: boolean; liveSourceId?: string; choosing?: number; held?: Output; inSync?: boolean };
@@ -87,6 +87,8 @@ export type SessionState = {
   installationName?: string;
   setupStep?: import("./setup").SetupStep;
   appearance?: TvAppearance;
+  // Couch-wide, admin-managed opt-in for shared live-source chooser requests. Defaults to false.
+  askEveryDevice?: boolean;
   administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;
   radioProgramme?: RadioProgramme | null;
@@ -101,6 +103,7 @@ export type Action =
   // The controlled Playback's live inputs play in sync on its devices, buffered, or directly on each.
   | { type: "inSync"; inSync: boolean }
   | { type: "sharing"; sharing: DeviceSharing }
+  | { type: "askEveryDevice"; enabled: boolean }
   | { type: "control"; deviceId: string }
   | { type: "navigate"; key: NavigationKey; deviceId?: string }
   | { type: "text"; deviceId: string; token: string; text: string; submit?: boolean }

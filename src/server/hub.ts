@@ -240,12 +240,19 @@ export async function createHub(options: HubOptions) {
     broadcast();
   } });
   const live = createLiveInputs<Socket<SocketData>>({ deviceOf, nameOf, send: (socket, message) => send(socket, JSON.stringify(message)),
-    ended: sourceId => {
+    ended: (source, publisherName = nameOf(source.deviceId)) => {
+      const sourceId = source.id;
       liveStreams.end(sourceId);
       for (const playback of all()) {
         const state = stateOf(playback);
         const affected = state.queue.some(entry => entry.liveSourceId === sourceId);
-        if (state.queue.find(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId))?.liveSourceId === sourceId) { clearTimeout(playback.undoable); playback.undoable = undefined; }
+        if (state.queue.find(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId))?.liveSourceId === sourceId) {
+          clearTimeout(playback.undoable); playback.undoable = undefined;
+          // Its receivers' players close with the item, so they hear who stopped sharing first: sent now, since the
+          // scheduled flush would find the playback settled and gone. The publisher, as the actor, hears nothing.
+          playback.session.notice({ deviceId: source.deviceId, name: publisherName }, `${publisherName} stopped sharing`);
+          flush();
+        }
         playback.session.endSource(sourceId);
         if (affected) settle(playback);
       }
@@ -925,7 +932,8 @@ export async function createHub(options: HubOptions) {
   };
 
   // What every window shares, whichever Playback it looks at.
-  const common: Pick<SessionState, "versions" | "installationName" | "setupStep" | "appearance" | "administratorClaimed" | "activeProfile" | "preferences" | "systemAudio"> = {
+  const common: Pick<SessionState, "versions" | "installationName" | "setupStep" | "appearance" | "askEveryDevice" | "administratorClaimed" | "activeProfile" | "preferences" | "systemAudio"> = {
+    askEveryDevice: store.askEveryDevice(),
     versions: {}, installationName: store.installationName(), setupStep: store.setupStep(),
     appearance: { size: store.tvInterfaceSize(), confirmedSize: store.tvInterfaceSize(), preview: null },
     administratorClaimed: store.administratorExists(), activeProfile: store.activeProfile(), preferences: store.playbackPreferences(store.activeProfile().id),
@@ -954,7 +962,7 @@ export async function createHub(options: HubOptions) {
         const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
         const loaded = playback.loaded?.playbackId === state.player.playbackId ? playback.loaded : undefined;
         return { id: playback.id, title: (state.queue.find(entry => entry.id === state.currentEntryId) ?? state.queue[cursor + 1])?.title ?? null, status: state.player.status, outputs: playback.outputs,
-          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
+          ...mpvPlayback === playback ? { hostOnly: true } : {}, ...common.askEveryDevice && playback.choosing ? { choosing: playback.choosing } : {}, ...playback.held ? { held: playback.held } : {}, ...playback.inSync ? { inSync: true } : {}, ...sourceOf(playback) ? { liveSourceId: sourceOf(playback), audioOnly: !live.source(sourceOf(playback)!)?.video } : loaded && (loaded.radio || playback.media?.audioOnly) ? { audioOnly: true } : {} };
       }),
       devices: store.devices().map(device => ({ id: device.id, name: device.name, online: !!newest(device.id), updates: !!updateSocket(device.id), tv: tvDevices.has(device.id), sharing: sharingOf(device.id), ...soundOf(device.id) })),
       liveSources: live.sources(),
@@ -1170,7 +1178,7 @@ export async function createHub(options: HubOptions) {
   const devices = createDevices({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: device => {
     if (device?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: device.id }).catch(() => {});
     invalidate("devices");
-  }, onRevoke: async id => {
+  }, onRevoke: async (id, name) => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     sendspin.drop(id);
     for (const playback of all()) {
@@ -1180,6 +1188,7 @@ export async function createHub(options: HubOptions) {
     shared.delete(id);
     targets.delete(id);
     for (const socket of sockets) if (socket.data.deviceId === id) {
+      live.disconnect(socket, name);
       sockets.delete(socket);
       socket.close(4001, "This device was removed. Pair again.");
     }
@@ -1690,6 +1699,12 @@ export async function createHub(options: HubOptions) {
             await enqueued;
             if (closed) return;
             playback = lookedAt(deviceId);
+          } else if (action.type === "askEveryDevice") {
+            authorize();
+            if (socket.data.deviceId && store.device(socket.data.deviceId)?.role !== "administrator") throw new ControllerError(ADMIN_ONLY, 403);
+            store.saveAskEveryDevice(action.enabled);
+            common.askEveryDevice = action.enabled;
+            broadcast();
           } else if (action.type === "publishLive") {
             // Nothing is encoded yet: receivers connect to the publisher, and Core asks for an upload only when it buffers.
             live.publish(socket, action);

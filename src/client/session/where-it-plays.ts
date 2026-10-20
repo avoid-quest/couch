@@ -18,11 +18,20 @@ export const reopens = (dismissed: string | null, request: string | null) => !!r
 export const chooserFor = (request: string | null, playback: string | null, requested: string | null | undefined) => request ?? (playback && requested?.startsWith(`${playback}:`) ? requested : null);
 /**
  * Play on a source's publisher, explicit or as primary Play's destination, while the source already plays:
- * Core keeps that playback, and only the requesting window opens its Where it plays. A waiting one asks Core.
+ * Core keeps that playback, and only the requesting window opens its Where it plays. A waiting one
+ * also opens here unless Core already asks every device (the shared, opt-in setting).
  */
-export const choosesHere = (action: Action, before: ClientSessionState | null, after: ClientSessionState | null) => action.type === "playLive" && action.playNow !== false && !!after && !chooserRequest(after)
-  && after.playbacks?.find(item => item.id === after.playback)?.liveSourceId === action.sourceId
-  && after.liveSources?.find(source => source.id === action.sourceId)?.deviceId === (action.deviceId ?? before?.controlling);
+export const choosesHere = (action: Action, before: ClientSessionState | null, after: ClientSessionState | null) => {
+  if (!after || chooserRequest(after)) return false;
+  const playback = after.playbacks?.find(item => item.id === after.playback);
+  if (!playback?.liveSourceId) return false;
+  // Play from Up next can also leave the source waiting for its first receiver.
+  const source = after.liveSources?.find(source => source.id === playback.liveSourceId);
+  if (action.type === "play") return action.entryId === after.currentEntryId && !!source
+    && !playback.outputs.some(output => output.sound && source.audio || output.picture && source.video);
+  return action.type === "playLive" && action.playNow !== false && playback.liveSourceId === action.sourceId
+    && after.liveSources?.find(source => source.id === action.sourceId)?.deviceId === (action.deviceId ?? before?.controlling);
+};
 
 /** Why a control is disabled, in one word where it can be: Core's refusal, or what the media lacks. */
 export type Reason = "Offline" | "Private" | "Sharing this source" | "Can't play this channel" | "No picture" | "No sound";

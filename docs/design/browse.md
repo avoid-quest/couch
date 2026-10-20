@@ -57,7 +57,7 @@ posters:
   names over their input kind, wrapping like Sources.
   Pressing a source plays it; its menu holds Play on, Play next and Queue.
   The first source carries `data-page-first`, so TV focus starts there.
-  Sharing's Add source opens Discover directly.
+  Sharing's Start sharing opens Discover directly.
 - **Radio**, "On air now": the saved stations, then the built-in ones (Home's
   Radio shelf without its recents, `useOnAir`). A tile reads the station and
   its current show, else where it's from; the heading already says they're on

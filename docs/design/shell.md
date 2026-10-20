@@ -48,10 +48,22 @@ inverts, as every control does.
 While sharing, the search keeps at least 11rem and the right column can take
 space from the left, moving the tabs only as much as needed. Below `xl`,
 the sharing status gives up "Sharing screen" (or sound) before the search
-gives up that width. Stop sharing keeps its label from 24rem up; below that,
-it is a 44px stop icon with the same accessible name. This smaller breakpoint
-keeps the label on a 390px phone while fitting the search and Couch switch
-at 320px. Without sharing, the columns and search keep their usual widths.
+gives up that width. On a phone (below `sm`) the status is one icon control,
+lucide Radio (a broadcast: one glyph for screen, system audio and microphone,
+where ScreenShare would misname sound; Couch draws no other live glyph, as
+Live is a word), labelled and titled "Sharing screen · Show sharing controls" (or
+"Sharing system audio", "Sharing microphone"), so a pointer's hover and a
+screen reader read the state. Touch has no hover, so pressing it opens a
+Popover with the status and Stop sharing, its one action; on a phone a stray
+tap beside the search then never ends sharing for every receiver. Below `sm`
+the search also keeps no minimum: it gives way to the icon so the Couch name
+at the left stays readable. Without sharing, the columns and search keep their
+usual widths. The sharing control and its popover stay local to the publishing
+device: a TV’s own remote can use them; another device’s Remote cannot.
+
+Below `lg`, a TV keeps the name, search, sharing control and clock on the first
+row and centres its tabs on a second row. Search keeps 11rem so Largest text
+and a narrow TV do not collapse its input or overlap the clock.
 
 The header is sticky: it stays at the top on the page's solid ground while
 the page scrolls under it, and the player hides it. It publishes its height

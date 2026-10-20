@@ -81,7 +81,7 @@ export type SessionGateValue = SessionBag & {
   // surfaces, so moving between the now-playing bar and Now Playing does not reopen it.
   dismissedChooser: string | null;
   dismissChooser: (request: string) => void;
-  // This window's own request to choose, after Play on a source's publisher that already plays (choosesHere).
+  // This window's own request after Play on a source's publisher, unless Core asks everyone (choosesHere).
   requestedChooser: string | null;
 };
 

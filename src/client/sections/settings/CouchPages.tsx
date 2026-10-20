@@ -1,5 +1,7 @@
+import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Switch } from "@/components/ui/switch";
 import type { SourceKind } from "@/components/sourceTypes";
 import { ADMIN_ONLY } from "@/copy";
 import { useShell } from "@/sections/shell/AppShell";
@@ -24,14 +26,19 @@ import { TvModeSettings } from "./couch/TvModeSettings";
 
 export function CouchGeneralPage() {
   const { credentials } = useShell();
-  const { connected, details } = useSessionGate();
+  const { connected, details, state, run } = useSessionGate();
   const { couch, host, administrator } = useSettingsScope();
   const appliance = details?.tvAppliance ?? details?.tvPresentation;
+  const chooser = useMutation({ mutationFn: (enabled: boolean) => run({ type: "askEveryDevice", enabled }) });
   return <SettingsLayout section="couch" title={couch}>
     <SettingsSection>
       <SettingsRow label="Name" description={`${host ? "Same as this device's name. " : ""}Every device shows it.${administrator ? "" : ` ${ADMIN_ONLY}`}`}>
         <span className="mr-auto text-sm">{couch}</span>
         {administrator && credentials && <RenameCouch credentials={credentials} connected={connected} name={couch} />}
+      </SettingsRow>
+      <SettingsRow label="Ask every device where a shared source plays" htmlFor="ask-every-device" className="[&_label]:touch:min-h-11 [&_label]:items-center"
+        description={`When someone plays a shared source that nothing is playing yet, every device viewing it shows Where it plays. Off: only the device that pressed Play.${administrator ? "" : ` ${ADMIN_ONLY}`}`}>
+        <Switch id="ask-every-device" checked={chooser.isPending ? chooser.variables : state?.askEveryDevice ?? false} disabled={!administrator || !connected || chooser.isPending} onCheckedChange={enabled => chooser.mutate(enabled)} />
       </SettingsRow>
       {credentials && (details?.tvModeChangeable || details?.tvAppliance) && <TvModeSettings key={String(details.tvPresentation)} credentials={credentials} connected={connected}
         administrator={administrator} couch={couch} enabled={!!details.tvPresentation} locked={!!details.tvAppliance} />}

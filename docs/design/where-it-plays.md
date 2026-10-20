@@ -214,8 +214,13 @@ or while it is on.
 
 ## The chooser
 
-A shared source waiting for receivers opens Where it plays for each request
-to choose; dismissed, it stays closed through unrelated updates and when the
+A shared source waiting for receivers opens Where it plays only in the window
+that pressed Play (from Discover, Search, Play on or Up next). **Ask every device
+where a shared source plays**, in the Couch’s General settings, is off by
+default. When on, Core sends the request to every window viewing that playback,
+including when it loses its last usable receiver. The waiting state and source
+discovery are unchanged by the setting. Each new Play request reopens it;
+dismissed, it stays closed through unrelated updates and when the
 now-playing bar gives way to Now Playing, since the session, not the Sheet,
 remembers the dismissal. Play on a source's publisher while the source plays
 opens it only in the window that asked.

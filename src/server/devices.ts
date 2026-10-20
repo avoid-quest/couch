@@ -40,7 +40,7 @@ export async function settingField(request: Request, field: string) {
   return (value as Record<string, unknown>)[field];
 }
 
-export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCode, pairingCode }: { store: Store; onChange: (device?: Device) => void; onRevoke?: (id: string) => void | Promise<void>; recoveryCode?: string; pairingCode?: string }) {
+export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCode, pairingCode }: { store: Store; onChange: (device?: Device) => void; onRevoke?: (id: string, name?: string) => void | Promise<void>; recoveryCode?: string; pairingCode?: string }) {
   if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("Check the admin code.");
   if (recoveryCode) store.createControllerClaim(recoveryCode, true);
   let setup: { code: string; expiresAt: number } | null = null;
@@ -95,8 +95,9 @@ export function createDevices({ store, onChange, onRevoke = () => {}, recoveryCo
           authorize();
           if (!target[2]) {
             if (request.method !== "DELETE") return methods("DELETE");
+            const name = store.devices().find(device => device.id === id)?.name;
             store.revokeDevice(id);
-            await onRevoke(id);
+            await onRevoke(id, name);
             onChange();
             return json({ ok: true });
           }

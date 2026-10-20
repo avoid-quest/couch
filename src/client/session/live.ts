@@ -8,6 +8,16 @@ type Publication = { source: LiveSource; capture: MediaStream; stream: MediaStre
 type Peer = { connection: RTCPeerConnection; candidates: RTCIceCandidateInit[]; work: Promise<void> };
 type Receiver = { peerId: string; load: Extract<PlaybackCommand, { type: "load" }>; stream: MediaStream; peer?: Peer; timeout?: ReturnType<typeof setTimeout> };
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
+// The browser's own capture errors are terse ("Permission denied", which Chromium also throws when the picker is
+// closed); say what happened and what to do next. Anything else keeps its message.
+const captureError = (reason: unknown, kind: LiveSelection["kind"]) => {
+  const name = reason instanceof DOMException ? reason.name : "";
+  const what = kind === "microphone" ? "Microphone access" : kind === "system-audio" ? "System audio capture" : "Screen capture";
+  if (name === "NotAllowedError") return new Error(kind === "microphone" ? `${what} wasn't allowed. Allow it, then try again.` : `${what} wasn't allowed. Choose a screen or window and allow it, then try again.`);
+  if (name === "NotFoundError") return new Error(kind === "microphone" ? "No audio input was found. Connect a microphone or audio interface, then try again." : "No screen or window was found to share.");
+  if (name === "NotReadableError" || name === "AbortError") return new Error(`${what} couldn't start. Another app may be using it.`);
+  return reason;
+};
 
 // Capture belongs to the authenticated session. Every receiver gets it directly over WebRTC;
 // Core asks for an encoded upload only while it plays the source buffered (docs/adr/0001).
@@ -103,7 +113,11 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
     if (sourceId) await options.command({ type: "endLive", sourceId });
   };
   // The desktop window hides on Close to keep Couch hosting; Close still ends sharing.
-  const unsubscribeWindowClosed = couchApp?.onWindowClosed?.(() => void end().catch(() => {}));
+  const leaving = () => { void end().catch(() => {}); };
+  const unsubscribeWindowClosed = couchApp?.onWindowClosed?.(leaving);
+  // Navigation can freeze the page before Core observes its socket closing. End capture now;
+  // the socket's close remains Core's fallback when the page cannot deliver this command.
+  window.addEventListener("pagehide", leaving);
   // Core's buffered stream (In sync, or a receiver that couldn't connect directly) reads one continuous
   // recording. Its failure ends only that upload; Core stops buffered delivery and receivers keep their peers.
   const stopUpload = (current: Publication, error?: Error) => {
@@ -208,7 +222,7 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         await couchApp?.prepareCapture?.({ kind: "microphone" });
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
         // Browsers expose input names only after microphone access is granted.
-        probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        probe = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(reason => { throw captureError(reason, "microphone"); });
         const inputs = await navigator.mediaDevices.enumerateDevices();
         if (closed || attempt !== generation) throw new Error("Input selection was canceled.");
         return inputs.filter(input => input.kind === "audioinput" && input.deviceId);
@@ -237,9 +251,9 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         const video: MediaTrackConstraints = selection.kind === "system-audio"
           ? { width: { max: 320 }, height: { max: 180 }, frameRate: { max: 1 } }
           : { ...(quality === "original" ? {} : { width: { max: quality === "720p" ? 1280 : 1920 }, height: { max: quality === "720p" ? 720 : 1080 } }), frameRate: { ideal: 30, max: 30 } };
-        capture = selection.kind === "microphone"
-          ? await navigator.mediaDevices.getUserMedia({ audio: { ...audio, ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}) }, video: false })
-          : await navigator.mediaDevices.getDisplayMedia({ video, audio: sound && audio });
+        capture = await (selection.kind === "microphone"
+          ? navigator.mediaDevices.getUserMedia({ audio: { ...audio, ...(selection.audioDeviceId ? { deviceId: { exact: selection.audioDeviceId } } : {}) }, video: false })
+          : navigator.mediaDevices.getDisplayMedia({ video, audio: sound && audio })).catch(reason => { throw captureError(reason, selection.kind); });
         if (closed || attempt !== generation) throw new Error("Capture was canceled.");
         const audioTracks = capture.getAudioTracks(), videoTracks = selection.kind === "screen" ? capture.getVideoTracks() : [];
         if (selection.kind !== "screen" && !audioTracks.length) throw new Error("The selected capture did not provide audio. Choose an audio input or grant system audio access.");
@@ -274,6 +288,6 @@ export function createLiveSession(options: { iceServers: RTCIceServer[]; send: (
         closePublication();
       }
     },
-    close() { closed = true; unsubscribeWindowClosed?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
+    close() { closed = true; window.removeEventListener("pagehide", leaving); unsubscribeWindowClosed?.(); closeReceiver(); closePublication(); void couchApp?.prepareCapture?.(null).catch(() => {}); },
   };
 }
