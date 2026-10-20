@@ -98,7 +98,7 @@ export function HeaderSearch({ className }: { className?: string }) {
           // Off the TV, Esc clears the field, then leaves it; the TV's Back stays Back.
           else if (event.key === "Escape" && !isTvPresentation()) { event.preventDefault(); if (value) clear(); else { shell.setSearchScope(null); input.current?.blur(); } }
           // Down reaches the recent searches while they show, else goes on to the page, as it does from the header's tabs.
-          else if (event.key === "ArrowDown") {
+          else if (event.key === "ArrowDown" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
             const recent = event.currentTarget.form?.querySelector<HTMLElement>("[data-search-recents] button");
             if (recent) { event.preventDefault(); recent.focus(); return; }
             const page = document.querySelector<HTMLElement>("[data-page]");

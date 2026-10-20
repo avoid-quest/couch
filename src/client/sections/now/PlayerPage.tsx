@@ -140,7 +140,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key === "Escape" || event.key === "BrowserBack") {
+      if (event.key === "Escape" || tvPresentation && event.key === "BrowserBack") {
         if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="listbox"][data-state="open"], [role="menu"][data-state="open"], [data-slot="popover-content"][data-state="open"]')) return;
         // Back on a toast's action only leaves it (navigation.ts).
         if (event.target instanceof Element && event.target.closest("[data-sonner-toaster]")) return;

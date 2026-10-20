@@ -30,6 +30,8 @@ test("A focused band button, or anything inside it, keeps its keys", () => {
   expect(isBackground(element("span", { role: "slider", tabindex: "0", "aria-label": "Playback position" }, band))).toBe(false);
   // A roving tabindex takes a control out of the tab order without making it background.
   expect(isBackground(element("button", { tabindex: "-1" }, band))).toBe(false);
+  expect(isBackground(element("video", { controls: "" }, player))).toBe(false);
+  expect(isBackground(element("audio", { controls: "" }, player))).toBe(false);
 });
 
 test("Nothing focused is background, and a tab stop is a control", () => {
