@@ -211,6 +211,27 @@ test("two devices using Play on This device share one playback and a repeat does
   } finally { await f.close(); }
 });
 
+test("a controller joins shared speakers to a microphone playback without asking for its private screen", { timeout: 15_000 }, async () => {
+  const f = await liveFixture();
+  try {
+    const other = await f.connect(2, "&audio=1");
+    await f.receiver.command({ type: "sharing", sharing: { audio: true, video: false } });
+    await f.publish("microphone", "microphone");
+    assert.equal((await f.publisher.command({ type: "playLive", sourceId: "microphone", deviceId: f.receiver.id })).ok, true);
+    await until(() => direct(f.receiver.load()));
+    f.receiver.report();
+    await until(() => f.receiver.state.player.status === "playing");
+    const playback = f.receiver.state.playback, load = f.receiver.load();
+    const result = await f.publisher.command({ type: "playLive", sourceId: "microphone", deviceId: other.id });
+    assert.equal(result.ok, true, result.error);
+    await until(() => direct(other.load()));
+    assert.equal(other.state.playback, playback);
+    assert.equal(f.receiver.load(), load, "joining keeps the first receiver's transport");
+    assert.deepEqual(other.state.outputs?.find(output => output.deviceId === other.id), { deviceId: other.id, picture: false, sound: true, local: false });
+    assert.deepEqual(consent(other, other.id), { audio: true, video: false }, "joining never grants screen consent");
+  } finally { await f.close(); }
+});
+
 test("Primary Play on a device busy with an ordinary item joins the source's playback and keeps that item's queue", { timeout: 15_000 }, async () => {
   const f = await liveFixture();
   try {

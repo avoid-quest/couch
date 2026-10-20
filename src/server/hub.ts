@@ -1821,7 +1821,8 @@ export async function createHub(options: HubOptions) {
               if (!usable(output)) throw new ControllerError(`${nameOf(target)} is not sharing an output this source uses.`, 403);
               // Joining gives control of that playback, so it needs the control Where it plays would (#644 Outputs).
               if (!controls(playback, deviceId)) throw new ControllerError(`${source.name} is playing privately on ${playback.outputs.map(output => nameOf(output.deviceId)).join(", ")}. It can join when they let other devices use their speakers or screen.`, 403);
-              await setOutput(playback, target, { picture: output.picture, sound: output.sound }, authorizePlayback(playback, authorize, deviceId), deviceId);
+              // Joining adds shared outputs; an unavailable channel is not a request to change it.
+              await setOutput(playback, target, { picture: output.picture || undefined, sound: output.sound || undefined }, authorizePlayback(playback, authorize, deviceId), deviceId);
             } else if (playNow && target === source.deviceId && waiting) {
               playback = waiting;
               authorizePlayback(playback, authorize, deviceId)();
