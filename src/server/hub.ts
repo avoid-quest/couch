@@ -270,9 +270,16 @@ export async function createHub(options: HubOptions) {
         live.host(source);
         // The sender chose this Couch, regardless of the host controller's selected device.
         const playback = createPlayback();
-        assign(playback, [{ deviceId: hostId(), picture: false, sound: true }], source);
-        playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${id}`, live: true, liveSourceId: id }, playNow: true });
-        reconcile(playback);
+        // A refused native audio preflight must leave the host's existing outputs alone.
+        playback.entered = () => assign(playback, [{ deviceId: hostId(), picture: false, sound: true }], source);
+        try {
+          playback.session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: source.name, source: `live:${id}`, live: true, liveSourceId: id }, playNow: true });
+          reconcile(playback);
+        } catch (error) {
+          log(`airplay ${id.slice(0, 8)} automatic playback failed: ${error instanceof Error ? error.message : String(error)}`);
+          playback.session.endSource(id);
+          settle(playback);
+        } finally { playback.entered = undefined; }
       },
       audio: (id, pcm) => { liveStreams.write(id, pcm); },
       ended: id => live.unhost(id),
