@@ -160,7 +160,7 @@ function OnlineResults(props: Props) {
     const hits: SearchHit[] = (page?.items ?? []).slice(0, props.paged ? undefined : visible).map(item => {
       const saved = item.kind === "media" ? !!savedWeb(item) : !!favorites?.some(entry => entry.id === item.id);
       const saveUnavailable = item.kind === "media" ? !later.data : favorites === null;
-      const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || saveUnavailable, run: () => save(item, saved) };
+      const saveAction = { label: saved ? "Saved" : "Save", pressed: saved, disabled: !props.connected || busy || saveUnavailable, run: () => save(item, saved) };
       return { id: `${provider}:${item.id}${item.collection?.index == null ? "" : `:${item.collection.index}`}`, url: item.url, source: providerNames[provider], title: item.title, meta: [item.subtitle, providerNames[provider]].filter(Boolean).join(" · "), description: item.description, ...facet(item), live: item.live, collection: collectionLabel(item), thumbnail: item.thumbnail,
         primary: { label: "Open", href: collectionLocation(item), run: () => props.onOpenCollection?.(item) },
         actions: [...(item.kind === "media" ? [
@@ -206,6 +206,6 @@ function OnlineResults(props: Props) {
         save: selected ? () => save(selected, selectedSaved) : undefined, saved: selectedSaved, saveDisabled: selected?.kind === "media" ? !later.data : favorites === null,
       } } : {}),
     });
-  }, [props.url, props.paged, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
+  }, [props.url, props.paged, props.connected, JSON.stringify(props.context), page, visible, favorites, later.data, history.data, history.isLoading, busy, loading, error, browse.hasNextPage, props.onResults, props.canPlay, props.onCommand, props.quality, props.onOpenCollection, props.onPlayHistory]);
   return null;
 }
