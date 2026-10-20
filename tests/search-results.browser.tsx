@@ -73,3 +73,62 @@ export async function runSearchResultsRegression() {
     releaseFilms!(); root.unmount(); client.clear(); window.fetch = originalFetch;
   }
 }
+
+/** Delayed and failed sources must leave the results usable, then recover in place. */
+export async function runSearchResultStatesRegression() {
+  const originalFetch = window.fetch;
+  const host = document.getElementById("fixture") ?? document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let release: () => void = () => {};
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let attempts = 0;
+  let opened = "";
+  window.fetch = async (input, init) => {
+    const url = new URL(String(input), location.href);
+    if (!url.pathname.startsWith("/api/")) return originalFetch(input, init);
+    const provider = url.pathname.split("/")[3];
+    if (provider === "twitch" && url.searchParams.get("q") === "space" && ++attempts === 1) {
+      await pending;
+      return Response.json({ error: "Source is unavailable." }, { status: 503 });
+    }
+    const items = url.searchParams.get("q") !== "space" ? [] : provider === "youtube"
+      ? [{ id: "space", provider, kind: "media", title: "Journeying through stunning cosmic views with James Webb Space Telescope", subtitle: "European Space Agency, ESA", description: "A compilation of cosmic views.", duration: 2606, url: "https://www.youtube.com/watch?v=space" }]
+      : provider === "twitch" ? [{ id: "stream", provider, kind: "media", title: "Space stream", live: true, url: "https://www.twitch.tv/space" }] : [];
+    return Response.json({ items, favorites: [], stations: [], playlists: [], programmes: {} });
+  };
+  const gate = { connected: true, run: async () => true, state: { devices: [], liveSources: [] } } as unknown as SessionGateValue;
+  let state: SearchRouteState = { query: "space", source: "All" };
+  const render = () => root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}><SearchPanel origin={location.origin} token="fixture" connected canPlay active searchState={state} onSearchChange={next => { state = next; render(); }} onCommand={gate.run} onOpenCollection={item => { opened = item.id; }} /></QueryClientProvider></SessionGateContext>);
+  try {
+    render();
+    await wait(900);
+    assert(host.querySelector('[role="status"]')?.textContent?.includes("Still asking Twitch"), "Pending source was not named");
+    const first = host.querySelector<HTMLElement>("[data-search-top] [data-play]")!;
+    assert(first, "Pending source hid successful results");
+    first.click();
+    assert(opened === "space", "Successful result could not open while another source was pending");
+    release();
+    await wait(900);
+    const alert = host.querySelector('[role="alert"]')!;
+    assert(alert?.textContent?.includes("Couldn't load Twitch."), "Failed source was not named");
+    assert(alert.compareDocumentPosition(host.querySelector("[data-search-top]")!) & Node.DOCUMENT_POSITION_FOLLOWING, "Partial failure was buried after the results");
+    assert(!host.textContent?.includes("Nothing found"), "Partial failure was reported as an empty search");
+    [...alert.querySelectorAll("button")].find(button => button.textContent === "Try again")!.click();
+    await wait(900);
+    assert(attempts === 2 && !host.querySelector('[role="alert"]'), "Try again did not clear the recovered failure");
+    assert(host.querySelector('[data-hit-id="youtube:space"]') && host.querySelector('[data-hit-id="twitch:stream"]'), "Retry replaced successful results");
+    state = { query: "space", source: "Bandcamp" }; render();
+    await wait();
+    assert(host.textContent?.includes("Nothing matches these filters"), "Empty source scope had no explanation");
+    [...host.querySelectorAll("button")].find(button => button.textContent === "Clear filters")!.click();
+    await wait();
+    assert(state.source === "All" && host.querySelector("[data-search-top]"), "Clear filters did not restore results");
+    state = { query: "no matches", source: "All" }; render();
+    await wait(900);
+    assert(host.textContent?.includes("Nothing found for “no matches”") && !host.querySelector("[data-hit-id]"), "Empty search retained stale results");
+    return { passed: true, checks: ["named pending source", "open during loading", "visible partial failure", "retry retains successes", "filtered empty and clear", "empty search retires results"] };
+  } finally {
+    release(); root.unmount(); client.clear(); window.fetch = originalFetch;
+  }
+}
