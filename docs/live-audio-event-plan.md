@@ -144,12 +144,12 @@ available code from complete qualification; unchecked tasks are still required.
 | Task | Implemented evidence | Remaining gate |
 | --- | --- | --- |
 | A1 | Typed frozen contract; false-pass regressions | Complete |
-| A2 | Unique PCM, bounded analyzer, private native graph, exact known-delay calibration | Capture/presentation bounds, speech/music, stereo/clipping |
+| A2 | Unique PCM, bounded continuous analyzer, absolute-frame witness, exact known-delay calibration and successful 128-frame browser control | Healthy direct-output repeat and independent continuous-route calibration; capture/physical presentation bounds, speech/music, stereo/clipping |
 | A3 | Disposable networking/audio IPC; control/N0/N1/N2; route/counter and cleanup tests | Clock models, CPU quotas, N3–N7 |
 | A4 | Two-browser WebRTC and buffered-live baselines | Known-ahead music and 10-client fanout |
 | B1 | Bounded 50/100 HTTP bursts with existing identities | Complete for existing admission model |
 | B2 | Separate budgets, paced offers, per-flush state projections; 50/100 protocol recovery observed | 50 real browser negotiation/recovery; 100 protocol recovery takes 15.28 s, above the 5 s allocation |
-| C1/C2 | Authenticated PCM capture/sender; TLS-backed receiver links; promising raw loopback/N0 results with explicit Electron buffer requests | Independent output-boundary and continuous-delivery qualification, valid N1 repeat, worker headroom; phone backend remains unmeasured |
+| C1/C2 | Authenticated PCM capture/sender; TLS-backed receiver links; promising raw loopback/N0 results with explicit Electron buffer requests; corrected renderer coverage | Complete software qualification: latest continuous N0/N1 attempts failed source-clock/graph health checks, continuous-route calibration and worker headroom remain unknown; phone backend unmeasured |
 | C3 | Measurements establish no qualified production choice yet | Two-output gate and a defensible architecture decision |
 | D/E/F | Conditional production, UI, compatibility and capacity work | Blocked behind C3 |
 | G1/G2 | Manual bounded lab commands and a scoped results report | Full regression/capability release qualification |

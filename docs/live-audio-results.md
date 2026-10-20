@@ -150,6 +150,54 @@ The C3 decision remains **blocked capability**: there is now a promising named
 software configuration, but no qualified production event path. N1, continuous
 delivery, calibration and sustained capacity have not passed the full contract.
 
+## Independent output and continuous-evidence follow-up
+
+The recorder now retains complete framed callbacks with absolute JACK sample
+addresses. A separate input-only witness taps the same source and actual Pulse
+output ports. Exact port connections and browser-to-sink ownership are checked.
+Analysis runs after recording, and stream/diagnostic retention is bounded.
+
+Known-delay calibration with this instrumentation passed: 50 markers per output
+at exactly 20/80/150 ms, exact witness/reference comparisons, and zero xruns or
+overflow. Its first attempt is retained as invalid: a final `jack_lsp` inspection
+registered a temporary client while the witness was armed. Final topology
+inspection now follows capture closure; topology-event checks remain enabled.
+
+Two direct-recorder browser attempts delivered 60/60 markers per output with
+raw maxima around 41.6–41.8 ms, but each reported nonzero xrun callbacks. They
+remain invalid. The successful **128-frame recorder-only FIFO control** delivered
+60/60 markers per output, with raw maxima 45.021/44.833 ms including the inserted
+delay. Each receiver had 288,000 exact sample comparisons at the expected offset
+and 288,000 mismatches under the deliberately wrong zero-offset assumption.
+Graph and witness both reported zero xruns, overflow or topology changes. An
+earlier control with stopped publication and xruns remains retained too.
+
+This establishes that the control can distinguish the sample-address displacement
+at the named software ports. It does not qualify a physical output offset or the
+complete software event gate. Direct zero-offset browser runs still need healthy
+repeatable capture. Formal presentation corrections and worker headroom remain
+unknown; raw latency never subtracts the inserted delay or virtual capture.
+
+The continuous fixture adds unique between-marker PCM and a frozen 5 ms identity
+model. Synthetic faults cover mute, repeat, deletion, insertion, compensating
+edits, resampling, capture defects and stale tails. Qualification requires an
+independent matching route calibration; backend identity now includes hashes of
+the actual loaded JACK/Pulse binaries and modules, collected before browser clock
+acquisition. Writer failures invalidate measurement without double-counting cells.
+
+The new TLS N0/N1 continuous attempts **did not qualify**. Recorded N0 and N1
+attempts had graph xruns, invalidated source clocks and 0/60 accepted markers on
+both outputs; all 288,000 post-warmup frames per receiver remain unresolved. A
+second N0 attempt stopped at the source-clock check before recording. These are
+not continuous-path calibration or network-capacity results. The frozen model
+has not yet been established on a healthy real route.
+
+Corrected renderer counters cover the complete original context interval,
+including the recording tail, with one bounded 1.5-second drain. Even measured
+zero renderer underruns coexisted with absent PCM in these attempts. Waveform,
+source-clock and graph-health checks remain independent. The retained JSON
+includes all nine new attempts and hashes; no failed run was replaced by its retry.
+
 ## Admission and recovery
 
 50 and 100 valid HTTP pairings completed in under one second alongside bounded

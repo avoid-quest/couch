@@ -249,7 +249,7 @@ try {
     // observations so later investigations need not reconstruct distributions.
     onMarker: observation => appendFileSync(join(directory, "markers.ndjson"), JSON.stringify(observation) + "\n") });
   // Fingerprint the objects actually loaded by JACK/Pulse, including selected
-  // modules and libjack. File paths are artifact metadata, not route keys:
+  // modules and libjack. Only object names and bytes enter the route key:
   // scratch executable locations must not make identical runs different routes.
   const fingerprintBackend = () => ["jack", "pulse", "graph"].flatMap(role => {
     const child = processes.find(child => processNames.get(child) === role);
