@@ -5,6 +5,8 @@ import { openStore } from "../../src/server/store";
 import { startIngressLab, type IngressOptions } from "./ingress-server";
 
 const config = JSON.parse(readFileSync(process.argv[2]!, "utf8")) as Omit<IngressOptions, "store"> & { databasePath: string };
+// Optional tls.certFile/keyFile are the scratch Core's PEM paths; forward them
+// with the exact page-origin allowlist, independently of the listener's URL.
 const store = openStore(config.databasePath);
 const lab = await startIngressLab({ ...config, store });
 const reply = (message: unknown) => process.stdout.write(`COUCH_INGRESS ${JSON.stringify(message)}\n`);

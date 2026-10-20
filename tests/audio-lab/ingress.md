@@ -12,6 +12,9 @@ target: "node", ... })`, then run the result with Node and a JSON config path.
 The CLI uses Couch's actual `openStore` and owns only that connection, not Core's
 process or database lifecycle. Use the scratch Core database containing the
 publisher and receiver identities paired through Core's real `/api/pair` flow.
+Run from a task-owned scratch working directory with its own `COUCH_DATA_DIR`
+and `COUCH_PORT`; imports may write helper state relative to the working directory.
+Use absolute config paths so they do not depend on that directory.
 
 ```json
 {
@@ -26,8 +29,34 @@ publisher and receiver identities paired through Core's real `/api/pair` flow.
 }
 ```
 
+Without `tls`, the listener uses HTTP/WS; omitting `host` and `port` keeps the
+existing `127.0.0.1` binding and an OS-assigned port. To use HTTPS/WSS on a
+task-owned private interface, set these fields in the same config:
+
+```json
+{
+  "tls": {
+    "certFile": "/scratch/core/tls/cert.pem",
+    "keyFile": "/scratch/core/tls/key.pem"
+  },
+  "host": "10.231.0.1",
+  "allowedOrigins": ["https://127.0.0.1:41001", "https://10.231.0.1:41001"]
+}
+```
+
+Both PEM files must come from the **scratch Core's** data directory. Never use
+the owner's installed Couch certificate, key, database or data directory. The
+certificate must cover the endpoint host/IP, and each receiving browser profile
+or Node client must trust that scratch certificate. TLS uses Node's
+[`https.createServer`](https://nodejs.org/api/https.html#httpscreateserveroptions-requestlistener);
+missing or invalid files fail startup, with no HTTP fallback. TLS is optional
+transport protection for this finite test; it adds no production upload route.
+
 `allowedOrigins` contains the **pages' origins** (source and receiver Core URLs),
-not necessarily the ingress endpoint. An Origin is an additional browser check;
+independently of the ingress endpoint. Matching stays exact, including scheme,
+host and port; enabling TLS does not add the endpoint or rewrite HTTP page
+origins to HTTPS. The singular `allowedOrigin` remains supported when
+`allowedOrigins` is absent. An Origin is an additional browser check;
 source authorization comes from the real token, configured publisher identity,
 and controller/administrator role. Receiver authorization comes from the paired
 key allowlist plus the official Noise handshake's proof of key possession.
@@ -37,19 +66,33 @@ Admission requires an open socket, `session.isEncrypted()` and an exact
 encryption by itself. The ingress rejects plaintext application frames during
 Noise setup and keeps its three-second deadline until encrypted hello and
 initial state complete identification; init or encryption alone cannot cancel it.
-Revocation is rechecked on each PCM frame and by a 10 ms watchdog. The prototype
-is plain HTTP/WS on task-owned local links; it does not offer a production secure
-upload route. Sendspin output is Noise encrypted with AES-GCM. Its server key is
+Revocation is rechecked on each PCM frame and by a 10 ms watchdog. HTTP and HTTPS
+share the same upgrade, authorization, Noise identification and revocation
+guards. Sendspin output is Noise encrypted with AES-GCM. Its server key is
 ephemeral and distinct from the installed Couch's key.
 
 The CLI prints `COUCH_INGRESS {"ready":true,"origin":"http://127.0.0.1:41002"}`.
+With TLS it returns `https://` instead, for example
+`COUCH_INGRESS {"ready":true,"origin":"https://10.231.0.1:41002"}`. The
+`startIngressLab` API accepts the same optional `tls` object and returns that
+HTTPS origin; the existing snapshot, stop and close APIs are unchanged.
 For `host:0.0.0.0`, replace only the host in the returned URL for namespace
-receivers. Send newline-delimited stdin requests:
+receivers, preserving the scheme and port. Send newline-delimited stdin requests:
 
 - `{"id":1}` → `COUCH_INGRESS {"id":1,"value":<snapshot>}`.
 - `{"id":2,"stop":true}` stops the source and clears/ends both streams.
-- `{"close":true}` closes owned sockets, HTTP server and store. EOF/SIGTERM also
+- `{"close":true}` closes owned sockets, HTTP(S) server and store. EOF/SIGTERM also
   clean up; the parent retains and stops the PID.
+
+Each admitted `snapshot().receivers[]` entry retains `transport` with
+`localAddress`, `localPort`, `remoteAddress`, and `remotePort`, captured from
+Node's public upgrade `request.socket` fields (server perspective). Unavailable
+values are `null`. This identifies each actual receiver TCP flow for shaping.
+`metrics.sentFrames[id]` and `metrics.sentPcmBytes[id]` accumulate frames and
+48 kHz stereo s16le payload bytes handed to that receiver's SDK session; they
+remain after disconnection. Byte counts exclude the ingress/Sendspin headers,
+Noise, WebSocket, TLS and TCP overhead and do not prove remote playback. Entries
+appear only after a frame is sent; an absent counter is not an observed zero.
 
 Build `ingress-browser.ts` with `target:"browser", format:"iife"` and inject the
 bundle into each existing worker. Its paired `sendspin-identity-sk` and
@@ -135,14 +178,30 @@ Pinned official interfaces inspected locally:
   decoding, 15 ms queue processing, clock correction, output compensation and
   late-chunk dropping. Declared minimum lead/buffer are hints, not two delays to
   add together. The renderer still needs an actual browser output measurement.
+  The TLS protocol tests use the unmodified public `SendspinCore` with
+  `webSocket` injection and `storage` for the paired key. Node `ws` supplies the
+  page Origin and per-connection CA trust. `onAudioData`, `onStreamClear` and
+  `onStreamEnd` observe delivery and revocation without playback or a browser.
 
 Protocol checks (not browser timing):
 
 ```sh
-bun build tests/live-audio-ingress.test.ts --target node --outfile /tmp/couch-live-audio-ingress.test.mjs
-node --test /tmp/couch-live-audio-ingress.test.mjs
+repo="$PWD"
+scratch=$(mktemp -d /tmp/couch-ingress-check.XXXXXX)
+bun build "$repo/tests/live-audio-ingress.test.ts" --target node --outfile "$scratch/ingress.test.mjs"
+cd "$scratch"
+export COUCH_DATA_DIR="$scratch/data" COUCH_PORT=0
+node --test --test-name-pattern '^TLS ' ./ingress.test.mjs
 ```
 
+Use the repository's pinned Bun version to bundle, then Node to run. TLS checks
+generate a fresh certificate through Core's certificate helper in a temporary
+directory and remove it afterward. They verify 10/20 ms PCM at two official
+SDK receivers, encrypted identities, publisher revocation, certificate trust
+rejection, and exact page origins independent of the endpoint. They open only
+loopback ephemeral ports. No native, playback, load or timing qualification runs.
+
+The broader protocol suite also contains existing checks described below.
 These checks cover authenticated two-receiver encrypted PCM, both packet sizes,
 immutable deadlines across drops, queued packets after source stop/revoke,
 receiver revocation, wrong credentials/origins, plaintext refusal, replayed source

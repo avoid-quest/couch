@@ -1,7 +1,9 @@
 // C1/C2 TEST-OWNED PROTOTYPE. Never mounted by Couch. PCM is a two-client
 // feasibility experiment, not evidence of 50 compressed listeners.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createServer as createSecureServer } from "node:https";
 import { WebSocket, WebSocketServer } from "ws";
 import { AudioCodec, Identity, PlaybackStateType, PlayerCommand, SENTINEL_RESOLVED, SendspinCore, serverNowUs, type SendspinSession } from "@sonn-audio/node-sendspin";
 import type { openStore } from "../../src/server/store";
@@ -17,6 +19,7 @@ export type IngressOptions = {
   leadMs: number;
   host?: string;
   port?: number;
+  tls?: { certFile: string; keyFile: string };
 };
 
 export async function startIngressLab(options: IngressOptions) {
@@ -34,13 +37,14 @@ export async function startIngressLab(options: IngressOptions) {
   // Couch identities. The allowlist plus Noise key proof enforce admission.
   core.enableEncryption(Identity.generate(), () => SENTINEL_RESOLVED);
   const sockets = new Set<WebSocket>();
+  const transports = new WeakMap<WebSocket, { localAddress: string | null; localPort: number | null; remoteAddress: string | null; remotePort: number | null }>();
   const receiverTimeouts = new Map<WebSocket, ReturnType<typeof setTimeout>>();
   const receivers = new Map<string, { socket: WebSocket; session: SendspinSession; blockedSince?: number }>();
   let generation = 0, publisher: { socket: WebSocket; token: string; generation: number } | undefined;
   let timeline: { originUs: number; firstSample: number; nextSample: number; uncertaintyUs: number } | undefined;
   let lastFrameAt = 0;
   const metrics = { acceptedFrames: 0, lateFrames: 0, missingSamples: 0, rejected: 0, stopped: 0,
-    sentFrames: {} as Record<string, number>, excluded: {} as Record<string, string>,
+    sentFrames: {} as Record<string, number>, sentPcmBytes: {} as Record<string, number>, excluded: {} as Record<string, string>,
     maxIngressAgeUs: 0, maxSocketBytes: 0, stopReason: "idle" };
   const admitted = (id: string) => options.receiverIds.includes(id) && !!store.device(id);
   const authorized = (token: string) => {
@@ -91,7 +95,10 @@ export async function startIngressLab(options: IngressOptions) {
     },
     onDisconnected(session) { if (receivers.get(id)?.session === session) receivers.delete(id); },
   });
-  const server = createServer((_request, response) => response.writeHead(404).end("Test-only PCM ingress"));
+  const server = options.tls ? createSecureServer({
+    cert: readFileSync(options.tls.certFile), key: readFileSync(options.tls.keyFile),
+  }) : createServer();
+  server.on("request", (_request, response) => response.writeHead(404).end("Test-only PCM ingress"));
   const ws = new WebSocketServer({ noServer: true, maxPayload: frameBytes + 1024, perMessageDeflate: false });
   server.on("upgrade", (request, socket, head) => {
     const path = new URL(request.url!, "http://lab").pathname;
@@ -100,6 +107,10 @@ export async function startIngressLab(options: IngressOptions) {
     }
     ws.handleUpgrade(request, socket, head, client => {
       sockets.add(client);
+      transports.set(client, {
+        localAddress: request.socket.localAddress ?? null, localPort: request.socket.localPort ?? null,
+        remoteAddress: request.socket.remoteAddress ?? null, remotePort: request.socket.remotePort ?? null,
+      });
       client.on("error", () => {});
       const timeout = setTimeout(() => client.terminate(), 3000);
       client.once("close", () => {
@@ -180,6 +191,7 @@ export async function startIngressLab(options: IngressOptions) {
             if (socket.bufferedAmount > frameBytes * 2) { exclude(id, "receiver byte budget"); continue; }
             session.sendPcmAudioFrame({ data: frame.subarray(16), timestampUs });
             metrics.sentFrames[id] = (metrics.sentFrames[id] ?? 0) + 1;
+            metrics.sentPcmBytes[id] = (metrics.sentPcmBytes[id] ?? 0) + frameBytes;
           }
         } catch { reject(client, "invalid source message"); }
       });
@@ -202,10 +214,10 @@ export async function startIngressLab(options: IngressOptions) {
   catch (error) { clearInterval(watchdog); throw error; }
   const address = server.address(); assert(address && typeof address === "object");
   return {
-    origin: `http://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host ?? "127.0.0.1"}:${address.port}`,
+    origin: `${options.tls ? "https" : "http"}://${options.host === "0.0.0.0" ? "127.0.0.1" : options.host ?? "127.0.0.1"}:${address.port}`,
     snapshot: () => ({ prototype: true, codec: "pcm-s16le", sampleRate: 48_000, channels: 2, packetMs, leadMs,
       generation, publisherConnected: !!publisher, timeline: timeline ? { ...timeline } : null, metrics: structuredClone(metrics),
-      receivers: [...receivers].map(([id, { session, socket }]) => ({ id, timing: session.getPlayerTiming(), bufferedBytes: socket.bufferedAmount, encrypted: session.isEncrypted() })) }),
+      receivers: [...receivers].map(([id, { session, socket }]) => ({ id, transport: { ...transports.get(socket)! }, timing: session.getPlayerTiming(), bufferedBytes: socket.bufferedAmount, encrypted: session.isEncrypted() })) }),
     stop,
     async close() {
       clearInterval(watchdog); stop("lab closed");
