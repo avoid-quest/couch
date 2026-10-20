@@ -47,7 +47,7 @@ const refusedUrl = `http://127.0.0.1:${refused}/`;
 writeFileSync(join(scratch, "probe.mjs"), `
 import { app, BrowserWindow } from 'electron';
 import { writeFileSync } from 'node:fs';
-const evidence = { rendererCases: [], unsandboxedFrame: null, updater: null, electron: process.versions.electron, mainPid: process.pid, corePids: [], mainFrameErrors: 0, childFrameErrors: 0, messageLevel: null };
+const evidence = { rendererCases: [], unsandboxedFrame: null, updater: null, electron: process.versions.electron, mainPid: process.pid, corePids: [], domExceptions: [], mainFrameErrors: 0, childFrameErrors: 0, messageLevel: null };
 const record = () => writeFileSync(${JSON.stringify(join(directory, "native-events.json"))}, JSON.stringify(evidence, null, 2));
 app.on('child-process-gone', () => record());
 app.on('browser-window-created', (_event, window) => {
@@ -57,6 +57,7 @@ app.on('browser-window-created', (_event, window) => {
       evidence.messageLevel = details.level;
       evidence.isMainFrame = details.frame === window.webContents.mainFrame;
     }
+    if (details.message.includes('DOMException')) evidence.domExceptions.push({ message: details.message, level: details.level, isMainFrame: details.frame === window.webContents.mainFrame });
     if (details.message.includes('DIAG privacy ')) evidence.rendererCases.push({ message: details.message, level: details.level, isMainFrame: details.frame === window.webContents.mainFrame });
     if (details.message === 'DIAG unsandboxed frame') evidence.unsandboxedFrame = { isMainFrame: details.frame === window.webContents.mainFrame, sourceId: details.sourceId, frameUrl: details.frame.url };
     if (details.message.includes('DIAG child frame')) {
@@ -77,6 +78,19 @@ BrowserWindow.prototype.loadURL = async function (url, options) {
     setTimeout(() => { throw new Error(${JSON.stringify(rendererMessage)}); }, 0);
     //# sourceURL=https://source.example/private.js?token=synthetic-source-secret
   `)});
+  await this.webContents.executeJavaScript(${JSON.stringify(`(async () => {
+    console.error(new DOMException('DIAG console DOMException https://media.example/private?sig=synthetic-dom-secret', 'NotSupportedError'));
+    const withStack = new DOMException('DIAG stack DOMException', 'InvalidStateError');
+    Object.defineProperty(withStack, 'stack', { value: 'DIAG stack frame https://stack.example/private.js?token=synthetic-stack-secret' });
+    console.error(withStack);
+    setTimeout(() => { throw new DOMException('DIAG thrown DOMException', 'InvalidStateError'); }, 0);
+    void Promise.reject(new DOMException('DIAG rejected DOMException', 'AbortError'));
+    const media = document.createElement('video');
+    const source = URL.createObjectURL(new Blob(['invalid media fixture'], { type: 'video/mp4' }));
+    media.src = source;
+    await media.play().catch(error => console.error('DIAG media rejection', error));
+    media.removeAttribute('src'); media.load(); URL.revokeObjectURL(source);
+  })()`)});
   await this.webContents.executeJavaScript(${JSON.stringify("new Promise(resolve => { const frame = document.createElement('iframe'); frame.sandbox = 'allow-scripts'; frame.onload = resolve; frame.srcdoc = `<script>console.error('DIAG child frame')</script>`; document.body.append(frame); })")});
   await this.webContents.executeJavaScript(${JSON.stringify(`
     for (const [id, message] of ${JSON.stringify(rendererCases)}) setTimeout(() => { throw new Error('DIAG privacy ' + id + ' ' + message); }, 0);
@@ -127,6 +141,11 @@ const lines = log.trimEnd().split("\n");
 const main = lines.find(line => line.includes("Couldn't load Couch"));
 const renderer = lines.find(line => line.includes("DIAG native renderer failure"));
 const failures: string[] = [];
+for (const [name, message] of [['NotSupportedError', 'DIAG console DOMException'], ['InvalidStateError', 'DIAG stack DOMException'], ['InvalidStateError', 'DIAG thrown DOMException'], ['AbortError', 'DIAG rejected DOMException'], ['NotSupportedError', 'DIAG media rejection']]) {
+  if (!lines.some(line => line.includes('renderer error:') && line.includes(name!) && line.includes(message!))) failures.push(`${message} lost its name or message`);
+}
+if (!lines.some(line => line.includes('DIAG stack frame stack.example'))) failures.push('Available DOMException stack was lost');
+if (lines.some(line => line.includes('[object DOMException]'))) failures.push('DOMException was still opaque');
 const iso = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z /;
 if (!main || !iso.test(main)) failures.push("Main failure lacks ISO timestamp");
 if (!renderer || !iso.test(renderer)) failures.push("Renderer failure absent from couch.log");

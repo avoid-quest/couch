@@ -1,4 +1,4 @@
-import { defaultStringifySearch, Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
+import { defaultStringifySearch, Link, Outlet, useLocation, useMatches, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ErrorInfo, type PropsWithChildren, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { BookmarkIcon, CompassIcon, HouseIcon, Keyboard, SettingsIcon, TvIcon, X, type LucideIcon } from "lucide-react";
@@ -292,14 +292,17 @@ export function ShellChrome({ children }: PropsWithChildren) {
   // This computer's Couch has started once its Core answered with a connection; until
   // then the shell shows Starting… or Couldn't start Couch (PairingPage).
   useShellReady(!localHost || paired);
-  // The player is full-bleed: its band replaces the header and status line.
-  const onPlayer = paired && section === "Now";
+  // The URL can move before the presented route. Keep the shell's bar in
+  // step with the page, including view-transition snapshots.
+  const playerVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/now") });
+  const remoteVisible = useMatches({ select: matches => matches.some(match => match.routeId === "/remote") });
+  const onPlayer = paired && playerVisible;
   useIdleCursor(tvPresentation && !onPlayer);
   const installationName = state?.installationName ?? details?.name;
   const localName = useLocalDeviceName();
   const tvName = localName ?? state?.devices?.find(device => device.id === deviceId())?.name ?? installationName;
   useRememberCouchName(installationName);
-  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && !["Now", "Remote"].includes(section);
+  const nowPlaying = !!current && (active || player?.status === "error" || player?.status === "ended") && !playerVisible && !remoteVisible;
   // The footer holds the now-playing bar and the phone tab bar; its height is --bottom-bar.
   const footer = useRef<HTMLDivElement>(null);
   useBottomBar(footer, paired && !setupPending);

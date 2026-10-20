@@ -148,6 +148,8 @@ their width and reach, keep Play/Pause and Where it plays; the player keeps
 the rest. It
 hides on the player and on Remote, and grows into the player band
 (`couch-player-band`) and back.
+The bar follows the presented route, so each transition snapshot contains
+only the bar or the player band, even while the URL is already changing.
 
 The bar and the phone tab bar share the shell's footer, whose height is
 `--bottom-bar`: scroll padding clears it, and the player band publishes its
