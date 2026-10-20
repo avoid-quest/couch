@@ -57,7 +57,7 @@ import { updateSettings } from "./updates-settings";
 import { createNativeUpdates } from "./updates-native";
 import type { UpdateAction, UpdateState, UpdateTarget } from "../shared/app-bridge";
 import { audioRendition, createSendspin, liveHls, type SyncedLoad } from "./sendspin";
-import { logPlaybackError } from "./playback-log";
+import { logPlaybackError, safePlaybackError } from "./playback-log";
 import { helper } from "./helpers";
 import { Identity } from "@sonn-audio/node-sendspin";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -1688,7 +1688,7 @@ export async function createHub(options: HubOptions) {
           try { peer = live.unreachable(socket, unreachable.peerId); } catch { socket.close(1008, "No permission for that live peer."); return; }
           const playback = peer && playbacks.get(peer.playbackId);
           if (!peer || !playback) return;
-          logPlaybackError(playback.id, `on ${nameOf(peer.deviceId)}`, undefined, `The live input couldn't connect directly (${unreachable.error}), so Couch plays it there through its buffered stream.`);
+          log(`live fallback ${playback.id.slice(0, 8)}: ${safePlaybackError(`Direct connection to ${nameOf(peer.deviceId)} failed (${unreachable.error}); trying Couch's buffered stream.`)}`);
           if (sourceOf(playback) === peer.sourceId && playback.outputs.some(output => output.deviceId === peer.deviceId)) { reconcile(playback); broadcast(); }
           return;
         }

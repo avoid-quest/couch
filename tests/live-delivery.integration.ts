@@ -221,17 +221,22 @@ test("RTC peer rotation and grouped delivery preserve pause and selected externa
   } finally { await f.close(); }
 });
 
-test("a receiver that can't connect directly plays Couch's buffered stream alone, while the other keeps its peer", { timeout: 15_000 }, async () => {
+test("a receiver that can't connect directly plays Couch's buffered stream alone, while the other keeps its peer", { timeout: 15_000 }, async t => {
+  const lines: string[] = [];
+  t.mock.method(console, "log", (line: string) => lines.push(line));
   const f = await liveFixture();
   try {
     await start(f);
     const peerId = rtc(f.receiver.load()!), group = f.publisher.state.playback!, entry = f.publisher.state.currentEntryId;
     const other = await addOther(f);
     const otherPeer = rtc(other.load()!), before = [loads(f.receiver).length, loads(other).length];
-    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "No network path for live inputs." }));
+    f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId, error: "No network path for live inputs. https://relay.example/session?token=private-fixture" }));
     await until(() => loads(f.receiver).length > before[0]!);
     relayed(f.receiver.load()!, f.receiver);
     assert.equal((await fetch(f.receiver.load()!.source)).status, 200);
+    assert.equal(lines.some(line => line.includes("player error")), false, "trying the buffered route isn't a playback failure");
+    assert.ok(lines.some(line => line.includes("live fallback") && line.includes("No network path for live inputs.")), "keep the direct failure as fallback diagnostics");
+    assert.equal(lines.some(line => line.includes("private-fixture")), false, "fallback diagnostics still redact source URLs");
     assert.equal(loads(other).length, before[1], "the healthy receiver keeps playing");
     assert.equal(rtc(other.load()!), otherPeer);
     assert.ok(uploadRequested(f));
@@ -309,7 +314,9 @@ test("a fallback that becomes ready after a pause loads paused", { timeout: 15_0
   } finally { await f.close(); }
 });
 
-test("a buffered stream that fails stops its receiver and says why, while the other keeps its peer and Core doesn't retry", { timeout: 15_000 }, async () => {
+test("a buffered stream that fails stops its receiver and says why, while the other keeps its peer and Core doesn't retry", { timeout: 15_000 }, async t => {
+  const lines: string[] = [];
+  t.mock.method(console, "log", (line: string) => lines.push(line));
   const f = await liveFixture();
   try {
     await start(f);
@@ -318,6 +325,7 @@ test("a buffered stream that fails stops its receiver and says why, while the ot
     ffmpeg(f, `case " $* " in *" -version "*) echo "ffmpeg version 7.0";; *) exit 1;; esac`);
     f.receiver.socket.send(JSON.stringify({ type: "liveFailed", peerId: rtc(f.receiver.load()!), error: "Unreachable." }));
     await until(() => !!f.publisher.state.outputs?.find(output => output.deviceId === f.receiver.id)?.error);
+    assert.ok(lines.some(line => line.includes("player error") && line.includes("buffered stream of this live input stopped")), "a failed buffered stream is still a playback error");
     assert.ok(f.receiver.messages.slice(before[0]).some(message => message.type === "player" && message.command.type === "stop"), "the relayed receiver stops waiting");
     assert.equal(f.publisher.state.outputs?.find(output => output.deviceId === other.id)?.error, undefined);
     assert.equal(loads(other).length, before[1], "the healthy receiver keeps playing");
