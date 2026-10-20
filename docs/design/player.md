@@ -154,8 +154,9 @@ which Back leaves for the control it came from.
   [Back on desktop and phones](#back-on-desktop-and-phones) says.
 - **On phones**, a tap shows or hides the controls; it never plays or pauses.
 
-The TV's player opens on the transport instead, for its remote
-([TV](tv.md#the-tv-player-answers-a-remote)).
+The TV's player opens on the transport when keyboard or Remote navigation is
+already active. Unattended startup uses the picture too, so receiving Play does
+not pin the controls open ([TV](tv.md#the-tv-player-answers-a-remote)).
 
 ## Back on desktop and phones
 
