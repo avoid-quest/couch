@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItem, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
-import { desktopNavigation } from "./navigation";
+import { desktopNavigation, loadCouch } from "./navigation";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -192,17 +192,17 @@ async function trust(address: string, again: boolean) {
 }
 
 // Full mode loads Core's own UI; Client mode loads the other Couch's own UI, so versions always match.
-async function load() {
+async function load(newConnection = false) {
   if (!window) return;
   if (choice.mode !== "remote") {
     if (!await startCore().catch(() => null)) return;
-    await window.loadURL(`${localOrigin}/`).catch(error => logAppError("main", `Couldn't load Couch: ${error.message}`));
+    await loadCouch(window, `${localOrigin}/`, newConnection).catch(error => logAppError("main", `Couldn't load Couch: ${error.message}`));
     return;
   }
   await stopCore();
   let address = choice.address!;
   for (;;) {
-    try { return void await window.loadURL(address = await trust(address, false)); } catch (error) {
+    try { return void await loadCouch(window, address = await trust(address, false), newConnection); } catch (error) {
       if (!window || choice.address !== address || choice.mode !== "remote") return;
       renderer?.unreachable();
       logAppError("main", `Couldn't reach Couch host=${diagnosticHost(address)}: ${error instanceof Error ? error.message : error}`);
@@ -219,8 +219,8 @@ async function load() {
       const { response } = await dialog.showMessageBox(window, { type: "warning", message: `Can't reach ${new URL(address).host}`, detail: `${(error as Error).message}\nCouch keeps trying.`, buttons: ["Try again", "Change address", "Use this computer"], defaultId: 0, cancelId: 0, signal: reachable.signal });
       answered = true;
       // Change address returns to the chooser, which keeps the address to correct or forget.
-      if (response === 1) { save({ ...choice, mode: null }); return load(); }
-      if (response === 2) { save({ ...choice, mode: "local" }); return load(); }
+      if (response === 1) { save({ ...choice, mode: null }); return load(true); }
+      if (response === 2) { save({ ...choice, mode: "local" }); return load(true); }
     }
   }
 }
@@ -400,7 +400,7 @@ handle("choose", async (event, mode, address, confirm) => {
     if (here) return choice;
   } else throw new Error("Choose This computer or another Couch.");
   // The window loads the chosen Couch; the page asking goes away.
-  void load();
+  void load(true);
   return null;
 });
 handle("forget", async (_event, address) => {
@@ -411,7 +411,7 @@ handle("forget", async (_event, address) => {
   // Its pairing lives in that origin's storage.
   await session.defaultSession.clearStorageData({ origin: address, storages: ["localstorage"] }).catch(() => {});
   if (!current || choice.mode !== null) return choice;
-  void load();
+  void load(true);
   return null;
 });
 handle("complete-local-setup", () => {

@@ -200,17 +200,30 @@ on macOS and Alt+Left / Alt+Right on Windows/Linux. Mouse back/forward commands
 use that history too. BrowserBack stays native off the TV; Esc keeps Couch's
 panel/page behavior. All desktop platforms have Electron's native Edit menu.
 Off the TV, horizontal overscroll stays enabled for browser back/forward gestures, while
-vertical overscroll stays suppressed. The Mac app handles Electron's discrete
-three-finger swipe (System Settings → Trackpad → Swipe between pages → two or
-three fingers); Electron's `swipe` event does not expose two-finger scrolling.
-There is no custom wheel or touch gesture recognizer. TV remote Back and its
-focus navigation stay contextual.
+vertical overscroll stays suppressed. The Mac app supports both Electron's discrete
+three-finger swipe and two-finger horizontal scrolling. Electron's documented
+[`swipe`](https://www.electronjs.org/docs/latest/api/browser-window#event-swipe-macos)
+only covers three fingers; its documented input events expose the scroll's end,
+but no history action or deltas. A small Mac-only preload adapter combines DOM
+wheel deltas with `gestureScrollEnd`, as
+[t3code's desktop window](https://github.com/pingdotgg/t3code/blob/main/apps/desktop/src/window/DesktopWindow.ts)
+does for gesture completion. A horizontal movement of at least 100px and more
+than twice the vertical movement traverses native history once, on completion.
+Modified gestures (including pinch), forms, sliders, native media and horizontal
+scroll containers keep their gesture, including at scroll edges. The listener is
+passive; browser gestures and TV remote navigation keep their existing handling.
+
+An explicit Couch or mode change clears native history only after its destination
+loads successfully, so Back cannot return to the previous Couch. Failed loads
+retain history, as do reloads and subsequent router navigation.
 
 Interaction regression: build `tests/desktop-interactions.browser.ts` with
 `bun build --target browser --format iife`, evaluate it in a paired scratch
 desktop, then run `window.runDesktopInteractionsRegression()`. Native menu,
-swipe and mouse-command dispatch is covered by `tests/desktop-navigation.test.ts`;
-physical macOS gestures and OS clipboard accelerators require platform checks.
+swipe and mouse-command dispatch and connection boundaries are covered by
+`tests/desktop-navigation.test.ts`; `tests/preload-history.test.ts` checks the real
+preload's two-finger logic with synthetic input. Physical macOS gestures, their
+momentum/event ordering and OS clipboard accelerators require platform checks.
 
 ## First run names the computer
 

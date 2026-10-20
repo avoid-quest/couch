@@ -14,6 +14,28 @@ if (process.platform === "darwin" && !process.argv.includes("--couch-tv-presenta
   const controls = (shown: boolean) => document.documentElement.toggleAttribute("data-window-controls", shown);
   addEventListener("DOMContentLoaded", () => controls(true));
   ipcRenderer.on("couch:full-screen", (_event, fullScreen: boolean) => controls(!fullScreen));
+
+  // Electron's `swipe` is three-finger only. Two-finger scrolling supplies wheel
+  // deltas and a native gestureScrollEnd; keep this adapter out of browsers and TV.
+  let x = 0, y = 0, ignored = false, lastWheel = 0;
+  const reset = () => { x = 0; y = 0; ignored = false; };
+  addEventListener("wheel", event => {
+    if (event.timeStamp - lastWheel > 250) reset();
+    lastWheel = event.timeStamp;
+    x += event.deltaX;
+    y += Math.abs(event.deltaY);
+    ignored ||= event.defaultPrevented || event.deltaMode !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey;
+    // A horizontal scroller owns the whole gesture, including its edges. Leave
+    // text entry, sliders and native media controls to Chromium as well.
+    ignored ||= event.composedPath().some(target => target instanceof Element && (
+      target.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"], video[controls], audio[controls]')
+      || (target.scrollWidth > target.clientWidth + 1 && /^(auto|scroll|overlay)$/.test(getComputedStyle(target).overflowX))
+    ));
+  }, { passive: true });
+  ipcRenderer.on("couch:scroll-end", () => {
+    if (!ignored && !document.body?.classList.contains("tv-presentation") && Math.abs(x) >= 100 && Math.abs(x) > y * 2) history.go(x < 0 ? -1 : 1);
+    reset();
+  });
 }
 
 contextBridge.exposeInMainWorld("couchApp", {
