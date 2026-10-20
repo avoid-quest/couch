@@ -93,7 +93,7 @@ missing_packages() {
 # Existing administrator files and masks take precedence, including disabled autologin.
 # Prints "keep DESTINATION", or "copy|link DESTINATION TEMPLATE" for what to add.
 plan_files() {
-    local path destination
+    local path destination found
     [[ -r $root$templates/files ]] || return 0
     while IFS= read -r path; do
         [[ $path != usr/lib/systemd/user/couch-tv.service ]] || continue
@@ -104,8 +104,14 @@ plan_files() {
         esac
         # Sign-in and power policy is only ever set by the administrator's setup.
         [[ $mode = tv || $destination = /$path ]] || continue
-        if [[ $destination != /$path ]] && exists "/$path"; then echo "keep /$path"
-        elif exists "$destination"; then echo "keep $destination"
+        # What only root can see is unknown, never absent: it may be the administrator's file.
+        found=0
+        [[ $destination = /$path ]] || exists "/$path" || found=$?
+        if [[ $found = 0 && $destination != /$path ]]; then echo "keep /$path"; continue; fi
+        if [[ $found = 2 ]]; then echo "unknown /$path"; continue; fi
+        found=0; exists "$destination" || found=$?
+        if [[ $found = 0 ]]; then echo "keep $destination"
+        elif [[ $found = 2 ]]; then echo "unknown $destination"
         elif [[ $destination = /etc/* ]]; then echo "copy $destination $path"
         else echo "link $destination $path"; fi
     done < "$root$templates/files"
@@ -116,6 +122,7 @@ install_files() {
     local action destination path
     while read -r action destination path; do
         if [[ $action = keep ]]; then echo "Preserved $destination"; continue; fi
+        [[ $action != unknown ]] || fail "Can't tell whether $destination exists."
         install -d -m 0755 "$(dirname "$root$destination")"
         if [[ $action = copy ]]; then
             install -m "$(stat -c '%a' "$root$templates/$path")" "$root$templates/$path" "$root$destination"
@@ -127,10 +134,16 @@ install_files() {
     timer_masked || systemctl enable --now couch-update.timer
 }
 # The administrator's /etc/couch/appliance.env, else the one setup would copy.
+# Fails (2) when only root could read which.
 data_dir() {
-    local file=$root/etc/couch/appliance.env data
-    [[ -e $file ]] || file=$root$templates/etc/couch/appliance.env
-    data=$(sed -n 's/^COUCH_DATA_DIR=//p' "$file" 2>/dev/null | tail -1)
+    local file=/etc/couch/appliance.env data found=0
+    exists "$file" || found=$?
+    case $found in
+        0) [[ -r $root$file ]] || return 2 ;;
+        2) return 2 ;;
+        *) file=$templates/etc/couch/appliance.env ;;
+    esac
+    data=$(sed -n 's/^COUCH_DATA_DIR=//p' "$root$file" 2>/dev/null | tail -1)
     data=${data#\"}; echo "${data%\"}"
 }
 if [[ $mode = refresh ]]; then
@@ -172,7 +185,10 @@ if [[ -e $root/etc/X11/default-display-manager ]]; then
     elif [[ $previous = none ]]; then refuse 'LightDM already has a desktop policy. Use ordinary installation.'; fi
 fi
 if $inspect; then
-    data=$(data_dir)
+    data_source=' (packaged default)'
+    if ! data=$(data_dir); then data= data_source=' (only root can read /etc/couch/appliance.env)'
+        unknown+=('Which data directory /etc/couch/appliance.env sets')
+    elif exists /etc/couch/appliance.env; then data_source=' (from /etc/couch/appliance.env)'; fi
     # Only reads: the TV account's session, if root can see it.
     session=unknown
     if [[ $account = none ]]; then session=none
@@ -186,7 +202,7 @@ if $inspect; then
     echo 'Couch TV setup inspection. Nothing was changed.'
     echo "Earlier setup: $previous"
     echo "Runtime account couch-tv: ${account/none/absent}"
-    echo "Data directory: ${data:-unknown}$([[ -e $root/etc/couch/appliance.env ]] && echo ' (from /etc/couch/appliance.env)' || echo ' (packaged default)')"
+    echo "Data directory: ${data:-unknown}$data_source"
     echo "Display manager: $(cat "$root/etc/X11/default-display-manager" 2>/dev/null || echo none); default target: $(query systemctl get-default); LightDM: $(query systemctl is-enabled lightdm.service)"
     echo "Unattended updates: couch-update.timer $(query systemctl is-enabled couch-update.timer)"
     actions+=("Refresh APT package lists and install or upgrade the TV packages${missing[*]:+ (missing: ${missing[*]})}")
@@ -201,6 +217,7 @@ if $inspect; then
     while read -r action destination path; do
         case $action in
             keep) kept+=("$destination") ;;
+            unknown) unknown+=("Whether $destination exists") ;;
             copy) actions+=("Copy $destination") ;;
             link) actions+=("Link $destination") ;;
         esac
@@ -239,7 +256,7 @@ if [[ -S $root/run/user/$(id -u couch-tv)/bus ]]; then
 fi
 ! pgrep -u couch-tv -x couch >/dev/null || fail 'A Couch writer remains. Stop it before setup.'
 install_files
-data=$(data_dir)
+data=$(data_dir) || fail "Can't read /etc/couch/appliance.env."
 install -d -m 0755 "$root/etc/systemd/user"
 if ! native_selected; then ln -s "$native_unit" "$root$unit"; fi
 if [[ -S $root/run/user/$(id -u couch-tv)/bus ]]; then

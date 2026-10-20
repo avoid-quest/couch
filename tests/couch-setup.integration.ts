@@ -87,7 +87,7 @@ function snapshot(root: string, path = ""): string[] {
   const entry = `${path || "."} ${info.mode.toString(8)}`;
   if (info.isSymbolicLink()) return [`${entry} -> ${readlinkSync(full)}`];
   if (info.isSocket()) return [`${entry} socket`];
-  if (!info.isDirectory()) return [`${entry} ${createHash("sha256").update(readFileSync(full)).digest("hex")}`];
+  if (!info.isDirectory()) { try { return [`${entry} ${createHash("sha256").update(readFileSync(full)).digest("hex")}`]; } catch { return [`${entry} unreadable`]; } }
   let entries: string[];
   try { entries = readdirSync(full).sort(); } catch { return [`${entry} unreadable`]; }
   return [entry, ...entries.flatMap(name => snapshot(root, join(path, name)))];
@@ -225,6 +225,46 @@ test("without root, inspection reports what only root can read as unavailable", 
     assert.match(plan.stdout, /Runtime account couch-tv: unknown/);
     for (const line of ["Run with sudo to read what only root can.", "Whether the couch-tv account is locked", "Whether /var/lib/couch/.config/systemd/user/couch-tv.service exists", "Whether the Couch TV app is running"]) assert.ok(plan.unavailable.includes(line), `${line}\n${plan.stdout}`);
   } finally { chmodSync(join(environment.root, "var/lib/couch"), 0o755); }
+});
+
+// Permission denial is not absence: an administrator's file under a directory only root can
+// read must be reported unknown, never planned over, and still kept by --tv.
+test("without root, files only root can see are unknown, not added, and --tv keeps them", rootOptions, () => {
+  const customised = "# Administrator's own power policy\n";
+  using environment = fixture({
+    installed: packages, account: null,
+    files: {
+      "etc/couch/appliance.env": "COUCH_DATA_DIR=\"/srv/couch data\"\n",
+      // The legacy location setup keeps in place of /etc/systemd/logind.conf.d.
+      "usr/lib/systemd/logind.conf.d/50-couch.conf": customised,
+      // Unreadable itself, beneath a readable directory: its existence is still visible.
+      "etc/lightdm/lightdm.conf.d/50-couch.conf": customised,
+    },
+  });
+  const hidden = ["etc/couch", "usr/lib/systemd/logind.conf.d"].map(path => join(environment.root, path));
+  const unreadable = join(environment.root, "etc/lightdm/lightdm.conf.d/50-couch.conf");
+  for (const path of hidden) chmodSync(path, 0);
+  chmodSync(unreadable, 0);
+  try {
+    const plan = inspect(environment, false);
+    assert.equal(plan.status, 0, plan.stdout + plan.stderr);
+    assert.match(plan.stdout, /^Data directory: unknown \(only root can read \/etc\/couch\/appliance\.env\)$/m);
+    for (const line of ["Which data directory /etc/couch/appliance.env sets", "Whether /etc/couch/appliance.env exists", "Whether /usr/lib/systemd/logind.conf.d/50-couch.conf exists"]) assert.ok(plan.unavailable.includes(line), `${line}\n${plan.stdout}`);
+    for (const line of ["Copy /etc/couch/appliance.env", "Copy /etc/systemd/logind.conf.d/50-couch.conf", "Copy /etc/lightdm/lightdm.conf.d/50-couch.conf"]) assert.ok(!plan.would.includes(line), `${line}\n${plan.stdout}`);
+    assert.ok(plan.keep.includes("/etc/lightdm/lightdm.conf.d/50-couch.conf"), plan.stdout);
+    // Readable and missing paths are still planned as before.
+    assert.ok(plan.would.includes("Link /usr/sbin/couch-session") && plan.would.includes("Link /etc/systemd/user/couch-tv.service"), plan.stdout);
+  } finally { for (const path of hidden) chmodSync(path, 0o755); }
+
+  const root = inspect(environment);
+  assert.match(root.stdout, /^Data directory: \/srv\/couch data \(from \/etc\/couch\/appliance\.env\)$/m);
+  for (const kept of ["/etc/couch/appliance.env", "/usr/lib/systemd/logind.conf.d/50-couch.conf", "/etc/lightdm/lightdm.conf.d/50-couch.conf"]) assert.ok(root.keep.includes(kept), `${kept}\n${root.stdout}`);
+  const applied = environment.run("--tv", true);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(readFileSync(join(environment.root, "etc/couch/appliance.env"), "utf8"), /srv\/couch data/);
+  assert.ok(!existsSync(join(environment.root, "etc/systemd/logind.conf.d/50-couch.conf")), "The legacy policy file stays the one in force");
+  chmodSync(unreadable, 0o644);
+  assert.equal(readFileSync(unreadable, "utf8"), customised);
 });
 
 test("--tv and --refresh still require root, and --refresh leaves an incomplete setup alone", rootOptions, () => {
