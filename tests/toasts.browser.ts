@@ -9,6 +9,35 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const messages = () => [...document.querySelectorAll('[data-sonner-toast]:not([data-removed="true"])')].map(node => node.textContent ?? "");
 const assert = (ok: unknown, message: string) => { if (!ok) throw new Error(message); };
 
+// Start with an empty idle session. Delay real snapshots so Queue's result arrives first.
+export async function runIdleQueueRegression(gate: () => SessionGateValue, mediaUrl: string) {
+  assert(gate().state?.playback === null && gate().state?.queue.length === 0, "Start with an empty idle session");
+  const descriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, "onmessage")!;
+  Object.defineProperty(WebSocket.prototype, "onmessage", { ...descriptor, set(this: WebSocket, listener: WebSocket["onmessage"]) {
+    descriptor.set!.call(this, (event: MessageEvent<string>) => {
+      if (JSON.parse(event.data).type === "state") setTimeout(() => listener?.call(this, event), 150);
+      else listener?.call(this, event);
+    });
+  } });
+  gate().reconnect();
+  await wait(500);
+  try {
+    assert(await gate().run({ type: "enqueue", entry: { id: crypto.randomUUID(), title: "First queued film", source: mediaUrl }, playNow: false }), "Could not queue fixture");
+    await wait(350);
+    assert(gate().state?.playback && gate().state?.currentEntryId === null, "Queue did not create an idle playback");
+    assert(messages().some(text => text.startsWith("Queued First queued film")), "The first Queue snapshot dismissed its own confirmation");
+    const action = [...document.querySelectorAll<HTMLButtonElement>('[data-sonner-toast]:not([data-removed="true"]) [data-button]')].find(button => button.textContent === "Up next");
+    assert(action, "The first Queue lost Up next");
+    action!.click();
+    await wait(350);
+    assert(new URLSearchParams(location.search).get("queue") === "true", "Up next did not open the new queue");
+    return { passed: true };
+  } finally {
+    Object.defineProperty(WebSocket.prototype, "onmessage", descriptor);
+    gate().reconnect();
+  }
+}
+
 export async function runToastRegression(gate: () => SessionGateValue, mediaUrl: string) {
   assert(document.body.classList.contains("tv-presentation"), "Run in TV presentation (?tv=1)");
   const results: { name: string; passed: boolean; error?: string }[] = [];

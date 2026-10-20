@@ -227,7 +227,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (message.type === "state") {
           // A result can precede its snapshot: retain confirmation for the destination it names.
           const previous = observation.current;
-          if (previous && (previous.controlling !== message.state.controlling || previous.playback !== message.state.playback || previous.currentEntryId !== message.state.currentEntryId)) dismissPlaybackFeedback(message.state.controlling);
+          // The first idle Queue creates a playback without replacing an item or destination.
+          if (previous && (previous.controlling !== message.state.controlling || previous.playback !== null && previous.playback !== message.state.playback || previous.currentEntryId !== message.state.currentEntryId)) dismissPlaybackFeedback(message.state.controlling);
           // This notice precedes the snapshot that closes the receiver. React may batch the two states.
           const activity = message.state.activity;
           if (activity?.kind === "sharing-stopped" && activity.id !== previous?.activity?.id && activity.actor.deviceId !== deviceId()) notice(activity.text);

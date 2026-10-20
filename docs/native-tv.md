@@ -192,7 +192,10 @@ reader, then import `/@fs/<checkout>/tests/toasts.browser.ts` and call
 `runToastRegression(window.couchPlaybackReview.gate, mediaUrl)` with a finite
 direct video URL. It checks expiry under a parked pointer, Queue → Play cleanup,
 incoming playback retiring Undo, Queue during playback, and remote Up/Back/OK on
-Stop's Undo. It changes the scratch queue. Use a second paired controller to
+Stop's Undo. It changes the scratch queue.
+Run `runIdleQueueRegression(gate, mediaUrl)` from an empty idle session to check
+that the first Queue keeps its confirmation and Up next after a delayed snapshot.
+Use a second paired controller to
 verify that Play, Pause, Resume and Queue stay quiet on the TV, while ending a
 shared source notifies its receivers once and keeps its publisher quiet. The same
 module exports `runPlayingOnRegression(gate, mediaUrl, targetDeviceId, true)`
