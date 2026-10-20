@@ -76,7 +76,7 @@ export type SessionState = {
   playbacks?: PlaybackSummary[];
   devices?: DeviceSummary[];
   liveSources?: LiveSource[];
-  activity?: { id: string; actor: PlaybackActor; text: string };
+  activity?: { id: string; actor: PlaybackActor; text: string; kind?: "sharing-stopped" };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;

@@ -5,7 +5,7 @@ import { ApiError } from "./api/client";
 // and shows one toast: a repeat updates the one showing. Only this module and the Toaster import sonner.
 const brief = 4_000, long = 6_000;
 
-type Kind = "failed" | "undo" | "queued" | "playing-on" | "activity" | "notice" | "tap-to-hear";
+type Kind = "failed" | "undo" | "queued" | "playing-on" | "notice" | "tap-to-hear";
 /** The Toaster shows the newest two; older ones stay mounted, hidden. */
 export const visibleToasts = 2;
 // Sonner updates a toast in place, so a repeat keeps its toast's id only while that toast shows: one leaving (timed
@@ -13,6 +13,7 @@ export const visibleToasts = 2;
 // keep it hidden. Otherwise the repeat takes the next id, and the old toast goes.
 const shown = new Map<Kind, { id: string; seq: number; leaving: boolean }>();
 let ids = 0;
+let playingOnDevice: string | undefined;
 const showing = (entry: { seq: number }) => [...shown.values()].filter(other => !other.leaving && other.seq > entry.seq).length < visibleToasts;
 function show(kind: Kind, text: string, { action, ...options }: Omit<ExternalToast, "id" | "action"> & { action?: { label: string; onClick: () => void } }, as: typeof toast.error = toast) {
   const last = shown.get(kind), current = last && !last.leaving && showing(last) ? last : { id: `${kind}-${++ids}`, seq: ids, leaving: false };
@@ -25,6 +26,14 @@ export function dismiss(kind: Kind) {
   const current = shown.get(kind);
   if (current) { current.leaving = true; toast.dismiss(current.id); }
 }
+
+/** Feedback and actions for the previous item or controlled device no longer apply. */
+export function dismissPlaybackFeedback(controlling?: string) {
+  dismiss("queued"); dismiss("undo");
+  // A command can finish before its snapshot. Its destination confirmation is still current there.
+  if (playingOnDevice !== controlling) dismiss("playing-on");
+}
+export function dismissAll() { for (const kind of shown.keys()) dismiss(kind); }
 
 /** "Couldn't X." Core's own sentence wins when it sent one; anything else (the network, a timeout) shows `text` and logs the detail. */
 export function failed(text: string, reason?: unknown) {
@@ -42,8 +51,10 @@ export const undoable = (text: string, undo: () => void, duration = long) => {
 
 export const queued = (title: string | undefined, upNext: () => void) =>
   show("queued", title ? `Queued ${title}` : "Queued", { duration: brief, action: { label: "Up next", onClick: upNext } });
-export const playingOn = (name: string) => show("playing-on", `Playing on ${name}`, { duration: brief });
-export const activity = (text: string) => show("activity", text, { duration: long });
+export const playingOn = (name: string, deviceId: string) => {
+  playingOnDevice = deviceId;
+  return show("playing-on", `Playing on ${name}`, { duration: brief });
+};
 export const notice = (text: string) => show("notice", text, { duration: long });
 export const waitingForTap = (hear: () => void) =>
   show("tap-to-hear", "Sound is waiting for a tap", { duration: Infinity, action: { label: "Tap to hear", onClick: hear } });

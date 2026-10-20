@@ -253,7 +253,7 @@ export async function createHub(options: HubOptions) {
           clearTimeout(playback.undoable); playback.undoable = undefined;
           // Its receivers' players close with the item, so they hear who stopped sharing first: sent now, since the
           // scheduled flush would find the playback settled and gone. The publisher, as the actor, hears nothing.
-          playback.session.notice({ deviceId: source.deviceId, name: publisherName }, `${publisherName} stopped sharing`);
+          playback.session.notice({ deviceId: source.deviceId, name: publisherName }, `${publisherName} stopped sharing`, "sharing-stopped");
           flush();
         }
         playback.session.endSource(sourceId);

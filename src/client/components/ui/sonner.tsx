@@ -1,60 +1,45 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { visibleToasts } from "@/toasts"
-import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { OctagonXIcon } from "lucide-react"
+import { buttonVariants } from "./button"
 
 // Couch: one placement, top right at the page gutter, below the header's row (min-h-14), or in the
 // player below its top band (PlayerPage publishes --player-top). Two at most, both open: a remote can't hover.
-const offset = { left: "var(--gutter)", right: "var(--gutter)", top: "calc(var(--player-top, 3.5rem) + 1rem)" }
+const offset = { left: "var(--gutter)", right: "var(--gutter)", top: "calc(var(--player-top, var(--top-bar, 3.5rem)) + 1rem)" }
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ tvPresentation = false, ...props }: ToasterProps & { tvPresentation?: boolean }) => {
+  // Sonner pauses every timer on hover. A parked TV pointer must not hold notices over a film.
+  const ignoreHover: React.MouseEventHandler = event => { if (tvPresentation) event.stopPropagation() }
   return (
-    <Sonner
-      theme="dark"
-      className="toaster group"
-      position="top-right"
-      offset={offset}
-      mobileOffset={offset}
-      visibleToasts={visibleToasts}
-      expand
-      icons={{
-        success: (
-          <CircleCheckIcon className="size-4" />
-        ),
-        info: (
-          <InfoIcon className="size-4" />
-        ),
-        warning: (
-          <TriangleAlertIcon className="size-4" />
-        ),
-        error: (
-          <OctagonXIcon className="size-4" />
-        ),
-        loading: (
-          <Loader2Icon className="size-4 animate-spin" />
-        ),
-      }}
-      style={
-        {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
-          // In rem, so one line holds the same words as the type scales up to the TV.
-          "--width": "24rem",
-          fontFamily: "var(--font-sans)",
-        } as React.CSSProperties
-      }
-      toastOptions={{
-        classNames: {
-          // One line: the message truncates and the action stays in view.
-          toast: "cn-toast shadow-none! text-sm!",
-          content: "min-w-0",
-          title: "truncate",
-          actionButton: "h-8! text-sm! touch:min-h-11 touch:min-w-11 hover:opacity-80",
-        },
-      }}
-      {...props}
-    />
+    <div onMouseOverCapture={ignoreHover} onMouseMoveCapture={ignoreHover}>
+      <Sonner
+        theme="dark"
+        className="toaster group"
+        position="top-right"
+        offset={offset}
+        mobileOffset={offset}
+        visibleToasts={visibleToasts}
+        expand
+        icons={{ error: <OctagonXIcon className="size-5 text-destructive" /> }}
+        style={
+          {
+            "--width": "min(28rem, calc(100vw - 2 * var(--gutter)))",
+            fontFamily: "var(--font-sans)",
+          } as React.CSSProperties
+        }
+        toastOptions={{
+          unstyled: true,
+          classNames: {
+            // The same flat left rule as Alert; messages wrap and the verb keeps its target.
+            toast: "flex w-full items-center gap-3 border-l-2 border-foreground/40 bg-background p-4 text-sm text-foreground shadow-none data-[type=error]:border-destructive",
+            content: "min-w-0 flex-1",
+            title: "font-medium leading-snug wrap-anywhere",
+            actionButton: buttonVariants(),
+          },
+        }}
+        {...props}
+      />
+    </div>
   )
 }
 

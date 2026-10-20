@@ -676,11 +676,12 @@ test("Stop ends reception and keeps capture; Stop sharing ends the source everyw
     await until(() => !f.receiver.state.liveSources?.length && !sharedPlaybacks(f.receiver).length);
     assert.equal(lastCommand(f.receiver), "stop");
     // One activity identity reaches the receiver before its player closes. The actor identifies
-    // the publisher, which the shell uses to suppress its own activity toast.
+    // the publisher, which the client uses to suppress its own stopped-sharing toast.
     const messages = f.receiver.messages.slice(ending);
     const notices = messages.flatMap(message => message.type === "state" && message.state.activity?.text === "Publisher stopped sharing" ? [message.state.activity] : []);
     assert.equal(new Set(notices.map(notice => notice.id)).size, 1);
     assert.ok(notices.every(notice => notice.actor.deviceId === f.publisher.id));
+    assert.ok(notices.every(notice => notice.kind === "sharing-stopped"), "receivers distinguish ended capture from routine playback activity");
     const notice = messages.findIndex(message => message.type === "state" && message.state.activity?.text === "Publisher stopped sharing");
     const stop = messages.findIndex(message => message.type === "player" && message.command.type === "stop");
     assert.ok(notice >= 0 && stop > notice, "the notice arrives before Stop closes the receiver");

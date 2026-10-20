@@ -17,7 +17,7 @@ import { PlaybackClockContext } from "./playback-clock";
 import { SessionGateContext } from "./gate-context";
 import { announcePlay, deviceId, loadLocalDeviceName, saveLocalDeviceName, useLocalDeviceName } from "./device-id";
 import { apiSend } from "../api/client";
-import { dismiss, dismissUndo, queued, undoable } from "../toasts";
+import { dismissAll, dismissUndo, queued, undoable } from "../toasts";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -204,7 +204,7 @@ export function SessionGate({ children, upNext }: PropsWithChildren<{ upNext: (t
   const commandAttempt = useRef(0);
   currentCredentials.current = credentials;
 
-  useEffect(() => { dismissUndo(); dismiss("queued"); setRequestedChooser(null); return () => void dismissUndo(); }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  useEffect(() => { dismissAll(); setRequestedChooser(null); return dismissAll; }, [credentials?.origin, credentials?.token, credentials?.installationId]);
   // A request belongs to the playback it was made for; viewing another one retires it.
   useEffect(() => setRequestedChooser(request => request?.startsWith(`${state?.playback}:`) ? request : null), [state?.playback]);
 

@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription, Di
 import { useOptionalSessionGate } from "@/session/session-context";
 import { deviceName, offline } from "@/copy";
 import { SetupQr } from "./SetupQr";
-import { activity } from "@/toasts";
+import { notice } from "@/toasts";
 
 export function PairingDialog({ credentials, urls, connected, open, onOpenChange, openerRef }: { credentials: Pick<ConnectionInfo, "origin" | "token">; urls: string[]; connected: boolean; open: boolean; onOpenChange: (open: boolean) => void; openerRef?: RefObject<HTMLButtonElement | null> }) {
   const state = useOptionalSessionGate()?.state;
@@ -15,7 +15,7 @@ export function PairingDialog({ credentials, urls, connected, open, onOpenChange
     if (!open || !state?.devices) { before.current = null; return; }
     const paired = before.current && state.devices.find(device => !before.current!.ids.has(device.id));
     if (paired) {
-      activity(`${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " · admin" : ""}`);
+      notice(`${paired.name} paired${before.current!.admin === false && state.administratorClaimed ? " · admin" : ""}`);
       onOpenChange(false);
     }
     before.current = { ids: new Set(state.devices.map(device => device.id)), admin: state.administratorClaimed };

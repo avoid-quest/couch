@@ -186,6 +186,25 @@ and `{ cancel: "navigation" }` to check cancellation; `{ delayMs: 350 }` keeps
 the fast-arrival check. Navigation also checks that the old observer cannot focus
 Settings after its own unchanged 15-second cutoff.
 
+Toast lifecycle checks use the real Sonner instance from Vite. In a paired scratch
+TV tab, evaluate `tests/playback-feedback.browser.js` to expose its SessionGate
+reader, then import `/@fs/<checkout>/tests/toasts.browser.ts` and call
+`runToastRegression(window.couchPlaybackReview.gate, mediaUrl)` with a finite
+direct video URL. It checks expiry under a parked pointer, Queue → Play cleanup,
+incoming playback retiring Undo, Queue during playback, and remote Up/Back/OK on
+Stop's Undo. It changes the scratch queue.
+Run `runIdleQueueRegression(gate, mediaUrl)` from an empty idle session to check
+that the first Queue keeps its confirmation and Up next after a delayed snapshot.
+Use a second paired controller to
+verify that Play, Pause, Resume and Queue stay quiet on the TV, while ending a
+shared source notifies its receivers once and keeps its publisher quiet. The same
+module exports `runPlayingOnRegression(gate, mediaUrl, targetDeviceId, true)`
+for a controller with a second online shared output: it delays real snapshots to
+check that Playing on survives its own confirmation and then expires. Call it
+without the last argument for normal delivery. `runTapToHearRecoveryRegression()`
+exercises the real shell boundary's Try again flow while audio is blocked, then
+activates the recovered Tap to hear action.
+
 For Continue, stop two decoded finite videos before completion on every output
 (the first leads Home as its hero, the second sits in Continue's shelf) and keep
 the second shared output online. Build `tests/tv-continue.browser.ts` with the same browser

@@ -363,6 +363,7 @@ export function renderInto(parent: HTMLElement | null) {
 // "Tap to hear" (#644): whether this browser is waiting for a gesture before it plays sound.
 export function onBlocked(listener: (blocked: boolean) => void) {
   blockedListeners.add(listener);
+  listener(blocked || !!unlockSound);
   return () => { blockedListeners.delete(listener); };
 }
 export function hear() {

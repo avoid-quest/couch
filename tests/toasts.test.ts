@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { toast, type ToastT } from "sonner";
 import { ApiError } from "../src/client/api/client";
-import { activity, dismiss, failed, notice, playingOn, queued, undoable, waitingForTap } from "../src/client/toasts";
+import { dismiss, dismissAll, dismissPlaybackFeedback, failed, notice, playingOn, queued, undoable, waitingForTap } from "../src/client/toasts";
 
 // sonner defers a dismissal's notice to a frame; there is no Toaster here to hear it.
 globalThis.requestAnimationFrame ??= callback => setTimeout(callback, 0) as unknown as number;
@@ -18,10 +18,8 @@ const press = (id: string | number) => {
 
 test("each kind fixes its duration and one action, and a repeat replaces the one showing", () => {
   toast.dismiss();
-  const playing = playingOn("Kitchen");
-  expect(playingOn("Studio")).toBe(playing);
-  const phone = activity("Phone paused");
-  expect(activity("Phone resumed")).toBe(phone);
+  const playing = playingOn("Kitchen", "kitchen");
+  expect(playingOn("Studio", "studio")).toBe(playing);
   notice("Skipped 2 channels with a repeated tvg-id.");
   let up = 0;
   const queue = queued("Film", () => up++);
@@ -29,7 +27,6 @@ test("each kind fixes its duration and one action, and a repeat replaces the one
   waitingForTap(() => {});
   expect(shown().map(({ id: _, ...each }) => each)).toEqual([
     { title: "Playing on Studio", type: undefined, duration: 4_000, action: undefined },
-    { title: "Phone resumed", type: undefined, duration: 6_000, action: undefined },
     { title: "Skipped 2 channels with a repeated tvg-id.", type: undefined, duration: 6_000, action: undefined },
     { title: "Queued", type: undefined, duration: 4_000, action: "Up next" },
     { title: "Sound is waiting for a tap", type: undefined, duration: Infinity, action: "Tap to hear" },
@@ -37,7 +34,7 @@ test("each kind fixes its duration and one action, and a repeat replaces the one
   press(queue);
   expect(up).toBe(1);
   dismiss("tap-to-hear"); dismiss("queued");
-  expect(shown().map(each => each.title)).toEqual(["Playing on Studio", "Phone resumed", "Skipped 2 channels with a repeated tvg-id."]);
+  expect(shown().map(each => each.title)).toEqual(["Playing on Studio", "Skipped 2 channels with a repeated tvg-id."]);
 });
 
 // Sonner keeps a leaving toast mounted for its exit, then removes whatever its id shows by then.
@@ -66,12 +63,37 @@ test("once a kind's toast is leaving, its repeat takes a new id, so that exit ca
 test("a repeat behind two newer toasts takes a new id and shows, and its hidden toast goes", () => {
   toast.dismiss();
   const first = failed("Couldn't play Film.");
-  activity("Phone paused");
+  playingOn("Kitchen", "kitchen");
   notice("Skipped 2 channels with a repeated tvg-id.");
   const again = failed("Couldn't play Film again.");
   expect(again).not.toBe(first);
-  expect(shown().map(each => each.title)).toEqual(["Phone paused", "Skipped 2 channels with a repeated tvg-id.", "Couldn't play Film again."]);
+  expect(shown().map(each => each.title)).toEqual(["Playing on Kitchen", "Skipped 2 channels with a repeated tvg-id.", "Couldn't play Film again."]);
   toast.dismiss();
+});
+
+test("a playback change retires old actions, preserving errors and audio recovery", () => {
+  dismissAll();
+  queued("Film", () => {});
+  playingOn("Kitchen", "kitchen");
+  undoable("Stopped.", () => {});
+  failed("Couldn't save Film.");
+  waitingForTap(() => {});
+  dismissPlaybackFeedback();
+  expect(shown().map(each => each.title)).toEqual(["Couldn't save Film.", "Sound is waiting for a tap"]);
+  dismissAll();
+  expect(shown()).toEqual([]);
+  const again = queued("Next film", () => {});
+  expect(shown()).toEqual([{ id: again, title: "Queued Next film", type: undefined, duration: 4_000, action: "Up next" }]);
+  dismissAll();
+});
+
+test("a delayed snapshot preserves Playing on for its destination and switching away retires it", () => {
+  dismissAll();
+  playingOn("Kitchen", "kitchen");
+  dismissPlaybackFeedback("kitchen");
+  expect(shown().map(each => each.title)).toEqual(["Playing on Kitchen"]);
+  dismissPlaybackFeedback("studio");
+  expect(shown()).toEqual([]);
 });
 
 test("a failure shows Core's own sentence, else the Couch one, and logs what it hid", () => {
