@@ -249,6 +249,9 @@ can't hold, and Home already shows For later and Played as shelves, so the
 tabs stay. They sit in the section nav Saved shares with Settings, a rail on
 wide screens and a Select on phones, where the Select names the tab and its
 title is for screen readers: [Settings](settings.md#section-nav).
+Lists keeps Save as list visible beside that screen-reader title, and its empty
+state offers the same Discover action as the other tabs. A selected list keeps
+its own visible title and verbs. These reuse PageHeader, Button and SavedEmpty.
 
 Played (`?tab=played`) lists History, newest first, as divided MediaRows with
 their length bar ("Resume at …" once partly watched). Each row's one verb opens
@@ -335,7 +338,8 @@ and Up from its neighbour would pick it before the tab bar.
 ## BrowsePagination
 
 Collection and radio lists keep count and Filter in fixed
-slots. Remote or multiple-page collections show Previous, "Page N of M" and
+slots. Filter uses the shared Input's immediate Clock focus inversion, with dark
+text and placeholder on white, as the header's Search does. Remote or multiple-page collections show Previous, "Page N of M" and
 Next, disabled when they can't move. A complete local collection on one page
 omits the inert pager, including a single season's episodes and a short list
 of seasons; its count still identifies the content. The page Select's trigger is

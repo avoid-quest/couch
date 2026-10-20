@@ -105,7 +105,8 @@ body { min-width: 0; }
 
 /* Clock focus: the focused control inverts. It is the only focus treatment and reads from the sofa.
    Unlayered on purpose so it wins over component rings and hover backgrounds. */
-:is(button, a, [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
+:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="slider"]):focus-visible { outline: none; box-shadow: none; background: var(--foreground); color: var(--background); }
+[data-slot="input"]:focus-visible::placeholder { color: color-mix(in srgb, var(--background) 65%, transparent); }
 [data-slot="button"][data-variant="default"]:focus-visible, [data-sonner-toast] [data-button]:focus-visible,
 :is([role="slider"], [role="switch"], [role="checkbox"], [role="radio"]):focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 /* A TV fader that OK handed Up/Down to (navigation.ts). */
@@ -119,7 +120,7 @@ body { min-width: 0; }
 [data-media-tile]:focus-visible [data-tile-caption] { background: var(--foreground); color: var(--background); }
 /* Inversion (focus, a menu's highlight) arrives at once and fades only as it leaves: easing it in would pass through a
    grey nobody can read, which a held arrow would show at every step, and a remote would feel slow. */
-:is(button, a, [role="tab"], [role="option"], [role^="menuitem"]):is(:focus-visible, [data-highlighted]),
+:is(button, a, [data-slot="input"], [role="tab"], [role="option"], [role^="menuitem"]):is(:focus-visible, [data-highlighted]),
 :is(button, a, [role="option"]):focus-visible .text-muted-foreground,
 [data-media-tile]:focus-visible :is([data-tile-art], [data-tile-caption], [data-tile-caption] *), [data-media-tile]:focus-visible ~ * { transition-duration: 0s; }
 html { view-transition-name: none; }
