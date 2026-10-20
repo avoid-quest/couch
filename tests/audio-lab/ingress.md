@@ -113,18 +113,26 @@ Both handles expose `snapshot()` and `stop()`. Publishing uses actual
 `getUserMedia`, requests no echo cancellation/noise suppression/automatic gain,
 and feeds an AudioWorklet. The worklet emits fixed sample counters with at most
 two unacknowledged messages; a stalled main thread drops packets at this seam.
-The websocket is bounded by bytes. It stops rather than replaying a backlog.
+Permission/device selection completes before opening the authenticated source
+socket, so a long prompt does not consume its pre-start timeout. Subsequent
+connection/setup failures stop the acquired tracks.
+The websocket reserves the next packet against a two-packet byte budget,
+including any queued start control. It stops rather than replaying a backlog.
 Capture automatically ends after 130 seconds, on socket close or track stop.
 
 Eight clock probes choose the lowest round-trip sample. After the worklet starts,
 a fixed one-second acquisition samples `performance.now()` against
 `AudioContext.currentTime` every 5 ms, requiring at least 100 observations.
-Acquisition PCM is explicitly discarded before the test signal starts. The
+Acquisition PCM is explicitly discarded before the test signal starts. The final
+acquisition read records `firstQualifiedSample`; queued or partial packets
+starting before that boundary are also discarded, preserving the original grid. The
 offset freezes at the observed envelope's midpoint; its required uncertainty
 includes half the observed range, half RTT, bracket duration and one observed
 render quantum. An envelope requiring more than 10 ms is `unsupported`.
-Subsequent residuals outside the frozen bound stop capture rather than retiming
-the source. `clockAcquisition` and the first 16 observed/published sample starts
+Subsequent phase/read-bracket residuals must stay inside half the acquired range;
+the RTT and render-quantum allowances remain reserved. A one-picosecond comparison
+tolerance handles floating-point roundoff only. Violations stop capture rather
+than retiming the source or widening uncertainty. `clockAcquisition` and the first 16 observed/published sample starts
 are retained. Missing render input discards affected packets and resumes on the
 original packet grid, with discontinuity/missing/discarded counters.
 
@@ -141,7 +149,12 @@ queue, assigning every frame `originUs + sampleOffset / 48000 + leadMs`. It drop
 expired input, records skipped samples, rejects repeated/out-of-order counters,
 and clears both receivers on source stop/disconnect/revoke. Receiver socket
 budgets stay far below the SDK's 512 KiB delayed-send branch; an excluded receiver
-stays excluded for this finite experiment. The remaining receiver's clock and
+stays excluded for this finite experiment. Prospective receiver budgets count
+the pinned SDK's 9-byte type/timestamp header, 16-byte AEAD tag and 4-byte
+unmasked WebSocket header along with PCM. A 20/40 ms no-progress watchdog samples
+the queue before and after writes and between packets; continuously nonempty
+queues remain eligible while draining within the byte budget. This watchdog is
+not an oldest-packet age measurement. The remaining receiver's clock and
 encoder never restart. Kernel TCP buffers and the SDK's internal browser queues
 are not equivalent to `bufferedAmount`; only browser fault/output measurements
 can prove that late media stays silent across those stages.
@@ -209,3 +222,25 @@ generations, coalesced plaintext handshake refusal without PCM disclosure,
 the deadline through encrypted identification, identity substitution refusal,
 and a labelled deterministic socket-pressure model that leaves the
 healthy receiver's timestamp unchanged. They cannot produce a latency/skew pass.
+
+
+Renderer coverage uses `totalDuration - underrunDuration` against the frozen
+`AudioContext.currentTime` boundaries. In pinned Chromium **152.0.7977.130**:
+
+- [`RealtimeAudioDestinationHandler::Render`](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc#L255)
+  passes `number_of_frames` to `HandlePreRenderTasks` and advances the context
+  frame counter by that same count at line 294.
+- [`AudioDestinationHandler::CurrentTime`](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/webaudio/audio_destination_handler.h#L48)
+  divides the context frame counter by sample rate.
+- [`AudioContext::HandlePreRenderTasks`](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/webaudio/audio_context.cc#L1578)
+  supplies the rendered-frame count and separate glitch information to the
+  [stats accumulator](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/platform/audio/audio_frame_stats_accumulator.cc#L14).
+- [`AudioPlaybackStats::totalDuration`](https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/webaudio/audio_playback_stats.cc#L28)
+  adds observed-frame duration and glitch duration. Glitches do not advance the
+  context frame counter, so using this total directly would compare different
+  clocks and could mistake lagging counters for full coverage.
+
+The coverage regressions include fresh underruns at exact rendered boundaries,
+prior underruns with stale transfers, and a fixed-boundary final drain. Unknown
+coverage remains inconclusive; renderer counters alone do not establish PCM
+integrity or hardware presentation.

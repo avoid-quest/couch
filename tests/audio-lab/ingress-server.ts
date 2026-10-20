@@ -31,6 +31,9 @@ export async function startIngressLab(options: IngressOptions) {
   const origins = new Set(options.allowedOrigins ?? (options.allowedOrigin ? [options.allowedOrigin] : []));
   assert(origins.size && [...origins].every(origin => new URL(origin).origin === origin), "Explicit browser origins required");
   const frameSamples = packetMs * 48, frameBytes = frameSamples * 4;
+  // Pinned SDK 0.6.2: type/timestamp (9), AEAD tag (16); unmasked ws header
+  // (4) for these 10/20 ms packets, which never need Noise fragmentation.
+  const receiverPacketBytes = frameBytes + 9 + 16 + 4;
   const core = new SendspinCore();
   core.configureServer({ name: "Couch test-only PCM ingress" });
   // A distinct ephemeral *lab* server identity; the paired receiver keys remain
@@ -39,7 +42,7 @@ export async function startIngressLab(options: IngressOptions) {
   const sockets = new Set<WebSocket>();
   const transports = new WeakMap<WebSocket, { localAddress: string | null; localPort: number | null; remoteAddress: string | null; remotePort: number | null }>();
   const receiverTimeouts = new Map<WebSocket, ReturnType<typeof setTimeout>>();
-  const receivers = new Map<string, { socket: WebSocket; session: SendspinSession; blockedSince?: number }>();
+  const receivers = new Map<string, { socket: WebSocket; session: SendspinSession; blockedSince?: number; observedBufferedBytes: number }>();
   let generation = 0, publisher: { socket: WebSocket; token: string; generation: number } | undefined;
   let timeline: { originUs: number; firstSample: number; nextSample: number; uncertaintyUs: number } | undefined;
   let lastFrameAt = 0;
@@ -89,7 +92,7 @@ export async function startIngressLab(options: IngressOptions) {
       if (socket.readyState !== WebSocket.OPEN || !session.isEncrypted() || session.getClientId() !== id || !admitted(id) || receivers.has(id) || metrics.excluded[id]) return void socket.terminate();
       const pcm = session.getPlayerSupportedFormats().some(format => format.codec === AudioCodec.PCM && format.sample_rate === 48_000 && format.channels === 2 && format.bit_depth === 16);
       if (!pcm) return void socket.terminate();
-      receivers.set(id, { socket, session });
+      receivers.set(id, { socket, session, observedBufferedBytes: 0 });
       clearTimeout(receiverTimeouts.get(socket)); receiverTimeouts.delete(socket);
       if (timeline) begin(session);
     },
@@ -101,7 +104,9 @@ export async function startIngressLab(options: IngressOptions) {
   server.on("request", (_request, response) => response.writeHead(404).end("Test-only PCM ingress"));
   const ws = new WebSocketServer({ noServer: true, maxPayload: frameBytes + 1024, perMessageDeflate: false });
   server.on("upgrade", (request, socket, head) => {
-    const path = new URL(request.url!, "http://lab").pathname;
+    let path: string;
+    try { path = new URL(request.url!, "http://lab").pathname; }
+    catch { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); return; }
     if (!origins.has(request.headers.origin ?? "") || !["/sendspin", "/__lab/pcm"].includes(path) || sockets.size >= 6) {
       socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return;
     }
@@ -183,13 +188,19 @@ export async function startIngressLab(options: IngressOptions) {
           // shared timeline. Excluded receivers cannot push the others later.
           if (timestampUs <= now + timeline.uncertaintyUs) { metrics.lateFrames++; return; }
           metrics.acceptedFrames++;
-          for (const [id, { session, socket }] of receivers) {
+          for (const [id, current] of receivers) {
+            const { session, socket } = current;
             metrics.maxSocketBytes = Math.max(metrics.maxSocketBytes, socket.bufferedAmount);
             if (!admitted(id)) { exclude(id, "receiver revoked"); continue; }
             // Stay far below the SDK's 512 KiB wait-and-send branch. Closing
             // makes any already queued generation ineligible for further sends.
-            if (socket.bufferedAmount > frameBytes * 2) { exclude(id, "receiver byte budget"); continue; }
+            if (socket.bufferedAmount + receiverPacketBytes > receiverPacketBytes * 2) { exclude(id, "receiver byte budget"); continue; }
+            if (!checkReceiverProgress(id, current, now)) continue;
             session.sendPcmAudioFrame({ data: frame.subarray(16), timestampUs });
+            // Capture the post-write baseline so subsequent draining is visible
+            // even if a new packet arrives before the queue reaches zero.
+            checkReceiverProgress(id, current, now);
+            metrics.maxSocketBytes = Math.max(metrics.maxSocketBytes, socket.bufferedAmount);
             metrics.sentFrames[id] = (metrics.sentFrames[id] ?? 0) + 1;
             metrics.sentPcmBytes[id] = (metrics.sentPcmBytes[id] ?? 0) + frameBytes;
           }
@@ -197,17 +208,26 @@ export async function startIngressLab(options: IngressOptions) {
       });
     });
   });
+  function checkReceiverProgress(id: string, current: NonNullable<ReturnType<typeof receivers.get>>, now: number) {
+    const bytes = current.socket.bufferedAmount;
+    if (!bytes) current.blockedSince = undefined;
+    else if (bytes < current.observedBufferedBytes) current.blockedSince = now;
+    else current.blockedSince ??= now;
+    current.observedBufferedBytes = bytes;
+    // This is a no-progress timeout, not an inferred age of the oldest packet.
+    // The separate prospective byte budget bounds a continuously draining queue.
+    if (current.blockedSince !== undefined && now - current.blockedSince >= packetMs * 2000) {
+      exclude(id, "receiver queue stalled"); return false;
+    }
+    return true;
+  }
   const watchdog = setInterval(() => {
     const now = serverNowUs();
     if (publisher && !authorized(publisher.token)) stop("publisher revoked");
     if (publisher && now - lastFrameAt > (timeline ? 250_000 : 10_000_000)) stop("source timeout");
     for (const [id, current] of receivers) {
       if (!admitted(id)) { exclude(id, "receiver revoked"); continue; }
-      if (!current.socket.bufferedAmount) current.blockedSince = undefined;
-      else {
-        current.blockedSince ??= now;
-        if (now - current.blockedSince >= packetMs * 2000) exclude(id, "receiver queue age");
-      }
+      checkReceiverProgress(id, current, now);
     }
   }, 10);
   try { await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(options.port ?? 0, options.host ?? "127.0.0.1", resolve); }); }

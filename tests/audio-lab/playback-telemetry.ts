@@ -1,6 +1,6 @@
 /** Chromium's counters describe renderer glitches, not all scheduler/output loss.
  * Durations are seconds: Chromium 152 audio_playback_stats.cc uses InSecondsF().
- * https://github.com/chromium/chromium/blob/152.0.7968.0/third_party/blink/renderer/modules/webaudio/audio_playback_stats.cc */
+ * https://github.com/chromium/chromium/blob/152.0.7977.130/third_party/blink/renderer/modules/webaudio/audio_playback_stats.cc */
 type PlaybackCounters = {
   underrunEvents: number; underrunDuration: number; totalDuration: number;
   averageLatency: number; minimumLatency: number; maximumLatency: number;
@@ -79,7 +79,10 @@ export function assessPlaybackCoverage(before: PlaybackObservation, after: Playb
   }
   result.observedDurationMs = duration;
   // Only rendered time shares currentTime's timeline: totalDuration includes
-  // underruns. Transfers may lag; a sufficient delta can still miss the tail.
+  // underruns. RealtimeAudioDestinationHandler::Render advances currentFrame
+  // by the same number_of_frames passed to HandlePreRenderTasks/stats.Update;
+  // neither adds glitch duration. See ingress.md for the pinned source chain.
+  // Transfers may lag; a sufficient delta can still miss the tail.
   if (renderedBefore > start || renderedAfter < end) {
     result.reasons.push("Renderer counters do not cover the complete measurement interval"); return result;
   }

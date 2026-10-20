@@ -143,3 +143,15 @@ test.each([
   expect(result.underrunEvents).toBeNull();
   expect(result.underrunDurationMs).toBeNull();
 });
+
+
+test("new underruns remain measurable at exact rendered-context boundaries", () => {
+  // The pinned render callback advances both currentFrame and observed_frames
+  // by rendered frames, while glitch duration accumulates separately.
+  const before = { ...observation(10, 2, 2), contextTimeSeconds: 8 };
+  const after = { ...observation(18.5, 3, 2.5), contextTimeSeconds: 16 };
+  expect(assessPlaybackCoverage(before, after, { startContextTimeSeconds: 8, endContextTimeSeconds: 16 })).toEqual({
+    status: "measured", reasons: [], requiredDurationMs: 8000, observedDurationMs: 8000,
+    underrunEvents: 1, underrunDurationMs: 500,
+  });
+});

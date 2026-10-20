@@ -58,7 +58,7 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
   const token = options.token ?? localStorage.getItem("couch.remote-token");
   if (!token || ![10, 20].includes(options.packetMs)) throw new Error("Paired publisher token and 10/20 ms packets required");
   const url = new URL("/__lab/pcm", options.origin); url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url);
+  let socket: WebSocket;
   let context: AudioContext | undefined, stream: MediaStream | undefined, node: AudioWorkletNode | undefined;
   let stopped = false, durationTimer: ReturnType<typeof setTimeout> | undefined;
   let clockTimer: ReturnType<typeof setInterval> | undefined;
@@ -68,7 +68,7 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
     inputPipelineUncertaintyUs: null, // No input-hardware timestamp API. Common-graph PCM measures this path.
     clockRttUs: 0, mappingUncertaintyUs: 0, sourceOriginUs: 0, firstSample: 0, sourceClockResidualMaxUs: 0,
     clockAcquisition: { status: "waiting", durationMs: 1000, intervalMs: 5, minimumSamples: 100, samples: 0,
-      measuredDurationMs: 0, observedRangeUs: 0, requiredUncertaintyUs: 0 },
+      measuredDurationMs: 0, observedRangeUs: 0, requiredUncertaintyUs: 0, firstQualifiedSample: null as number | null },
     discardedDuringClockAcquisition: 0, publishedSampleStarts: [] as number[],
     sampleStarts: [] as number[], sourceDiscontinuities: 0, missingInputSamples: 0,
     discardedAtDiscontinuitySamples: 0, emptyInputBlocks: 0, graphQuantumFrames: 0,
@@ -78,14 +78,10 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
     clearTimeout(durationTimer); clearInterval(clockTimer);
     node?.port.postMessage("stop"); node?.disconnect();
     stream?.getTracks().forEach(track => track.stop());
-    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
-    socket.close();
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "stop" }));
+    socket?.close();
     await context?.close();
   }
-  socket.addEventListener("close", event => {
-    if (!stopped) stats.error = `Source socket closed: ${event.code} ${event.reason}`;
-    void stop();
-  });
   const waitMessage = (type: string) => new Promise<any>((resolve, reject) => {
     const timer = setTimeout(() => done(new Error(`Ingress ${type} timeout`)), 5000);
     function done(error?: Error, value?: unknown) {
@@ -97,6 +93,18 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
     socket.addEventListener("message", onMessage); socket.addEventListener("close", onClose);
   });
   try {
+    // Permission/device selection may take arbitrarily long. Open the bounded
+    // source session only after capture is granted; stop() owns it from here.
+    stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: {
+      ...(options.deviceId ? { deviceId: { exact: options.deviceId } } : {}),
+      sampleRate: 48_000, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+      latency: 0,
+    } as MediaTrackConstraints });
+    socket = new WebSocket(url);
+    socket.addEventListener("close", event => {
+      if (!stopped) stats.error = `Source socket closed: ${event.code} ${event.reason}`;
+      void stop();
+    });
     const ready = waitMessage("ready");
     socket.addEventListener("open", () => socket.send(JSON.stringify({ type: "auth", token })), { once: true });
     const hello = await ready;
@@ -110,12 +118,6 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
       if (rttUs >= 0 && rttUs < best.rttUs) best = { rttUs, offsetUs: (sync.receivedUs - sentUs + sync.sentServerUs - receivedUs) / 2 };
     }
     stats.clockRttUs = best.rttUs;
-    stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: {
-      ...(options.deviceId ? { deviceId: { exact: options.deviceId } } : {}),
-      sampleRate: 48_000, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false,
-      latency: 0,
-    } as MediaTrackConstraints });
-    if (stopped) { stream.getTracks().forEach(track => track.stop()); throw new Error("Publisher closed while requesting capture"); }
     context = new AudioContext({ sampleRate: 48_000, latencyHint: "interactive" });
     await context.resume();
     if (context.sampleRate !== 48_000) throw new Error("Experiment requires 48 kHz AudioContext");
@@ -126,10 +128,10 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
     let acquisitionAtUs = 0, minOffsetUs = Infinity, maxOffsetUs = -Infinity, quantumUs = 0;
     function readClock() {
       const before = performance.now() * 1000, audioTime = context!.currentTime, after = performance.now() * 1000;
-      return { before, after, offsetUs: (before + after) / 2 + best.offsetUs - audioTime * 1e6 };
+      return { before, after, audioTime, offsetUs: (before + after) / 2 + best.offsetUs - audioTime * 1e6 };
     }
     function acquireClock() {
-      const { before, after, offsetUs } = readClock(), acquisition = stats.clockAcquisition;
+      const { before, after, audioTime, offsetUs } = readClock(), acquisition = stats.clockAcquisition;
       minOffsetUs = Math.min(minOffsetUs, offsetUs - (after - before) / 2);
       maxOffsetUs = Math.max(maxOffsetUs, offsetUs + (after - before) / 2);
       acquisition.samples++; acquisition.measuredDurationMs = (after - acquisitionAtUs) / 1000;
@@ -149,6 +151,7 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
       audioToServerUs = (minOffsetUs + maxOffsetUs) / 2;
       stats.mappingUncertaintyUs = acquisition.requiredUncertaintyUs;
       stats.sourceClockResidualMaxUs = acquisition.observedRangeUs / 2;
+      acquisition.firstQualifiedSample = Math.ceil(audioTime * 48_000);
       acquisition.status = "qualified";
     }
     node.port.onmessage = ({ data }: MessageEvent<{ buffer: ArrayBuffer; first: number; dropped: number;
@@ -171,15 +174,16 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
         }
         return;
       }
-      stats.maxSocketBytes = Math.max(stats.maxSocketBytes, socket.bufferedAmount);
-      // At most two packets may wait in either JS handoff. Never preserve a
-      // backlog to replay when the main thread or source link catches up.
-      if (socket.bufferedAmount > data.buffer.byteLength * 2) {
-        stats.droppedAtSocket++; stats.error = "Publisher socket byte budget"; void stop(); return;
+      // A queued/partial worklet packet can arrive after qualification while
+      // still containing acquisition samples. Keep its original grid intact.
+      if (data.first < stats.clockAcquisition.firstQualifiedSample!) {
+        stats.discardedDuringClockAcquisition++; return;
       }
       const clock = readClock(), residual = Math.abs(clock.offsetUs - audioToServerUs) + (clock.after - clock.before) / 2;
       stats.sourceClockResidualMaxUs = Math.max(stats.sourceClockResidualMaxUs, residual);
-      if (residual > stats.mappingUncertaintyUs || data.quantumFrames / 48_000 * 1e6 > quantumUs) {
+      // RTT and render-quantum allowances remain reserved, not drift slack.
+      // One picosecond accommodates floating-point roundoff only.
+      if (residual > stats.clockAcquisition.observedRangeUs / 2 + 1e-6 || data.quantumFrames / 48_000 * 1e6 > quantumUs) {
         stats.clockAcquisition.status = "invalidated";
         stats.error = "Source render clock exceeded the acquired mapping bound"; void stop(); return;
       }
@@ -188,9 +192,16 @@ async function publish(options: { origin: string; token?: string; packetMs: 10 |
         stats.sourceOriginUs = data.first / 48_000 * 1e6 + audioToServerUs;
         socket.send(JSON.stringify({ type: "start", firstSample: data.first, originUs: stats.sourceOriginUs, uncertaintyUs: stats.mappingUncertaintyUs }));
       }
+      stats.maxSocketBytes = Math.max(stats.maxSocketBytes, socket.bufferedAmount);
+      // At most two packets may wait in either JS handoff. Never preserve a
+      // backlog to replay when the main thread or source link catches up.
+      if (socket.bufferedAmount + data.buffer.byteLength > data.buffer.byteLength * 2) {
+        stats.droppedAtSocket++; stats.error = "Publisher socket byte budget"; void stop(); return;
+      }
       const view = new DataView(data.buffer);
       view.setUint32(0, 0x314d4350, true); view.setUint32(4, hello.generation, true); view.setFloat64(8, data.first, true);
       socket.send(data.buffer); stats.sentFrames++;
+      stats.maxSocketBytes = Math.max(stats.maxSocketBytes, socket.bufferedAmount);
       if (stats.publishedSampleStarts.length < 16) stats.publishedSampleStarts.push(data.first);
     };
     context.createMediaStreamSource(stream).connect(node);

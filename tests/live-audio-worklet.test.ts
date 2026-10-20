@@ -86,20 +86,23 @@ for (const packetMs of [10, 20] as const) test(`${packetMs} ms capture drops bou
   assertSamples(f.packets, packetMs);
 });
 
-async function publisherFixture(t: TestContext) {
+async function publisherFixture(t: TestContext, options: { permissionDelayMs?: number; connectionFailure?: boolean } = {}) {
   let nowUs = 0, context: any, node: any;
   let interval: (() => void) | undefined;
   const sent: (string | ArrayBuffer)[] = [];
-  const track = { stop() {}, addEventListener() {}, getSettings: () => ({ sampleRate: 44100 }) };
+  const sockets: Socket[] = [];
+  let trackStops = 0;
+  const track = { stop() { trackStops++; }, addEventListener() {}, getSettings: () => ({ sampleRate: 44100 }) };
   class Socket extends EventTarget {
     static OPEN = 1;
     readyState = Socket.OPEN;
     bufferedAmount = 0;
-    constructor() { super(); queueMicrotask(() => this.dispatchEvent(new Event("open"))); }
+    constructor() { super(); sockets.push(this); queueMicrotask(() => this.dispatchEvent(new Event("open"))); }
     send(data: string | ArrayBuffer) {
       sent.push(data);
       if (typeof data !== "string") return;
       const message = JSON.parse(data);
+      if (message.type === "auth" && options.connectionFailure) { queueMicrotask(() => this.close()); return; }
       const reply = message.type === "auth" ? { type: "ready", packetMs: 10, generation: 7 }
         : message.type === "sync" ? { type: "sync", receivedUs: message.sentUs + 1_000_000, sentServerUs: message.sentUs + 1_000_000 } : null;
       if (reply) queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(reply) })));
@@ -111,7 +114,14 @@ async function publisherFixture(t: TestContext) {
     setInterval: (callback: () => void) => { interval = callback; return 1; },
     clearInterval: () => { interval = undefined; },
     performance: { now: () => nowUs / 1000 },
-    navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track], getAudioTracks: () => [track] }) } },
+    navigator: { mediaDevices: { getUserMedia: async () => {
+      if (options.permissionDelayMs) {
+        // A virtual permission wait longer than the server's pre-start timeout.
+        nowUs += options.permissionDelayMs * 1000;
+        assert.equal(sockets.length, 0, "Permission must precede opening the authenticated connection");
+      }
+      return { getTracks: () => [track], getAudioTracks: () => [track] };
+    } } },
     AudioContext: class {
       currentTime = 0; sampleRate = 48_000; destination = {}; audioWorklet = { addModule: async () => {} };
       constructor() { context = this; }
@@ -124,7 +134,9 @@ async function publisherFixture(t: TestContext) {
     },
   };
   runInNewContext(stripTypeScriptTypes(browserSource.replace(/^import .*;\n/gm, "")), scope);
-  const publisher = await scope.window.__ingressLab.publish({ origin: "http://lab", token: "fixture", packetMs: 10 });
+  if (options.connectionFailure) t.after(() => assert.equal(trackStops, 1, "Release capture after connection failure"));
+  const publishing = scope.window.__ingressLab.publish({ origin: "http://lab", token: "fixture", packetMs: 10 });
+  const publisher = await publishing;
   t.after(() => publisher.stop());
   const f = capture(10);
   for (let frame = 0; frame < 512; frame += 128) f.block(frame);
@@ -132,6 +144,8 @@ async function publisherFixture(t: TestContext) {
   node.port.onmessage({ data: f.packets[0] });
   return {
     publisher,
+    socket: sockets[0]!,
+    trackStops: () => trackStops,
     controls: () => sent.filter((message): message is string => typeof message === "string").map(message => JSON.parse(message)),
     audio: () => sent.filter((message): message is ArrayBuffer => typeof message !== "string"),
     tick(elapsedMs: number, phaseUs = 100_000) {
@@ -147,26 +161,26 @@ test("publisher measures a fixed acquisition window before sending any PCM, then
   for (let elapsed = 10; elapsed <= 1000; elapsed += 10) f.tick(elapsed, elapsed % 20 ? 99_500 : 100_500);
   assert.equal(f.audio().length, 0, "Acquisition packets must never be replayed");
   assert.equal(f.publisher.snapshot().clockAcquisition.status, "qualified");
-  f.packet(48_000);
+  f.packet(49_440);
   const start = f.controls().find(message => message.type === "start");
-  assert.equal(start.originUs, 2_100_000);
-  assert.equal(start.firstSample, 48_000);
+  assert.equal(start.originUs, 2_130_000);
+  assert.equal(start.firstSample, 49_440);
   assert(Math.abs(start.uncertaintyUs - (500 + 128 / 48_000 * 1e6)) < 1e-6);
-  for (let index = 1; index < 18; index++) { f.tick(1000 + index * 10); f.packet(48_000 + index * 480); }
+  for (let index = 1; index < 18; index++) { f.tick(1000 + index * 10); f.packet(49_440 + index * 480); }
   const snapshot = f.publisher.snapshot();
-  assert.equal(snapshot.sourceOriginUs, 2_100_000);
+  assert.equal(snapshot.sourceOriginUs, 2_130_000);
   assert.equal(f.controls().filter(message => message.type === "start").length, 1);
   assert.equal(snapshot.publishedSampleStarts.length, 16);
   assert.equal(snapshot.sampleStarts.length, 16);
   assert.equal(f.audio().length, 18);
-  assert.deepEqual(f.audio().map(buffer => new DataView(buffer).getFloat64(8, true)), Array.from({ length: 18 }, (_, index) => 48_000 + index * 480));
+  assert.deepEqual(f.audio().map(buffer => new DataView(buffer).getFloat64(8, true)), Array.from({ length: 18 }, (_, index) => 49_440 + index * 480));
   assert.equal(snapshot.inputPipelineUncertaintyUs, null);
 });
 
 test("render clock bursts exceeding the 10 ms budget fail acquisition without starting the source", async t => {
   const f = await publisherFixture(t);
   for (let elapsed = 10; elapsed <= 1000; elapsed += 10) f.tick(elapsed, elapsed % 20 ? 100_000 : 124_000);
-  f.packet(48_000);
+  f.packet(49_440);
   const snapshot = f.publisher.snapshot();
   assert.equal(snapshot.clockAcquisition.status, "unsupported");
   assert(Math.abs(snapshot.clockAcquisition.observedRangeUs - 24_000) < 1e-6);
@@ -180,9 +194,9 @@ test("render clock bursts exceeding the 10 ms budget fail acquisition without st
 test("a clock phase outside the acquired bound stops publication without retiming or widening uncertainty", async t => {
   const f = await publisherFixture(t);
   for (let elapsed = 10; elapsed <= 1000; elapsed += 10) f.tick(elapsed);
-  f.packet(48_000);
+  f.packet(49_440);
   const before = f.publisher.snapshot();
-  f.tick(1010, 116_000); f.packet(48_480);
+  f.tick(1010, 116_000); f.packet(49_920);
   const after = f.publisher.snapshot();
   assert.equal(f.audio().length, 1);
   assert.equal(after.sourceOriginUs, before.sourceOriginUs);
@@ -197,4 +211,55 @@ test("sparse clock acquisition cannot claim a measured bound", async t => {
   assert.equal(f.publisher.snapshot().clockAcquisition.status, "unsupported");
   assert.match(f.publisher.snapshot().error, /samples/);
   assert.equal(f.audio().length, 0);
+});
+
+
+test("clock drift cannot spend the reserved RTT and render-quantum uncertainty", async t => {
+  const f = await publisherFixture(t);
+  for (let elapsed = 10; elapsed <= 1000; elapsed += 10) f.tick(elapsed, elapsed % 20 ? 99_500 : 100_500);
+  f.packet(49_440);
+  const before = f.publisher.snapshot();
+  f.tick(1010, 101_000); f.packet(49_920);
+  assert.equal(f.audio().length, 1);
+  assert.equal(f.publisher.snapshot().clockAcquisition.status, "invalidated");
+  assert.equal(f.publisher.snapshot().mappingUncertaintyUs, before.mappingUncertaintyUs);
+});
+
+test("publisher byte budget includes the next packet and permits exactly two", async t => {
+  const f = await publisherFixture(t);
+  for (let elapsed = 10; elapsed <= 1000; elapsed += 10) f.tick(elapsed);
+  f.packet(49_440);
+  f.socket.bufferedAmount = 1936;
+  f.packet(49_920);
+  assert.equal(f.audio().length, 2);
+  f.socket.bufferedAmount = 1937;
+  f.packet(50_400);
+  assert.equal(f.audio().length, 2);
+  assert.equal(f.publisher.snapshot().droppedAtSocket, 1);
+  assert.match(f.publisher.snapshot().error, /byte budget/);
+});
+
+test("packets overlapping clock acquisition are discarded without shifting the original grid", async t => {
+  const f = await publisherFixture(t);
+  for (let elapsed = 10; elapsed <= 1000; elapsed += 10) f.tick(elapsed);
+  // Qualification is at context frame 48,960, midway through this grid cell.
+  f.packet(48_800);
+  assert.equal(f.audio().length, 0);
+  assert(!f.controls().some(message => message.type === "start"));
+  f.packet(49_280);
+  assert.equal(f.audio().length, 1);
+  assert.equal(f.controls().find(message => message.type === "start").firstSample, 49_280);
+  assert.equal(f.publisher.snapshot().discardedDuringClockAcquisition, 2);
+});
+
+test("a permission prompt longer than ten seconds does not occupy a source session", async t => {
+  const f = await publisherFixture(t, { permissionDelayMs: 15_000 });
+  assert.equal(f.controls().filter(message => message.type === "auth").length, 1);
+  await f.publisher.stop();
+  assert.equal(f.trackStops(), 1);
+});
+
+
+test("capture is released when admission fails after permission is granted", async t => {
+  await assert.rejects(publisherFixture(t, { connectionFailure: true }), /closed/);
 });

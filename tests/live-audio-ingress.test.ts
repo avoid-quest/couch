@@ -338,15 +338,7 @@ test("replayed counters and stale publication generations cannot inject audio", 
 });
 
 test("bounded receiver socket pressure excludes only that receiver and preserves the healthy deadline", { timeout: 6000 }, async t => {
-  const serverSockets: WebSocket[] = [];
-  const upgrade = WebSocketServer.prototype.handleUpgrade;
-  t.mock.method(WebSocketServer.prototype, "handleUpgrade", function(this: WebSocketServer, ...args: Parameters<typeof upgrade>) {
-    const [request, socket, head, callback] = args;
-    return upgrade.call(this, request, socket, head, (client, req) => {
-      if (request.url === "/sendspin") serverSockets.push(client);
-      callback(client, req);
-    });
-  });
+  const serverSockets = observeServerSockets(t);
   const f = await fixture(t), receivers = await Promise.all(f.keys.map(key => f.receiver(key)));
   const publisher = await f.publisher(), anchor = f.start(publisher.ws); publisher.ws.send(f.frame(publisher.generation));
   await until(() => receivers.every(receiver => receiver.frames.length === 1));
@@ -361,4 +353,76 @@ test("bounded receiver socket pressure excludes only that receiver and preserves
   assert.equal(f.lab.snapshot().timeline!.originUs, anchor);
   assert.equal(receivers[0]!.frames.length, 1);
   assert.equal(receivers[1]!.frames[1]!.timestamp, Math.round(anchor + currentSample / 48_000 * 1e6 + 40_000));
+});
+
+function observeServerSockets(t: TestContext) {
+  const serverSockets: WebSocket[] = [];
+  const upgrade = WebSocketServer.prototype.handleUpgrade;
+  t.mock.method(WebSocketServer.prototype, "handleUpgrade", function(this: WebSocketServer, ...args: Parameters<typeof upgrade>) {
+    const [request, socket, head, callback] = args;
+    return upgrade.call(this, request, socket, head, (client, req) => {
+      if (request.url === "/sendspin") serverSockets.push(client);
+      callback(client, req);
+    });
+  });
+  return serverSockets;
+}
+
+for (const packetMs of [10, 20] as const) test(`${packetMs} ms receiver budget reserves the encrypted frame before sending`, { timeout: 6000 }, async t => {
+  const sockets = observeServerSockets(t);
+  const f = await fixture(t, packetMs), receivers = await Promise.all(f.keys.map(key => f.receiver(key)));
+  const publisher = await f.publisher(), anchor = f.start(publisher.ws);
+  publisher.ws.send(f.frame(publisher.generation));
+  await until(() => receivers.every(receiver => receiver.frames.length === 1));
+  // SDK 0.6.2: 9-byte timestamp/type header, 16-byte AEAD tag, 4-byte ws header.
+  const wireBytes = packetMs * 48 * 4 + 9 + 16 + 4;
+  let buffered = wireBytes;
+  Object.defineProperty(sockets[0]!, "bufferedAmount", { get: () => buffered, configurable: true });
+  await sleep(packetMs);
+  let sample = Math.floor((serverNowUs() - anchor) / (packetMs * 1000)) * packetMs * 48;
+  publisher.ws.send(f.frame(publisher.generation, sample));
+  await until(() => receivers.every(receiver => receiver.frames.length === 2));
+  buffered = 0; // Drain between independent budget-boundary checks.
+  await sleep(packetMs);
+  buffered = wireBytes + 1;
+  sample = Math.floor((serverNowUs() - anchor) / (packetMs * 1000)) * packetMs * 48;
+  publisher.ws.send(f.frame(publisher.generation, sample));
+  await until(() => receivers[1]!.frames.length === 3);
+  assert.equal(receivers[0]!.frames.length, 2);
+  assert.equal(f.lab.snapshot().metrics.excluded[f.keys[0]!.peerId], "receiver byte budget");
+});
+
+test("a continuously occupied receiver queue that drains keeps the original timeline", { timeout: 6000 }, async t => {
+  const sockets = observeServerSockets(t);
+  const f = await fixture(t), receivers = await Promise.all(f.keys.map(key => f.receiver(key)));
+  const publisher = await f.publisher(), anchor = f.start(publisher.ws);
+  publisher.ws.send(f.frame(publisher.generation));
+  await until(() => receivers.every(receiver => receiver.frames.length === 1));
+  let buffered = 50;
+  const socket = sockets[0]!, send = socket.send;
+  Object.defineProperty(socket, "bufferedAmount", { get: () => buffered, configurable: true });
+  t.mock.method(socket, "send", function(this: WebSocket, ...args: Parameters<WebSocket["send"]>) {
+    if (Buffer.isBuffer(args[0])) buffered += args[0].length + 4;
+    return send.apply(this, args);
+  });
+  for (let index = 0; index < 8; index++) {
+    await sleep(10);
+    buffered = 50; // Previous write drains, but zero is never observed.
+    const sample = Math.floor((serverNowUs() - anchor) / 10_000) * 480;
+    publisher.ws.send(f.frame(publisher.generation, sample));
+    await until(() => receivers[1]!.frames.length === index + 2);
+  }
+  assert.equal(f.lab.snapshot().metrics.excluded[f.keys[0]!.peerId], undefined);
+  assert.equal(receivers[0]!.frames.length, 9);
+  assert.equal(f.lab.snapshot().timeline!.originUs, anchor);
+});
+
+test("a receiver queue without drain progress is still excluded", { timeout: 6000 }, async t => {
+  const sockets = observeServerSockets(t);
+  const f = await fixture(t);
+  await Promise.all(f.keys.map(key => f.receiver(key)));
+  Object.defineProperty(sockets[0]!, "bufferedAmount", { get: () => 50, configurable: true });
+  await until(() => !!f.lab.snapshot().metrics.excluded[f.keys[0]!.peerId]);
+  assert.equal(f.lab.snapshot().receivers.length, 1);
+  assert.equal(f.lab.snapshot().receivers[0]!.id, f.keys[1]!.peerId);
 });
