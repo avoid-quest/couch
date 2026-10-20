@@ -97,13 +97,14 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
   useEffect(() => { if (queueOpen) queueClose.current?.focus(); }, [queueOpen]);
   const { transportReady, pausable } = playbackCapabilities(state, connected);
   const ends = useEndTime(state);
-  // Opening, the player focuses the picture, so keys are shortcuts at once; a TV's remote starts on the transport.
+  // Unattended playback starts on the picture so automatic focus cannot pin the bands open.
+  // A TV already driven by keys keeps its transport entry point.
   useEffect(() => {
     if (queueOpen) return;
     const frame = requestAnimationFrame(() => {
       if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement) && !document.activeElement.matches(":disabled")) return;
       if (restoreDetailFocus(location.state.detailFocus)) return;
-      (tvPresentation ? firstTransport() : surface())?.focus({ preventScroll: true });
+      (tvPresentation && document.documentElement.hasAttribute("data-keyboard") ? firstTransport() : surface())?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [tvPresentation, current?.id, transportReady, location.state.__TSR_key]);
@@ -149,7 +150,7 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         else if (queueOpen) closeQueue();
         else if (tvPresentation && shown) {
           clearTimeout(timer.current);
-          if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement)) document.activeElement.blur();
+          if (document.activeElement instanceof HTMLElement && root.current?.contains(document.activeElement)) surface()?.focus({ preventScroll: true });
           setShown(false);
         }
         else if (!tvPresentation && event.key === "Escape" && fullscreen.supported && fullscreen.fullscreen) void fullscreen.toggle();
@@ -157,8 +158,8 @@ export function PlayerPage({ queueOpen: requestedQueueOpen, onQueueOpenChange }:
         return;
       }
       const inPlayer = root.current?.contains(document.activeElement) || document.activeElement === document.body;
-      // A TV's remote with the controls hidden: OK shows them on the transport, the arrows on the timeline.
-      if (tvPresentation && !panel && !shown && inPlayer && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)) {
+      // A TV's first key on the picture enters the controls, even before their initial timeout.
+      if (tvPresentation && !panel && (!shown || document.activeElement === surface()) && inPlayer && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation(); wake();
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") void seekBy(event.key === "ArrowLeft" ? -10 : 10);
         const timeline = event.key.startsWith("Arrow");

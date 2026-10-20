@@ -102,11 +102,20 @@ same arrow navigation.
 
 ## The TV player answers a remote
 
+A fresh TV receiving Play from another device starts with focus on the picture,
+so playing video hides its bands after 4 s without a mouse click. Once a local
+key or Remote navigation has established keyboard input, player entry keeps
+the transport focus. Pointer input clears that mode. From the picture, the first
+OK or arrow enters the controls as below, including before their initial timeout;
+it never activates Pause just because playback started. Deliberate control focus,
+open panels and their focus restoration keep working as usual.
+
 A Remote's Info key opens the player from any page. With its controls hidden, OK shows them
 on the first enabled transport slot, Up and Down show them on the timeline (or
 that transport slot when there is no seekable timeline), and Left and Right seek
 10 s and show the timeline (live media that can't seek only shows them). Back
-hides the controls; with them hidden it leaves the player for the page that
+hides the controls and returns focus to the picture, so automatic queue
+advancement keeps idle controls idle; with them hidden it leaves the player for the page that
 opened it, and playback goes on in Home's hero and the now-playing bar.
 
 Paused shows a large Pause glyph and "Paused" over a picture, and the controls stay up until

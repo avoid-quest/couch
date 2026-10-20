@@ -155,6 +155,20 @@ and bubbling key events; also use T3 keyboard input to check actual D-pad
 navigation and capture screenshots. This browser evidence does not qualify
 native Main, Linux packaging or a physical TV remote.
 
+For startup focus, build `tests/tv-playback-focus.browser.ts` in the same way.
+Reload a paired, idle TV on Home without pointer or key input, then evaluate
+`runTvPlaybackFocusRegression({ token, deviceId, targetDeviceId, source })`:
+`token` and `deviceId` belong to a second paired controller, `targetDeviceId`
+is the TV, and `source` is a 30–60 s finite direct video URL. Keep
+credentials out of captured evidence. The check sends real WebSocket commands,
+asserts playing video hides the bands without focusing Pause, then checks first
+OK, deliberate focus, pause/resume, Back, timeline navigation, panel/menu restoration
+and automatic queue advancement. Stop playback and reload Home before repeating
+with `true` as the second argument to check OK before the first hide timeout.
+Store the returned promise's result on `window` and read it separately if the
+preview's evaluation timeout is shorter than the check. Use native preview key
+input as well to verify local keyboard entry and the focus highlight.
+
 For Continue, stop two decoded finite videos before completion on every output
 (the first leads Home as its hero, the second sits in Continue's shelf) and keep
 the second shared output online. Build `tests/tv-continue.browser.ts` with the same browser

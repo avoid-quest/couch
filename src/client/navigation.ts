@@ -135,7 +135,7 @@ export function applyTvNavigation(key: NavigationKey) {
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
-    if (key !== "back" && scope.querySelector("[data-player-band=hidden]")) {
+    if (key !== "back" && (scope.querySelector("[data-player-band=hidden]") || document.activeElement?.matches("[data-player-surface]"))) {
       sendKey(document.body, ok ? "Enter" : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key]);
       return true;
     }
