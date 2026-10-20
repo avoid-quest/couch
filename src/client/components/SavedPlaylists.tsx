@@ -27,12 +27,13 @@ const listPath = (id: string) => `/api/playlists/${encodeURIComponent(id)}`;
 type Write = { path: string; body: unknown; method?: string };
 
 /** Saved's Lists tab: lists kept from Up next or a source, and one list's detail. */
-export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }: {
+export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, onFind }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
   queueCount: number;
+  onFind: () => void;
 }) {
   const credentials = { origin, token };
   const session = useOptionalSessionGate();
@@ -95,12 +96,12 @@ export function SavedPlaylists({ origin, token, connected, canPlay, queueCount }
 
   return <section ref={section} aria-label="Lists">
     {!openId ? <>
-      <PageHeader title="Lists" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
+      <PageHeader title="Lists" className="max-md:[&>h1]:sr-only" actions={<Button disabled={disabled || !!cannotSave} onClick={() => void create()}>Save as list</Button>} />
       {connected && cannotSave && <p className="mb-4 text-sm text-muted-foreground">{cannotSave}</p>}
       <SavedStatus connected={connected} loading={loading} />
       {loadError && <SavedError message={loadError.message || "Couldn't load lists."} onRetry={() => void list.refetch()} />}
       {connected && mutation.error && <SavedError message={mutation.error.message || "Couldn't change this list."} />}
-      {connected && !loading && !loadError && !playlists.length && <SavedEmpty>No lists yet. Save Up next to play it again later.</SavedEmpty>}
+      {connected && !loading && !loadError && !playlists.length && <SavedEmpty action={<Button variant="outline" onClick={onFind}>Discover</Button>}>No lists yet. Save Up next to play it again later.</SavedEmpty>}
       {!!playlists.length && <MediaList>{playlists.map(item => <MediaRow key={item.id} data-playlist-id={item.id}
         title={item.name}
         meta={summary(item)}

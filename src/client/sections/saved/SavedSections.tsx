@@ -79,7 +79,7 @@ export function SavedSections({ state, credentials, connected, canPlay, tab, onT
     <div className="min-w-0">
       {tab === "later" && <><PageHeader title="For later" className="max-md:sr-only" /><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} showHeading={false} /></>}
       {tab === "channels" && <><PageHeader title="Channels & stations" className="max-md:sr-only" /><SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onFind={onFind} {...favoriteActions} /></>}
-      {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} />}
+      {tab === "lists" && <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} onFind={onFind} />}
       {tab === "played" && <><PageHeader title="Played" className="max-md:sr-only" /><PlayedSection origin={credentials.origin} token={credentials.token} connected={connected} onFind={onFind} /></>}
     </div>
   </section>;
