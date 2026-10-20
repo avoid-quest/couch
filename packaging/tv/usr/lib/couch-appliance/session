@@ -39,7 +39,9 @@ cleanup() {
     wait || true
 }
 trap cleanup EXIT HUP INT TERM
-systemctl --user reset-failed couch-tv.service || true
+if systemctl --user is-failed --quiet couch-tv.service; then
+    systemctl --user reset-failed couch-tv.service || true
+fi
 systemctl --user start couch-tv.service || true
 
 # Keep LightDM's session alive after the restart limit, so it cannot reset the
