@@ -4,7 +4,7 @@ import { createNativeUpdates } from "./server/updates-native";
 import { createNativeTvMode } from "./server/tv-mode-native";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { startHelpers } from "./server/helpers";
+import { helpersCommand, startHelpers } from "./server/helpers";
 import { createHub } from "./server/hub";
 import { liveTurnFromEnvironment } from "./server/live-ice";
 import type { AppMessage, CoreMessage } from "./shared/protocol";
@@ -12,6 +12,12 @@ import { buildInfo } from "./server/build-info";
 
 if (process.argv.includes("--version")) {
   console.log(JSON.stringify(buildInfo));
+  process.exit(0);
+}
+// Recovery for the media helpers, run as the account Couch runs as with its COUCH_DATA_DIR (src/server/helpers.ts).
+if (process.argv[2] === "--helpers") {
+  try { console.log(await helpersCommand(join(process.env.COUCH_DATA_DIR ?? ".data", "helpers"), process.argv.slice(3))); }
+  catch (error) { console.error((error as Error).message); process.exit(1); }
   process.exit(0);
 }
 

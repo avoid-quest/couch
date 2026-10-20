@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { resolve } from "node:path";
 import { providerForUrl } from "../shared/providers";
-import { helper, checkHelper } from "./helpers";
+import { helper, checkHelper, helperWorked, useHelper } from "./helpers";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 import { soundCloudPlugin } from "./soundcloud";
 import { createPublicMediaProxy } from "./public-media-proxy";
@@ -90,10 +90,28 @@ async function extract(command: string, quickjs: string, args: string[], signal:
   } finally { kill(); await exited.catch(() => {}); }
 }
 
-export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, plugin }: YtDlpOptions = {}): Promise<string> {
-  signal?.throwIfAborted();
+async function withYtDlp<T>(options: YtDlpOptions, use: (command: string) => Promise<T>): Promise<T> {
+  options.signal?.throwIfAborted();
   // A first run waits here for its helper downloads, outside the website's deadline.
-  const [command, quickjs] = await Promise.all([helper("yt-dlp"), helper("qjs")]);
+  // The yt-dlp copy stays on disk until this run ends, even if an update replaces it meanwhile.
+  const ytDlp = await useHelper("yt-dlp");
+  try { return await use(ytDlp.path); }
+  finally { ytDlp.release(); }
+}
+
+// Listing a site or reading a page's details: yt-dlp exiting cleanly isn't evidence that its copy plays the site.
+export const runYtDlp = (args: string[], options: YtDlpOptions = {}) => withYtDlp(options, command => extractWith(command, args, options));
+
+// Playback: media that `accept` makes of the output is evidence that this copy works for the
+// provider. It is recorded before the copy is released, so an update deciding which copies to keep sees it.
+export const resolveWithYtDlp = <T>(args: string[], options: YtDlpOptions, provider: string, accept: (output: string) => Promise<T>) => withYtDlp(options, async command => {
+  const media = await accept(await extractWith(command, args, options));
+  await helperWorked("yt-dlp", command, provider);
+  return media;
+});
+
+async function extractWith(command: string, args: string[], { signal, timeoutMs = 30_000, plugin }: YtDlpOptions): Promise<string> {
+  const quickjs = await helper("qjs");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {

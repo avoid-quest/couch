@@ -302,6 +302,53 @@ YouTube's challenges) and ffmpeg. The app ships none of them
   newer release exists, and downloads again any helper that is missing or
   doesn't run. Before each yt-dlp run it also replaces a missing yt-dlp or
   QuickJS-NG, and a yt-dlp that won't start.
+- Core records what it actually selected in `<data>/helpers/status.json`
+  (`HelperStatus` in `src/server/helper-status.ts`, `schema: 1`): per helper its
+  origin (`system` or `managed`), version, path, the SHA-256 it verified when it
+  downloaded that copy, when the check last ran it and the latest yt-dlp release
+  that check saw. Under `managed`, each copy on disk has its digest and, for
+  yt-dlp, `worked`: the last time Couch resolved playable media with that copy,
+  per provider. Listing a site, reading a page's details or printing its
+  version doesn't count.
+  Reading the file never checks, downloads or selects a helper. Entries of the
+  wrong shape are dropped when it is read, so a damaged file never stops selection.
+- Couch writes `status.json` and `hold.json` to a temporary file, flushes it,
+  renames it into place and flushes the directory; removing the hold flushes
+  the directory too. On Linux, with storage that honours flushes, a power cut
+  after a write returns keeps it. macOS `fsync` can leave it in the drive's
+  cache (Node has no `F_FULLFSYNC`), and Windows can't flush a directory, so
+  there the rename relies on NTFS's journal.
+  Either way a reader sees the old file or the new one, never part of one.
+- Couch keeps one previous yt-dlp copy beside the selected one, also while it
+  uses the copy on `PATH`: the newest that has worked, else the newest, never a
+  copy of the selected version. A copy a run is using when a check decides what
+  to keep stays until the next check; playback records that its copy worked
+  once Couch has accepted its media, before letting go of it, so that check
+  sees it. Core
+  renames a copy to `<version>.removing` before removing it and puts it back if
+  it is held or pinned by then, or, after Core stopped in between, at its next
+  check. `--helpers previous` pins the copy in `<data>/helpers/pins` before its
+  last look at it and until its hold is written, and Core reads pins before the
+  hold, so a hold it reports names a copy that is still there; it writes nothing unless the copy passes, so it
+  never undoes another command. A pin a stopped command left lapses after ten
+  minutes. Commands aren't serialized: Core uses whatever the last write to
+  `hold.json` left. Each command reports its own change as it last saw it,
+  and fails if it already sees another command's; a command overlapping after
+  that look can still replace the reported outcome, and `--helpers status`
+  shows the hold as it is when read. A website failing,
+  even with a 403, never changes the selection: an update can break one site
+  while others work.
+- When an update breaks a website, recover from the account Couch runs as, with
+  its `COUCH_DATA_DIR`: `node build/core.mjs --helpers previous [days]` (the
+  installed app: `ELECTRON_RUN_AS_NODE=1 <Couch executable> <resources>/app.asar/build/core.mjs`)
+  holds the previous copy that still runs for 1–30 days, 7 by default, in
+  `<data>/helpers/hold.json`. Core uses it from its next yt-dlp run, across
+  restarts, without checking for releases, then returns to the latest;
+  `--helpers latest` returns sooner and `--helpers status` prints the record and
+  the hold. Run during a hold, `previous` renews it, with the held copy while it
+  still runs, even before Core has applied the hold or once an older copy has
+  worked since. A held copy that has gone missing is replaced by the latest as usual.
+  Couch never changes a system yt-dlp; its package manager does.
 - SoundCloud runs use yt-dlp's cache at `<data>/yt-dlp-cache`, so the extractor
   retains its public client ID between searches and playback. yt-dlp refreshes
   that ID on HTTP 401/403. This does not cache signed audio URLs or account

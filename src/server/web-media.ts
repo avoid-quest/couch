@@ -2,7 +2,8 @@ import { publicFetch } from "./public-network";
 import { streamingCommunityLink } from "./streamingcommunity";
 import type { ExternalSubtitle, VideoQuality } from "../shared/protocol";
 import { sourceSubtitle } from "./subtitles";
-import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import { resolveWithYtDlp, runYtDlp, type YtDlpOptions } from "./yt-dlp";
+import { providerForUrl } from "../shared/providers";
 import { isMovies123Host } from "../shared/movies123";
 import { resolveMovies123Link } from "./movies123";
 import { movies123Title } from "./providers/movies123";
@@ -150,45 +151,47 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const youtube = host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
     const sort = youtube ? ["--format-sort", vp9 ? "res,fps,vcodec:vp9" : "res,fps,vcodec:h264,acodec:aac"] : [];
     const sourceHeaders = Object.entries(direct?.headers ?? {}).flatMap(([name, value]) => ["--add-headers", `${name}:${value}`]);
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin });
-    const info = parseInfo(output);
-    if (info._has_drm === true) await rejectDrm(info, signal);
-    const media = parseMedia(info, subtitleLanguage);
-    media.publicNetwork = true;
-    if (direct) {
-      media.metadata = { ...media.metadata, ...direct.metadata };
-      if (direct.subtitles?.length) media.subtitles = direct.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
-    }
-    try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
-    if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
-    // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
-    // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
-    // its own headers, opens the master playlist instead.
-    if (media.metadata?.live && !media.audioSource && typeof info.manifest_url === "string" && String(info.protocol).startsWith("m3u8")) {
-      const response = await publicFetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
-      await response?.body?.cancel();
-      if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
-    }
-    const transport = new URL(media.source);
-    const at = Number(transport.searchParams.get("ts")) * 1000;
-    // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
-    // fresh resolution of the same track returns the same media. Other 4xx errors
-    // and providers do not establish transport expiry.
-    if (host.endsWith(".bandcamp.com") && info.extractor === "Bandcamp" && info.format_id === "mp3-128" && !media.audioSource && !media.metadata?.live && transport.protocol === "https:" && /^t\d+\.bcbits\.com$/.test(transport.hostname) && /^\/stream\//.test(transport.pathname) && Number.isSafeInteger(at) && at > 0) {
-      media.expiry = { at, recover: async cancellation => {
-        if (Date.now() < at) return null;
-        cancellation.throwIfAborted();
-        const response = await publicFetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
-        await response.body?.cancel();
-        cancellation.throwIfAborted();
-        if (response.status !== 410) return null;
-        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage);
-        const replacement = new URL(fresh.source);
-        if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
-        return fresh;
-      } };
-    }
-    return media;
+    // Everything until media is returned can still reject it, so all of it decides whether this copy worked.
+    return resolveWithYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, ...sourceHeaders, "--write-subs", "--sub-langs", "all,-live_chat", "--sub-format", "vtt/srt", "--", direct?.url ?? streamingCommunity ?? source], { ...options, signal, plugin }, plugin ?? providerForUrl(source) ?? "other", async output => {
+      const info = parseInfo(output);
+      if (info._has_drm === true) await rejectDrm(info, signal);
+      const media = parseMedia(info, subtitleLanguage);
+      media.publicNetwork = true;
+      if (direct) {
+        media.metadata = { ...media.metadata, ...direct.metadata };
+        if (direct.subtitles?.length) media.subtitles = direct.subtitles.map(track => ({ ...track, source: sourceSubtitle(track.source) }));
+      }
+      try { media.headers = headers(info.http_headers); } catch { /* Invalid headers only cost a relay its extra headers. */ }
+      if (direct) media.headers = { ...media.headers, ...headers(direct.headers) };
+      // A live variant playlist can be tied to yt-dlp's session (RaiPlay's Akamai
+      // aka_me_session_id answers 403 to another User-Agent), so a Device, which sends
+      // its own headers, opens the master playlist instead.
+      if (media.metadata?.live && !media.audioSource && typeof info.manifest_url === "string" && String(info.protocol).startsWith("m3u8")) {
+        const response = await publicFetch(media.source, { signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(5000)]) }).catch(() => null);
+        await response?.body?.cancel();
+        if (response?.status === 403) media.source = mediaUrl(info.manifest_url);
+      }
+      const transport = new URL(media.source);
+      const at = Number(transport.searchParams.get("ts")) * 1000;
+      // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
+      // fresh resolution of the same track returns the same media. Other 4xx errors
+      // and providers do not establish transport expiry.
+      if (host.endsWith(".bandcamp.com") && info.extractor === "Bandcamp" && info.format_id === "mp3-128" && !media.audioSource && !media.metadata?.live && transport.protocol === "https:" && /^t\d+\.bcbits\.com$/.test(transport.hostname) && /^\/stream\//.test(transport.pathname) && Number.isSafeInteger(at) && at > 0) {
+        media.expiry = { at, recover: async cancellation => {
+          if (Date.now() < at) return null;
+          cancellation.throwIfAborted();
+          const response = await publicFetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
+          await response.body?.cancel();
+          cancellation.throwIfAborted();
+          if (response.status !== 410) return null;
+          const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin, vp9, subtitleLanguage);
+          const replacement = new URL(fresh.source);
+          if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
+          return fresh;
+        } };
+      }
+      return media;
+    });
   };
 }
 
