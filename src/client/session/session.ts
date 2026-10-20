@@ -1,4 +1,4 @@
-import { failed } from "../toasts";
+import { dismissPlaybackFeedback, failed } from "../toasts";
 import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, PlayerMessage, ServerMessage, SessionState } from "../../shared/protocol";
@@ -225,6 +225,9 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           return;
         }
         if (message.type === "state") {
+          // Retire old actions before the new snapshot and its command confirmation reach React.
+          const previous = observation.current;
+          if (previous && (previous.controlling !== message.state.controlling || previous.playback !== message.state.playback || previous.currentEntryId !== message.state.currentEntryId)) dismissPlaybackFeedback();
           baseline = true;
           clearTimeout(handshake);
           attempt = 0;

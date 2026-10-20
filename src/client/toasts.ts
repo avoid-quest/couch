@@ -5,7 +5,7 @@ import { ApiError } from "./api/client";
 // and shows one toast: a repeat updates the one showing. Only this module and the Toaster import sonner.
 const brief = 4_000, long = 6_000;
 
-type Kind = "failed" | "undo" | "queued" | "playing-on" | "activity" | "notice" | "tap-to-hear";
+type Kind = "failed" | "undo" | "queued" | "playing-on" | "notice" | "tap-to-hear";
 /** The Toaster shows the newest two; older ones stay mounted, hidden. */
 export const visibleToasts = 2;
 // Sonner updates a toast in place, so a repeat keeps its toast's id only while that toast shows: one leaving (timed
@@ -26,6 +26,12 @@ export function dismiss(kind: Kind) {
   if (current) { current.leaving = true; toast.dismiss(current.id); }
 }
 
+/** Feedback and actions for the previous item or controlled device no longer apply. */
+export function dismissPlaybackFeedback() {
+  dismiss("queued"); dismiss("playing-on"); dismiss("undo");
+}
+export function dismissAll() { for (const kind of shown.keys()) dismiss(kind); }
+
 /** "Couldn't X." Core's own sentence wins when it sent one; anything else (the network, a timeout) shows `text` and logs the detail. */
 export function failed(text: string, reason?: unknown) {
   const said = reason instanceof ApiError && typeof reason.body.error === "string";
@@ -43,7 +49,6 @@ export const undoable = (text: string, undo: () => void, duration = long) => {
 export const queued = (title: string | undefined, upNext: () => void) =>
   show("queued", title ? `Queued ${title}` : "Queued", { duration: brief, action: { label: "Up next", onClick: upNext } });
 export const playingOn = (name: string) => show("playing-on", `Playing on ${name}`, { duration: brief });
-export const activity = (text: string) => show("activity", text, { duration: long });
 export const notice = (text: string) => show("notice", text, { duration: long });
 export const waitingForTap = (hear: () => void) =>
   show("tap-to-hear", "Sound is waiting for a tap", { duration: Infinity, action: { label: "Tap to hear", onClick: hear } });

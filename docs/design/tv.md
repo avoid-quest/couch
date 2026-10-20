@@ -23,6 +23,9 @@ Focus is
 the only highlight; no hover style applies on the TV. The TV has no hover: under `.tv-presentation` the `hover` variant
 never applies, so a stray pointer can't compete with focus. Focus inverts at once and fades only as it leaves, so a
 held arrow moves it at every repeat and leaves a short trail ([Motion](../design.md#motion)).
+Toasts ignore pointer hover too: a parked pointer cannot pause their dismissal.
+Remote playback activity stays quiet; starting another item clears old Queue,
+Playing on and Undo feedback ([Messages](../design.md#components)).
 
 Back closes an open
 overlay, then leaves a detail page for the page

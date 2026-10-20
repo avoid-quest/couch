@@ -27,7 +27,7 @@ import { useNavigation } from "@/navigation";
 import { collectionLocation, DetailFocusRestoration, useDetailNavigation } from "@/detail-navigation";
 import { cn } from "cn";
 import { Toaster } from "@/components/ui/sonner";
-import { activity, dismiss, waitingForTap } from "@/toasts";
+import { dismiss, waitingForTap } from "@/toasts";
 import { deviceName, offline, TRY_AGAIN } from "@/copy";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
@@ -225,10 +225,13 @@ function MediaSessionBridge() { useMediaSession(); useTapToHear(); return null; 
 
 // A browser that needs a gesture before it plays sound asks for one on its own screen (#644).
 function useTapToHear() {
-  useEffect(() => onBlocked(blocked => {
-    if (blocked) waitingForTap(hear);
-    else dismiss("tap-to-hear");
-  }), []);
+  useEffect(() => {
+    const unsubscribe = onBlocked(blocked => {
+      if (blocked) waitingForTap(hear);
+      else dismiss("tap-to-hear");
+    });
+    return () => { unsubscribe(); dismiss("tap-to-hear"); };
+  }, []);
 }
 
 // Connection and player state as one quiet line; red only for errors that need a decision.
@@ -269,7 +272,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const { pathname } = useLocation();
-  const { nativeHost, localHost, tvPresentation, credentials, state, details, identity, pairingRequired, connected, run, error, setError } = useSessionGate();
+  const { nativeHost, localHost, tvPresentation, credentials, state, details, pairingRequired, connected, run, error, setError } = useSessionGate();
   useNativeWindowTitle(nativeHost, state, connected, details?.name);
   const { section, statusLabel, active, current } = shell;
   const setupPending = useLocalSetupPending(credentials);
@@ -282,12 +285,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
     return () => { window.removeEventListener("couch-home", onHome); window.removeEventListener("couch-info", onInfo); };
   }, [tvPresentation, section]);
   const player = state?.player;
-  // Another device's activity replaces the last; this device's own retires it.
-  useEffect(() => {
-    if (!state?.activity) return;
-    if (identity && state.activity.actor.deviceId !== (identity.device?.id ?? "host")) activity(state.activity.text);
-    else dismiss("activity");
-  }, [state?.activity?.id, identity?.device?.id]);
   const paired = !!credentials && !pairingRequired;
   // This computer's Couch has started once its Core answered with a connection; until
   // then the shell shows Starting… or Couldn't start Couch (PairingPage).
@@ -352,7 +349,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
             </div>
           </>}
           {/* Inside the TV's navigation scope, so a remote reaches a toast's action (navigation.ts). */}
-          <Toaster />
+          <Toaster tvPresentation={tvPresentation} />
         </div>
       </main>
     </div>
