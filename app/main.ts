@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItem, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
+import { desktopNavigation } from "./navigation";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -466,14 +467,15 @@ else {
   void app.whenReady().then(() => {
     // Couch is black everywhere, so native title bars, menus and dialogs are dark too.
     nativeTheme.themeSource = "dark";
-    Menu.setApplicationMenu(process.platform !== "darwin" ? tv ? null : Menu.buildFromTemplate([
+    const menu = process.platform !== "darwin" ? tv ? null : Menu.buildFromTemplate([
       { label: "File", submenu: [{ role: "quit", label: "Quit Couch", accelerator: "Control+Q" }] },
+      { role: "editMenu" },
     ]) : Menu.buildFromTemplate([
       { role: "appMenu", submenu: [{ role: "about" }, { label: "Show Couch", click: show }, { type: "separator" }, { role: "services" }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] },
       { role: "editMenu" },
       { label: "View", submenu: [{ role: "togglefullscreen" }] },
       { role: "windowMenu" },
-    ]));
+    ]);
     if (!tv) {
       const icon = process.platform === "darwin"
         ? nativeImage.createFromBuffer(readFileSync(join(icons, "tray-template.png")), { scaleFactor: 2 })
@@ -506,6 +508,8 @@ else {
       callback({ responseHeaders: { ...headers, "Access-Control-Allow-Origin": ["*"] } });
     });
     createWindow();
+    if (!tv) menu?.insert(2, new MenuItem(desktopNavigation(window!)));
+    Menu.setApplicationMenu(menu);
     if (appliance) setInterval(() => { try { reportPlayback(); } catch (error) { logAppError("main", `Couldn't report playback for updates: ${error instanceof Error ? error.message : error}`); } }, 5_000).unref();
     updates = startUpdates({
       channelPath: join(dataDir, "update-channel"),

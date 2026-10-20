@@ -187,6 +187,31 @@ such as the player's picture, which holds focus when the player opens
 TV, arrows on the picture stay with its shortcuts and never move focus, even
 where they can't act (live media can't seek).
 
+Native text commands stay native: prose can be selected and copied; fields
+keep cut, paste, select all, undo, redo and modified caret/selection keys.
+Buttons and media actions retain their intentional nonselectable labels and
+touch/TV hold menus. Shift+arrows and arrows in editable text or native media
+controls never move spatial focus; selected prose keeps its arrow keys too.
+Search uses plain Down to enter results, leaving modified Down in the field.
+
+Desktop history is separate from the TV's contextual Back: the app's History
+menu uses Chromium's history (including router entries), with Cmd+[ / Cmd+]
+on macOS and Alt+Left / Alt+Right on Windows/Linux. Mouse back/forward commands
+use that history too. BrowserBack stays native off the TV; Esc keeps Couch's
+panel/page behavior. All desktop platforms have Electron's native Edit menu.
+Off the TV, horizontal overscroll stays enabled for browser back/forward gestures, while
+vertical overscroll stays suppressed. The Mac app handles Electron's discrete
+three-finger swipe (System Settings → Trackpad → Swipe between pages → two or
+three fingers); Electron's `swipe` event does not expose two-finger scrolling.
+There is no custom wheel or touch gesture recognizer. TV remote Back and its
+focus navigation stay contextual.
+
+Interaction regression: build `tests/desktop-interactions.browser.ts` with
+`bun build --target browser --format iife`, evaluate it in a paired scratch
+desktop, then run `window.runDesktopInteractionsRegression()`. Native menu,
+swipe and mouse-command dispatch is covered by `tests/desktop-navigation.test.ts`;
+physical macOS gestures and OS clipboard accelerators require platform checks.
+
 ## First run names the computer
 
 The app asks "Where is your Couch?" (This

@@ -10,7 +10,8 @@
 @layer components {
 /* Keep scroll edges continuous with the black page, and focus clear of the sticky header (--top-bar, with room for a tile's outline) and the footer (now-playing bar, phone tabs). */
 html { background: var(--background); scroll-padding-top: calc(var(--top-bar, 0px) * var(--interface-scale) + 1rem); scroll-padding-bottom: calc(var(--bottom-bar, 0px) * var(--interface-scale)); }
-html, body { overscroll-behavior: none; }
+html, body { overscroll-behavior-y: none; }
+html:has(body.tv-presentation), body.tv-presentation { overscroll-behavior-x: none; }
 [hidden] { display: none !important; }
 button, a, input { -webkit-tap-highlight-color: transparent; }
 a { text-underline-offset: 4px; }

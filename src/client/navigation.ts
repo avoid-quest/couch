@@ -196,7 +196,7 @@ export function useNavigation(onBack: () => void) {
     // moves on with every arrow too, until OK hands it the keys along it; OK, Back or leaving it hands
     // them back, as TV equalisers do.
     const leave = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.defaultPrevented || event.isComposing || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const tv = isTvPresentation();
       const slider = target?.closest<HTMLElement>('[role="slider"]');
@@ -235,9 +235,9 @@ export function useNavigation(onBack: () => void) {
       if (hold.release()) target.click();
     };
     const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.defaultPrevented || event.isComposing || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (event.key === "Escape" || event.key === "BrowserBack") {
+      if (event.key === "Escape" || isTvPresentation() && event.key === "BrowserBack") {
         if (lastVisible(portals)) return;
         event.preventDefault();
         // Back on a toast's action leaves it, as sonner returns focus to where it came from.
@@ -249,7 +249,8 @@ export function useNavigation(onBack: () => void) {
         return;
       }
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], [role="menu"], [role="slider"]')) return;
+      if (target?.isContentEditable || target?.closest('input, textarea, select, video, audio, [role="combobox"], [role="listbox"], [role="menu"], [role="slider"]')) return;
+      if (!isTvPresentation() && window.getSelection()?.isCollapsed === false) return;
       // Off the TV, the player's picture keeps its arrows for its shortcuts, even where one can't act (live media can't seek).
       if (!isTvPresentation() && target?.matches("[data-player-surface]")) return;
       if (target?.closest('[role="tablist"]') && ["ArrowLeft", "ArrowRight"].includes(event.key)) return;
