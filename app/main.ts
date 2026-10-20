@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, MenuItem, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, MenuItem, nativeImage, nativeTheme, net, screen, session, shell, Tray, utilityProcess, type IpcMainInvokeEvent, type Rectangle, type UtilityProcess } from "electron";
 import { desktopNavigation, loadCouch } from "./navigation";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { lookup } from "node:dns/promises";
@@ -70,6 +70,7 @@ let window: BrowserWindow | null = null;
 const capture = createCapture(() => window?.webContents ?? null, () => choice.mode === "remote" ? choice.address : localOrigin, localOrigin);
 let tray: Tray | null = null;
 let quitting = false;
+let updating = false;
 let stopped = false;
 let updatePlayback = "unavailable";
 const reportPlayback = () => { if (appliance) write(join(dataDir, "update-playback"), `${Math.floor(Date.now() / 1000)} ${updatePlayback}\n`); };
@@ -321,7 +322,7 @@ function createWindow() {
   }
   window.on("close", event => {
     saveBounds();
-    if (quitting || tv) return;
+    if (quitting || updating || tv) return;
     // Couch keeps hosting in the background; the tray, dock or a second launch shows it again.
     event.preventDefault();
     // Closing still ends this window's sharing, and any capture it is starting, as unloading would.
@@ -463,6 +464,9 @@ if (!primary) app.quit();
 else {
   app.on("second-instance", show);
   app.on("activate", show);
+  // Updates close windows before before-quit. Let the updater finish that step;
+  // before-quit still owns Core's graceful shutdown, so don't mark quitting yet.
+  autoUpdater.on("before-quit-for-update", () => { updating = true; });
   app.on("before-quit", event => { if (!stopped) { event.preventDefault(); void quit(); } });
   void app.whenReady().then(() => {
     // Couch is black everywhere, so native title bars, menus and dialogs are dark too.
