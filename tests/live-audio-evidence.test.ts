@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createLiveAudioEvidence, liveAudioAcceptance, type LiveAudioRun } from "./audio-lab/evidence.ts";
 import { createMarkerSignal, createPcmAnalyzer } from "./audio-lab/pcm.ts";
+import { continuousProfile, createContinuousAnalyzer, createContinuousSignal } from "./audio-lab/continuous.ts";
 
 function run(delayFrames = 960): LiveAudioRun {
   const signal = createMarkerSignal({ sampleRate: 48_000, seed: 42 });
@@ -63,6 +64,59 @@ test("one measured output cannot pass the two-output alignment contract", () => 
   expect(result.gates.quality.status).toBe("passed");
   expect(result.gates.alignment.status).toBe("unmeasured");
   expect(result.status).toBe("unmeasured");
+});
+
+test("sparse markers cannot qualify overall continuous delivery", () => {
+  const result = createLiveAudioEvidence(calibratedFixture()).measured;
+  expect(result.gates.softwareLatency.status).toBe("passed");
+  expect(result.gates.continuousAudioIntegrity.status).toBe("unmeasured");
+  expect(result.status).toBe("unmeasured");
+});
+
+function continuousFixture() {
+  const value = calibratedFixture();
+  const source = createContinuousSignal({ sampleRate: 48_000, seed: 42 }).render(0, 9_600);
+  const reference = new Float32Array(24_000); reference.set(source);
+  const output = new Float32Array(24_000); output.set(source, 960);
+  const options = { sampleRate: 48_000, seed: 42, receiverIds: ["one", "two"], durationFrames: source.length, warmupFrames: 960, maxDelayMs: 200 };
+  const markers = createPcmAnalyzer({ ...options, clockUncertaintyMs: 0.1 });
+  value.recording = { runId: "unit-measurement", routeId: "unit-route" };
+  // Metadata exercises policy only; no real route is calibrated by this test.
+  const continuous = createContinuousAnalyzer({ ...options, ...value.recording, calibration: {
+    kind: "route", status: "passed", artifact: "unit-calibration.json", sha256: "a".repeat(64),
+    runId: "unit-calibration", routeId: value.recording.routeId, profileId: continuousProfile.id,
+  } });
+  for (const [id, samples] of [["reference", reference], ["one", output], ["two", output]] as const) {
+    markers.push(id, { startFrame: 0, samples }); continuous.push(id, { startFrame: 0, samples });
+  }
+  value.analysis = markers.finish(); value.continuousAnalysis = continuous.finish(); value.fixedWarmupMs = 20;
+  return value;
+}
+
+test("continuous identity must match this recording, fixture, window and receivers", () => {
+  const value = continuousFixture();
+  expect(createLiveAudioEvidence(value).measured.gates.continuousAudioIntegrity.status).toBe("passed");
+  for (const mutate of [
+    (run: LiveAudioRun) => { run.recording!.runId = "other"; },
+    (run: LiveAudioRun) => { run.recording!.routeId = "other"; },
+    (run: LiveAudioRun) => { run.continuousAnalysis!.manifest = { ...run.continuousAnalysis!.manifest, seed: 43 }; },
+    (run: LiveAudioRun) => { run.continuousAnalysis!.durationFrames++; },
+    (run: LiveAudioRun) => { run.continuousAnalysis!.receivers[0]!.id = "other"; },
+  ]) {
+    const changed = structuredClone(value); mutate(changed);
+    expect(createLiveAudioEvidence(changed).measured.gates.continuousAudioIntegrity.status).toBe("inconclusive");
+    expect(createLiveAudioEvidence(changed).measured.status).not.toBe("passed");
+  }
+});
+
+test("continuous identity cannot fill unknown renderer or worker evidence", () => {
+  const value = continuousFixture(); value.telemetry[0]!.rendererUnderruns = null;
+  const result = createLiveAudioEvidence(value).measured;
+  expect(result.gates.continuousAudioIntegrity.status).toBe("passed");
+  expect(result.gates.quality.status).toBe("inconclusive");
+  expect(result.status).toBe("inconclusive");
+  value.workers[0]!.overloaded = null;
+  expect(createLiveAudioEvidence(value).measured.gates.softwareLatency.status).toBe("inconclusive");
 });
 
 test("preserves unknown capture delay and rejects unmeasured output correction", () => {

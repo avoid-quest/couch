@@ -1,5 +1,6 @@
 import { record } from "../../packaging/tv/evidence.js";
 import type { PcmAnalysis } from "./pcm.ts";
+import type { ContinuousAnalysis } from "./continuous.ts";
 
 /** Frozen before playback changes. Changing a gate requires a new contract ID. */
 export const liveAudioAcceptance = Object.freeze({
@@ -42,6 +43,9 @@ export type LiveAudioRun = {
   workers: { id: string; cpuCount: number; memoryBytes: number; cpuPercentMax: number | null; rssBytesMax: number | null; overloaded: boolean | null }[];
   telemetry: { id: string; rendererUnderruns: number | null; unexpectedMutes: number | null; disconnects: number | null; missingSourceMs: number | null; concealedSourceMs: number | null; longestInterruptionMs: number | null; queueAgeMsMax: number | null; queueBytesMax: number | null }[];
   analysis: PcmAnalysis | null;
+  /** The recording/route identity is supplied independently of the analyzer. */
+  recording?: { runId: string; routeId: string };
+  continuousAnalysis?: ContinuousAnalysis | null;
   fixedWarmupMs: number;
   untested: string[];
 };
@@ -112,7 +116,23 @@ export function createLiveAudioEvidence(run: LiveAudioRun) {
   const quality = !eligible ? unmeasured : cannotMeasure ?? (run.network.quality === "fault" ? gate("unmeasured", "Fault scenarios require their recovery/isolation assertions") : qualityFailures.length ? gate("failed", ...qualityFailures) : qualityUnknown.length ? gate("inconclusive", ...qualityUnknown) : gate("passed"));
   const rendered = analysis?.receivers.filter(receiver => receiver.detected > 0).length ?? 0;
   const participation = receivers.requested === 0 ? gate("unmeasured", "No receivers requested") : receivers.admitted !== receivers.requested || receivers.activelyRendering !== receivers.requested || receivers.excluded > 0 || rendered !== receivers.activelyRendering ? gate("failed", "Requested, admitted, actively rendering and observed output counts do not all match") : gate("passed");
-  const gates = { softwareLatency, alignment, quality, participation };
+  const continuous = run.continuousAnalysis;
+  const continuousIssues: string[] = [];
+  if (continuous) {
+    if (!analysis || continuous.manifest.sampleRate !== analysis.sampleRate || continuous.manifest.seed !== analysis.seed
+      || continuous.durationFrames !== analysis.durationFrames || continuous.warmupFrames !== analysis.warmupFrames)
+      continuousIssues.push("Continuous and marker analyses describe different fixtures or intervals");
+    if (!run.recording || continuous.runId !== run.recording.runId || continuous.routeId !== run.recording.routeId)
+      continuousIssues.push("Continuous analysis does not match the recording/route identity");
+    const markerIds = analysis?.receivers.map(receiver => receiver.id).sort() ?? [];
+    if (JSON.stringify(continuous.receivers.map(receiver => receiver.id).sort()) !== JSON.stringify(markerIds))
+      continuousIssues.push("Continuous and marker receiver identities differ");
+  }
+  const continuousAudioIntegrity = !continuous ? gate("unmeasured", "Sparse markers and thresholded activity do not establish continuous waveform identity")
+    : continuousIssues.length ? gate("inconclusive", ...continuousIssues)
+    : gate(continuous.status, ...continuous.measurementIssues, ...continuous.qualificationIssues,
+      ...(continuous.status === "failed" ? ["Continuous waveform identity did not conform to the frozen profile"] : []));
+  const gates = { softwareLatency, alignment, quality, participation, continuousAudioIntegrity };
   const values = Object.values(gates);
   const status: AudioGate["status"] = invalid.length && eligible ? "inconclusive" : values.some(value => value.status === "failed") ? "failed" : values.some(value => value.status === "inconclusive") ? "inconclusive" : eligible && values.every(value => value.status === "passed") ? "passed" : "unmeasured";
   const untested = [...new Set([...run.untested, "phone acoustic latency", "physical speaker alignment", "venue Wi-Fi/radio contention", "channel mapping and clipping qualification", "speech/music listening quality", "continuous integrity between markers and quiet/overlaid replay", "three 30-minute runs at 50 listeners and a two-hour churn soak"])];
@@ -123,9 +143,10 @@ export function createLiveAudioEvidence(run: LiveAudioRun) {
       route: run.route, codec: run.codec, source: run.source, receiverCounts: receivers,
       network: run.network, timeline: run.timeline, calibration, workers: run.workers,
       fixedWarmupMs: run.fixedWarmupMs, durationMs, telemetry: run.telemetry, analysis,
+      recording: run.recording ?? null, continuousAnalysis: continuous ?? null,
       uncertaintyMs, latencyUpperBoundsMs, skewUpperBoundMs,
       conditions: {
-        continuousAudioIntegrity: gate("unmeasured", "Sparse markers and thresholded activity do not establish continuous audio quality or rule out quiet/overlaid replay"),
+        continuousAudioIntegrity,
         captureToSpeaker: gate("unmeasured", "No synchronized physical acoustic measurement"),
         physicalSpeakerSkew: gate("unmeasured", "Virtual graph alignment is not physical speaker alignment"),
         venueWifi: gate("unmeasured", "Shaping and software clients do not reproduce venue radios"),
