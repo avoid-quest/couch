@@ -14,6 +14,10 @@ const setup = resolve("packaging/couch-setup");
 const namespace = spawnSync("unshare", ["-r", "true"]).status === 0;
 const options = { skip: process.platform !== "linux" ? "Linux only" : false, timeout: 20_000 };
 const rootOptions = { ...options, skip: options.skip || (!namespace && "Needs unprivileged user namespaces (unshare -r).") };
+// Cases that run setup without root: a root runner has root there too, and chmod 0 doesn't stop it.
+const nonRoot = "Needs a non-root runner; root reads what these cases make unreadable.";
+const unprivilegedOptions = { ...options, skip: options.skip || (process.getuid?.() === 0 && nonRoot) };
+const mixedOptions = { ...rootOptions, skip: rootOptions.skip || (process.getuid?.() === 0 && nonRoot) };
 const mutating = /^(apt-get|adduser|chgrp|install|touch|ln|chmod|mv|mkdir|rm|cp|sync|flock) |^systemctl .*\b(enable|disable|start|stop|restart|reset-failed|daemon-reload|set-default|mask)\b|^couch /m;
 // Setup refuses group-writable state directories, as it should.
 process.umask(0o022);
@@ -216,7 +220,7 @@ test("several conflicts are all listed, where --tv would stop at the first", roo
   assert.match(environment.run("--tv", true).stderr, /couch-setup: The existing couch-tv account/);
 });
 
-test("without root, inspection reports what only root can read as unavailable", options, () => {
+test("without root, inspection reports what only root can read as unavailable", unprivilegedOptions, () => {
   using environment = fixture({ installed: packages, files: { "var/lib/couch/.keep": "" } });
   chmodSync(join(environment.root, "var/lib/couch"), 0);
   try {
@@ -229,7 +233,7 @@ test("without root, inspection reports what only root can read as unavailable", 
 
 // Permission denial is not absence: an administrator's file under a directory only root can
 // read must be reported unknown, never planned over, and still kept by --tv.
-test("without root, files only root can see are unknown, not added, and --tv keeps them", rootOptions, () => {
+test("without root, files only root can see are unknown, not added, and --tv keeps them", mixedOptions, () => {
   const customised = "# Administrator's own power policy\n";
   using environment = fixture({
     installed: packages, account: null,
@@ -267,13 +271,37 @@ test("without root, files only root can see are unknown, not added, and --tv kee
   assert.equal(readFileSync(unreadable, "utf8"), customised);
 });
 
-test("--tv and --refresh still require root, and --refresh leaves an incomplete setup alone", rootOptions, () => {
+test("--tv and --refresh still require root, and --refresh leaves an incomplete setup alone", mixedOptions, () => {
   using environment = fixture({ installed: packages });
   for (const argument of ["--tv", "--refresh"]) assert.match(environment.run(argument, false).stderr, /couch-setup: sudo couch-setup --tv/);
   const refresh = environment.run("--refresh", true);
   assert.equal(refresh.status, 0);
   assert.match(refresh.stdout, /nothing to refresh/);
   assert.doesNotMatch(refresh.events, mutating);
+});
+
+// A damaged package: a TV list missing, unreadable or empty must never apply an empty plan.
+for (const [manifest, damage] of [["packages", "missing"], ["files", "missing"], ["packages", "empty"], ["files", "directory"]] as const) test(`a ${manifest} list that is ${damage} refuses before anything changes`, rootOptions, () => {
+  for (const mode of ["--inspect", "--tv", "--refresh"]) {
+    using environment = fixture({ installed: packages, state: mode === "--refresh" ? "complete" : undefined });
+    const list = join(environment.root, "usr/share/couch/tv", manifest);
+    rmSync(list);
+    if (damage === "empty") writeFileSync(list, "");
+    if (damage === "directory") mkdirSync(list);
+    const refusal = "The Couch package's TV lists in /usr/share/couch/tv are missing or unreadable. Reinstall its Debian package.";
+    if (mode === "--inspect") {
+      const plan = inspect(environment);
+      assert.equal(plan.status, 1, plan.stdout);
+      assert.deepEqual(plan.refuse, [refusal]);
+      continue;
+    }
+    const before = snapshot(environment.root);
+    const applied = environment.run(mode, true);
+    assert.equal(applied.status, 1, `${mode}: ${applied.stdout}`);
+    assert.match(applied.stderr, new RegExp(`^couch-setup: ${refusal.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}$`, "m"));
+    assert.doesNotMatch(applied.events, mutating, `${mode} changes nothing`);
+    assert.deepEqual(snapshot(environment.root), before, `${mode} writes nothing`);
+  }
 });
 
 test("--refresh adds only missing packages and non-policy files to a completed setup", rootOptions, () => {
