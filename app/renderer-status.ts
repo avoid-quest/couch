@@ -24,9 +24,11 @@ function kernelIdentity() {
 
 export function rendererStatus(path: string, run: { run: string; version: string }, page: () => "local" | "remote") {
   const identity = { ...run, pid: process.pid, ...kernelIdentity(), startedAt: new Date().toISOString() };
-  let state: RendererState = "starting", navigation = 0, committed = false, failed = false, beforeHang: RendererState = "starting";
+  let state: RendererState = "starting", navigation = 0, committed = false, failed = false, beforeHang: RendererState = "starting", why: string | undefined;
+  // The status before a navigation that hasn't committed, failed or been replaced yet.
+  let before: { state: RendererState; navigation: number; committed: boolean; failed: boolean; why: string | undefined } | null = null;
   const set = (next: RendererState, reason?: string) => {
-    state = next;
+    state = next; why = reason;
     // Status never stops the app; the next change tries again.
     try {
       writeFileSync(`${path}.tmp`, JSON.stringify({ ...identity, navigation, state, page: page(), at: new Date().toISOString(), ...reason ? { reason } : {} }));
@@ -40,6 +42,14 @@ export function rendererStatus(path: string, run: { run: string; version: string
     // The main frame's mounted app shell. Main checks the sender is this window's
     // main frame; only the document the current navigation committed can count,
     // never one it replaced or a failed load's error page.
+    // Main cancelled the navigation in progress (will-navigate), so the page it would have
+    // replaced stays, as does its status. Nothing else follows a cancellation.
+    cancelled() {
+      if (!before) return;
+      ({ navigation, committed, failed } = before);
+      set(before.state, before.why);
+      before = null;
+    },
     acknowledge() {
       if (!committed || failed || !["loading", "page-loaded"].includes(state)) return false;
       set("ready");
@@ -47,18 +57,18 @@ export function rendererStatus(path: string, run: { run: string; version: string
     },
     watch(contents: Contents) {
       contents.on("did-start-navigation", (_event, _url, inPlace: boolean, mainFrame: boolean) => {
-        if (mainFrame && !inPlace) { navigation++; committed = failed = false; set("loading"); }
+        if (mainFrame && !inPlace) { before ??= { state, navigation, committed, failed, why }; navigation++; committed = failed = false; set("loading"); }
       });
       // Main-frame cross-document commits only; the replaced document is gone.
-      contents.on("did-navigate", () => { committed = true; });
+      contents.on("did-navigate", () => { committed = true; before = null; });
       // Chromium can finish loading its error page after a failure; that stays failed.
       contents.on("did-fail-load", (_event, code: number, description: string, _url, mainFrame: boolean) => {
         // ERR_ABORTED is a navigation replaced by another one.
-        if (mainFrame && code !== -3) { failed = true; set("failed", `${code} ${description}`.replace(/[^\w -]/g, "").slice(0, 80)); }
+        if (mainFrame && code !== -3) { failed = true; before = null; set("failed", `${code} ${description}`.replace(/[^\w -]/g, "").slice(0, 80)); }
       });
       // The shell may mount before the load event finishes.
       contents.on("did-finish-load", () => { if (!failed && state === "loading") set("page-loaded"); });
-      contents.on("render-process-gone", (_event, details: { reason: string }) => { failed = true; set("gone", details.reason.replace(/[^\w-]/g, "").slice(0, 40)); });
+      contents.on("render-process-gone", (_event, details: { reason: string }) => { failed = true; before = null; set("gone", details.reason.replace(/[^\w-]/g, "").slice(0, 40)); });
       contents.on("unresponsive", () => { if (state !== "unresponsive") beforeHang = state; set("unresponsive"); });
       contents.on("responsive", () => { if (state === "unresponsive") set(beforeHang); });
     },

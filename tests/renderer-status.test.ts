@@ -77,6 +77,28 @@ test("the replaced document can't make the next navigation ready", () => {
   expect(renderer.read().state).toBe("page-loaded");
 });
 
+test("a navigation Main cancels leaves the shown document's status, and a committed one can't be undone", () => {
+  using renderer = fixture();
+  renderer.navigate();
+  renderer.commit();
+  renderer.loaded();
+  renderer.status.acknowledge();
+  // A cross-origin link: did-start-navigation, then will-navigate, which Main cancels. Electron 44 sends
+  // nothing else (no did-fail-load), and the ready document stays.
+  renderer.navigate();
+  renderer.navigate();
+  renderer.status.cancelled();
+  expect(renderer.read()).toMatchObject({ state: "ready", navigation: 1 });
+  // A late, repeated cancellation changes nothing.
+  renderer.status.cancelled();
+  expect(renderer.read()).toMatchObject({ state: "ready", navigation: 1 });
+  renderer.navigate();
+  renderer.commit();
+  renderer.status.cancelled();
+  expect(renderer.read()).toMatchObject({ state: "loading", navigation: 2 });
+  expect(renderer.status.acknowledge()).toBe(true);
+});
+
 test("a failed page stays failed through Chromium's error page until the next navigation", () => {
   using renderer = fixture("remote");
   renderer.navigate();

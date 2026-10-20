@@ -348,7 +348,7 @@ function createWindow() {
     gone = [...gone.filter(at => Date.now() - at < 60_000), Date.now()];
     if (["crashed", "oom", "abnormal-exit"].includes(reason) && gone.length <= 3) void load();
   });
-  contents.on("will-navigate", (event, url) => { if (new URL(url).origin !== new URL(contents.getURL()).origin) event.preventDefault(); });
+  contents.on("will-navigate", (event, url) => { if (new URL(url).origin !== new URL(contents.getURL()).origin) { event.preventDefault(); renderer?.cancelled(); } });
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: "deny" };
