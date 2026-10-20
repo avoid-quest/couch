@@ -30,14 +30,15 @@ function RadioResults(props: Props) {
   const loading = props.connected && search.isFetching;
   const error = search.error ? searchError(search.error) : search.data?.error ?? "";
   const saveError = kept.error ? searchError(kept.error) : "";
-  useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
+  // Debounced summaries can still call online actions after a disconnect.
+  useEffect(() => { const controller = new AbortController(); lifetime.current = props.connected ? controller : null; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
 
   async function retry() {
     await client.invalidateQueries({ queryKey: options.queryKey, exact: true, refetchType: "none" });
     await client.fetchQuery({ ...radioSearchQuery(props, title, props.query, avoid), staleTime: 0 }).catch(() => {});
   }
   async function action(failure: string, work: (signal: AbortSignal) => Promise<boolean | void>) {
-    if (busy || !props.connected || !lifetime.current) return;
+    if (busy || !props.connected || !lifetime.current || lifetime.current.signal.aborted) return;
     const signal = lifetime.current.signal; setBusy(true);
     try { await work(signal); }
     catch (reason) { if (!signal.aborted) failed(failure, reason); }

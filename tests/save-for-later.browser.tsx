@@ -18,6 +18,8 @@ export async function runSaveForLaterRegression() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let items: ForLaterItem[] = [];
   let denied = false, writes = 0, channelsSaved = 0, stationsSaved = 0, commands = 0;
+  let query = "space", stationSaved = false;
+  const station = { id: "space-radio", name: "Space radio", url: "https://example.com/radio" };
   const media = ["Space film", "Space video"].map((title, index) => ({ id: `space-${index}`, provider: index ? "youtube" : "streamingcommunity", kind: "media", title, url: `https://www.youtube.com/watch?v=space${index}`, duration: 600 }));
   window.fetch = async (input, init) => {
     const url = new URL(String(input), location.href);
@@ -33,8 +35,12 @@ export async function runSaveForLaterRegression() {
       return Response.json({ items });
     }
     if (url.pathname === "/api/providers/favorites" && init?.method === "POST") channelsSaved++;
-    if (url.pathname === "/api/radio/favorites" && init?.method === "POST") stationsSaved++;
-    if (url.pathname === "/api/radio/stations") return Response.json({ stations: [{ id: "space-radio", name: "Space radio", url: "https://example.com/radio" }] });
+    if (url.pathname.startsWith("/api/radio/favorites")) {
+      if (init?.method === "POST") { stationsSaved++; stationSaved = true; }
+      if (init?.method === "DELETE") stationSaved = false;
+      return Response.json({ favorites: stationSaved ? [station] : [] });
+    }
+    if (url.pathname === "/api/radio/stations") return Response.json({ stations: [station] });
     const provider = url.pathname.split("/")[3];
     const results = provider === "streamingcommunity" ? [media[0]] : provider === "youtube" ? [media[1], { id: "channel", provider, kind: "channel", title: "Space channel", url: "https://www.youtube.com/@space" }]
       : provider === "bandcamp" ? [{ id: "track", provider, kind: "media", title: "Space track", url: "https://space.bandcamp.com/track/space", duration: 120 }] : [];
@@ -44,7 +50,7 @@ export async function runSaveForLaterRegression() {
   const props = { origin: location.origin, token: "fixture", connected: true, canPlay: true };
   const render = (saved = false) => root.render(<SessionGateContext value={gate}><QueryClientProvider client={client}>{saved
     ? <ForLaterSection {...props} />
-    : <SearchPanel {...props} active searchState={{ query: "space", source: "All" }} onSearchChange={() => {}} onCommand={gate.run} />}</QueryClientProvider></SessionGateContext>);
+    : <SearchPanel {...props} active searchState={{ query, source: "All" }} onSearchChange={() => {}} onCommand={gate.run} />}</QueryClientProvider></SessionGateContext>);
   const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("[data-search-top] button")].find(node => node.textContent === label);
   const menu = async (selector: string, label: string) => {
     const item = host.querySelector<HTMLElement>(selector);
@@ -91,8 +97,9 @@ export async function runSaveForLaterRegression() {
     assert(commands === 0, "Cached Play or Queue sent a command immediately after disconnect");
     assert(button("Save")?.disabled, "Offline Save did not become disabled");
     button("Save")?.click(); await wait();
-    await menu('[data-hit-id="Radio directory:space-radio"]', "Save");
+    await menu('[data-hit-id="Radio directory:space-radio"]', "Saved");
     assert(writes === before && stationsSaved === 1, "Offline Save sent a mutation");
+    assert(stationSaved, "Offline Saved removed a station");
     denied = false; props.connected = true; gate.connected = true; render(); await wait(900);
     button("Save")!.click(); await wait();
     assert(writes === before + 1 && button("Saved")?.getAttribute("aria-pressed") === "true", "Reconnect did not restore Save on cached results");
@@ -102,7 +109,24 @@ export async function runSaveForLaterRegression() {
     assert(commands === 2, "Reconnect did not restore Play and Queue on cached results");
     await menu('[data-hit-id="youtube:space-1"]', "Save");
     assert(items.length === 2, "Reconnect did not restore row Save on cached results");
-    return { passed: true, checks: ["visible closest-match Save", "Save/Saved toggle", "row, collection and tile menus", "Saved lookup separates media from channels", "Remove", "rejected Save", "immediate disconnect blocks cached Save, Play and Queue", "offline does not mutate", "reconnect restores cached Save/Saved, row Save, Play and Queue"] };
+    query = "radio"; render(); await wait(900);
+    assert(host.querySelector("[data-search-top]")?.getAttribute("data-hit-id") === "Radio directory:space-radio", "Radio is not the closest match");
+    button("Saved")!.click(); await wait();
+    assert(!stationSaved && button("Save"), "Radio Saved did not toggle off");
+    const radioWrites = stationsSaved, radioCommands = commands;
+    props.connected = false; gate.connected = false; render(); await wait(20);
+    assert(button("Save") && !button("Save")!.disabled && button("Play") && !button("Play")!.disabled && button("Queue") && !button("Queue")!.disabled, "Missed the cached radio interaction window");
+    button("Play")!.click(); button("Queue")!.click(); button("Save")!.click(); await wait();
+    assert(stationsSaved === radioWrites && commands === radioCommands, `Cached radio actions ran after disconnect: ${stationsSaved - radioWrites} Save POSTs, ${commands - radioCommands} commands`);
+    assert(button("Save")?.disabled, "Offline radio Save did not become disabled");
+    props.connected = true; gate.connected = true; render(); await wait(900);
+    button("Save")!.click(); await wait();
+    assert(stationsSaved === radioWrites + 1 && stationSaved && button("Saved")?.getAttribute("aria-pressed") === "true", "Reconnect did not restore radio Save");
+    button("Saved")!.click(); await wait();
+    assert(!stationSaved && button("Save"), "Reconnect did not restore radio Saved removal");
+    button("Play")!.click(); await wait(); button("Queue")!.click(); await wait();
+    assert(commands === radioCommands + 2, "Reconnect did not restore radio Play and Queue");
+    return { passed: true, checks: ["visible closest-match Save", "Save/Saved toggle", "row, collection and tile menus", "Saved lookup separates media from channels", "Remove", "rejected Save", "immediate disconnect blocks cached provider and radio Save, Play and Queue", "offline does not mutate", "reconnect restores provider and radio Save/Saved, Play and Queue, and row Save"] };
   } finally {
     root.unmount(); host.remove(); client.clear(); window.fetch = originalFetch;
   }
